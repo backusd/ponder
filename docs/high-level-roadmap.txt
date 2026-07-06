@@ -1,0 +1,395 @@
+HIGH-LEVEL ROADMAP
+==================
+
+Status
+------
+
+This roadmap has been updated after the initial project-structure scaffold was
+implemented and verified on 2026-07-05.
+
+The roadmap remains flexible. It should describe the direction of the project,
+not freeze every implementation detail forever. When implementation teaches us
+that a decision should change, update the relevant roadmap, decision record, or
+ADR deliberately.
+
+The first milestone should not be "do chemistry calculations." The first
+milestone should be a polished application shell that can open a real project,
+validate it, show its contents, and establish architectural patterns that future
+chemistry, rendering, workflow, scripting, and compute systems will use.
+
+
+1. PROJECT STRUCTURE
+====================
+
+The initial project-structure phase is implemented.
+
+The repository is a CMake-based C++23 monorepo. It is optimized first for
+developer source builds and is structured so future CI, packaging, install
+exports, web use cases, remote compute, and headless workers can be added later.
+
+Important implemented decisions:
+
+- Canonical project name: `ponder`.
+- C++ namespace: `pond::`.
+- Public includes: `#include <ponder/{library}/{file}>`.
+- Native project extension: `.ponder`.
+- License: Apache-2.0.
+- Contributor certification: Developer Certificate of Origin.
+- Initial dependency strategy: Git submodules plus `add_subdirectory`.
+- Initial test framework: GoogleTest.
+- Project libraries build as static libraries initially.
+- Project code builds with warnings-as-errors.
+- CI, packaging, vulnerability scanning, and release artifacts are deferred.
+
+Implemented top-level layout:
+
+    CMakeLists.txt
+    CMakePresets.json
+    AGENTS.md
+    cmake/
+        CompilerWarnings.cmake
+        Dependencies.cmake
+        InstallRules.cmake
+        PrecompiledHeaders.cmake
+        PreventInSourceBuilds.cmake
+        ProjectOptions.cmake
+        ProjectTargets.cmake
+        Sanitizers.cmake
+    docs/
+        adr/
+        architecture/
+        formats/
+        project-structure/
+    apps/
+        desktop/
+            CMakeLists.txt
+            docs/Codex.md
+            src/
+    libs/
+        core/
+        math/
+        chemistry/
+        scientific_data/
+        project/
+        workflow/
+        compute/
+        io/
+        render/
+        platform/
+        ui/
+        plugin_sdk/
+    plugins/
+        builtin/
+    tools/
+        project-inspect/
+    tests/
+        unit/
+        integration/
+        fixtures/
+        fixtures/projects/
+        golden/
+    third_party/
+        googletest/
+        imgui/
+        nlohmann_json/
+        SDL3/
+        spdlog/
+    scripts/
+        build.ps1
+        build.sh
+        format.ps1
+        format.sh
+        test.ps1
+        test.sh
+
+Each library has:
+
+- A CMake target named `ponder_<library>`.
+- An alias target named `ponder::<library>`.
+- Public headers under `include/ponder/{library}/`.
+- Implementation files under `src/`.
+- A target-scoped private precompiled header.
+- A boundary document at `docs/Boundary.md`.
+- A subsystem-local Codex guide at `docs/Codex.md`.
+
+Codex guidance follows a strict two-document model:
+
+1. Root `AGENTS.md` for global rules only.
+2. The local `<subsystem path>/docs/Codex.md` for subsystem guidance.
+
+Do not add a separate Codex routing tree unless that decision is explicitly
+revisited.
+
+
+2. EXECUTABLES AND LIBRARY BOUNDARIES
+=====================================
+
+Initial executable targets are implemented:
+
+ponder-desktop
+    The desktop application. It currently starts as a scaffold and should grow
+    into the main user-facing application.
+
+ponder-project-inspect
+    A developer/user tool for inspecting `.ponder` projects. It currently starts
+    as a scaffold and should become the first non-GUI proof that project loading
+    works through reusable libraries.
+
+The important architectural rule remains:
+
+    Everything below the application layer must be usable without the desktop UI.
+
+That rule keeps the architecture open for a future web app, command-line tools,
+batch execution, cloud services, and remote runners.
+
+Initial library boundaries:
+
+core
+    Project-wide foundation code: exceptions, result/error conventions,
+    assertions, logging, diagnostics, and small low-level helpers. This library
+    should stay at the bottom of the dependency graph.
+
+math
+    Vector, matrix, geometry, transforms, bounding volumes, spatial algorithms,
+    and numeric helpers that are not chemistry-specific.
+
+chemistry
+    Domain objects such as atoms, bonds, molecules, residues, conformers,
+    trajectories, basis sets, orbitals, wavefunctions, density grids, and force
+    field metadata. This library should describe chemistry data, not know how to
+    render it or where computations run.
+
+scientific_data
+    Generic scientific data containers: tables, scalar fields, vector fields,
+    volumetric grids, time series, images, meshes, annotations, and metadata.
+
+project
+    Project loading/saving, schema versioning, asset registry, metadata,
+    dependency graph, provenance, cache keys, dirty state, and project
+    diagnostics. This is the next major system to make real.
+
+workflow
+    Dependency-aware graph model, nodes, ports, typed values, invalidation, and
+    execution planning. It should depend on project/data abstractions, not UI.
+
+compute
+    Job descriptions, execution backends, scheduling interfaces, local process
+    execution, cancellation, progress, logs, artifacts, and remote-runner
+    abstractions.
+
+io
+    File import/export for chemistry and scientific formats. Start with a small
+    set, such as XYZ plus the native project format.
+
+render
+    Renderer abstraction, scene data, visualization data flow, GPU-resource
+    boundaries, molecular drawing primitives, picking, and screenshot/export
+    support.
+
+platform
+    Windowing, input, clipboard, monitors, file dialogs, drag-and-drop, and other
+    OS integration.
+
+ui
+    Editor UI widgets, docking, panels, property inspectors, project browser,
+    node editor, plotting, and app-level commands.
+
+plugin_sdk
+    Stable public extension contracts for plugins. Real external plugins should
+    use a stable C-style binary boundary, with C++ SDK wrappers on top. Built-in
+    plugins can start simpler while the API takes shape.
+
+Future executable targets can reuse the same libraries:
+
+ponder-cli
+    Command-line tool for inspecting projects, validating project files,
+    importing/exporting data, and eventually running workflows headlessly.
+
+ponder-worker
+    Headless local or remote compute worker. This should use core, project,
+    workflow, compute, chemistry, io, and plugin_sdk, but not ui or platform.
+
+ponder-server
+    Future service process for collaboration, remote execution, project
+    indexing, or web application support.
+
+
+3. TEST STRUCTURE
+=================
+
+CTest and GoogleTest are implemented.
+
+The scaffold starts with one test executable per library:
+
+    ponder_core_tests
+    ponder_math_tests
+    ponder_chemistry_tests
+    ponder_scientific_data_tests
+    ponder_project_tests
+    ponder_workflow_tests
+    ponder_compute_tests
+    ponder_io_tests
+    ponder_render_tests
+    ponder_platform_tests
+    ponder_ui_tests
+    ponder_plugin_sdk_tests
+
+Unit tests live under `tests/unit/{library}/`. Each initial library has a smoke
+test proving that its public header can be included and linked.
+
+Future testing should grow in this order:
+
+1. Add focused unit tests as each library gains real behavior.
+2. Add project-format tests with small `.ponder` fixtures.
+3. Add integration tests across project, IO, workflow, compute, and plugin
+   boundaries.
+4. Add desktop smoke tests after the UI shell stabilizes.
+5. Add performance tests and benchmarks only after there is meaningful workflow,
+   IO, rendering, or project-loading behavior to measure.
+
+Fixtures and golden files should stay small, readable where possible, and
+intentionally versioned. Large binary assets should remain out of the repository
+until a later asset policy explicitly allows them.
+
+CI should eventually run configure/build/test on Windows, Linux, and macOS,
+plus formatting, clang-tidy, sanitizers where supported, and packaging smoke
+tests once packaging exists. CI itself is intentionally deferred for now.
+
+
+4. NEXT BUILD SEQUENCE
+======================
+
+The project-structure foundation is complete. The next sequence should move from
+scaffold to the first real project-loading application milestone.
+
+Step 1: Define the native `.ponder` project format
+--------------------------------------------------
+
+Create a small format spec under `docs/formats/` and an ADR if the file vs
+directory shape needs a durable decision.
+
+The extension is already decided: `.ponder`. The concrete shape still needs to
+be specified. A directory-based project remains a good candidate:
+
+    Example.ponder/
+        project.json
+        assets/
+        cache/
+        logs/
+
+The first `project.json` should include:
+
+- Project format version.
+- Project UUID.
+- Display name.
+- Created/modified metadata.
+- Asset list.
+- Dependency graph placeholder.
+- Application/plugin version metadata.
+
+Keep the first schema small, explicit, and versioned.
+
+Step 2: Implement project loading and validation
+------------------------------------------------
+
+Build real behavior in `ponder_project` for project creation, loading,
+validation, saving, and diagnostics. Add tests for:
+
+- Successful load.
+- Missing files.
+- Unknown or unsupported format versions.
+- Invalid JSON.
+- Save/load round trips.
+
+Step 3: Wire `ponder-project-inspect`
+-------------------------------------
+
+Make `ponder-project-inspect` load a `.ponder` project through the project
+library and print a concise summary of schema version, metadata, assets, and
+diagnostics.
+
+This gives us a GUI-free smoke test for the same project APIs the desktop app
+will use.
+
+Step 4: Add minimal chemistry and scientific data models
+--------------------------------------------------------
+
+Add only the domain types needed for a small molecule asset: element, atom, bond,
+molecule, and generic asset metadata. Do not build a full chemistry engine yet.
+
+Step 5: Add initial IO support
+------------------------------
+
+Add a small `ponder_io` handler interface and one simple molecule importer,
+likely XYZ. Use small fixtures under `tests/fixtures/`.
+
+Step 6: Build the desktop application shell
+-------------------------------------------
+
+Grow `ponder-desktop` from scaffold to a minimal application shell with startup
+logging, a window, a main loop, a basic menu structure, and a project browser
+panel.
+
+Step 7: Wire project loading into the desktop app
+-------------------------------------------------
+
+Add "Open Project" behavior through platform file dialogs and route loading
+through `ponder_project`. Show diagnostics and populate the project browser with
+metadata and assets.
+
+At this point the application should be able to load a real `.ponder` project.
+
+Step 8: Add a minimal viewport and molecule preview
+---------------------------------------------------
+
+Add enough render/platform/ui integration to show a simple molecule preview for
+loaded molecule assets. This proves the early data path:
+
+    project -> asset registry -> molecule data -> scene data -> viewport
+
+Step 9: Introduce plugin extension points
+-----------------------------------------
+
+Add the first `ponder_plugin_sdk` interfaces only after the built-in project and
+IO path works. Start with file-format handlers and simple metadata.
+
+Step 10: Introduce workflow graph primitives
+--------------------------------------------
+
+Add a minimal workflow graph with nodes, ports, typed values, dependencies, and
+invalidation.
+
+Step 11: Introduce compute job abstractions
+-------------------------------------------
+
+Add job descriptions, progress, cancellation, logs, artifacts, and a local
+runner interface. Do not integrate a large external chemistry engine until the
+job model is clear.
+
+Step 12: Expand toward real chemistry integrations
+--------------------------------------------------
+
+Once project loading, asset handling, plugin registration, workflow graph, and
+compute jobs exist, begin integrating external engines behind adapters. Start
+with one engine and one narrow workflow.
+
+
+5. FIRST MAJOR MILESTONE
+========================
+
+The first substantial milestone should be:
+
+    A desktop application that opens a `.ponder` project, validates project
+    metadata, lists project metadata and assets, imports a simple molecule file
+    into the project, saves the updated project, and shows a basic molecule
+    preview.
+
+That milestone proves the most important early architectural claims:
+
+- The project format exists.
+- The app is desktop-first but not desktop-only.
+- Core systems are reusable outside the GUI.
+- Data flows through libraries with clear boundaries.
+- Tests validate the same project behavior used by the app.
+- Future workflow, plugin, rendering, scripting, and compute systems have a
+  place to attach without reshaping the repository.

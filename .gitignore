@@ -1,69 +1,78 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Build directories
+# Build trees
 build/
 Build/
 build-*/
+out/
+cmake-build-*/
 
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
-Makefile
 install_manifest.txt
 compile_commands.json
+CMakeUserPresets.json
+
+# Compiled objects and libraries
+*.d
+*.o
+*.obj
+*.lo
+*.slo
+*.a
+*.lib
+*.la
+*.lai
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables and bundles
+*.exe
+*.out
+*.app
+
+# Debug and compiler artifacts
+*.ilk
+*.pdb
+*.dwo
+*.gch
+*.pch
+*.mod
+*.smod
+
+# Logs and test output
+*.log
+Testing/
+test-results/
+
+# Dependency caches
+.cache/
+.ccache/
+vcpkg_installed/
+
+# IDE and editor files
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Local prompt scratch files
+prompt.txt
+docs/prompt.txt
 
 # Temporary files
 *.tmp
-*.log
 *.bak
 *.swp
-
-# vcpkg
-vcpkg_installed/
-
-# debug information files
-*.dwo
-
-# test output & cache
-Testing/
-.cache/
+*.swo
+*~

@@ -1,0 +1,970 @@
+PROJECT STRUCTURE IMPLEMENTATION ROADMAP
+========================================
+
+Purpose
+-------
+
+This document breaks step "1. PROJECT STRUCTURE" from
+`docs/high-level-roadmap.txt` into implementation tasks that are small enough to
+hand to Codex one at a time.
+
+Status: implemented and locally verified on 2026-07-05.
+
+The open questions for this phase have been answered. This roadmap now records
+the implemented project-structure scaffold. The project structure should still
+remain flexible as we learn, but changes should be made deliberately and
+recorded. The guiding principle is that this codebase should look like the
+beginning of a project that can survive 10+ years of development.
+
+
+Implemented Phase Summary
+=========================
+
+The PS-000 through PS-018 tasks are complete for the initial scaffold.
+
+Implemented artifacts include:
+
+- Root repository metadata, license, contributor docs, and global `AGENTS.md`.
+- Top-level monorepo layout for apps, libraries, tools, plugins, tests, docs,
+  examples, scripts, and third-party dependencies.
+- Root CMake project, helper modules, descriptive presets, and in-source build
+  rejection.
+- Git submodule dependency scaffold for spdlog, GoogleTest, nlohmann/json,
+  SDL3, and Dear ImGui.
+- Dependency and license policy documentation.
+- `.clang-format`, `.clang-tidy`, and `.editorconfig`.
+- Initial static library targets for all agreed libraries.
+- Core conventions for `PonderException`, result/error handling, assertions,
+  and logging.
+- Initial `ponder-desktop` and `ponder-project-inspect` executable targets.
+- GoogleTest/CTest smoke tests for every initial library.
+- Examples, fixtures, golden-file, architecture, format, ADR, and subsystem
+  documentation skeletons.
+- Thin developer workflow scripts.
+- Deferred CI, packaging, security scanning, and release-signing documentation.
+- Local verification record at `docs/project-structure/local-verification.md`.
+
+Local verification passed for:
+
+- `windows-msvc-release` configure/build.
+- `windows-msvc-release` CTest run: 12/12 tests passed.
+- `windows-msvc-debug` configure/build/test: 12/12 tests passed.
+
+Known local verification gaps:
+
+- `clang-format` was not available on `PATH`, so format checking could not run.
+- `clang-tidy` was not available on `PATH`, so static-analysis checking could
+  not run.
+- Clang/GCC sanitizer presets could not be run from this Windows host.
+
+These are local toolchain gaps, not unresolved project-structure decisions.
+
+
+Next-Phase Follow-Ups
+=====================
+
+The project-structure phase does not block the next roadmap phase. The next
+major work should move into project-format and project-loading implementation.
+
+Recommended follow-up tasks for later roadmaps:
+
+- Define the concrete `.ponder` file or directory format under `docs/formats/`.
+- Add an ADR if the native project on-disk shape becomes a durable decision.
+- Implement project creation, loading, validation, saving, and diagnostics in
+  `ponder_project`.
+- Make `ponder-project-inspect` load a real `.ponder` project through
+  `ponder_project`.
+- Add small `.ponder` examples and fixtures once the format exists.
+- Install local `clang-format` and `clang-tidy` or document expected versions so
+  PS-017 format/static-analysis checks can be rerun.
+- Run Linux/macOS configure/build/test and Clang/GCC sanitizer presets when
+  those toolchains are available.
+- Revisit CI only after local workflows are stable enough to automate.
+
+Decision Baseline
+=================
+
+These decisions apply to every task below.
+
+Project identity:
+
+- Canonical project name: `ponder`.
+- The C++ namespace is `pond::`. This is the only intended use of the shortened
+  name.
+- Everything else should use the full `ponder` name: CMake targets, executable
+  names, include prefixes, project options, folders, and public documentation.
+- Public includes use the form `#include <ponder/{library}/{file}>`, for example
+  `#include <ponder/core/Result.hpp>`.
+- Native project extension: `.ponder`.
+- License: Apache-2.0.
+- Contributor certification: Developer Certificate of Origin.
+- Initial repository model: monorepo.
+- Initial platform support: Windows, Linux, and macOS. Source quality and modern
+  implementation practices take priority over supporting old OS versions.
+- Initial distribution priority: developer source builds.
+- Future web, remote compute, and headless-worker use cases are architectural
+  requirements from day one.
+
+Build system:
+
+- Build system: CMake.
+- Recommended CMake minimum: 3.28 unless implementation discovers a concrete
+  reason to raise it.
+- C++ standard: C++23 from day one.
+- Initial compiler families: MSVC and clang-cl on Windows, Clang and GCC on
+  Linux, and AppleClang on macOS.
+- Recommended initial minimum compiler versions: MSVC 19.38 / Visual Studio
+  2022 17.8, Clang/clang-cl 17, GCC 13, and AppleClang 15. Raise these if
+  needed to preserve clean C++23 implementation.
+- Initial library linkage: static libraries.
+- Real external plugins should eventually use a stable C-style binary boundary
+  with C++ SDK wrappers. Built-in plugins may start simpler.
+- Implementation target names use the form `ponder_core`; alias targets use the
+  form `ponder::core`.
+- Project options always use the `PONDER_*` prefix.
+- Warnings-as-errors are always enabled for project code in every build.
+- RTTI is enabled intentionally for editor, reflection, and plugin-facing use
+  cases.
+- Exceptions are allowed only for truly exceptional or unrecoverable cases. All
+  project-thrown exceptions should use a single exception type named
+  `PonderException`.
+- Normal recoverable errors should prefer `std::expected` or an expected-like
+  project wrapper.
+- Precompiled headers should be used with modern target-scoped CMake practices.
+- Unity/jumbo builds are not supported initially.
+- C++ modules are not supported and should not be assumed.
+- Installable CMake package exports should be prepared for, but not fully
+  polished before APIs stabilize.
+- Generated files should stay in the build tree unless intentionally checked in
+  and documented.
+- In-source builds must be explicitly rejected.
+- Preset names should be long and descriptive, such as `windows-msvc-debug`,
+  `windows-msvc-release`, `linux-clang-debug`, `linux-gcc-debug`, and
+  `linux-clang-asan`.
+- Developer-local CMake overrides should be supported through ignored
+  `CMakeUserPresets.json`.
+
+Dependencies:
+
+- Dependency strategy: Git submodules plus `add_subdirectory`.
+- Initial allowed dependencies: spdlog, GoogleTest, nlohmann/json, SDL3, and
+  Dear ImGui.
+- JSON library: nlohmann/json.
+- Test framework: GoogleTest.
+- Third-party patches must be isolated, documented, and easy to reapply during
+  updates.
+- Dependency licenses are permissive by default: MIT, BSD, Apache-2.0, ISC,
+  Zlib, and Boost are allowed. MPL and EPL require case-by-case review. Do not
+  link GPL or AGPL code into the core. GPL tools may be supported as external
+  user-installed engines if they remain separate.
+- Dependency license information should be tracked from the beginning.
+- Offline and air-gapped builds are best-effort initially. Pin dependencies and
+  support pre-populated dependency checkouts, but do not require perfect offline
+  builds in the first scaffold.
+- CI dependency caches should be used later when CI is added, with careful cache
+  keys.
+- Avoid large assets at first.
+
+Repository layout:
+
+- The high-level roadmap is guidance, not a rigid file-by-file mandate.
+- Directory names for libraries use underscores.
+- The generic scientific data library is named `scientific_data`.
+- Every library has public headers under `include/ponder/{library}/` and
+  implementation files under `src/`.
+- Private headers live in `src/`.
+- Tests live under a central `tests/` directory.
+- Each library has its own `docs/` directory for boundary and design notes.
+- Built-in plugins live under `plugins/builtin/`.
+- Developer tools live under `tools/` when they test or inspect reusable
+  systems.
+- Examples live under `examples/` from the beginning.
+- Sample project files may live under both `examples/` and `tests/fixtures/`.
+- Git should ignore build trees, CMake user presets, IDE files, generated
+  binaries, dependency caches, logs, and local environment files.
+
+Code style:
+
+- Formatting: LLVM-derived custom `.clang-format`, 4-space indentation, 100
+  columns, Allman braces.
+- Naming: types use PascalCase, functions use PascalCase, variables use
+  camelCase, private members use `m_*`, constants use `kPascalCase`, CMake
+  implementation targets use `project_library`, and alias targets use
+  `project::library`.
+- Filenames use PascalCase.
+- clang-tidy should start useful but not overwhelming, then tighten over time.
+- include-what-you-use is not enforced initially. Keep headers clean manually,
+  use clang-tidy where helpful, and add IWYU later as an advisory tool.
+- Comments should be selective. Use comments for non-obvious logic,
+  Doxygen-style comments for important public APIs once stable, and separate
+  design docs or ADRs for architectural decisions.
+- Public API headers should avoid heavy third-party includes.
+- Public SDK-facing types should use PIMPL or other ABI-stability patterns when
+  appropriate.
+- Assertion macros should be project-defined. They should debug break in debug
+  builds and compile out in release builds.
+- Logging should support at least trace, debug, info, warning, error, and fatal
+  levels. Logging macros should look like `LOG_*`, support `std::format`-style
+  formatting, and capture time, file name, and source location.
+
+Testing:
+
+- Test framework: GoogleTest.
+- Tests are enabled by default.
+- Every scaffolded library should get at least one smoke test.
+- Start with one test executable per library. Split into multiple test
+  executables as each library grows.
+- AddressSanitizer and UndefinedBehaviorSanitizer may be enabled on Clang/GCC.
+  Skip sanitizers on Windows for now.
+- Code coverage is deferred.
+- Benchmark framework setup is deferred until there is meaningful project, IO,
+  workflow, rendering, or compute code to measure.
+- Golden files and fixtures should be small, readable where possible, and
+  intentionally versioned.
+
+Documentation:
+
+- New docs should be written as `.md`.
+- Lightweight ADRs should be used for durable decisions such as dependency
+  management, plugin ABI, project format, C++ standard, and renderer backend.
+- Add `CONTRIBUTING.md`, `SECURITY.md`, and `CODE_OF_CONDUCT.md` before the
+  project goes public. Heavier governance docs can wait until there are real
+  contributors.
+- Every major library should have a boundary document.
+- Codex guidance uses a strict two-document lookup model: the root `AGENTS.md`
+  for truly global rules, plus exactly one subsystem-local
+  `<library|executable path>/docs/Codex.md` file for local guidance.
+- Do not add a separate Codex routing index or repo-local skill-pack layer
+  unless this decision is explicitly revisited.
+- Generated API documentation is deferred.
+- Dependency and license policy should be documented before third-party
+  dependencies are added.
+
+CI, security, and release posture:
+
+- CI implementation is intentionally deferred right now.
+- CMake should still be structured so CI, packaging, install exports, and
+  release artifacts can be added later.
+- Local scripts should be thin wrappers, not a second build system.
+- Dependency vulnerability scanning is deferred with CI.
+- Signed releases are a future requirement. Start with signed git tags when
+  releases begin; add Windows/macOS code signing before broad binary
+  distribution.
+- Configure/build should avoid executing plugins, scripts, or external tools
+  unless there is a clear reason.
+- Aim for reproducible builds, but do not sacrifice more important design goals
+  for perfect reproducibility in the initial scaffold.
+- If generated code is checked in, the generator version and regeneration
+  command must be documented.
+
+
+TASK PS-000: Record Project-Structure Decisions
+===============================================
+
+Goal:
+    Capture the answered open questions as the decision record for this phase.
+
+Depends on:
+    None.
+
+Implementation notes:
+    Create:
+
+        docs/project-structure/decisions.md
+
+    Record each answered question ID from `open-questions.txt`, the selected
+    answer, and any implementation consequence. Mark
+    `docs/project-structure/open-questions.txt` as historical input for this
+    phase rather than the active implementation source.
+
+    Because new docs should be Markdown, use `.md` for newly created decision
+    and architecture documents. Existing `.txt` planning files can be converted
+    in a separate documentation cleanup if desired.
+
+Done when:
+    All project-structure answers are captured in `decisions.md`.
+    The implementation tasks can refer to decisions rather than unresolved open
+    questions.
+
+
+TASK PS-001: Add Root Repository Metadata
+=========================================
+
+Goal:
+    Add the basic repository files that define project identity, licensing,
+    contributor expectations, and local file hygiene.
+
+Depends on:
+    PS-000.
+
+Implementation notes:
+    Add:
+
+    - `README.md`
+    - `LICENSE`
+    - `.gitignore`
+    - `.editorconfig`
+    - `AGENTS.md`
+
+    Also add or prepare:
+
+    - `CONTRIBUTING.md`
+    - `SECURITY.md`
+    - `CODE_OF_CONDUCT.md`
+
+    `README.md` should identify `ponder` as an early open-source computational
+    chemistry platform, point to the planning docs, and avoid implying the app
+    already exists.
+
+    `LICENSE` should be Apache-2.0.
+
+    `CONTRIBUTING.md` should include the Developer Certificate of Origin policy
+    or a clear placeholder if public contribution docs are intentionally delayed.
+
+    `.gitignore` should cover build trees, CMake user presets, common IDE
+    folders, generated binaries, logs, dependency caches, local environment
+    files, and temporary files.
+
+    `AGENTS.md` should contain only global rules for the entire codebase. It
+    should not mention local guidance for a specific library or executable
+    beyond the generic rule that subsystem work should read the nearest
+    `<library|executable path>/docs/Codex.md` file.
+
+Done when:
+    A fresh checkout has clear project identity, license, DCO intent, editing
+    defaults, Codex global guidance, and ignore rules.
+
+
+TASK PS-002: Create the Top-Level Directory Skeleton
+====================================================
+
+Goal:
+    Create the agreed monorepo layout without implementing real systems yet.
+
+Depends on:
+    PS-001.
+
+Implementation notes:
+    Create this initial layout:
+
+        apps/
+        apps/desktop/
+        cmake/
+        docs/
+        docs/adr/
+        docs/architecture/
+        docs/formats/
+        docs/project-structure/
+        examples/
+        examples/projects/
+        libs/
+        plugins/
+        plugins/builtin/
+        scripts/
+        tests/
+        tests/unit/
+        tests/integration/
+        tests/fixtures/
+        tests/fixtures/projects/
+        tests/golden/
+        third_party/
+        third_party/patches/
+        tools/
+        tools/project-inspect/
+
+    Prefer meaningful `README.md` files where a directory needs to be preserved
+    before source files exist. Avoid empty placeholder files unless there is no
+    better option.
+
+Done when:
+    The monorepo skeleton exists and matches the naming decisions.
+    No build targets are added for directories that do not yet contain targets.
+
+
+TASK PS-003: Create the Root CMake Project
+==========================================
+
+Goal:
+    Add the root CMake project and establish project-wide build rules.
+
+Depends on:
+    PS-001, PS-002.
+
+Implementation notes:
+    Add `CMakeLists.txt` at the repository root.
+
+    The root project should:
+
+    - Require CMake 3.28 or newer unless a concrete implementation reason
+      requires raising the minimum.
+    - Declare the project as `ponder`.
+    - Set C++23 as the required standard.
+    - Reject in-source builds.
+    - Define options with the `PONDER_*` prefix.
+    - Enable tests by default.
+    - Keep generated files in the build tree.
+    - Avoid C++ module setup.
+    - Avoid unity/jumbo build setup.
+    - Include helper modules from `cmake/`.
+    - Add subdirectories only after those subdirectories have meaningful
+      `CMakeLists.txt` files.
+
+    The root file should stay small. Put reusable logic in `cmake/` modules.
+
+Done when:
+    CMake can configure an empty or near-empty `ponder` project.
+    In-source configuration fails with a clear message.
+
+
+TASK PS-004: Add CMake Helper Modules
+=====================================
+
+Goal:
+    Add reusable CMake modules for project options, warnings, precompiled
+    headers, sanitizers, dependency wiring, and future install/export structure.
+
+Depends on:
+    PS-003.
+
+Implementation notes:
+    Add files under `cmake/`, likely:
+
+    - `CompilerWarnings.cmake`
+    - `Dependencies.cmake`
+    - `InstallRules.cmake`
+    - `PrecompiledHeaders.cmake`
+    - `PreventInSourceBuilds.cmake`
+    - `ProjectOptions.cmake`
+    - `Sanitizers.cmake`
+
+    The modules should implement these policies:
+
+    - Warnings-as-errors for all project targets.
+    - Do not impose project warnings-as-errors on third-party submodules.
+    - RTTI is enabled.
+    - Exceptions are enabled, but project code should use `PonderException` for
+      project-thrown exceptions.
+    - PCH support is target-scoped and private to implementation targets.
+    - ASAN/UBSAN presets are supported for Clang/GCC where practical.
+    - Install/export structure is prepared lightly, without requiring stable API
+      package polish yet.
+
+Done when:
+    Project-wide CMake behavior is centralized.
+    Future library tasks can use helper functions instead of duplicating CMake
+    logic.
+
+
+TASK PS-005: Add CMake Presets
+==============================
+
+Goal:
+    Add descriptive CMake presets for common developer source builds.
+
+Depends on:
+    PS-003, PS-004.
+
+Implementation notes:
+    Add `CMakePresets.json` with long, descriptive preset names. Include at
+    least:
+
+    - `windows-msvc-debug`
+    - `windows-msvc-release`
+    - `windows-clangcl-debug`
+    - `linux-clang-debug`
+    - `linux-gcc-debug`
+    - `linux-clang-asan`
+    - `macos-appleclang-debug`
+
+    Add release and RelWithDebInfo variants where useful.
+
+    Support developer-local overrides by ignoring `CMakeUserPresets.json`.
+
+    Presets should optimize for source builds by developers. They should not
+    depend on CI existing.
+
+Done when:
+    A developer can configure the project with documented presets.
+    Presets do not require CI infrastructure.
+
+
+TASK PS-006: Add Dependency Submodule Scaffold
+==============================================
+
+Goal:
+    Add the selected third-party dependency strategy: Git submodules plus
+    `add_subdirectory`.
+
+Depends on:
+    PS-002, PS-004, PS-005.
+
+Implementation notes:
+    Add submodule locations under `third_party/` for the initial dependency set:
+
+    - spdlog
+    - googletest
+    - nlohmann_json
+    - SDL3
+    - imgui
+
+    Pin each submodule to a specific commit or tag. Do not track floating
+    branches.
+
+    Wire dependencies through `cmake/Dependencies.cmake` and imported or alias
+    targets where useful. Keep third-party build options contained so they do
+    not leak into project targets.
+
+    If a dependency needs local changes, do not make undocumented edits inside
+    the submodule. Store patch files or patch notes under
+    `third_party/patches/<dependency>/` and document how to reapply them.
+
+    Avoid adding Python, renderer-backend, cloud, or chemistry-engine
+    dependencies in this task.
+
+Done when:
+    The initial dependencies are pinned and can be included by CMake.
+    Dependency code is separated from project code.
+    No GPL or AGPL code is linked into core project libraries.
+
+
+TASK PS-007: Add Dependency and License Policy
+==============================================
+
+Goal:
+    Document how third-party code is selected, pinned, patched, licensed, and
+    updated.
+
+Depends on:
+    PS-006.
+
+Implementation notes:
+    Add:
+
+    - `third_party/README.md`
+    - A dependency license inventory, such as `third_party/licenses.md`
+    - Patch policy under `third_party/patches/README.md`
+
+    The policy should state:
+
+    - Permissive licenses are allowed by default: MIT, BSD, Apache-2.0, ISC,
+      Zlib, and Boost.
+    - MPL and EPL need case-by-case review.
+    - GPL and AGPL must not be linked into the core platform.
+    - GPL tools may be supported only as external user-installed engines.
+    - Dependencies are pinned.
+    - Offline/air-gapped builds are best-effort through pre-populated
+      submodules.
+    - Large assets should not be added without a specific decision.
+
+Done when:
+    A contributor can understand why dependencies are present and how they may
+    be updated.
+
+
+TASK PS-008: Add Formatting and Static-Analysis Configuration
+============================================================
+
+Goal:
+    Establish formatting, naming, and static-analysis conventions before real
+    source code grows.
+
+Depends on:
+    PS-001.
+
+Implementation notes:
+    Add:
+
+    - `.clang-format`
+    - `.clang-tidy`
+
+    `.clang-format` should be LLVM-derived with:
+
+    - 4-space indentation.
+    - 100-column target.
+    - Allman braces.
+    - PascalCase filename-friendly conventions where applicable.
+
+    `.clang-tidy` should be useful but not overwhelming. It should catch common
+    correctness and modernization issues without making early development
+    miserable.
+
+    Do not enforce include-what-you-use yet. Keep public headers clean manually
+    and revisit IWYU later as an advisory tool.
+
+Done when:
+    Formatting can be run consistently.
+    Static analysis expectations are visible before library code accumulates.
+
+
+TASK PS-009: Scaffold Initial Library Targets
+=============================================
+
+Goal:
+    Add minimal CMake targets and public/private source layout for the initial
+    libraries.
+
+Depends on:
+    PS-003, PS-004, PS-008.
+
+Implementation notes:
+    Scaffold these libraries:
+
+        libs/core/
+        libs/math/
+        libs/chemistry/
+        libs/scientific_data/
+        libs/project/
+        libs/workflow/
+        libs/compute/
+        libs/io/
+        libs/render/
+        libs/platform/
+        libs/ui/
+        libs/plugin_sdk/
+
+    Each library should have:
+
+    - `CMakeLists.txt`
+    - `include/ponder/{library}/`
+    - `src/`
+    - `src/Pch.hpp` or equivalent private PCH header if the target uses PCH.
+    - `docs/Boundary.md`
+    - `docs/Codex.md`
+
+    Use target names and aliases like:
+
+        ponder_core        -> ponder::core
+        ponder_math        -> ponder::math
+        ponder_chemistry   -> ponder::chemistry
+        ponder_plugin_sdk  -> ponder::plugin_sdk
+
+    Source namespaces should use `pond::{library}` even though targets and
+    include prefixes use `ponder`.
+
+    Public headers should avoid heavy third-party includes. SDK-facing public
+    types should be designed so PIMPL or other ABI-stability patterns can be
+    used when appropriate.
+
+    Keep dependencies between these targets minimal. The scaffold should prove
+    the shape without inventing implementation that belongs to later roadmap
+    phases.
+
+Done when:
+    All initial library targets configure and build as static libraries.
+    Include prefixes, target names, aliases, namespaces, filenames, and library
+    docs match the decisions.
+
+
+TASK PS-010: Seed Core Coding Conventions
+=========================================
+
+Goal:
+    Add the smallest useful core headers needed to make project-wide style
+    conventions concrete.
+
+Depends on:
+    PS-009.
+
+Implementation notes:
+    In `libs/core/`, add minimal declarations or implementations for:
+
+    - `PonderException`
+    - Assertion macros that debug break in debug builds and compile out in
+      release builds.
+    - Logging macro names and severity levels, wired to spdlog if dependency
+      setup is ready.
+    - A result/expected convention, using `std::expected` where compiler support
+      is acceptable or a documented fallback if needed.
+
+    Keep this task intentionally small. It should establish conventions, not
+    build the full core library.
+
+Done when:
+    Later libraries have a concrete place to import exception, assertion,
+    logging, and recoverable-error conventions.
+
+
+TASK PS-011: Scaffold Initial Executable Targets
+================================================
+
+Goal:
+    Add placeholder executable targets for the desktop app and project-inspection
+    tool without implementing real application behavior yet.
+
+Depends on:
+    PS-009, PS-010.
+
+Implementation notes:
+    Add:
+
+    - `apps/desktop/CMakeLists.txt`
+    - `apps/desktop/src/Main.cpp`
+    - `apps/desktop/docs/Codex.md`
+    - `tools/project-inspect/CMakeLists.txt`
+    - `tools/project-inspect/src/Main.cpp`
+    - `tools/project-inspect/docs/Codex.md`
+
+    Executable names:
+
+    - `ponder-desktop`
+    - `ponder-project-inspect`
+
+    The desktop app may be a console stub at first if platform/windowing
+    integration is not ready. The goal is to prove target structure, not app
+    behavior.
+
+Done when:
+    Both executable targets build.
+    Executables use full `ponder` naming and link only the minimal libraries
+    needed for the scaffold.
+
+
+TASK PS-012: Add Initial Test Harness
+=====================================
+
+Goal:
+    Add CTest and GoogleTest integration with one test executable per initial
+    library.
+
+Depends on:
+    PS-006, PS-009, PS-010.
+
+Implementation notes:
+    Add:
+
+    - `tests/CMakeLists.txt`
+    - `tests/unit/core/`
+    - `tests/unit/math/`
+    - `tests/unit/chemistry/`
+    - `tests/unit/scientific_data/`
+    - `tests/unit/project/`
+    - `tests/unit/workflow/`
+    - `tests/unit/compute/`
+    - `tests/unit/io/`
+    - `tests/unit/render/`
+    - `tests/unit/platform/`
+    - `tests/unit/ui/`
+    - `tests/unit/plugin_sdk/`
+
+    Start with one test executable per library, for example
+    `ponder_core_tests` and `ponder_math_tests`. Each should contain a small
+    smoke test proving that the corresponding public header can be included and
+    the target can be linked.
+
+    Register tests with CTest. Tests should be enabled by default.
+
+Done when:
+    `ctest` runs successfully from the build tree.
+    Every scaffolded library has a passing smoke test.
+
+
+TASK PS-013: Add Examples and Fixture Skeleton
+==============================================
+
+Goal:
+    Add the initial locations for examples, sample projects, test fixtures, and
+    golden files without adding large assets.
+
+Depends on:
+    PS-002.
+
+Implementation notes:
+    Add README documents for:
+
+    - `examples/`
+    - `examples/projects/`
+    - `tests/fixtures/`
+    - `tests/fixtures/projects/`
+    - `tests/golden/`
+
+    Document that sample `.ponder` projects may exist both as user-facing
+    examples and as test fixtures, but should stay small and intentional.
+
+Done when:
+    Future project-format and IO tasks have clear places for examples and test
+    data.
+
+
+TASK PS-014: Add Documentation and ADR Skeleton
+===============================================
+
+Goal:
+    Create the Markdown documentation structure that will hold architecture
+    notes, format specs, ADRs, and library boundary documents.
+
+Depends on:
+    PS-000, PS-002, PS-009.
+
+Implementation notes:
+    Add or update:
+
+    - `docs/adr/README.md`
+    - `docs/architecture/README.md`
+    - `docs/formats/README.md`
+    - `docs/project-structure/decisions.md`
+    - `libs/*/docs/Boundary.md`
+    - `libs/*/docs/Codex.md`
+
+    Add initial ADRs for decisions that are already durable enough:
+
+    - C++23 from day one.
+    - Git submodules plus `add_subdirectory`.
+    - Hybrid plugin ABI direction.
+    - Static libraries initially.
+    - `.ponder` native project extension.
+
+    Generated API documentation is deferred. Do not add Doxygen/Sphinx tooling
+    yet unless a later task explicitly asks for it.
+
+Done when:
+    New architecture and decision docs are Markdown.
+    Each major library has a boundary document and subsystem-local Codex guide,
+    even if they are brief.
+
+
+TASK PS-015: Add Developer Workflow Scripts
+===========================================
+
+Goal:
+    Add thin scripts for common configure, build, test, and format workflows.
+
+Depends on:
+    PS-005, PS-008, PS-012.
+
+Implementation notes:
+    Add thin wrappers such as:
+
+    - `scripts/build.ps1`
+    - `scripts/build.sh`
+    - `scripts/test.ps1`
+    - `scripts/test.sh`
+    - `scripts/format.ps1`
+    - `scripts/format.sh`
+
+    Scripts should be convenience wrappers around CMake, CTest, clang-format,
+    and clang-tidy. They must not become a second build system.
+
+    Scripts should work from the repository root, fail clearly, and print or
+    document the command they wrap.
+
+Done when:
+    A contributor can configure, build, test, and format using documented local
+    commands.
+
+
+TASK PS-016: Document Deferred CI, Packaging, and Release Requirements
+======================================================================
+
+Goal:
+    Record the CI, packaging, dependency-cache, vulnerability-scan, and release
+    requirements that are intentionally deferred.
+
+Depends on:
+    PS-014.
+
+Implementation notes:
+    Do not add CI workflows yet.
+
+    Add a short planning document, for example:
+
+        docs/project-structure/deferred-ci-and-release.md
+
+    It should record:
+
+    - CI is intentionally deferred.
+    - Future CI should build Windows, Linux, and macOS.
+    - Future CI should use dependency caches with careful cache keys.
+    - Future CI may add dependency vulnerability scanning.
+    - Formatting and clang-tidy enforcement should tighten over time.
+    - Release signing is a future requirement.
+    - Start with signed git tags when releases begin.
+    - Add Windows/macOS code signing before broad public binary distribution.
+    - CMake should remain structured for future packaging and install exports.
+
+Done when:
+    Deferred work is explicit and does not appear as an accidental omission.
+
+
+TASK PS-017: Verify the Full Scaffold Locally
+=============================================
+
+Goal:
+    Run the complete local verification loop and fix scaffold problems before
+    moving on to feature implementation.
+
+Depends on:
+    PS-001 through PS-016.
+
+Implementation notes:
+    Run the agreed local commands for:
+
+    - Configure.
+    - Build.
+    - Test.
+    - Format check.
+    - clang-tidy, if configured as a local check.
+    - ASAN/UBSAN preset on Clang/GCC where available.
+
+    Also inspect the target graph informally:
+
+    - Application targets depend downward on libraries.
+    - Reusable libraries do not depend on the desktop app.
+    - GUI/platform dependencies do not leak into core libraries.
+    - Third-party warning settings do not override project warning policy.
+    - Generated files stay in the build tree.
+
+Done when:
+    The scaffold configures, builds, and tests cleanly using the documented
+    local workflow.
+    Known platform limitations are documented.
+
+
+TASK PS-018: Review and Update the Roadmaps
+===========================================
+
+Goal:
+    Update planning docs after the project structure exists.
+
+Depends on:
+    PS-017.
+
+Implementation notes:
+    Review and update:
+
+    - `docs/high-level-roadmap.txt`
+    - `docs/project-structure/open-questions.txt`
+    - `docs/project-structure/roadmap.txt`
+    - `docs/project-structure/decisions.md`
+
+    Remove resolved uncertainty, mark completed work, and add follow-up tasks
+    for anything that belongs to later phases. Pay special attention to any
+    roadmap claims that changed because of the dependency strategy, docs-as-MD
+    decision, static-library-first build, or deferred CI.
+
+Done when:
+    The roadmap reflects the actual scaffold instead of an imagined one.
+    No unresolved project-structure decisions block the next roadmap phase.
+
+
+Completed Implementation Order
+==============================
+
+1. PS-000: Record project-structure decisions.
+2. PS-001: Add root repository metadata.
+3. PS-002: Create the top-level directory skeleton.
+4. PS-003: Create the root CMake project.
+5. PS-004: Add CMake helper modules.
+6. PS-005: Add CMake presets.
+7. PS-006: Add dependency submodule scaffold.
+8. PS-007: Add dependency and license policy.
+9. PS-008: Add formatting and static-analysis configuration.
+10. PS-009: Scaffold initial library targets.
+11. PS-010: Seed core coding conventions.
+12. PS-011: Scaffold initial executable targets.
+13. PS-012: Add initial test harness.
+14. PS-013: Add examples and fixture skeleton.
+15. PS-014: Add documentation and ADR skeleton.
+16. PS-015: Add developer workflow scripts.
+17. PS-016: Document deferred CI, packaging, and release requirements.
+18. PS-017: Verify the full scaffold locally.
+19. PS-018: Review and update the roadmaps. Completed on 2026-07-05.

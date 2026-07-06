@@ -1,0 +1,59 @@
+* text=auto
+
+# Source and project files
+*.c text
+*.cc text
+*.cpp text
+*.cxx text
+*.h text
+*.hh text
+*.hpp text
+*.hxx text
+*.ipp text
+*.inl text
+*.cmake text
+CMakeLists.txt text
+*.json text
+*.md text
+*.txt text
+*.yml text
+*.yaml text
+*.toml text
+*.ini text
+*.cfg text
+*.editorconfig text
+.clang-format text
+.clang-tidy text
+.gitignore text
+.gitmodules text
+
+# Scripts
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Patches and generated text snapshots
+*.patch text eol=lf
+*.diff text eol=lf
+*.dot text eol=lf
+
+# Common binary assets and build artifacts
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.bmp binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.7z binary
+*.tar binary
+*.gz binary
+*.xz binary
+*.exe binary
+*.dll binary
+*.lib binary
+*.pdb binary

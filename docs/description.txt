@@ -1,0 +1,368 @@
+PROJECT VISION
+
+Goal:
+Create the "Blender of Computational Chemistry"—a modern, open-source scientific computing platform that unifies quantum chemistry, molecular dynamics, visualization, workflows, scripting, and cloud execution into a single cohesive application.
+
+Core Philosophy:
+- Do not reinvent every chemistry algorithm initially.
+- Build the best platform for integrating existing engines.
+- Treat chemistry software like a modern IDE or game engine rather than a collection of command-line tools.
+- Focus on architecture, extensibility, user experience, and performance.
+
+==================================================
+PRIMARY GOALS
+==================================================
+
+- Desktop-first application with future web support.
+- Modern C++ core.
+- Beautiful GPU visualization.
+- Plugin-first architecture.
+- Python scripting support.
+- Local and remote/cloud execution.
+- Unified project format.
+- Dependency-aware workflow engine.
+- Long-term foundation for future native chemistry algorithms.
+
+==================================================
+HIGH-LEVEL ARCHITECTURE
+==================================================
+
+Application (Editor)
+    ↓
+Editor Libraries
+    ↓
+SDK Libraries
+    ↓
+Domain Libraries
+    ↓
+Infrastructure Libraries
+    ↓
+Third-party Libraries
+
+Everything below the GUI should be reusable without the desktop application.
+
+==================================================
+CORE LIBRARIES
+==================================================
+
+core
+- Logging
+- Reflection
+- Job System
+- Threading
+- Serialization
+- Events
+- File System
+- UUIDs
+- Versioning
+
+math
+- Vectors
+- Matrices
+- Geometry
+- Spatial Algorithms
+
+render
+- Renderer abstraction
+- Scene management
+- Materials
+- Meshes
+- Volumetric rendering
+- GPU picking
+- Ray tracing
+
+platform
+- Windowing
+- Input
+- Clipboard
+- File dialogs
+
+ui
+- Immediate mode editor
+- Docking
+- Node editor
+- Plotting
+
+assets
+- Molecules
+- Trajectories
+- Wavefunctions
+- Density grids
+- Images
+- Scripts
+- Workflows
+
+project
+- Asset registry
+- Dependency graph
+- Undo/Redo
+- Metadata
+- Caching
+
+plugins
+- Dynamic loading
+- Versioning
+- Registration
+- Dependency resolution
+
+python
+- Automatic bindings through reflection
+- Python plugins
+- Interactive scripting
+
+chemistry
+- Atom
+- Bond
+- Molecule
+- Trajectory
+- BasisSet
+- Orbital
+- Wavefunction
+- DensityGrid
+- ForceField
+
+io
+- XYZ
+- PDB
+- CIF
+- MOL
+- SDF
+- SMILES
+- Cube
+- Gaussian
+- ORCA
+- Extensible via plugins
+
+compute
+- Local execution
+- SSH
+- Slurm
+- PBS
+- Docker
+- Cloud providers
+
+workflow
+- Visual node-based workflow system
+- Similar to Blender Geometry Nodes
+- Every calculation represented as a node
+
+==================================================
+COMPUTATION MODEL
+==================================================
+
+Everything is a job.
+
+The user chooses:
+
+- Local CPU
+- Local GPU
+- Remote workstation
+- HPC cluster
+- AWS
+- Azure
+- Oracle Cloud
+- Google Cloud
+
+The chemistry algorithms should never know where they are running.
+
+==================================================
+PLUGIN MODEL
+==================================================
+
+Support both C++ and Python plugins.
+
+C++:
+- High performance
+- Rendering
+- Simulation
+- Compute
+- File formats
+- UI extensions
+
+Python:
+- Analysis
+- Automation
+- Workflow scripting
+- Custom algorithms
+- Rapid prototyping
+
+Reflection system automatically exposes C++ APIs to Python.
+
+Plugins should be able to contribute:
+- Quantum methods
+- MD engines
+- File import/export
+- Visualization types
+- Workflow nodes
+- UI panels
+- Analysis tools
+- Machine learning models
+
+==================================================
+CHEMISTRY ENGINES
+==================================================
+
+Initially integrate existing software instead of rewriting everything.
+
+Quantum Chemistry:
+- Psi4
+- PySCF
+- ORCA
+- Future native engine
+
+Molecular Dynamics:
+- OpenMM
+- GROMACS
+- LAMMPS
+
+Design everything behind abstract interfaces so engines are interchangeable.
+
+==================================================
+VISUALIZATION
+==================================================
+
+Major differentiator of the platform.
+
+Goals:
+- Modern GPU renderer
+- Real-time rendering
+- Electron densities
+- Molecular orbitals
+- Electrostatic potential
+- Volumetric rendering
+- PBR
+- Ray tracing
+- Large trajectory visualization
+- Publication-quality images
+- Educational visualization
+
+==================================================
+PROJECT FORMAT
+==================================================
+
+Projects contain:
+
+- Geometry
+- Calculations
+- Wavefunctions
+- Electron densities
+- Trajectories
+- Images
+- Scripts
+- Notes
+- Workflows
+- History
+- Logs
+- Cache
+
+Comparable to a Unity or Unreal project.
+
+==================================================
+KEY ARCHITECTURAL PRINCIPLE
+==================================================
+
+Keep systems loosely coupled.
+
+The renderer should never know about Hartree-Fock.
+
+Quantum chemistry produces generic scientific data objects.
+
+The renderer only renders those data objects.
+
+This separation enables future scientific domains beyond chemistry.
+
+==================================================
+LONG-TERM DIFFERENTIATOR
+==================================================
+
+Represent the entire project as a dependency graph.
+
+Examples:
+
+Geometry
+    ↓
+Hartree-Fock
+    ↓
+Electron Density
+    ↓
+Electrostatic Potential
+    ↓
+Visualization
+
+Changing geometry invalidates only downstream calculations.
+
+Visualization changes should not rerun expensive calculations.
+
+This enables:
+- Incremental recomputation
+- Persistent caching
+- Provenance
+- Parallel execution
+- Remote execution
+- Reproducibility
+
+==================================================
+THIRD-PARTY LIBRARIES
+==================================================
+
+Formatting:
+- fmt
+
+Logging:
+- spdlog
+
+Linear Algebra:
+- Eigen
+
+Compression:
+- zstd
+
+Windowing:
+- SDL3
+
+Rendering:
+- Vulkan
+- Vulkan Memory Allocator
+- shaderc
+- glslang
+- SPIRV-Cross
+- meshoptimizer
+
+GUI:
+- Dear ImGui
+- ImPlot
+- ImGuizmo
+- ImNodes (or custom)
+
+Python:
+- pybind11
+
+==================================================
+LICENSING
+==================================================
+
+Recommended license:
+Apache License 2.0
+
+Reasons:
+- Commercial-friendly
+- Explicit patent grant
+- Encourages industry adoption
+- Compatible with paid plugins
+- Leaves open future business options
+
+Potential business model:
+- Open-source core platform
+- Paid enterprise plugins
+- Hosted cloud compute
+- Collaboration services
+- Professional support
+- Training and consulting
+
+==================================================
+LONG-TERM VISION
+==================================================
+
+Build not just another chemistry application, but a reusable scientific computing platform.
+
+The architecture should be general enough that future domains—such as finite element analysis, computational fluid dynamics, materials science, or astrophysics—could reuse the same project system, rendering engine, workflow engine, plugin system, and computation graph.
