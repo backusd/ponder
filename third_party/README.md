@@ -40,6 +40,11 @@ kept separate from the core platform and are not linked into project libraries.
   - Path: `third_party/spdlog`
   - License: MIT
   - Commit: `8671ca4d492c8ee1cdfd3dd88afb9f88dd268178`
+- moodycamel ConcurrentQueue
+  - Path: `third_party/moodycamel`
+  - License: BSD-2-Clause or Boost Software License 1.0; zlib note for
+    `lightweightsemaphore.h`
+  - Commit: `1e2def448e43fb3362123ab5ff039c39e1ba5cfd`
 - GoogleTest
   - Path: `third_party/googletest`
   - License: BSD-3-Clause
@@ -66,6 +71,7 @@ third-party target names directly:
 - `ponder::gtest`
 - `ponder::gtest_main`
 - `ponder::nlohmann_json`
+- `ponder::moodycamel`
 - `ponder::SDL3`
 - `ponder::imgui`
 

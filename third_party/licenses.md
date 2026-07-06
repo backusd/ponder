@@ -28,6 +28,17 @@ Dependencies are pinned as Git submodules. Floating branches are not allowed.
 - Notes: includes bundled fmt under MIT. Prefer project logging wrappers over
   direct app-wide use.
 
+### moodycamel ConcurrentQueue
+
+- Purpose: lock-free queue for the future async logging backend.
+- Usage: private runtime dependency behind core logging implementation details.
+- License: BSD-2-Clause or Boost Software License 1.0; zlib applies to the
+  embedded `lightweightsemaphore.h` implementation used by the blocking queue.
+- License file: `third_party/moodycamel/LICENSE.md`.
+- Pinned commit: `1e2def448e43fb3362123ab5ff039c39e1ba5cfd`.
+- Notes: keep this dependency out of public core headers. Prefer the non-blocking
+  queue for logging unless blocking behavior is explicitly needed.
+
 ### GoogleTest
 
 - Purpose: unit and integration test framework.

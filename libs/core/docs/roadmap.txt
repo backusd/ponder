@@ -188,6 +188,12 @@ TASK CORE-005: Implement Assertion And Verify Handlers
       message formatting, source location capture, and RAII handler restoration.
 
 TASK CORE-006: Add moodycamel Dependency For Async Logging
+    Status: implemented.
+
+    `moodycamel/concurrentqueue` is vendored as `third_party/moodycamel`,
+    exposed to project CMake as `ponder::moodycamel`, and linked privately
+    by `ponder_core` for future async logging internals.
+
     Add `moodycamel::ConcurrentQueue` as a third-party dependency for internal
     logging use.
 

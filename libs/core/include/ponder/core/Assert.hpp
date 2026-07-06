@@ -35,11 +35,11 @@ private:
 
 using AssertionFailureHandler = void (*)(const AssertionFailure& failure);
 
-[[nodiscard]] AssertionFailureHandler
-SetAssertionFailureHandler(AssertionFailureHandler handler) noexcept;
+[[nodiscard]] AssertionFailureHandler SetAssertionFailureHandler(
+    AssertionFailureHandler handler) noexcept;
 
-[[nodiscard]] AssertionFailureHandler
-SetVerifyFailureHandler(AssertionFailureHandler handler) noexcept;
+[[nodiscard]] AssertionFailureHandler SetVerifyFailureHandler(
+    AssertionFailureHandler handler) noexcept;
 
 class ScopedAssertionFailureHandler final
 {
@@ -73,35 +73,36 @@ private:
 
 [[nodiscard]] std::string FormatAssertionFailure(const AssertionFailure& failure);
 
-[[noreturn]] void
-HandleAssertionFailure(std::string_view expression, std::string message,
-                       std::source_location location = std::source_location::current());
+[[noreturn]] void HandleAssertionFailure(
+    std::string_view expression, std::string message,
+    std::source_location location = std::source_location::current());
 
 template <typename... Args>
-[[noreturn]] void
-HandleAssertionFailureFormatted(std::string_view expression, std::source_location location,
-                                std::format_string<Args...> messageFormat, Args&&... args)
+[[noreturn]] void HandleAssertionFailureFormatted(std::string_view expression,
+                                                  std::source_location location,
+                                                  std::format_string<Args...> messageFormat,
+                                                  Args&&... args)
 {
     HandleAssertionFailure(expression, std::format(messageFormat, std::forward<Args>(args)...),
                            location);
 }
 
-[[noreturn]] void
-HandleVerifyFailure(std::string_view expression, std::string message,
-                    std::source_location location = std::source_location::current());
+[[noreturn]] void HandleVerifyFailure(
+    std::string_view expression, std::string message,
+    std::source_location location = std::source_location::current());
 
 template <typename... Args>
-[[noreturn]] void
-HandleVerifyFailureFormatted(std::string_view expression, std::source_location location,
-                             std::format_string<Args...> messageFormat, Args&&... args)
+[[noreturn]] void HandleVerifyFailureFormatted(std::string_view expression,
+                                               std::source_location location,
+                                               std::format_string<Args...> messageFormat,
+                                               Args&&... args)
 {
     HandleVerifyFailure(expression, std::format(messageFormat, std::forward<Args>(args)...),
                         location);
 }
 
-[[noreturn]] void
-HandleUnreachable(std::string message,
-                  std::source_location location = std::source_location::current());
+[[noreturn]] void HandleUnreachable(
+    std::string message, std::source_location location = std::source_location::current());
 
 template <typename... Args>
 [[noreturn]] void HandleUnreachableFormatted(std::source_location location,

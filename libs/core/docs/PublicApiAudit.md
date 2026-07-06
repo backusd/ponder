@@ -124,7 +124,7 @@ Mismatches and gaps:
 
 Roadmap coverage:
 
-- CORE-006 should add the internal queue dependency.
+- CORE-006 added the internal queue dependency as private CMake wiring.
 - CORE-007 should refine the frontend/backend and preserve the no-third-party
   public-header rule.
 - CORE-008 should add deterministic logging test infrastructure.

@@ -28,18 +28,15 @@ private:
     StackTrace m_stackTrace;
 };
 
-[[nodiscard]] PonderException
-MakePonderException(std::string message,
-                    std::source_location location = std::source_location::current());
+[[nodiscard]] PonderException MakePonderException(
+    std::string message, std::source_location location = std::source_location::current());
 
-[[noreturn]] void
-ThrowPonderException(std::string message,
-                     std::source_location location = std::source_location::current());
+[[noreturn]] void ThrowPonderException(
+    std::string message, std::source_location location = std::source_location::current());
 
 template <typename... Args>
-[[nodiscard]] PonderException
-MakeFormattedPonderException(std::source_location location,
-                             std::format_string<Args...> messageFormat, Args&&... args)
+[[nodiscard]] PonderException MakeFormattedPonderException(
+    std::source_location location, std::format_string<Args...> messageFormat, Args&&... args)
 {
     return MakePonderException(std::format(messageFormat, std::forward<Args>(args)...), location);
 }

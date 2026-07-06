@@ -33,6 +33,9 @@ For subsystem work, read exactly two guidance files by default:
 
 - Formatting is LLVM-derived with 4-space indentation, 100 columns, and Allman
   braces.
+- Keep function names on the same line as their return type. If a declaration or
+  definition is too long, wrap the parameter list instead of moving the function
+  name onto its own line.
 - Types and functions use PascalCase.
 - Variables use camelCase.
 - Private data members use `m_*`.
