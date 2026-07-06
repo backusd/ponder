@@ -21,14 +21,7 @@ namespace pond::core
 {
 namespace
 {
-struct LogRecord final
-{
-    LogLevel Level{LogLevel::Info};
-    std::string Category;
-    std::string Message;
-    std::source_location Location;
-};
-
+void DefaultLogSinkHandler(const LogEntry&) {}
 void DefaultFatalHandler(std::string_view, std::string_view, std::source_location) {}
 
 spdlog::level::level_enum ToSpdlogLevel(LogLevel level) noexcept
@@ -79,37 +72,37 @@ public:
         Shutdown();
     }
 
-    void Log(LogRecord record) noexcept
+    void Log(LogEntry entry) noexcept
     {
-        if (!IsLogLevelEnabled(record.Level, m_minimumLevel.load(std::memory_order_relaxed)))
+        if (!IsLogLevelEnabled(entry.GetLevel(), m_minimumLevel.load(std::memory_order_relaxed)))
         {
             return;
         }
 
-        const bool isFatal = record.Level == LogLevel::Fatal;
-        const LogRecord synchronousRecord = record;
-        const std::string fatalCategory = record.Category;
-        const std::string fatalMessage = record.Message;
-        const std::source_location fatalLocation = record.Location;
+        const bool isFatal = entry.GetLevel() == LogLevel::Fatal;
+        const LogEntry synchronousEntry = entry;
+        const std::string fatalCategory{entry.GetCategory()};
+        const std::string fatalMessage{entry.GetMessage()};
+        const std::source_location fatalLocation = entry.GetLocation();
 
         if (!m_acceptingQueuedMessages.load(std::memory_order_acquire))
         {
-            WriteRecord(record);
+            WriteEntry(entry);
             FlushLogger();
             InvokeFatalHandlerIfNeeded(isFatal, fatalCategory, fatalMessage, fatalLocation);
             return;
         }
 
-        m_pendingRecords.fetch_add(1, std::memory_order_acq_rel);
+        m_pendingEntries.fetch_add(1, std::memory_order_acq_rel);
 
-        if (!m_queue.enqueue(std::move(record)))
+        if (!m_queue.enqueue(std::move(entry)))
         {
-            m_pendingRecords.fetch_sub(1, std::memory_order_acq_rel);
+            m_pendingEntries.fetch_sub(1, std::memory_order_acq_rel);
             m_waitCondition.notify_all();
-            WriteRecord(LogRecord{LogLevel::Error, "logging",
-                                  "Failed to enqueue log record; writing synchronously.",
-                                  std::source_location::current()});
-            WriteRecord(synchronousRecord);
+            WriteEntry(LogEntry{LogLevel::Error, "logging",
+                                "Failed to enqueue log record; writing synchronously.",
+                                std::chrono::system_clock::now(), std::source_location::current()});
+            WriteEntry(synchronousEntry);
             FlushLogger();
             InvokeFatalHandlerIfNeeded(isFatal, fatalCategory, fatalMessage, fatalLocation);
             return;
@@ -146,7 +139,7 @@ public:
         m_waitCondition.wait(lock,
                              [this]()
                              {
-                                 return m_pendingRecords.load(std::memory_order_acquire) == 0;
+                                 return m_pendingEntries.load(std::memory_order_acquire) == 0;
                              });
         FlushLogger();
     }
@@ -171,6 +164,12 @@ public:
         }
     }
 
+    LogSinkHandler SetSinkHandler(LogSinkHandler handler) noexcept
+    {
+        return m_sinkHandler.exchange(handler ? handler : DefaultLogSinkHandler,
+                                      std::memory_order_acq_rel);
+    }
+
     LogFatalHandler SetFatalHandler(LogFatalHandler handler) noexcept
     {
         return m_fatalHandler.exchange(handler ? handler : DefaultFatalHandler,
@@ -185,7 +184,7 @@ private:
             DrainQueue();
 
             if (m_stopRequested.load(std::memory_order_acquire) &&
-                m_pendingRecords.load(std::memory_order_acquire) == 0)
+                m_pendingEntries.load(std::memory_order_acquire) == 0)
             {
                 break;
             }
@@ -195,7 +194,7 @@ private:
                                  [this]()
                                  {
                                      return m_stopRequested.load(std::memory_order_acquire) ||
-                                            m_pendingRecords.load(std::memory_order_acquire) > 0;
+                                            m_pendingEntries.load(std::memory_order_acquire) > 0;
                                  });
         }
 
@@ -205,44 +204,46 @@ private:
 
     void DrainQueue() noexcept
     {
-        LogRecord record;
-        while (m_queue.try_dequeue(record))
+        LogEntry entry;
+        while (m_queue.try_dequeue(entry))
         {
-            WriteRecord(record);
-            if (m_pendingRecords.fetch_sub(1, std::memory_order_acq_rel) == 1)
+            WriteEntry(entry);
+            if (m_pendingEntries.fetch_sub(1, std::memory_order_acq_rel) == 1)
             {
                 m_waitCondition.notify_all();
             }
         }
     }
 
-    void WriteRecord(const LogRecord& record) noexcept
+    void WriteEntry(const LogEntry& entry) noexcept
     {
+        InvokeSinkHandler(entry);
+
         try
         {
-            m_logger->log(spdlog::source_loc{record.Location.file_name(),
-                                             static_cast<int>(record.Location.line()),
-                                             record.Location.function_name()},
-                          ToSpdlogLevel(record.Level), "{}", FormatPayload(record));
+            m_logger->log(spdlog::source_loc{entry.GetLocation().file_name(),
+                                             static_cast<int>(entry.GetLocation().line()),
+                                             entry.GetLocation().function_name()},
+                          ToSpdlogLevel(entry.GetLevel()), "{}", FormatPayload(entry));
         }
         catch (...)
         {
         }
     }
 
-    [[nodiscard]] std::string FormatPayload(const LogRecord& record) const
+    [[nodiscard]] std::string FormatPayload(const LogEntry& entry) const
     {
-        if (record.Category.empty())
+        if (entry.GetCategory().empty())
         {
-            return record.Message;
+            return std::string{entry.GetMessage()};
         }
 
         std::string payload;
-        payload.reserve(record.Category.size() + record.Message.size() + 3);
+        payload.reserve(entry.GetCategory().size() + entry.GetMessage().size() + 3);
         payload.append("[");
-        payload.append(record.Category);
+        payload.append(entry.GetCategory());
         payload.append("] ");
-        payload.append(record.Message);
+        payload.append(entry.GetMessage());
         return payload;
     }
 
@@ -251,6 +252,17 @@ private:
         try
         {
             m_logger->flush();
+        }
+        catch (...)
+        {
+        }
+    }
+
+    void InvokeSinkHandler(const LogEntry& entry) noexcept
+    {
+        try
+        {
+            m_sinkHandler.load(std::memory_order_acquire)(entry);
         }
         catch (...)
         {
@@ -276,10 +288,11 @@ private:
     }
 
     std::shared_ptr<spdlog::logger> m_logger;
-    moodycamel::ConcurrentQueue<LogRecord> m_queue;
+    moodycamel::ConcurrentQueue<LogEntry> m_queue;
     std::atomic<LogLevel> m_minimumLevel{LogLevel::Trace};
+    std::atomic<LogSinkHandler> m_sinkHandler{DefaultLogSinkHandler};
     std::atomic<LogFatalHandler> m_fatalHandler{DefaultFatalHandler};
-    std::atomic<std::uint64_t> m_pendingRecords{0};
+    std::atomic<std::uint64_t> m_pendingEntries{0};
     std::atomic<bool> m_acceptingQueuedMessages{true};
     std::atomic<bool> m_stopRequested{false};
     std::mutex m_waitMutex;
@@ -293,6 +306,38 @@ LoggingBackend& GetLoggingBackend()
     return kBackend;
 }
 } // namespace
+
+LogEntry::LogEntry(LogLevel level, std::string category, std::string message,
+                   std::chrono::system_clock::time_point timestamp, std::source_location location)
+    : m_level(level), m_category(std::move(category)), m_message(std::move(message)),
+      m_timestamp(timestamp), m_location(location)
+{
+}
+
+LogLevel LogEntry::GetLevel() const noexcept
+{
+    return m_level;
+}
+
+std::string_view LogEntry::GetCategory() const noexcept
+{
+    return m_category;
+}
+
+std::string_view LogEntry::GetMessage() const noexcept
+{
+    return m_message;
+}
+
+std::chrono::system_clock::time_point LogEntry::GetTimestamp() const noexcept
+{
+    return m_timestamp;
+}
+
+const std::source_location& LogEntry::GetLocation() const noexcept
+{
+    return m_location;
+}
 
 std::string_view GetLogLevelName(LogLevel level) noexcept
 {
@@ -325,8 +370,8 @@ void LogMessage(LogLevel level, std::string_view category, std::string_view mess
 {
     try
     {
-        GetLoggingBackend().Log(
-            LogRecord{level, std::string{category}, std::string{message}, location});
+        GetLoggingBackend().Log(LogEntry{level, std::string{category}, std::string{message},
+                                         std::chrono::system_clock::now(), location});
     }
     catch (...)
     {
@@ -353,9 +398,47 @@ void ShutdownLogging() noexcept
     GetLoggingBackend().Shutdown();
 }
 
+LogSinkHandler SetLogSinkHandler(LogSinkHandler handler) noexcept
+{
+    return GetLoggingBackend().SetSinkHandler(handler);
+}
+
 LogFatalHandler SetLogFatalHandler(LogFatalHandler handler) noexcept
 {
     return GetLoggingBackend().SetFatalHandler(handler);
+}
+
+ScopedLogSinkHandler::ScopedLogSinkHandler(LogSinkHandler handler) noexcept
+{
+    FlushLog();
+    m_previousHandler = SetLogSinkHandler(handler);
+}
+
+ScopedLogSinkHandler::~ScopedLogSinkHandler()
+{
+    FlushLog();
+    (void)SetLogSinkHandler(m_previousHandler);
+}
+
+ScopedLogFatalHandler::ScopedLogFatalHandler(LogFatalHandler handler) noexcept
+    : m_previousHandler(SetLogFatalHandler(handler))
+{
+}
+
+ScopedLogFatalHandler::~ScopedLogFatalHandler()
+{
+    (void)SetLogFatalHandler(m_previousHandler);
+}
+
+ScopedMinimumLogLevel::ScopedMinimumLogLevel(LogLevel level) noexcept
+    : m_previousLevel(GetMinimumLogLevel())
+{
+    SetMinimumLogLevel(level);
+}
+
+ScopedMinimumLogLevel::~ScopedMinimumLogLevel()
+{
+    SetMinimumLogLevel(m_previousLevel);
 }
 
 void LogFormattingFailure(LogLevel level, std::string_view category, std::string_view reason,

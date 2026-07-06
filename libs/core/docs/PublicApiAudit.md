@@ -117,14 +117,24 @@ CORE-007 update:
   fatal handler is intentionally no-op for now so callers such as assertions can
   own their terminating behavior.
 
+CORE-008 update:
+
+- Logging now exposes `LogEntry`, `LogSinkHandler`, `SetLogSinkHandler`,
+  `ScopedLogSinkHandler`, `ScopedLogFatalHandler`, and
+  `ScopedMinimumLogLevel` for deterministic tests.
+- Capture records include level, category, message, timestamp, and source
+  location using only standard library public types.
+- The scoped sink guard flushes before installing and before restoring so
+  async queued messages are captured by the intended handler.
+- Logging tests now assert each level, category/message formatting, formatting
+  failure diagnostics, fatal handler routing, minimum-level filtering, RAII
+  restoration, and queued flush behavior.
+
 Remaining gaps:
 
-- CORE-008 still needs a test sink or scoped log capture utility so tests can
-  assert exact emitted records without depending on console/debugger output.
-- CORE-008 should add RAII restoration for log/fatal handlers and deterministic
-  sink-level async logging assertions.
 - CORE-015 should keep checking public header hygiene.
-
+- Future logging work may add richer runtime sink configuration, but the current
+  capture hook is sufficient for deterministic core tests.
 ### `PonderException.hpp`
 
 CORE-004 update: `PonderException` has since been refined into a standalone

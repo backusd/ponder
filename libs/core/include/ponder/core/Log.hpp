@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <exception>
 #include <format>
 #include <source_location>
@@ -19,6 +20,33 @@ enum class LogLevel
     Fatal = 5
 };
 
+class LogEntry final
+{
+public:
+    LogEntry() = default;
+    LogEntry(LogLevel level, std::string category, std::string message,
+             std::chrono::system_clock::time_point timestamp, std::source_location location);
+    LogEntry(const LogEntry&) = default;
+    LogEntry(LogEntry&&) noexcept = default;
+    LogEntry& operator=(const LogEntry&) = default;
+    LogEntry& operator=(LogEntry&&) noexcept = default;
+    ~LogEntry() = default;
+
+    [[nodiscard]] LogLevel GetLevel() const noexcept;
+    [[nodiscard]] std::string_view GetCategory() const noexcept;
+    [[nodiscard]] std::string_view GetMessage() const noexcept;
+    [[nodiscard]] std::chrono::system_clock::time_point GetTimestamp() const noexcept;
+    [[nodiscard]] const std::source_location& GetLocation() const noexcept;
+
+private:
+    LogLevel m_level{LogLevel::Info};
+    std::string m_category;
+    std::string m_message;
+    std::chrono::system_clock::time_point m_timestamp{};
+    std::source_location m_location{};
+};
+
+using LogSinkHandler = void (*)(const LogEntry& entry);
 using LogFatalHandler = void (*)(std::string_view category, std::string_view message,
                                  std::source_location location);
 
@@ -39,7 +67,53 @@ void SetMinimumLogLevel(LogLevel level) noexcept;
 void FlushLog() noexcept;
 void ShutdownLogging() noexcept;
 
+[[nodiscard]] LogSinkHandler SetLogSinkHandler(LogSinkHandler handler) noexcept;
 [[nodiscard]] LogFatalHandler SetLogFatalHandler(LogFatalHandler handler) noexcept;
+
+class ScopedLogSinkHandler final
+{
+public:
+    explicit ScopedLogSinkHandler(LogSinkHandler handler) noexcept;
+    ~ScopedLogSinkHandler();
+
+    ScopedLogSinkHandler(const ScopedLogSinkHandler&) = delete;
+    ScopedLogSinkHandler& operator=(const ScopedLogSinkHandler&) = delete;
+    ScopedLogSinkHandler(ScopedLogSinkHandler&&) = delete;
+    ScopedLogSinkHandler& operator=(ScopedLogSinkHandler&&) = delete;
+
+private:
+    LogSinkHandler m_previousHandler{nullptr};
+};
+
+class ScopedLogFatalHandler final
+{
+public:
+    explicit ScopedLogFatalHandler(LogFatalHandler handler) noexcept;
+    ~ScopedLogFatalHandler();
+
+    ScopedLogFatalHandler(const ScopedLogFatalHandler&) = delete;
+    ScopedLogFatalHandler& operator=(const ScopedLogFatalHandler&) = delete;
+    ScopedLogFatalHandler(ScopedLogFatalHandler&&) = delete;
+    ScopedLogFatalHandler& operator=(ScopedLogFatalHandler&&) = delete;
+
+private:
+    LogFatalHandler m_previousHandler{nullptr};
+};
+
+class ScopedMinimumLogLevel final
+{
+public:
+    explicit ScopedMinimumLogLevel(LogLevel level) noexcept;
+    ~ScopedMinimumLogLevel();
+
+    ScopedMinimumLogLevel(const ScopedMinimumLogLevel&) = delete;
+    ScopedMinimumLogLevel& operator=(const ScopedMinimumLogLevel&) = delete;
+    ScopedMinimumLogLevel(ScopedMinimumLogLevel&&) = delete;
+    ScopedMinimumLogLevel& operator=(ScopedMinimumLogLevel&&) = delete;
+
+private:
+    LogLevel m_previousLevel{LogLevel::Trace};
+};
 
 void LogFormattingFailure(LogLevel level, std::string_view category, std::string_view reason,
                           std::source_location location) noexcept;

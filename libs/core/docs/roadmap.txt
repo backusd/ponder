@@ -238,6 +238,15 @@ TASK CORE-007: Refine Logging Frontend And Async Backend
     - No spdlog or moodycamel types exposed in public headers.
 
 TASK CORE-008: Add Logging Test Infrastructure
+    Status: implemented.
+
+    Logging now exposes standard-library-only capture records and scoped
+    handler guards: `LogEntry`, `LogSinkHandler`, `ScopedLogSinkHandler`,
+    `ScopedLogFatalHandler`, and `ScopedMinimumLogLevel`. Tests can capture
+    async-drained records after `FlushLog` and assert level, message,
+    category, timestamp, and source location without depending on console or
+    debugger sinks.
+
     Add a test sink or scoped log capture utility so logging behavior can be
     tested without depending on console/debugger output.
 

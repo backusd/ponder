@@ -39,6 +39,10 @@ configuration, environment, job-system, or application dependencies.
   `LOG_FATAL` for diagnostics.
 - Use `_CATEGORY` logging macros when a stable subsystem category helps filtering
   or later capture assertions.
+- Use `ScopedLogSinkHandler`, `ScopedLogFatalHandler`, and
+  `ScopedMinimumLogLevel` in tests that modify logging state.
+- `ScopedLogSinkHandler` flushes before installing and before restoring its
+  handler so async records remain deterministic.
 - Use `FlushLog` before process boundaries where queued messages must be visible;
   use `ShutdownLogging` only for explicit application shutdown paths.
 - Fatal logs flush and invoke the configured fatal handler. The default fatal
