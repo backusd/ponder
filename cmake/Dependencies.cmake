@@ -59,55 +59,33 @@ function(ponder_add_imgui_target)
 endfunction()
 
 function(ponder_configure_dependencies)
-    ponder_set_dependency_option(SPDLOG_BUILD_EXAMPLE OFF BOOL
-        "Disable spdlog examples.")
-    ponder_set_dependency_option(SPDLOG_BUILD_EXAMPLE_HO OFF BOOL
-        "Disable spdlog header-only examples.")
-    ponder_set_dependency_option(SPDLOG_BUILD_TESTS OFF BOOL
-        "Disable spdlog tests.")
-    ponder_set_dependency_option(SPDLOG_BUILD_TESTS_HO OFF BOOL
-        "Disable spdlog header-only tests.")
-    ponder_set_dependency_option(SPDLOG_BUILD_BENCH OFF BOOL
-        "Disable spdlog benchmarks.")
-    ponder_set_dependency_option(SPDLOG_INSTALL OFF BOOL
-        "Disable spdlog install rules.")
-    ponder_set_dependency_option(SPDLOG_BUILD_SHARED OFF BOOL
-        "Build spdlog as a static library.")
+    ponder_set_dependency_option(SPDLOG_BUILD_EXAMPLE OFF BOOL "Disable spdlog examples.")
+    ponder_set_dependency_option(SPDLOG_BUILD_EXAMPLE_HO OFF BOOL "Disable spdlog header-only examples.")
+    ponder_set_dependency_option(SPDLOG_BUILD_TESTS OFF BOOL "Disable spdlog tests.")
+    ponder_set_dependency_option(SPDLOG_BUILD_TESTS_HO OFF BOOL "Disable spdlog header-only tests.")
+    ponder_set_dependency_option(SPDLOG_BUILD_BENCH OFF BOOL "Disable spdlog benchmarks.")
+    ponder_set_dependency_option(SPDLOG_INSTALL OFF BOOL "Disable spdlog install rules.")
+    ponder_set_dependency_option(SPDLOG_BUILD_SHARED OFF BOOL "Build spdlog as a static library.")
 
-    ponder_set_dependency_option(BUILD_GMOCK ON BOOL
-        "Build GoogleMock with GoogleTest.")
-    ponder_set_dependency_option(INSTALL_GTEST OFF BOOL
-        "Disable GoogleTest install rules.")
-    ponder_set_dependency_option(gtest_force_shared_crt ON BOOL
-        "Use the shared CRT for GoogleTest on Windows.")
+    ponder_set_dependency_option(BUILD_GMOCK ON BOOL "Build GoogleMock with GoogleTest.")
+    ponder_set_dependency_option(INSTALL_GTEST OFF BOOL "Disable GoogleTest install rules.")
+    ponder_set_dependency_option(gtest_force_shared_crt ON BOOL "Use the shared CRT for GoogleTest on Windows.")
 
-    ponder_set_dependency_option(JSON_BuildTests OFF BOOL
-        "Disable nlohmann/json tests.")
-    ponder_set_dependency_option(JSON_Install OFF BOOL
-        "Disable nlohmann/json install rules.")
-    ponder_set_dependency_option(JSON_SystemInclude ON BOOL
-        "Treat nlohmann/json includes as system includes.")
+    ponder_set_dependency_option(JSON_BuildTests OFF BOOL "Disable nlohmann/json tests.")
+    ponder_set_dependency_option(JSON_Install OFF BOOL "Disable nlohmann/json install rules.")
+    ponder_set_dependency_option(JSON_SystemInclude ON BOOL "Treat nlohmann/json includes as system includes.")
 
-    ponder_set_dependency_option(SDL_SHARED OFF BOOL
-        "Disable the SDL3 shared library.")
-    ponder_set_dependency_option(SDL_STATIC ON BOOL
-        "Enable the SDL3 static library.")
-    ponder_set_dependency_option(SDL_TEST_LIBRARY OFF BOOL
-        "Disable the SDL3 test library.")
-    ponder_set_dependency_option(SDL_TESTS OFF BOOL
-        "Disable SDL3 tests.")
-    ponder_set_dependency_option(SDL_EXAMPLES OFF BOOL
-        "Disable SDL3 examples.")
-    ponder_set_dependency_option(SDL_INSTALL OFF BOOL
-        "Disable SDL3 install rules.")
-    ponder_set_dependency_option(SDL_INSTALL_TESTS OFF BOOL
-        "Disable SDL3 test installation.")
+    ponder_set_dependency_option(SDL_SHARED OFF BOOL "Disable the SDL3 shared library.")
+    ponder_set_dependency_option(SDL_STATIC ON BOOL "Enable the SDL3 static library.")
+    ponder_set_dependency_option(SDL_TEST_LIBRARY OFF BOOL "Disable the SDL3 test library.")
+    ponder_set_dependency_option(SDL_TESTS OFF BOOL "Disable SDL3 tests.")
+    ponder_set_dependency_option(SDL_EXAMPLES OFF BOOL "Disable SDL3 examples.")
+    ponder_set_dependency_option(SDL_INSTALL OFF BOOL "Disable SDL3 install rules.")
+    ponder_set_dependency_option(SDL_INSTALL_TESTS OFF BOOL "Disable SDL3 test installation.")
 
     ponder_add_third_party_subdirectory(third_party/spdlog third_party/spdlog)
     ponder_add_third_party_subdirectory(third_party/googletest third_party/googletest)
-    ponder_add_third_party_subdirectory(
-        third_party/nlohmann_json
-        third_party/nlohmann_json)
+    ponder_add_third_party_subdirectory(third_party/nlohmann_json third_party/nlohmann_json)
     ponder_add_third_party_subdirectory(third_party/SDL3 third_party/SDL3)
     ponder_add_imgui_target()
 

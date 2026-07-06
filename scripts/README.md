@@ -17,6 +17,7 @@ scripts/check-tools.sh
 
 The PowerShell tool check also searches Visual Studio LLVM install directories
 for Clang tools that are installed but not on PATH.
+
 ## Build
 
 ```sh

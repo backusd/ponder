@@ -32,6 +32,7 @@ add_subdirectory(libs)
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
 if(PONDER_BUILD_APPS)
     add_subdirectory(apps)
 endif()

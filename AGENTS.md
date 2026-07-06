@@ -1,19 +1,19 @@
 # AGENTS.md
 
 This file contains global guidance for Codex and other coding agents working in
-this repository. Keep this file limited to rules that apply across the whole
-codebase.
+this repository.
 
 For subsystem work, read exactly two guidance files by default:
 
 1. This root `AGENTS.md`.
 2. The subsystem-local `<library|executable path>/docs/Codex.md`.
 
-Do not add library-specific or executable-specific guidance here. Put that in
-the relevant subsystem `docs/Codex.md` file.
-
 ## Global Project Rules
 
+- When writing commit messages, NEVER auto-add your agent name as co-author
+- When making technical decisions, do not give any weight to development 
+  cost. Instead, prefer quality, simplicity, robustness, scalability, and
+  long term maintainability.
 - The canonical project name is `ponder`.
 - C++ namespaces use `pond::`. This is the only intended use of shortened
   `pond`.
@@ -42,17 +42,11 @@ the relevant subsystem `docs/Codex.md` file.
 
 ## Error Handling And Diagnostics
 
-- Prefer `std::expected` or an expected-like wrapper for recoverable errors.
-- Use `PonderException` only for truly exceptional, usually unrecoverable cases.
-- Use project assertion macros once they exist.
-- Use project logging macros once they exist.
+- Prefer `Result` (an expected-like wrapper) defined in 
+  `libs/core/include/ponder/core/Result.hpp` for recoverable errors.
+- Use `PonderException` defined in `libs/core/include/ponder/core/PonderException.hpp` 
+  only for truly exceptional, usually unrecoverable cases.
+- Use project assertion macros defined in `libs/core/include/ponder/core/Assert.hpp`
+- Use project logging macros defined in `libs/core/include/ponder/core/Log.hpp`
 
-## Documentation Model
 
-- Root `AGENTS.md` contains global rules only.
-- Each library, executable, tool, or plugin should have local guidance at
-  `<subsystem path>/docs/Codex.md`.
-- Local `docs/Codex.md` files should describe ownership, dependencies,
-  invariants, local docs/tests, and verification steps for that subsystem.
-- Do not create a separate Codex routing index or repo-local skill-pack layer
-  unless the project explicitly revisits this decision.
