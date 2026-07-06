@@ -49,6 +49,13 @@ surface. The highest-priority follow-up work is:
 
 ### `Assert.hpp`
 
+CORE-005 update:
+
+- Assertions now expose scoped handler overrides, `PONDER_VERIFY`,
+  `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`.
+- The findings below are retained as historical audit context for why the
+  assertion work was added.
+
 Current behavior:
 
 - Provides `PONDER_ASSERT` and `PONDER_ASSERT_MESSAGE`.

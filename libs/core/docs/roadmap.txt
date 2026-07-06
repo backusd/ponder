@@ -143,7 +143,7 @@ TASK CORE-004: Refine `PonderException` And Throw Helpers
 
     `PonderException` is now a standalone project type with message, source
     location, and stacktrace fallback storage. `ThrowPonderException` and
-    `PONDER_THROW` provide source-location-aware throw helpers.
+    `PONDER_EXCEPTION` provide source-location-aware throw helpers.
 
     Update `PonderException` and add throw helpers/macros.
 
@@ -163,6 +163,12 @@ TASK CORE-004: Refine `PonderException` And Throw Helpers
       format-style throw helpers.
 
 TASK CORE-005: Implement Assertion And Verify Handlers
+    Status: implemented.
+
+    Assertion and verify failure handlers now use scoped RAII overrides for tests.
+    `PONDER_VERIFY` remains active and throws `PonderException`; debug-only
+    assertions compile out in release builds.
+
     Implement assertion behavior according to the resolved decisions.
 
     Expected coverage:

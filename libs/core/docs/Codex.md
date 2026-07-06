@@ -27,8 +27,9 @@ configuration, environment, job-system, or application dependencies.
   type.
 - `PonderException` should not carry `Error`; it should carry a human-readable
   message, source location, and stacktrace if practical.
-- Use `PONDER_THROW` or `ThrowPonderException` for throwing `PonderException`. These helpers support
-  std::format-style messages and source-location capture.
+- Use `throw PONDER_EXCEPTION(...)` or `ThrowPonderException` for throwing
+  `PonderException`. These helpers support std::format-style messages and
+  source-location capture.
 - Use `PONDER_ASSERT` or `PONDER_ASSERT_MESSAGE` for internal invariants.
 - Debug-only assertions should log and debug break, and should compile out in
   release builds.

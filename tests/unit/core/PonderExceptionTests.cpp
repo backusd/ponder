@@ -59,12 +59,12 @@ TEST(PonderExceptionTests, ThrowFunctionThrowsStandaloneException)
     FAIL() << "ThrowPonderException should throw";
 }
 
-TEST(PonderExceptionTests, ThrowMacroFormatsMessageAndCapturesLocation)
+TEST(PonderExceptionTests, ExceptionMacroFormatsMessageAndCapturesLocation)
 {
     const auto expectedLine = __LINE__ + 3;
     void (*throwFunction)() = []()
     {
-        PONDER_THROW("formatted {} {}", "value", 42);
+        throw PONDER_EXCEPTION("formatted {} {}", "value", 42);
     };
 
     try
@@ -79,6 +79,6 @@ TEST(PonderExceptionTests, ThrowMacroFormatsMessageAndCapturesLocation)
         return;
     }
 
-    FAIL() << "PONDER_THROW should throw";
+    FAIL() << "PONDER_EXCEPTION should throw";
 }
 } // namespace

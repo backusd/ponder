@@ -1,5 +1,6 @@
 ponder_add_project_test(ponder_core_tests
     SOURCES
+        AssertTests.cpp
         ErrorTests.cpp
         PonderExceptionTests.cpp
         ResultTests.cpp

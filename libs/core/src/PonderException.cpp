@@ -30,8 +30,13 @@ const StackTrace& PonderException::GetStackTrace() const noexcept
     return m_stackTrace;
 }
 
+PonderException MakePonderException(std::string message, std::source_location location)
+{
+    return PonderException{std::move(message), CaptureStackTrace(), location};
+}
+
 [[noreturn]] void ThrowPonderException(std::string message, std::source_location location)
 {
-    throw PonderException{std::move(message), location};
+    throw MakePonderException(std::move(message), location);
 }
 } // namespace pond::core

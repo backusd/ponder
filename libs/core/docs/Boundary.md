@@ -24,7 +24,8 @@ other libraries to depend on.
   a standalone project type and must not derive from `std::exception` or any
   other type. It should carry a human-readable message, source location, and
   stacktrace if practical, but it should not carry `Error`.
-- Throw helper macros/functions for `PonderException`, including `PONDER_THROW` and `ThrowPonderException`, with std::format-style
+- Throw helper macros/functions for `PonderException`, including
+  `PONDER_EXCEPTION` and `ThrowPonderException`, with std::format-style
   messages and automatic source-location capture.
 - `PONDER_ASSERT`, `PONDER_ASSERT_MESSAGE`, `PONDER_VERIFY`,
   `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`.

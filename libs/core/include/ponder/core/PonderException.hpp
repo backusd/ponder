@@ -28,18 +28,22 @@ private:
     StackTrace m_stackTrace;
 };
 
+[[nodiscard]] PonderException
+MakePonderException(std::string message,
+                    std::source_location location = std::source_location::current());
+
 [[noreturn]] void
 ThrowPonderException(std::string message,
                      std::source_location location = std::source_location::current());
 
 template <typename... Args>
-[[noreturn]] void ThrowFormattedPonderException(std::source_location location,
-                                                std::format_string<Args...> messageFormat,
-                                                Args&&... args)
+[[nodiscard]] PonderException
+MakeFormattedPonderException(std::source_location location,
+                             std::format_string<Args...> messageFormat, Args&&... args)
 {
-    ThrowPonderException(std::format(messageFormat, std::forward<Args>(args)...), location);
+    return MakePonderException(std::format(messageFormat, std::forward<Args>(args)...), location);
 }
 } // namespace pond::core
 
-#define PONDER_THROW(...)                                                                          \
-    ::pond::core::ThrowFormattedPonderException(std::source_location::current(), __VA_ARGS__)
+#define PONDER_EXCEPTION(...)                                                                      \
+    ::pond::core::MakeFormattedPonderException(std::source_location::current(), __VA_ARGS__)
