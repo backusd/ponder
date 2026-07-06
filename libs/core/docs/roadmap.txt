@@ -321,6 +321,12 @@ TASK CORE-011: Add UUID And Stable Identifier Support
       deterministic generation behavior if present.
 
 TASK CORE-012: Add `ScopeExit`
+    Status: implemented.
+
+    `ScopeExit.hpp` now provides a tiny header-only move-only scope guard
+    with `MakeScopeExit`, `Dismiss`, move ownership transfer, and a strict
+    no-throw cleanup callback contract.
+
     Add a tiny dependency-free scope guard utility.
 
     Expected coverage:

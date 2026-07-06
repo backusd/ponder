@@ -70,6 +70,9 @@ configuration, environment, job-system, or application dependencies.
   such as `AssetId`, `NodeId`, and `MoleculeId` in the owning domain library.
 - Core may own build/version information, UUID/stable identifiers, `ScopeExit`,
   and minimal string conversion helpers.
+- Use `ScopeExit` for tiny local cleanup and restoration paths. Cleanup
+  callbacks must be `noexcept`; create durable RAII types for reusable
+  resource concepts.
 - Core must not own runtime configuration, environment access, filesystem/path
   utilities, custom allocators, non-copyable helper base types, cancellation,
   progress reporting, domain typed IDs, or job execution.

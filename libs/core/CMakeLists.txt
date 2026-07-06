@@ -15,6 +15,7 @@ ponder_add_project_library(core
         include/ponder/core/Log.hpp
         include/ponder/core/PonderException.hpp
         include/ponder/core/Result.hpp
+        include/ponder/core/ScopeExit.hpp
         include/ponder/core/StackTrace.hpp
         include/ponder/core/Uuid.hpp
     SOURCES
