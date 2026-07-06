@@ -358,6 +358,12 @@ TASK CORE-013: Add Minimal String Utilities
       behavior if applicable.
 
 TASK CORE-014: Document Deferred Non-Core Systems
+    Status: implemented.
+
+    Deferred non-core systems are now documented in `Boundary.md` and
+    `Codex.md`, including likely ownership routes for compute, platform,
+    IO, workflow, application-layer, and domain-library responsibilities.
+
     Update `libs/core/docs/Boundary.md` and `libs/core/docs/Codex.md` to make the
     deferrals explicit.
 
@@ -376,6 +382,12 @@ TASK CORE-014: Document Deferred Non-Core Systems
     `ponder_io`, or the owning domain library where appropriate.
 
 TASK CORE-015: Tighten Public Header Hygiene
+    Status: implemented.
+
+    Public header hygiene is now covered by the updated public API audit and
+    compile-only self-containment sources under
+    `tests/unit/core/HeaderSelfContainment/`.
+
     Review public headers for avoidable includes, third-party leaks, and
     unnecessary implementation details.
 

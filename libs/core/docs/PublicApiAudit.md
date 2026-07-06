@@ -213,6 +213,31 @@ Roadmap coverage:
 - Existing implementation files use spdlog privately, which matches the
   dependency boundary decision.
 
+## CORE-015 Header Hygiene Update
+
+Status: implemented.
+
+The public core headers were reviewed again after the Error, Result,
+PonderException, assertion, logging, build-info, UUID, ScopeExit, and string
+utility work landed.
+
+Findings:
+
+- Public headers do not include or expose spdlog, fmt, moodycamel, or other
+  third-party implementation types.
+- Heavier standard headers that remain in public headers are tied to the current
+  public API surface: `std::format`-based template helpers, `std::expected` in
+  `Result`, value-owned strings/vectors, `std::source_location`, and hashing or
+  comparison support.
+- No obvious public include can be moved to a `.cpp` file without either breaking
+  self-containment or changing the exposed API shape.
+- Header self-containment is now covered by separate compile-only translation
+  units under `tests/unit/core/HeaderSelfContainment/`, one per public core
+  header. These sources are part of `ponder_core_tests`, which does not use core
+  precompiled headers.
+
+Future public headers should be added to both `libs/core/CMakeLists.txt` and the
+header self-containment source list in `tests/unit/core/CMakeLists.txt`.
 ## Roadmap Changes From This Audit
 
 - Mark CORE-001 as implemented and reference this document.

@@ -42,8 +42,8 @@ private:
     LogLevel m_level{LogLevel::Info};
     std::string m_category;
     std::string m_message;
-    std::chrono::system_clock::time_point m_timestamp{};
-    std::source_location m_location{};
+    std::chrono::system_clock::time_point m_timestamp;
+    std::source_location m_location;
 };
 
 using LogSinkHandler = void (*)(const LogEntry& entry);

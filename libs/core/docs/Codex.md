@@ -89,6 +89,42 @@ configuration, environment, job-system, or application dependencies.
   utilities, custom allocators, non-copyable helper base types, cancellation,
   progress reporting, domain typed IDs, or job execution.
 
+## Deferred System Routing
+
+When a task asks for one of these systems while working in core, do not implement
+it here unless the roadmap has explicitly changed first:
+
+- Put general threading, job execution, schedulers, and worker pools in
+  `ponder_compute` or a dedicated execution library.
+- Put cancellation and progress contracts in `ponder_compute`, `ponder_workflow`,
+  or the operation-owning library.
+- Put runtime configuration, feature flags, command-line policy, and preferences
+  in the application layer or a future configuration subsystem.
+- Put environment variable access and host environment inspection in
+  `ponder_platform`.
+- Put filesystem/path utilities, file watching, and directory traversal in
+  `ponder_io` or `ponder_platform`.
+- Put memory allocation/tracking infrastructure in the subsystem that proves the
+  need; do not add project-wide allocator policy speculatively.
+- Do not add `NonCopyable`, `NonMovable`, or similar helper base classes to core.
+  Delete copy/move operations directly on the type that owns the invariant.
+- Put domain typed IDs in the owning domain library. Core owns only generic
+  stable identifier primitives such as `Uuid`.
+
+## Header Hygiene
+
+- Public headers must be self-contained and compile when included as the first
+  project header in a translation unit.
+- Every new public core header must be listed in `libs/core/CMakeLists.txt` and
+  added to the header self-containment sources under
+  `tests/unit/core/HeaderSelfContainment/`.
+- Keep third-party implementation details such as spdlog/fmt and moodycamel out
+  of public headers. Standard-library template APIs may include the headers they
+  require, but avoid heavy includes that can be moved to `.cpp` files without
+  changing the public type surface.
+- Prefer forward declarations only when they keep the header self-contained and
+  do not obscure ownership, value semantics, or template requirements.
+
 ## Verification
 
 - Configure and build a supported CMake preset.

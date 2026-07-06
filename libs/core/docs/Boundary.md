@@ -110,6 +110,35 @@ code units on 16-bit `wchar_t` platforms and UTF-32 code units on 32-bit
 - Domain typed IDs such as `AssetId`, `NodeId`, or `MoleculeId`; those belong in
   the library that owns the domain concept.
 
+## Deferred System Ownership
+
+The following systems are intentionally outside `ponder_core` until the owning
+library or application layer is ready to define them:
+
+- General threading, thread pools, job queues, schedulers, and worker lifetimes
+  should belong in `ponder_compute` or another dedicated execution library. The
+  internal logging worker is not a reusable job system.
+- Cancellation tokens, progress reporting, and long-running workflow control
+  should belong in `ponder_compute`, `ponder_workflow`, or the API that owns the
+  long-running operation.
+- Runtime configuration, feature flags, command-line policy, and user/application
+  preferences should belong in the application layer or a future configuration
+  subsystem, not core.
+- Environment variable access and host process/environment inspection should
+  belong in `ponder_platform`.
+- Filesystem paths, file watching, directory traversal, and path normalization
+  should belong in `ponder_io` or `ponder_platform`. Core should continue to
+  avoid `std::filesystem::path` in public APIs for now.
+- Custom memory allocation, memory tracking, arenas, and leak diagnostics should
+  belong in the subsystem that proves the need, with project-wide policy added
+  only after real usage exists.
+- Non-copyable or non-movable helper base types should not be centralized in
+  core. Prefer directly deleting copy/move operations on each type so ownership
+  remains local and explicit.
+- Domain typed IDs such as `AssetId`, `NodeId`, `MoleculeId`, project handles,
+  or document handles should belong in the library that owns that domain concept,
+  usually wrapping `Uuid` or another stable representation.
+
 ## Dependencies
 
 Keep this library at the bottom of the dependency graph. All project libraries
