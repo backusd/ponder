@@ -4,22 +4,54 @@ Read the root `AGENTS.md` before this file.
 
 ## Scope
 
-Work here only on project-wide foundation code that can be shared without
-pulling in domain, UI, rendering, or application dependencies.
+Work here only on narrow project-wide foundation code that can be shared without
+pulling in domain, UI, rendering, project-format, platform, filesystem, runtime
+configuration, environment, job-system, or application dependencies.
 
 ## Local Rules
 
 - Keep public headers under `include/ponder/core/`.
 - Use the `pond::core` namespace.
-- Avoid third-party types in public APIs unless a boundary decision allows them.
+- Keep `ponder_core` at the bottom of the dependency graph.
+- All project libraries may depend on core; core must not depend on any project
+  library.
+- Avoid third-party types in public APIs.
+- Stable standard library vocabulary types are allowed when they improve API
+  clarity, but avoid `std::filesystem::path` in core for now.
 - Prefer small, boring primitives with clear tests.
 - Use `Result<T>` for recoverable errors.
-- Use `PonderException` only for truly exceptional failures.
+- `Error` should carry category/code, message, source location, and stacktrace if
+  practical.
+- Use `PonderException` only for truly exceptional failures. It must be a
+  standalone project type and must not derive from `std::exception` or any other
+  type.
+- `PonderException` should not carry `Error`; it should carry a human-readable
+  message, source location, and stacktrace if practical.
+- Provide project throw helpers/macros for `PonderException` that support
+  std::format-style messages and source-location capture.
 - Use `PONDER_ASSERT` or `PONDER_ASSERT_MESSAGE` for internal invariants.
+- Debug-only assertions should log and debug break, and should compile out in
+  release builds.
+- Use `PONDER_VERIFY` when the expression must remain active in release builds;
+  verify failures should throw and support std::format-style messages.
 - Use `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, and
   `LOG_FATAL` for diagnostics.
+- Logging should capture timestamp, level, file, line, function, and optional
+  category.
+- Logging may use spdlog/fmt and moodycamel privately, but public headers must
+  not expose those types.
+- Async logging may use an internal queue and dedicated logging thread, but core
+  must not grow a general threading or job system.
+- Core may own build/version information, UUID/stable identifiers, `ScopeExit`,
+  and minimal string conversion helpers.
+- Core must not own runtime configuration, environment access, filesystem/path
+  utilities, custom allocators, non-copyable helper base types, cancellation,
+  progress reporting, domain typed IDs, or job execution.
 
 ## Verification
 
 - Configure and build a supported CMake preset.
-- When tests exist for this library, run the matching core test executable.
+- Run `ponder_core_tests` after changing core behavior.
+- Run formatting checks for touched source files.
+- Run clang-tidy where available for high-signal core warnings.
+- Confirm generated files and local build outputs are not staged.

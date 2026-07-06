@@ -1,0 +1,372 @@
+CORE LIBRARY ROADMAP
+====================
+
+Purpose
+-------
+
+This roadmap breaks core-library work into implementation-sized tasks. Each task
+should be small enough to hand to Codex independently. The core design questions
+have been answered by the project owner and are reflected here.
+
+Guiding Principles
+------------------
+
+- Keep `ponder_core` very limited and at the bottom of the dependency graph.
+- All project libraries may depend on core; core must not depend on other project
+  libraries.
+- Prefer small, boring primitives with clear ownership and strong tests.
+- Avoid domain, UI, rendering, project-format, platform, filesystem, runtime
+  configuration, environment, job-system, and general threading coupling.
+- Do not expose third-party types from public headers.
+- Use stable standard library vocabulary types in public APIs when they improve
+  clarity, but avoid `std::filesystem::path` in core for now.
+- Use core itself to establish project-wide conventions for errors, exceptions,
+  assertions, logging, build information, source locations, and tiny utilities.
+
+Resolved Decisions Summary
+--------------------------
+
+- Core scope is narrow: errors, exceptions, assertions, logging, diagnostics,
+  build/version information, UUID/stable identifiers, minimal string utilities,
+  `ScopeExit`, and similarly tiny dependency-free helpers.
+- Core does not own general threading, job execution, cancellation, progress,
+  runtime configuration, environment access, filesystem/path utilities, custom
+  allocators, non-copyable base types, or domain typed IDs.
+- `Error` should carry category/code, human-readable message, source location,
+  and stacktrace if practical. Nested causes and structured metadata are
+  deferred.
+- `Result<T>` should remain a thin project-owned wrapper or alias around
+  `std::expected` and support `Result<void>`.
+- `PonderException` should be a standalone project type and must not derive from
+  `std::exception` or any other type. It should carry a human-readable message,
+  source location, and stacktrace if practical. It should not carry `Error`.
+- Exception throw helpers/macros should support std::format-style messages.
+- Assertions should include `PONDER_ASSERT`, `PONDER_ASSERT_MESSAGE`,
+  `PONDER_VERIFY`, `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`.
+- Debug assertions log and debug break. Normal assertions compile out in release.
+  `PONDER_VERIFY` remains active and throws on failure, with format-style
+  messages.
+- Logging uses project macros backed by testable functions/classes. Logs include
+  timestamp, level, file, line, function, and optional category. Thread IDs can
+  wait until broader threading work exists.
+- Logging should be queued and non-blocking for callers where practical, using
+  `moodycamel::ConcurrentQueue` internally and a dedicated logging thread for
+  now. This is a logging implementation detail, not a general core job system.
+- Build/version metadata should be generated into the build tree and exposed by a
+  small core API.
+- UUID/stable identifier support belongs in core. Domain typed IDs belong in the
+  library that owns the domain concept.
+- For now, time APIs should use standard `std::chrono` types directly.
+- Minimal string utilities may include `std::string`/`std::wstring` conversion.
+- Core tests should be strict and should use scoped RAII overrides for global
+  handlers.
+
+Task Sequence
+-------------
+
+TASK CORE-000: Record Core Decisions In Local Docs
+    Status: implemented.
+
+    Update the core documentation to reflect the answered design questions before
+    changing code.
+
+    Required updates:
+
+    - `libs/core/docs/Boundary.md`
+    - `libs/core/docs/Codex.md`
+    - `docs/high-level-roadmap.txt`, only if the high-level sequencing changes
+
+    The boundary document should explicitly state what core owns and what it does
+    not own. The Codex guide should give implementation rules for future core
+    tasks, including the narrow-scope rule, no third-party public API leakage,
+    strict test expectations, and the standalone `PonderException` rule.
+
+TASK CORE-001: Audit Existing Core Public API
+    Status: implemented.
+
+    Audit recorded in `libs/core/docs/PublicApiAudit.md`.
+
+    Review the current public headers:
+
+    - `Assert.hpp`
+    - `Library.hpp`
+    - `Log.hpp`
+    - `PonderException.hpp`
+    - `Result.hpp`
+
+    Document mismatches between current behavior and the resolved decisions.
+    Keep this task primarily investigative unless the fixes are tiny and obvious.
+    Follow-up implementation work is tracked in CORE-002 through CORE-019.
+
+TASK CORE-002: Define The Error Model
+    Status: implemented.
+
+    Initial implementation adds `ErrorCategory`, `ErrorCode`, `StackTrace`,
+    `CaptureStackTrace`, `FormatErrorCode`, and `FormatError`.
+
+    Implement or refine `pond::core::Error`.
+
+    Expected coverage:
+
+    - Project-owned error category/code representation.
+    - Human-readable message.
+    - Source location capture.
+    - Stacktrace capture if practical on the supported compiler matrix.
+    - Graceful fallback when stacktrace is unavailable.
+    - Current stacktrace capture is an empty best-effort fallback until CORE-009
+      evaluates standard library and compiler support.
+    - No platform-specific error codes as the primary API.
+    - No nested causes or arbitrary metadata yet.
+    - Tests for construction, formatting, source location, stacktrace fallback,
+      and propagation helpers.
+
+TASK CORE-003: Refine `Result<T>`
+    Refine `pond::core::Result<T>` as a thin project-owned wrapper or alias
+    around `std::expected`.
+
+    Expected coverage:
+
+    - Value results.
+    - `Result<void>`.
+    - Error results using the project `Error` type.
+    - `[[nodiscard]]` behavior where practical.
+    - Helper functions only if they remove real call-site noise.
+    - Tests showing intended usage patterns.
+
+TASK CORE-004: Refine `PonderException` And Throw Helpers
+    Update `PonderException` and add throw helpers/macros.
+
+    Expected coverage:
+
+    - Standalone type design with no base class.
+    - No inheritance from `std::exception` or any other type.
+    - Removal of the current `std::runtime_error` inheritance.
+    - Project-owned message accessor behavior.
+    - Source location capture.
+    - Stacktrace capture if practical, with fallback when unavailable.
+    - No stored `Error` object.
+    - One or more helper macros/functions for throwing with std::format-style
+      messages and automatic source location.
+    - Existing tests and consumers updated away from `what()`.
+    - Tests for message access, source location, stacktrace fallback, and
+      format-style throw helpers.
+
+TASK CORE-005: Implement Assertion And Verify Handlers
+    Implement assertion behavior according to the resolved decisions.
+
+    Expected coverage:
+
+    - `PONDER_ASSERT`.
+    - `PONDER_ASSERT_MESSAGE`.
+    - `PONDER_VERIFY` with std::format-style messages.
+    - `PONDER_UNREACHABLE`.
+    - `PONDER_DEBUG_BREAK`.
+    - Replacement of the current direct abort/debug-break path with a testable
+      handler-driven design.
+    - Debug assertions log and debug break.
+    - Debug-only assertions compile out in release builds.
+    - `PONDER_VERIFY` remains active in release builds and throws on failure.
+    - Overrideable assertion/verify handlers for tests.
+    - Tests for handler invocation, release/debug policy where practical,
+      message formatting, source location capture, and RAII handler restoration.
+
+TASK CORE-006: Add moodycamel Dependency For Async Logging
+    Add `moodycamel::ConcurrentQueue` as a third-party dependency for internal
+    logging use.
+
+    Expected coverage:
+
+    - Add as a Git submodule under `third_party/`.
+    - Wire through CMake using existing dependency patterns.
+    - Record license and dependency notes in `third_party/licenses.md` and
+      `third_party/README.md`.
+    - Keep moodycamel out of public core headers.
+    - Add any needed CMake aliases or internal targets.
+
+TASK CORE-007: Refine Logging Frontend And Async Backend
+    Refine logging macros and implementation.
+
+    Expected coverage:
+
+    - `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, and
+      `LOG_FATAL`.
+    - Defined level ordering.
+    - std::format-style call sites.
+    - Intentional, testable behavior for formatting failures rather than silent
+      catch-all handling.
+    - Source-location capture through macros.
+    - Timestamp, level, file, line, function, and optional category.
+    - Console and debugger sinks by default.
+    - Queued log messages using `moodycamel::ConcurrentQueue`.
+    - Dedicated logging thread for now.
+    - Flush and shutdown behavior that does not lose messages during normal exit.
+    - Fatal logs flush sinks and route through a fatal handler.
+    - No spdlog or moodycamel types exposed in public headers.
+
+TASK CORE-008: Add Logging Test Infrastructure
+    Add a test sink or scoped log capture utility so logging behavior can be
+    tested without depending on console/debugger output.
+
+    Expected coverage:
+
+    - Capturing level, message, category, source location, and timestamp shape.
+    - Synchronous test mode or deterministic flush helper for async logging.
+    - Restoring previous logger state with RAII.
+    - Tests for each log level, format-style messages, fatal handler routing, and
+      queued logging behavior.
+
+TASK CORE-009: Establish Source-Location And Stacktrace Conventions
+    Add a small project-owned convention for source locations and stacktraces if
+    direct standard library use is not sufficient.
+
+    Expected coverage:
+
+    - Prefer `std::source_location` in public APIs when it stays clean.
+    - Evaluate `std::stacktrace` availability on supported compilers.
+    - Revisit the current empty `CaptureStackTrace` fallback and enable real
+      frame capture where practical.
+    - Provide fallback behavior when stacktraces are unavailable.
+    - Keep wrappers tiny and dependency-free.
+    - Use the same convention in Error, PonderException, assertions, and logging.
+
+TASK CORE-010: Add Build Information API
+    Add a small generated build/version information API.
+
+    Expected coverage:
+
+    - Project version.
+    - Git commit when available.
+    - Build type.
+    - Compiler family/version if practical.
+    - Platform/architecture if practical.
+    - Generated files stay in the build tree.
+    - Generator/version behavior is documented.
+    - Tests verify stable fields and tolerate unavailable optional fields.
+
+TASK CORE-011: Add UUID And Stable Identifier Support
+    Add core-owned UUID/stable identifier primitives.
+
+    Expected coverage:
+
+    - UUID value type or equivalent stable identifier type.
+    - Parsing and formatting if needed now.
+    - Deterministic/testable generation hooks if generation is included.
+    - No domain-specific IDs such as `AssetId`, `NodeId`, or `MoleculeId` in
+      core. Those belong in their owning libraries.
+    - Tests for value semantics, parsing/formatting, invalid input, and
+      deterministic generation behavior if present.
+
+TASK CORE-012: Add `ScopeExit`
+    Add a tiny dependency-free scope guard utility.
+
+    Expected coverage:
+
+    - Move-only RAII cleanup behavior.
+    - Dismiss/release behavior if useful.
+    - `noexcept` policy for destructors and cleanup callbacks.
+    - Tests for normal scope exit, early return style usage, move behavior,
+      dismissal, and use in handler-restoration helpers.
+
+TASK CORE-013: Add Minimal String Utilities
+    Add only the approved string helpers.
+
+    Expected coverage:
+
+    - `std::string` to `std::wstring` conversion.
+    - `std::wstring` to `std::string` conversion.
+    - Clear encoding decision and documentation.
+    - Cross-platform behavior that does not depend on Windows-only APIs in public
+      headers.
+    - Tests for ASCII, representative Unicode, empty strings, and invalid input
+      behavior if applicable.
+
+TASK CORE-014: Document Deferred Non-Core Systems
+    Update `libs/core/docs/Boundary.md` and `libs/core/docs/Codex.md` to make the
+    deferrals explicit.
+
+    Must document that core does not currently own:
+
+    - General threading or job execution.
+    - Cancellation/progress contracts.
+    - Runtime configuration or feature flags.
+    - Environment variable access.
+    - Filesystem/path utilities.
+    - Custom memory allocation/tracking.
+    - Non-copyable/non-movable helper base types.
+    - Domain typed IDs.
+
+    Point future implementers toward `ponder_compute`, `ponder_platform`,
+    `ponder_io`, or the owning domain library where appropriate.
+
+TASK CORE-015: Tighten Public Header Hygiene
+    Review public headers for avoidable includes, third-party leaks, and
+    unnecessary implementation details.
+
+    Expected coverage:
+
+    - Use the findings in `libs/core/docs/PublicApiAudit.md` as a checklist.
+
+    - Replace heavy includes with forward declarations where appropriate.
+    - Keep public headers self-contained.
+    - Ensure every public header can be included independently.
+    - Ensure spdlog and moodycamel remain private implementation details.
+    - Add or expand tests for header self-containment if useful.
+
+TASK CORE-016: Address High-Signal clang-tidy Findings In Core
+    Run clang-tidy against the PCH-free analysis preset and fix high-signal core
+    warnings.
+
+    Expected coverage:
+
+    - Fix high-signal warnings in core early.
+    - Do not churn the whole repository.
+    - Keep changes scoped to core unless a warning exposes a project-wide policy
+      issue.
+    - Document any intentionally deferred tidy warnings.
+
+TASK CORE-017: Expand Core Unit Tests
+    Grow `ponder_core_tests` into a real test suite.
+
+    Expected coverage:
+
+    - Result and Error.
+    - PonderException and throw helpers.
+    - Assertions and verify behavior.
+    - Logging frontend, queueing, sinks, flushing, and fatal handling.
+    - Build information.
+    - UUID/stable identifiers.
+    - ScopeExit.
+    - String utilities.
+    - Scoped RAII overrides for global handlers.
+
+    Split tests into multiple source files or executables once a single smoke
+    test becomes hard to scan.
+
+TASK CORE-018: Final Core Documentation Pass
+    Update core docs after implementation:
+
+    - `libs/core/docs/Boundary.md`.
+    - `libs/core/docs/Codex.md`.
+    - `libs/core/docs/roadmap.txt`.
+    - `docs/high-level-roadmap.txt` if the project sequence changes again.
+    - Relevant ADRs if durable architectural decisions were made.
+
+    Ensure the local Codex guidance remains the single subsystem-specific file a
+    future agent needs to pair with root `AGENTS.md`.
+
+TASK CORE-019: Verify Core Locally
+    Run local verification for the completed core phase:
+
+    - Configure and build a supported preset.
+    - Run `ponder_core_tests`.
+    - Run formatting checks.
+    - Run clang-tidy where available.
+    - Confirm no generated files are staged.
+
+    Record any local tool limitations in the relevant developer setup or
+    subsystem documentation rather than recreating a temporary project-structure
+    verification log.
+
+
+
+

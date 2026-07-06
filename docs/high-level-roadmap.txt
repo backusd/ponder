@@ -12,10 +12,12 @@ not freeze every implementation detail forever. When implementation teaches us
 that a decision should change, update the relevant roadmap, decision record, or
 ADR deliberately.
 
-The first milestone should not be "do chemistry calculations." The first
-milestone should be a polished application shell that can open a real project,
-validate it, show its contents, and establish architectural patterns that future
-chemistry, rendering, workflow, scripting, and compute systems will use.
+The first milestone should not be "do chemistry calculations," and it should
+not rush directly into user-facing project features. The next phase should
+solidify the bottom of the system first: core error handling, diagnostics,
+assertions, logging, utility conventions, and any cross-cutting primitives that
+future libraries will depend on. User-facing milestones should come after the
+foundation is boring, tested, and difficult to misuse.
 
 
 1. PROJECT STRUCTURE
@@ -259,17 +261,90 @@ tests once packaging exists. CI itself is intentionally deferred for now.
 4. NEXT BUILD SEQUENCE
 ======================
 
-The project-structure foundation is complete. The next sequence should move from
-scaffold to the first real project-loading application milestone.
+The project-structure foundation is complete. The next sequence should move
+from scaffold to reliable foundation libraries before implementing project
+format, desktop workflows, rendering, plugins, or compute integrations.
 
-Step 1: Define the native `.ponder` project format
+The guiding rule for this phase:
+
+    Build from the bottom up, make each layer boring and tested, and do not
+    start advanced features before their foundations are stable.
+
+Step 1: Solidify `ponder_core`
+------------------------------
+
+Make `ponder_core` the dependable bottom of the dependency graph. Before
+building project files, workflow graphs, renderers, or chemistry features, make
+the core library's contracts clear and hard to misuse.
+
+The core phase should cover:
+
+- `Result<T>` and `Error` conventions for recoverable failures.
+- `PonderException` conventions for exceptional failures.
+- Assertion behavior, debug breaks, and release-build behavior.
+- Logging macros, severity levels, source locations, and backend boundaries.
+- Small cross-cutting utility types that are safe for most libraries.
+- Decisions about whether cancellation, progress reporting, threading, or job
+  primitives belong in core or should wait for `ponder_compute`.
+
+Detailed planning for this phase lives under `libs/core/docs/`.
+
+Step 2: Harden core tests and local verification
+------------------------------------------------
+
+Expand `ponder_core_tests` beyond smoke tests. Add focused unit tests for error
+propagation, exception metadata, assertion behavior that can be tested safely,
+logging sinks, formatting behavior, and any utility primitives added to core.
+
+The goal is to make core changes cheap to verify before other libraries depend
+on them heavily.
+
+Step 3: Review cross-library dependency direction
+-------------------------------------------------
+
+Once core is stronger, review the bottom-level libraries before adding real
+domain behavior:
+
+- `math` should depend only on core when necessary.
+- `scientific_data` should stay generic and not depend on chemistry.
+- `chemistry` should model chemistry data, not file IO, rendering, or compute.
+- `project`, `workflow`, `compute`, `io`, `render`, `platform`, `ui`, and
+  `plugin_sdk` should keep depending inward rather than sideways.
+
+Adjust boundary docs before implementation pressure makes the wrong dependency
+direction feel convenient.
+
+Step 4: Add foundational math primitives
+-----------------------------------------
+
+Add only the math types needed broadly by later systems: vectors, matrices,
+transforms, bounds, numeric helpers, identifiers, and geometry primitives if
+they are truly shared. Keep algorithms small and well tested.
+
+Do not build renderer-specific or chemistry-specific math here.
+
+Step 5: Add foundational scientific and chemistry data models
+-------------------------------------------------------------
+
+Add minimal value types and containers needed to describe simple scientific and
+chemical data:
+
+- Elements, atoms, bonds, molecules, and conformers.
+- Generic metadata and typed identifiers.
+- Tables, arrays, grids, or fields only when a near-term use case needs them.
+
+These models should be useful without project files, rendering, IO, workflow, or
+compute.
+
+Step 6: Define the native `.ponder` project format
 --------------------------------------------------
 
-Create a small format spec under `docs/formats/` and an ADR if the file vs
+After core error/diagnostic conventions and basic data models exist, define the
+native project format under `docs/formats/` and add an ADR if the file vs
 directory shape needs a durable decision.
 
-The extension is already decided: `.ponder`. The concrete shape still needs to
-be specified. A directory-based project remains a good candidate:
+The extension is already decided: `.ponder`. A directory-based project remains a
+good candidate:
 
     Example.ponder/
         project.json
@@ -277,31 +352,17 @@ be specified. A directory-based project remains a good candidate:
         cache/
         logs/
 
-The first `project.json` should include:
+Keep the first schema small, explicit, versioned, and aligned with the core
+diagnostic/error model.
 
-- Project format version.
-- Project UUID.
-- Display name.
-- Created/modified metadata.
-- Asset list.
-- Dependency graph placeholder.
-- Application/plugin version metadata.
-
-Keep the first schema small, explicit, and versioned.
-
-Step 2: Implement project loading and validation
+Step 7: Implement project loading and validation
 ------------------------------------------------
 
 Build real behavior in `ponder_project` for project creation, loading,
-validation, saving, and diagnostics. Add tests for:
+validation, saving, and diagnostics. Use core `Result`, `Error`, logging, and
+assertion conventions consistently.
 
-- Successful load.
-- Missing files.
-- Unknown or unsupported format versions.
-- Invalid JSON.
-- Save/load round trips.
-
-Step 3: Wire `ponder-project-inspect`
+Step 8: Wire `ponder-project-inspect`
 -------------------------------------
 
 Make `ponder-project-inspect` load a `.ponder` project through the project
@@ -311,27 +372,21 @@ diagnostics.
 This gives us a GUI-free smoke test for the same project APIs the desktop app
 will use.
 
-Step 4: Add minimal chemistry and scientific data models
---------------------------------------------------------
-
-Add only the domain types needed for a small molecule asset: element, atom, bond,
-molecule, and generic asset metadata. Do not build a full chemistry engine yet.
-
-Step 5: Add initial IO support
+Step 9: Add initial IO support
 ------------------------------
 
 Add a small `ponder_io` handler interface and one simple molecule importer,
 likely XYZ. Use small fixtures under `tests/fixtures/`.
 
-Step 6: Build the desktop application shell
--------------------------------------------
+Step 10: Build the desktop application shell
+--------------------------------------------
 
 Grow `ponder-desktop` from scaffold to a minimal application shell with startup
 logging, a window, a main loop, a basic menu structure, and a project browser
 panel.
 
-Step 7: Wire project loading into the desktop app
--------------------------------------------------
+Step 11: Wire project loading into the desktop app
+--------------------------------------------------
 
 Add "Open Project" behavior through platform file dialogs and route loading
 through `ponder_project`. Show diagnostics and populate the project browser with
@@ -339,56 +394,70 @@ metadata and assets.
 
 At this point the application should be able to load a real `.ponder` project.
 
-Step 8: Add a minimal viewport and molecule preview
----------------------------------------------------
+Step 12: Add a minimal viewport and molecule preview
+----------------------------------------------------
 
 Add enough render/platform/ui integration to show a simple molecule preview for
 loaded molecule assets. This proves the early data path:
 
     project -> asset registry -> molecule data -> scene data -> viewport
 
-Step 9: Introduce plugin extension points
------------------------------------------
+Step 13: Introduce plugin extension points
+------------------------------------------
 
 Add the first `ponder_plugin_sdk` interfaces only after the built-in project and
 IO path works. Start with file-format handlers and simple metadata.
 
-Step 10: Introduce workflow graph primitives
+Step 14: Introduce workflow graph primitives
 --------------------------------------------
 
 Add a minimal workflow graph with nodes, ports, typed values, dependencies, and
 invalidation.
 
-Step 11: Introduce compute job abstractions
+Step 15: Introduce compute job abstractions
 -------------------------------------------
 
 Add job descriptions, progress, cancellation, logs, artifacts, and a local
 runner interface. Do not integrate a large external chemistry engine until the
 job model is clear.
 
-Step 12: Expand toward real chemistry integrations
+Step 16: Expand toward real chemistry integrations
 --------------------------------------------------
 
 Once project loading, asset handling, plugin registration, workflow graph, and
 compute jobs exist, begin integrating external engines behind adapters. Start
 with one engine and one narrow workflow.
 
+5. NEXT MILESTONES
+==================
 
-5. FIRST MAJOR MILESTONE
-========================
+The next substantial milestone should be a foundation milestone, not a
+user-facing feature milestone:
 
-The first substantial milestone should be:
+    `ponder_core` is stable enough that other libraries can rely on its error,
+    diagnostic, assertion, logging, and low-level utility conventions without
+    needing to revisit those contracts immediately.
+
+That milestone proves:
+
+- Core systems are reusable outside the GUI.
+- Recoverable errors and exceptional failures have clear conventions.
+- Assertions and logging are testable and consistent.
+- The bottom of the dependency graph is small, boring, and documented.
+- Future project, workflow, plugin, rendering, and compute systems have a stable
+  foundation.
+
+After that, the first user-facing application milestone should be:
 
     A desktop application that opens a `.ponder` project, validates project
     metadata, lists project metadata and assets, imports a simple molecule file
     into the project, saves the updated project, and shows a basic molecule
     preview.
 
-That milestone proves the most important early architectural claims:
+That milestone proves the most important early product architecture claims:
 
 - The project format exists.
 - The app is desktop-first but not desktop-only.
-- Core systems are reusable outside the GUI.
 - Data flows through libraries with clear boundaries.
 - Tests validate the same project behavior used by the app.
 - Future workflow, plugin, rendering, scripting, and compute systems have a
