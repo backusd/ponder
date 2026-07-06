@@ -92,8 +92,8 @@ TEST(ErrorPropagationTests, MakeUnexpectedBuildsExplicitError)
 
     pond::core::Result<int> result = pond::core::MakeUnexpected(code, "unsupported");
 
-    ASSERT_FALSE(result.has_value());
-    EXPECT_TRUE(result.error().GetCode() == code);
-    EXPECT_EQ(result.error().GetMessage(), std::string_view{"unsupported"});
+    ASSERT_FALSE(result.HasValue());
+    EXPECT_TRUE(result.GetError().GetCode() == code);
+    EXPECT_EQ(result.GetError().GetMessage(), std::string_view{"unsupported"});
 }
 } // namespace

@@ -121,6 +121,11 @@ TASK CORE-002: Define The Error Model
       and propagation helpers.
 
 TASK CORE-003: Refine `Result<T>`
+    Status: implemented.
+
+    `Result<T>` is now a `[[nodiscard]]` project-owned wrapper around
+    `std::expected<T, Error>`, with `VoidResult` specialized for `void`.
+
     Refine `pond::core::Result<T>` as a thin project-owned wrapper or alias
     around `std::expected`.
 
@@ -366,7 +371,3 @@ TASK CORE-019: Verify Core Locally
     Record any local tool limitations in the relevant developer setup or
     subsystem documentation rather than recreating a temporary project-structure
     verification log.
-
-
-
-

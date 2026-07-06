@@ -28,7 +28,7 @@ int main(int argc, char** argv)
     const auto result = RunProjectInspectStub(argc, argv);
     if (!result)
     {
-        LOG_ERROR("ponder-project-inspect failed: {}", result.error().GetMessage());
+        LOG_ERROR("ponder-project-inspect failed: {}", result.GetError().GetMessage());
         return 1;
     }
 

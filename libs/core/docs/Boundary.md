@@ -18,8 +18,8 @@ other libraries to depend on.
 
 - `Error` for recoverable failure details. It should carry category/code,
   human-readable message, source location, and stacktrace if practical.
-- `Result<T>` for recoverable operations, implemented as a thin project-owned
-  wrapper or alias around `std::expected` and supporting `Result<void>`.
+- `Result<T>` for recoverable operations, implemented as a thin `[[nodiscard]]`
+  project-owned wrapper around `std::expected<T, Error>` and supporting `Result<void>`.
 - `PonderException` for truly exceptional, usually unrecoverable failures. It is
   a standalone project type and must not derive from `std::exception` or any
   other type. It should carry a human-readable message, source location, and

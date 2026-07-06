@@ -152,6 +152,10 @@ Roadmap coverage:
 
 ### `Result.hpp`
 
+CORE-003 update: `Result<T>` has since been refined into a `[[nodiscard]]`
+project-owned wrapper around `std::expected<T, Error>`. The alias finding below is
+retained as historical audit context.
+
 Current behavior:
 
 - `Error` carries message and source location.
@@ -199,4 +203,3 @@ Roadmap coverage:
   while adding async logging.
 - Make CORE-015 use this audit as a checklist for header hygiene and
   self-containment.
-

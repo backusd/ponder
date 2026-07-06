@@ -17,7 +17,7 @@ int main()
     const auto result = RunDesktopStub();
     if (!result)
     {
-        LOG_ERROR("ponder-desktop failed: {}", result.error().GetMessage());
+        LOG_ERROR("ponder-desktop failed: {}", result.GetError().GetMessage());
         return 1;
     }
 
