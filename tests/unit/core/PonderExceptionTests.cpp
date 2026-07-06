@@ -1,0 +1,84 @@
+#include <ponder/core/PonderException.hpp>
+
+#include <concepts>
+#include <exception>
+#include <gtest/gtest.h>
+#include <source_location>
+#include <string>
+#include <string_view>
+#include <utility>
+
+namespace
+{
+TEST(PonderExceptionTests, IsStandaloneProjectType)
+{
+    static_assert(!std::derived_from<pond::core::PonderException, std::exception>);
+}
+
+TEST(PonderExceptionTests, StoresMessageLocationAndStackTraceFallback)
+{
+    const auto location = std::source_location::current();
+    const pond::core::PonderException exception{"boom", location};
+
+    EXPECT_EQ(exception.GetMessage(), std::string_view{"boom"});
+    EXPECT_STREQ(exception.GetLocation().file_name(), location.file_name());
+    EXPECT_EQ(exception.GetLocation().line(), location.line());
+    EXPECT_TRUE(exception.GetStackTrace().IsEmpty());
+}
+
+TEST(PonderExceptionTests, AcceptsExplicitStackTrace)
+{
+    pond::core::StackTrace stackTrace{{"frame A", "frame B"}};
+
+    const pond::core::PonderException exception{std::string{"boom"}, std::move(stackTrace)};
+
+    ASSERT_EQ(exception.GetStackTrace().GetFrames().size(), 2U);
+    EXPECT_EQ(exception.GetStackTrace().GetFrames()[0], "frame A");
+    EXPECT_EQ(exception.GetStackTrace().GetFrames()[1], "frame B");
+}
+
+TEST(PonderExceptionTests, ThrowFunctionThrowsStandaloneException)
+{
+    using ThrowFunction = void (*)(std::string, std::source_location);
+
+    const auto location = std::source_location::current();
+    const ThrowFunction throwFunction = &pond::core::ThrowPonderException;
+
+    try
+    {
+        throwFunction("thrown", location);
+    }
+    catch (const pond::core::PonderException& exception)
+    {
+        EXPECT_EQ(exception.GetMessage(), std::string_view{"thrown"});
+        EXPECT_STREQ(exception.GetLocation().file_name(), location.file_name());
+        EXPECT_EQ(exception.GetLocation().line(), location.line());
+        return;
+    }
+
+    FAIL() << "ThrowPonderException should throw";
+}
+
+TEST(PonderExceptionTests, ThrowMacroFormatsMessageAndCapturesLocation)
+{
+    const auto expectedLine = __LINE__ + 3;
+    void (*throwFunction)() = []()
+    {
+        PONDER_THROW("formatted {} {}", "value", 42);
+    };
+
+    try
+    {
+        throwFunction();
+    }
+    catch (const pond::core::PonderException& exception)
+    {
+        EXPECT_EQ(exception.GetMessage(), std::string_view{"formatted value 42"});
+        EXPECT_STREQ(exception.GetLocation().file_name(), __FILE__);
+        EXPECT_EQ(exception.GetLocation().line(), expectedLine);
+        return;
+    }
+
+    FAIL() << "PONDER_THROW should throw";
+}
+} // namespace

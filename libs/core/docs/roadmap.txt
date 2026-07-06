@@ -139,6 +139,12 @@ TASK CORE-003: Refine `Result<T>`
     - Tests showing intended usage patterns.
 
 TASK CORE-004: Refine `PonderException` And Throw Helpers
+    Status: implemented.
+
+    `PonderException` is now a standalone project type with message, source
+    location, and stacktrace fallback storage. `ThrowPonderException` and
+    `PONDER_THROW` provide source-location-aware throw helpers.
+
     Update `PonderException` and add throw helpers/macros.
 
     Expected coverage:

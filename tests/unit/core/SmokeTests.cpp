@@ -20,7 +20,7 @@ TEST(CoreSmokeTests, ExposesLibraryNameAndConventions)
     EXPECT_EQ(failure.GetError().GetMessage(), std::string_view{"failure"});
 
     const pond::core::PonderException exception{"boom"};
-    EXPECT_STREQ(exception.what(), "boom");
+    EXPECT_EQ(exception.GetMessage(), std::string_view{"boom"});
 
     PONDER_ASSERT(true);
     LOG_INFO("core smoke test completed");

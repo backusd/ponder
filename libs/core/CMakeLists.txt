@@ -5,12 +5,14 @@ ponder_add_project_library(core
         include/ponder/core/Log.hpp
         include/ponder/core/PonderException.hpp
         include/ponder/core/Result.hpp
+        include/ponder/core/StackTrace.hpp
     SOURCES
         src/Assert.cpp
         src/Library.cpp
         src/Log.cpp
         src/PonderException.cpp
         src/Result.cpp
+        src/StackTrace.cpp
     PRIVATE_HEADERS
         src/Pch.hpp
     PRIVATE_DEPS

@@ -1,16 +1,16 @@
 #pragma once
 
+#include <ponder/core/StackTrace.hpp>
+
 #include <concepts>
 #include <cstdint>
 #include <expected>
 #include <memory>
 #include <source_location>
-#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace pond::core
 {
@@ -54,20 +54,6 @@ private:
     ErrorCodeValue m_value{0};
 };
 
-class StackTrace final
-{
-public:
-    StackTrace() = default;
-    explicit StackTrace(std::vector<std::string> frames);
-
-    [[nodiscard]] bool IsEmpty() const noexcept;
-    [[nodiscard]] std::span<const std::string> GetFrames() const noexcept;
-    [[nodiscard]] std::string Format() const;
-
-private:
-    std::vector<std::string> m_frames;
-};
-
 class Error final
 {
 public:
@@ -93,10 +79,8 @@ private:
 [[nodiscard]] std::string_view GetErrorCategoryName(ErrorCategory category) noexcept;
 [[nodiscard]] std::string FormatErrorCode(ErrorCode code);
 [[nodiscard]] std::string FormatError(const Error& error);
-[[nodiscard]] StackTrace CaptureStackTrace();
 
-template <typename Value> 
-class [[nodiscard]] Result final
+template <typename Value> class [[nodiscard]] Result final
 {
 public:
     using ValueType = Value;

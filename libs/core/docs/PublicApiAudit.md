@@ -125,6 +125,11 @@ Roadmap coverage:
 
 ### `PonderException.hpp`
 
+CORE-004 update: `PonderException` has since been refined into a standalone
+project type with project-owned message access, source location, stacktrace
+fallback storage, and source-location-aware throw helpers.
+
+
 Current behavior:
 
 - `PonderException` derives from `std::runtime_error`.
