@@ -68,7 +68,8 @@ using UuidEntropySource = bool (*)(std::span<Uuid::Byte, Uuid::kByteCount> bytes
 
 namespace std
 {
-template <> struct hash<pond::core::Uuid>
+template <>
+struct hash<pond::core::Uuid>
 {
     [[nodiscard]] std::size_t operator()(const pond::core::Uuid& uuid) const noexcept
     {

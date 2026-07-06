@@ -8,6 +8,7 @@ ponder_add_project_test(ponder_core_tests
         ResultTests.cpp
         ScopeExitTests.cpp
         SmokeTests.cpp
+        StringTests.cpp
         UuidTests.cpp
     PRIVATE_DEPS
         ponder::core)

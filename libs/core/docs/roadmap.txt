@@ -338,6 +338,13 @@ TASK CORE-012: Add `ScopeExit`
       dismissal, and use in handler-restoration helpers.
 
 TASK CORE-013: Add Minimal String Utilities
+    Status: implemented.
+
+    `String.hpp` now provides UTF-8 `std::string` to platform-width
+    `std::wstring` conversion and the reverse through `Utf8ToWideString`
+    and `WideStringToUtf8`. Invalid UTF-8 and invalid wide code units are
+    recoverable parse errors.
+
     Add only the approved string helpers.
 
     Expected coverage:

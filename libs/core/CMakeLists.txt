@@ -17,6 +17,7 @@ ponder_add_project_library(core
         include/ponder/core/Result.hpp
         include/ponder/core/ScopeExit.hpp
         include/ponder/core/StackTrace.hpp
+        include/ponder/core/String.hpp
         include/ponder/core/Uuid.hpp
     SOURCES
         "${PONDER_CORE_BUILD_INFO_SOURCE}"
@@ -26,6 +27,7 @@ ponder_add_project_library(core
         src/PonderException.cpp
         src/Result.cpp
         src/StackTrace.cpp
+        src/String.cpp
         src/Uuid.cpp
     PRIVATE_HEADERS
         src/Pch.hpp

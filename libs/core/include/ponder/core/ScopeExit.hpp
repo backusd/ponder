@@ -12,7 +12,8 @@ concept ScopeExitCallback =
     std::is_nothrow_move_constructible_v<Callback> && std::is_nothrow_destructible_v<Callback> &&
     std::is_nothrow_invocable_v<Callback&>;
 
-template <ScopeExitCallback Callback> class [[nodiscard]] ScopeExit final
+template <ScopeExitCallback Callback>
+class [[nodiscard]] ScopeExit final
 {
 public:
     explicit constexpr ScopeExit(Callback callback) noexcept : m_callback(std::move(callback)) {}

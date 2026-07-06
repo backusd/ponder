@@ -19,6 +19,9 @@ configuration, environment, job-system, or application dependencies.
 - Stable standard library vocabulary types are allowed when they improve API
   clarity, but avoid `std::filesystem::path` in core for now.
 - Prefer small, boring primitives with clear tests.
+- Do not create individual utility documentation files. Put durable core utility
+  boundary details in `libs/core/docs/Boundary.md` and implementation guidance in
+  this file.
 - Use `Result<T>` for recoverable errors.
 - `Error` should carry category/code, message, source location, and stacktrace if
   practical.
@@ -68,11 +71,20 @@ configuration, environment, job-system, or application dependencies.
   toolchain metadata must be refreshed.
 - `Uuid` is the generic stable identifier primitive. Keep domain-specific IDs
   such as `AssetId`, `NodeId`, and `MoleculeId` in the owning domain library.
+  Keep UUID parse/format behavior canonical and deterministic.
 - Core may own build/version information, UUID/stable identifiers, `ScopeExit`,
   and minimal string conversion helpers.
 - Use `ScopeExit` for tiny local cleanup and restoration paths. Cleanup
-  callbacks must be `noexcept`; create durable RAII types for reusable
-  resource concepts.
+  callbacks must be `noexcept`; create durable RAII types for reusable resource
+  concepts.
+- Narrow project strings are UTF-8. Use `Utf8ToWideString` and
+  `WideStringToUtf8` for core-owned conversion between UTF-8 `std::string` and
+  platform-width `std::wstring`.
+- String conversion failures are recoverable parse errors. Do not silently
+  replace invalid UTF-8, invalid surrogate sequences, or out-of-range Unicode
+  code points.
+- Keep string conversion dependency-free and avoid Windows-only APIs in public
+  headers.
 - Core must not own runtime configuration, environment access, filesystem/path
   utilities, custom allocators, non-copyable helper base types, cancellation,
   progress reporting, domain typed IDs, or job execution.

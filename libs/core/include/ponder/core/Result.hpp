@@ -80,7 +80,8 @@ private:
 [[nodiscard]] std::string FormatErrorCode(ErrorCode code);
 [[nodiscard]] std::string FormatError(const Error& error);
 
-template <typename Value> class [[nodiscard]] Result final
+template <typename Value>
+class [[nodiscard]] Result final
 {
 public:
     using ValueType = Value;
@@ -209,7 +210,8 @@ private:
     ExpectedType m_expected;
 };
 
-template <> class [[nodiscard]] Result<void> final
+template <>
+class [[nodiscard]] Result<void> final
 {
 public:
     using ValueType = void;
@@ -276,7 +278,8 @@ private:
 
 using VoidResult = Result<void>;
 
-template <typename... Args> [[nodiscard]] std::unexpected<Error> MakeUnexpected(Args&&... args)
+template <typename... Args>
+[[nodiscard]] std::unexpected<Error> MakeUnexpected(Args&&... args)
 {
     return std::unexpected<Error>(Error(std::forward<Args>(args)...));
 }

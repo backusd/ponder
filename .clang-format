@@ -36,6 +36,7 @@ SortIncludes: CaseSensitive
 ContinuationIndentWidth: 4
 ConstructorInitializerIndentWidth: 4
 BreakAfterReturnType: None
+BreakTemplateDeclarations: Yes
 PenaltyReturnTypeOnItsOwnLine: 1000000
 SpaceAfterCStyleCast: false
 SpaceBeforeCpp11BracedList: false

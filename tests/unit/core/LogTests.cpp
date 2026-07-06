@@ -81,7 +81,8 @@ std::vector<pond::core::LogEntry> GetSecondaryCapturedEntries()
 }
 } // namespace
 
-template <> struct std::formatter<ThrowsDuringFormatting>
+template <>
+struct std::formatter<ThrowsDuringFormatting>
 {
     constexpr auto parse(std::format_parse_context& context)
     {
