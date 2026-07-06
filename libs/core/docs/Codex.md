@@ -66,6 +66,8 @@ configuration, environment, job-system, or application dependencies.
 - Build information is exposed through `BuildInfo.hpp` and implemented by a
   generated source file in the build tree. Reconfigure CMake when Git commit or
   toolchain metadata must be refreshed.
+- `Uuid` is the generic stable identifier primitive. Keep domain-specific IDs
+  such as `AssetId`, `NodeId`, and `MoleculeId` in the owning domain library.
 - Core may own build/version information, UUID/stable identifiers, `ScopeExit`,
   and minimal string conversion helpers.
 - Core must not own runtime configuration, environment access, filesystem/path

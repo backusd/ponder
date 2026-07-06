@@ -35,7 +35,8 @@ other libraries to depend on.
   logging implementation detail, not a general job system.
 - Build/version information generated into the build tree and exposed through
   BuildInfo.hpp.
-- UUID/stable identifier primitives that are not tied to a domain concept.
+- UUID/stable identifier primitives that are not tied to a domain concept,
+  including the generic Uuid value type.
 - Tiny dependency-free helpers such as `ScopeExit`.
 - Minimal string utilities, initially limited to `std::string` and
   `std::wstring` conversion unless a strong shared need appears.

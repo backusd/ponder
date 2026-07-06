@@ -301,6 +301,13 @@ TASK CORE-010: Add Build Information API
     - Tests verify stable fields and tolerate unavailable optional fields.
 
 TASK CORE-011: Add UUID And Stable Identifier Support
+    Status: implemented.
+
+    `Uuid.hpp` now provides the generic 128-bit UUID value type, canonical
+    parse/format support, hashing/value semantics, deterministic v4 UUID
+    construction from supplied bytes, and v4 generation with injectable entropy.
+    Domain-specific IDs remain outside core.
+
     Add core-owned UUID/stable identifier primitives.
 
     Expected coverage:
