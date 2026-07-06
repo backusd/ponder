@@ -280,6 +280,13 @@ TASK CORE-009: Establish Source-Location And Stacktrace Conventions
     - Use the same convention in Error, PonderException, assertions, and logging.
 
 TASK CORE-010: Add Build Information API
+    Status: implemented.
+
+    `BuildInfo.hpp` exposes project version, optional Git commit, build type,
+    compiler metadata, target platform/architecture metadata, and CMake
+    generator metadata. Its implementation source is generated into the build
+    tree by `ponder_configure_build_info`.
+
     Add a small generated build/version information API.
 
     Expected coverage:

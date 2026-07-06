@@ -82,20 +82,23 @@ Roadmap coverage:
 
 ### `Library.hpp`
 
+CORE-010 update:
+
+- Build/version metadata now lives in `BuildInfo.hpp` and its generated
+  implementation source rather than expanding `GetLibraryName()`.
+
 Current behavior:
 
 - Exposes `GetLibraryName()` returning `"core"`.
 
-Mismatches and gaps:
+Remaining note:
 
-- This is fine as a smoke-test API, but it should not become the long-term build
-  metadata API by accident.
-- The planned build/version metadata should probably live in a more explicit API
-  rather than expanding this small library-name helper indefinitely.
+- `GetLibraryName()` is still fine as a smoke-test API, but `BuildInfo.hpp` is
+  now the explicit build/version metadata surface.
 
 Roadmap coverage:
 
-- CORE-010 should introduce the real build information API.
+- CORE-010 introduced the real build information API.
 - CORE-018 should decide whether `GetLibraryName()` remains useful after build
   metadata exists.
 

@@ -63,6 +63,9 @@ configuration, environment, job-system, or application dependencies.
   not expose those types.
 - Async logging may use an internal queue and dedicated logging thread, but core
   must not grow a general threading or job system.
+- Build information is exposed through `BuildInfo.hpp` and implemented by a
+  generated source file in the build tree. Reconfigure CMake when Git commit or
+  toolchain metadata must be refreshed.
 - Core may own build/version information, UUID/stable identifiers, `ScopeExit`,
   and minimal string conversion helpers.
 - Core must not own runtime configuration, environment access, filesystem/path

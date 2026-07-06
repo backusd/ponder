@@ -1,0 +1,32 @@
+#include <ponder/core/BuildInfo.hpp>
+
+#include <string_view>
+
+namespace pond::core
+{
+namespace
+{
+#if defined(PONDER_BUILD_INFO_ACTIVE_BUILD_TYPE)
+constexpr std::string_view kBuildType{PONDER_BUILD_INFO_ACTIVE_BUILD_TYPE};
+#else
+constexpr std::string_view kBuildType{"@PONDER_BUILD_INFO_CONFIGURED_BUILD_TYPE_CPP@"};
+#endif
+} // namespace
+
+BuildInfo GetBuildInfo() noexcept
+{
+    // clang-format off
+    return BuildInfo{"@PONDER_BUILD_INFO_PROJECT_NAME_CPP@",
+                     "@PONDER_BUILD_INFO_PROJECT_VERSION_CPP@",
+                     "@PONDER_BUILD_INFO_GIT_COMMIT_CPP@",
+                     kBuildType,
+                     "@PONDER_BUILD_INFO_COMPILER_NAME_CPP@",
+                     "@PONDER_BUILD_INFO_COMPILER_VERSION_CPP@",
+                     "@PONDER_BUILD_INFO_TARGET_SYSTEM_NAME_CPP@",
+                     "@PONDER_BUILD_INFO_TARGET_SYSTEM_PROCESSOR_CPP@",
+                     @PONDER_BUILD_INFO_POINTER_WIDTH_BITS@U,
+                     "@PONDER_BUILD_INFO_CMAKE_GENERATOR_CPP@",
+                     "@PONDER_BUILD_INFO_CMAKE_VERSION_CPP@"};
+    // clang-format on
+}
+} // namespace pond::core

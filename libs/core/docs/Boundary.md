@@ -33,7 +33,8 @@ other libraries to depend on.
   fatal levels.
 - Async logging internals using a queue and dedicated logging thread. This is a
   logging implementation detail, not a general job system.
-- Build/version information generated into the build tree.
+- Build/version information generated into the build tree and exposed through
+  BuildInfo.hpp.
 - UUID/stable identifier primitives that are not tied to a domain concept.
 - Tiny dependency-free helpers such as `ScopeExit`.
 - Minimal string utilities, initially limited to `std::string` and
