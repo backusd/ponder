@@ -101,33 +101,28 @@ Roadmap coverage:
 
 ### `Log.hpp`
 
-Current behavior:
+CORE-007 update:
 
-- Public header defines `LogLevel`, `LogMessage`, `SetMinimumLogLevel`, and
-  `LogFormatted`.
-- Logging macros capture `std::source_location`.
-- Public header uses only standard library types.
-- Source file uses spdlog privately.
+- Public logging now defines explicit `LogLevel` ordering, level-name helpers,
+  minimum-level accessors, category-aware `LogMessage` overloads, `FlushLog`,
+  `ShutdownLogging`, fatal-handler hooks, and format-style frontend helpers.
+- `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, and
+  `LOG_FATAL` remain the standard macros. Each also has a `_CATEGORY` variant.
+- Formatting failures are reported through logging diagnostics instead of being
+  silently swallowed.
+- `Log.cpp` owns the spdlog sinks, moodycamel queue, dedicated worker thread,
+  flush/shutdown behavior, and fatal-handler dispatch. Third-party logging and
+  queue types remain private implementation details.
+- Fatal logs flush before invoking the configured fatal handler. The default
+  fatal handler is intentionally no-op for now so callers such as assertions can
+  own their terminating behavior.
 
-Mismatches and gaps:
+Remaining gaps:
 
-- The public header currently performs formatting and catches all formatting
-  failures silently. The final design should make formatting/failure behavior
-  intentional and testable.
-- Logging is synchronous today; the planned queued backend and dedicated logging
-  thread do not exist yet.
-- There is no category support yet.
-- There is no test sink, scoped log capture, deterministic flush, or fatal
-  handler hook.
-- Current spdlog usage is private, which is good and should remain true when the
-  async backend is added.
-
-Roadmap coverage:
-
-- CORE-006 added the internal queue dependency as private CMake wiring.
-- CORE-007 should refine the frontend/backend and preserve the no-third-party
-  public-header rule.
-- CORE-008 should add deterministic logging test infrastructure.
+- CORE-008 still needs a test sink or scoped log capture utility so tests can
+  assert exact emitted records without depending on console/debugger output.
+- CORE-008 should add RAII restoration for log/fatal handlers and deterministic
+  sink-level async logging assertions.
 - CORE-015 should keep checking public header hygiene.
 
 ### `PonderException.hpp`

@@ -207,6 +207,17 @@ TASK CORE-006: Add moodycamel Dependency For Async Logging
     - Add any needed CMake aliases or internal targets.
 
 TASK CORE-007: Refine Logging Frontend And Async Backend
+    Status: implemented.
+
+    Logging now has explicit level ordering, category-aware macros,
+    source-location-aware format-style calls, a moodycamel-backed async
+    queue, a dedicated logging thread, console/debugger sinks, flush and
+    shutdown hooks, and fatal-handler routing. Formatting failures now emit
+    logging diagnostics instead of disappearing silently.
+
+    CORE-008 should still add capture sinks, scoped logging/fatal-handler
+    overrides, and deterministic sink-level assertions.
+
     Refine logging macros and implementation.
 
     Expected coverage:

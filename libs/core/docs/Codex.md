@@ -37,6 +37,13 @@ configuration, environment, job-system, or application dependencies.
   verify failures should throw and support std::format-style messages.
 - Use `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, and
   `LOG_FATAL` for diagnostics.
+- Use `_CATEGORY` logging macros when a stable subsystem category helps filtering
+  or later capture assertions.
+- Use `FlushLog` before process boundaries where queued messages must be visible;
+  use `ShutdownLogging` only for explicit application shutdown paths.
+- Fatal logs flush and invoke the configured fatal handler. The default fatal
+  handler is no-op for now; code that must terminate should still own that
+  termination path explicitly.
 - Logging should capture timestamp, level, file, line, function, and optional
   category.
 - Logging may use spdlog/fmt and moodycamel privately, but public headers must
