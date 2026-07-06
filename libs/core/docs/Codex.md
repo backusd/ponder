@@ -50,6 +50,15 @@ configuration, environment, job-system, or application dependencies.
   termination path explicitly.
 - Logging should capture timestamp, level, file, line, function, and optional
   category.
+- Prefer `std::source_location` directly in public core APIs when source capture
+  is needed.
+- Use `FormatSourceLocation` for file/line/column display and
+  `FormatSourceLocationWithFunction` only when function names are useful.
+- `CaptureStackTrace` is best-effort. Use `IsStackTraceCaptureSupported` when
+  behavior depends on real frames, and accept an empty stacktrace as the
+  cross-platform fallback.
+- Use `StackTraceCaptureOptions` to skip known wrapper frames or cap captured
+  depth at public boundaries.
 - Logging may use spdlog/fmt and moodycamel privately, but public headers must
   not expose those types.
 - Async logging may use an internal queue and dedicated logging thread, but core

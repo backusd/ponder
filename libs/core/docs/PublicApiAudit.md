@@ -197,9 +197,10 @@ Roadmap coverage:
 
 ## Cross-Cutting Findings
 
-- Source-location use is already present, but stacktrace policy is still
-  undefined. CORE-009 should settle the shared convention once for Error,
-  PonderException, assertions, and logging.
+- CORE-009 settled the shared source-location and stacktrace convention:
+  public APIs use `std::source_location` directly, display code uses
+  `FormatSourceLocation`, and stacktraces are captured through the best-effort
+  `CaptureStackTrace` helpers with empty traces as the portable fallback.
 - The current tests are intentionally small smoke tests. They should be split
   into focused files as soon as Error, exceptions, assertions, and logging become
   more than scaffolding.

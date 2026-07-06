@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <source_location>
 #include <span>
 #include <string>
 #include <vector>
@@ -20,5 +22,35 @@ private:
     std::vector<std::string> m_frames;
 };
 
+class StackTraceCaptureOptions final
+{
+public:
+    constexpr StackTraceCaptureOptions() noexcept = default;
+    constexpr StackTraceCaptureOptions(std::size_t skipFrames, std::size_t maxFrames) noexcept
+        : m_skipFrames(skipFrames), m_maxFrames(maxFrames)
+    {
+    }
+
+    [[nodiscard]] constexpr std::size_t GetSkipFrames() const noexcept
+    {
+        return m_skipFrames;
+    }
+
+    [[nodiscard]] constexpr std::size_t GetMaxFrames() const noexcept
+    {
+        return m_maxFrames;
+    }
+
+private:
+    std::size_t m_skipFrames{0};
+    std::size_t m_maxFrames{64};
+};
+
+[[nodiscard]] std::string FormatSourceLocation(
+    std::source_location location = std::source_location::current());
+[[nodiscard]] std::string FormatSourceLocationWithFunction(
+    std::source_location location = std::source_location::current());
+[[nodiscard]] bool IsStackTraceCaptureSupported() noexcept;
+[[nodiscard]] StackTrace CaptureStackTrace(StackTraceCaptureOptions options);
 [[nodiscard]] StackTrace CaptureStackTrace();
 } // namespace pond::core

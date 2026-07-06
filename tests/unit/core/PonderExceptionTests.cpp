@@ -23,7 +23,12 @@ TEST(PonderExceptionTests, StoresMessageLocationAndStackTraceFallback)
     EXPECT_EQ(exception.GetMessage(), std::string_view{"boom"});
     EXPECT_STREQ(exception.GetLocation().file_name(), location.file_name());
     EXPECT_EQ(exception.GetLocation().line(), location.line());
-    EXPECT_TRUE(exception.GetStackTrace().IsEmpty());
+    EXPECT_EQ(exception.GetStackTrace().IsEmpty(), exception.GetStackTrace().GetFrames().empty());
+
+    if (!pond::core::IsStackTraceCaptureSupported())
+    {
+        EXPECT_TRUE(exception.GetStackTrace().IsEmpty());
+    }
 }
 
 TEST(PonderExceptionTests, AcceptsExplicitStackTrace)

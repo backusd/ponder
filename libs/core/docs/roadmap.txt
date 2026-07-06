@@ -259,6 +259,13 @@ TASK CORE-008: Add Logging Test Infrastructure
       queued logging behavior.
 
 TASK CORE-009: Establish Source-Location And Stacktrace Conventions
+    Status: implemented.
+
+    `std::source_location` remains the public API convention. `StackTrace.hpp`
+    now provides project-owned formatting helpers, stacktrace capture options,
+    a support probe, and a documented empty fallback when real frame capture is
+    unavailable on the active standard library.
+
     Add a small project-owned convention for source locations and stacktraces if
     direct standard library use is not sufficient.
 

@@ -1,5 +1,7 @@
 #include <ponder/core/Result.hpp>
+#include <ponder/core/StackTrace.hpp>
 
+#include <format>
 #include <gtest/gtest.h>
 #include <source_location>
 #include <string>
@@ -33,8 +35,12 @@ TEST(ErrorTests, ConstructsWithDefaultCodeMessageLocationAndStackTraceFallback)
     EXPECT_EQ(error.GetMessage(), std::string_view{"failed"});
     EXPECT_STREQ(error.GetLocation().file_name(), location.file_name());
     EXPECT_EQ(error.GetLocation().line(), location.line());
-    EXPECT_TRUE(error.GetStackTrace().IsEmpty());
-    EXPECT_TRUE(error.GetStackTrace().GetFrames().empty());
+    EXPECT_EQ(error.GetStackTrace().IsEmpty(), error.GetStackTrace().GetFrames().empty());
+
+    if (!pond::core::IsStackTraceCaptureSupported())
+    {
+        EXPECT_TRUE(error.GetStackTrace().IsEmpty());
+    }
 }
 
 TEST(ErrorTests, ConstructsWithExplicitCode)
@@ -69,6 +75,51 @@ TEST(StackTraceTests, EmptyFallbackIsWellFormed)
     const pond::core::StackTrace stackTrace = pond::core::CaptureStackTrace();
 
     EXPECT_EQ(stackTrace.IsEmpty(), stackTrace.GetFrames().empty());
+
+    if (!pond::core::IsStackTraceCaptureSupported())
+    {
+        EXPECT_TRUE(stackTrace.IsEmpty());
+    }
+}
+
+TEST(StackTraceTests, CaptureOptionsCanDisableCapture)
+{
+    const pond::core::StackTrace stackTrace =
+        pond::core::CaptureStackTrace(pond::core::StackTraceCaptureOptions{0, 0});
+
+    EXPECT_TRUE(stackTrace.IsEmpty());
+    EXPECT_TRUE(stackTrace.GetFrames().empty());
+}
+
+TEST(StackTraceTests, CaptureOptionsLimitCapturedFramesWhenSupported)
+{
+    constexpr std::size_t kMaxFrames{4};
+    const pond::core::StackTrace stackTrace =
+        pond::core::CaptureStackTrace(pond::core::StackTraceCaptureOptions{0, kMaxFrames});
+
+    EXPECT_LE(stackTrace.GetFrames().size(), kMaxFrames);
+
+    if (!pond::core::IsStackTraceCaptureSupported())
+    {
+        EXPECT_TRUE(stackTrace.IsEmpty());
+    }
+}
+
+TEST(SourceLocationTests, FormatsFileLineAndColumn)
+{
+    const auto location = std::source_location::current();
+
+    EXPECT_EQ(pond::core::FormatSourceLocation(location),
+              std::format("{}:{}:{}", location.file_name(), location.line(), location.column()));
+}
+
+TEST(SourceLocationTests, FormatsFunctionWhenRequested)
+{
+    const auto location = std::source_location::current();
+    const std::string formatted = pond::core::FormatSourceLocationWithFunction(location);
+
+    EXPECT_NE(formatted.find(pond::core::FormatSourceLocation(location)), std::string::npos);
+    EXPECT_NE(formatted.find(location.function_name()), std::string::npos);
 }
 
 TEST(ErrorFormattingTests, FormatsCategoriesAndErrors)
@@ -83,7 +134,7 @@ TEST(ErrorFormattingTests, FormatsCategoriesAndErrors)
 
     const std::string formatted = pond::core::FormatError(error);
     EXPECT_NE(formatted.find("[parse:12] bad input"), std::string::npos);
-    EXPECT_NE(formatted.find(location.file_name()), std::string::npos);
+    EXPECT_NE(formatted.find(pond::core::FormatSourceLocation(location)), std::string::npos);
 }
 
 TEST(ErrorPropagationTests, MakeUnexpectedBuildsExplicitError)

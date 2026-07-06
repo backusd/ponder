@@ -77,8 +77,7 @@ std::string FormatErrorCode(ErrorCode code)
 
 std::string FormatError(const Error& error)
 {
-    const auto& location = error.GetLocation();
-    return std::format("[{}] {} ({}:{}:{})", FormatErrorCode(error.GetCode()), error.GetMessage(),
-                       location.file_name(), location.line(), location.column());
+    return std::format("[{}] {} ({})", FormatErrorCode(error.GetCode()), error.GetMessage(),
+                       FormatSourceLocation(error.GetLocation()));
 }
 } // namespace pond::core
