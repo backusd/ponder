@@ -76,7 +76,29 @@ private:
     StackTrace m_stackTrace;
 };
 
-[[nodiscard]] std::string_view GetErrorCategoryName(ErrorCategory category) noexcept;
+[[nodiscard]] constexpr std::string_view GetErrorCategoryName(ErrorCategory category) noexcept
+{
+    switch (category)
+    {
+    case ErrorCategory::General:
+        return "general";
+    case ErrorCategory::InvalidArgument:
+        return "invalid_argument";
+    case ErrorCategory::NotFound:
+        return "not_found";
+    case ErrorCategory::Io:
+        return "io";
+    case ErrorCategory::Parse:
+        return "parse";
+    case ErrorCategory::Unsupported:
+        return "unsupported";
+    case ErrorCategory::Internal:
+        return "internal";
+    }
+
+    return "unknown";
+}
+
 [[nodiscard]] std::string FormatErrorCode(ErrorCode code);
 [[nodiscard]] std::string FormatError(const Error& error);
 
@@ -88,113 +110,122 @@ public:
     using ErrorType = Error;
     using ExpectedType = std::expected<ValueType, ErrorType>;
 
-    Result()
+    constexpr Result()
         requires std::default_initializable<ValueType>
     = default;
-    Result(const Result&) = default;
-    Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) = default;
-    Result& operator=(const Result&) = default;
-    Result& operator=(Result&&) noexcept(std::is_nothrow_move_assignable_v<ExpectedType>) = default;
+    constexpr Result(const Result&) = default;
+    constexpr Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) =
+        default;
+    constexpr Result& operator=(const Result&) = default;
+    constexpr Result& operator=(Result&&) noexcept(
+        std::is_nothrow_move_assignable_v<ExpectedType>) = default;
     ~Result() = default;
 
     template <typename Input>
         requires(!std::same_as<std::remove_cvref_t<Input>, Result> &&
                  !std::same_as<std::remove_cvref_t<Input>, std::unexpected<ErrorType>> &&
                  std::constructible_from<ValueType, Input &&>)
-    Result(Input&& value) : m_expected(std::in_place, std::forward<Input>(value))
+    constexpr Result(Input&& value) noexcept(std::is_nothrow_constructible_v<ValueType, Input&&>)
+        : m_expected(std::in_place, std::forward<Input>(value))
     {
     }
 
-    Result(std::unexpected<ErrorType> unexpected) : m_expected(std::move(unexpected)) {}
+    constexpr Result(std::unexpected<ErrorType> unexpected) noexcept(
+        std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
+        : m_expected(std::move(unexpected))
+    {
+    }
 
     template <typename... Args>
         requires std::constructible_from<ValueType, Args&&...>
-    [[nodiscard]] static Result FromValue(Args&&... args)
+    [[nodiscard]] static constexpr Result FromValue(Args&&... args) noexcept(
+        std::is_nothrow_constructible_v<ValueType, Args&&...>)
     {
         return Result{std::in_place, std::forward<Args>(args)...};
     }
 
-    [[nodiscard]] static Result FromError(ErrorType error)
+    [[nodiscard]] static constexpr Result FromError(ErrorType error) noexcept(
+        std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
     {
         return Result{std::unexpected<ErrorType>{std::move(error)}};
     }
 
-    [[nodiscard]] bool HasValue() const noexcept
+    [[nodiscard]] constexpr bool HasValue() const noexcept
     {
         return m_expected.has_value();
     }
 
-    [[nodiscard]] explicit operator bool() const noexcept
+    [[nodiscard]] constexpr explicit operator bool() const noexcept
     {
         return HasValue();
     }
 
-    [[nodiscard]] ValueType& GetValue() &
+    [[nodiscard]] constexpr ValueType& GetValue() &
     {
         return m_expected.value();
     }
 
-    [[nodiscard]] const ValueType& GetValue() const&
+    [[nodiscard]] constexpr const ValueType& GetValue() const&
     {
         return m_expected.value();
     }
 
-    [[nodiscard]] ValueType&& GetValue() &&
+    [[nodiscard]] constexpr ValueType&& GetValue() &&
     {
         return std::move(m_expected).value();
     }
 
-    [[nodiscard]] const ValueType&& GetValue() const&&
+    [[nodiscard]] constexpr const ValueType&& GetValue() const&&
     {
         return std::move(m_expected).value();
     }
 
-    [[nodiscard]] ErrorType& GetError() &
+    [[nodiscard]] constexpr ErrorType& GetError() &
     {
         return m_expected.error();
     }
 
-    [[nodiscard]] const ErrorType& GetError() const&
+    [[nodiscard]] constexpr const ErrorType& GetError() const&
     {
         return m_expected.error();
     }
 
-    [[nodiscard]] ErrorType&& GetError() &&
+    [[nodiscard]] constexpr ErrorType&& GetError() &&
     {
         return std::move(m_expected).error();
     }
 
-    [[nodiscard]] const ErrorType&& GetError() const&&
+    [[nodiscard]] constexpr const ErrorType&& GetError() const&&
     {
         return std::move(m_expected).error();
     }
 
-    [[nodiscard]] ValueType& operator*() & noexcept
+    [[nodiscard]] constexpr ValueType& operator*() & noexcept
     {
         return *m_expected;
     }
 
-    [[nodiscard]] const ValueType& operator*() const& noexcept
+    [[nodiscard]] constexpr const ValueType& operator*() const& noexcept
     {
         return *m_expected;
     }
 
-    [[nodiscard]] ValueType&& operator*() && noexcept
+    [[nodiscard]] constexpr ValueType&& operator*() && noexcept
     {
         return *std::move(m_expected);
     }
 
-    [[nodiscard]] const ValueType&& operator*() const&& noexcept
+    [[nodiscard]] constexpr const ValueType&& operator*() const&& noexcept
     {
         return *std::move(m_expected);
     }
 
-    [[nodiscard]] ValueType* operator->() noexcept
+    [[nodiscard]] constexpr ValueType* operator->() noexcept
     {
         return std::addressof(*m_expected);
     }
 
-    [[nodiscard]] const ValueType* operator->() const noexcept
+    [[nodiscard]] constexpr const ValueType* operator->() const noexcept
     {
         return std::addressof(*m_expected);
     }
@@ -202,7 +233,8 @@ public:
 private:
     template <typename... Args>
         requires std::constructible_from<ValueType, Args&&...>
-    explicit Result(std::in_place_t, Args&&... args)
+    constexpr explicit Result(std::in_place_t, Args&&... args) noexcept(
+        std::is_nothrow_constructible_v<ValueType, Args&&...>)
         : m_expected(std::in_place, std::forward<Args>(args)...)
     {
     }
@@ -218,56 +250,63 @@ public:
     using ErrorType = Error;
     using ExpectedType = std::expected<void, ErrorType>;
 
-    Result() = default;
-    Result(const Result&) = default;
-    Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) = default;
-    Result& operator=(const Result&) = default;
-    Result& operator=(Result&&) noexcept(std::is_nothrow_move_assignable_v<ExpectedType>) = default;
+    constexpr Result() = default;
+    constexpr Result(const Result&) = default;
+    constexpr Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) =
+        default;
+    constexpr Result& operator=(const Result&) = default;
+    constexpr Result& operator=(Result&&) noexcept(
+        std::is_nothrow_move_assignable_v<ExpectedType>) = default;
     ~Result() = default;
 
-    Result(std::unexpected<ErrorType> unexpected) : m_expected(std::move(unexpected)) {}
+    constexpr Result(std::unexpected<ErrorType> unexpected) noexcept(
+        std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
+        : m_expected(std::move(unexpected))
+    {
+    }
 
-    [[nodiscard]] static Result Success()
+    [[nodiscard]] static constexpr Result Success() noexcept
     {
         return Result{};
     }
 
-    [[nodiscard]] static Result FromError(ErrorType error)
+    [[nodiscard]] static constexpr Result FromError(ErrorType error) noexcept(
+        std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
     {
         return Result{std::unexpected<ErrorType>{std::move(error)}};
     }
 
-    [[nodiscard]] bool HasValue() const noexcept
+    [[nodiscard]] constexpr bool HasValue() const noexcept
     {
         return m_expected.has_value();
     }
 
-    [[nodiscard]] explicit operator bool() const noexcept
+    [[nodiscard]] constexpr explicit operator bool() const noexcept
     {
         return HasValue();
     }
 
-    void GetValue() const
+    constexpr void GetValue() const
     {
         m_expected.value();
     }
 
-    [[nodiscard]] ErrorType& GetError() &
+    [[nodiscard]] constexpr ErrorType& GetError() &
     {
         return m_expected.error();
     }
 
-    [[nodiscard]] const ErrorType& GetError() const&
+    [[nodiscard]] constexpr const ErrorType& GetError() const&
     {
         return m_expected.error();
     }
 
-    [[nodiscard]] ErrorType&& GetError() &&
+    [[nodiscard]] constexpr ErrorType&& GetError() &&
     {
         return std::move(m_expected).error();
     }
 
-    [[nodiscard]] const ErrorType&& GetError() const&&
+    [[nodiscard]] constexpr const ErrorType&& GetError() const&&
     {
         return std::move(m_expected).error();
     }
@@ -279,7 +318,7 @@ private:
 using VoidResult = Result<void>;
 
 template <typename... Args>
-[[nodiscard]] std::unexpected<Error> MakeUnexpected(Args&&... args)
+[[nodiscard]] constexpr std::unexpected<Error> MakeUnexpected(Args&&... args)
 {
     return std::unexpected<Error>(Error(std::forward<Args>(args)...));
 }

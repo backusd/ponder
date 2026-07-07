@@ -11,7 +11,6 @@ ponder_add_project_library(core
     PUBLIC_HEADERS
         include/ponder/core/Assert.hpp
         include/ponder/core/BuildInfo.hpp
-        include/ponder/core/Library.hpp
         include/ponder/core/Log.hpp
         include/ponder/core/PonderException.hpp
         include/ponder/core/Result.hpp
@@ -22,7 +21,6 @@ ponder_add_project_library(core
     SOURCES
         "${PONDER_CORE_BUILD_INFO_SOURCE}"
         src/Assert.cpp
-        src/Library.cpp
         src/Log.cpp
         src/PonderException.cpp
         src/Result.cpp

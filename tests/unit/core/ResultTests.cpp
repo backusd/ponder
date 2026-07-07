@@ -8,6 +8,40 @@
 
 namespace
 {
+struct ConstexprWidget final
+{
+    int value{0};
+
+    [[nodiscard]] constexpr int GetValue() const noexcept
+    {
+        return value;
+    }
+};
+
+constexpr bool ResultValueObserversAreConstexpr()
+{
+    pond::core::Result<int> result = 42;
+    return result.HasValue() && static_cast<bool>(result) && result.GetValue() == 42 &&
+           *result == 42;
+}
+
+constexpr bool ResultFactoryAndArrowAreConstexpr()
+{
+    const auto result = pond::core::Result<ConstexprWidget>::FromValue(ConstexprWidget{7});
+    return result.HasValue() && result->GetValue() == 7;
+}
+
+constexpr bool VoidResultObserversAreConstexpr()
+{
+    const pond::core::VoidResult result = pond::core::VoidResult::Success();
+    return result.HasValue() && static_cast<bool>(result);
+}
+
+static_assert(ResultValueObserversAreConstexpr());
+static_assert(ResultFactoryAndArrowAreConstexpr());
+static_assert(VoidResultObserversAreConstexpr());
+static_assert(noexcept(std::declval<const pond::core::Result<int>&>().HasValue()));
+static_assert(noexcept(static_cast<bool>(std::declval<const pond::core::Result<int>&>())));
 TEST(ResultTests, StoresValue)
 {
     pond::core::Result<int> result = 42;

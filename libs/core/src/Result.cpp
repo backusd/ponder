@@ -5,11 +5,6 @@
 
 namespace pond::core
 {
-namespace
-{
-constexpr std::string_view kUnknownErrorCategory{"unknown"};
-}
-
 Error::Error(std::string message, std::source_location location)
     : Error(ErrorCode{}, std::move(message), location)
 {
@@ -45,29 +40,6 @@ const std::source_location& Error::GetLocation() const noexcept
 const StackTrace& Error::GetStackTrace() const noexcept
 {
     return m_stackTrace;
-}
-
-std::string_view GetErrorCategoryName(ErrorCategory category) noexcept
-{
-    switch (category)
-    {
-    case ErrorCategory::General:
-        return "general";
-    case ErrorCategory::InvalidArgument:
-        return "invalid_argument";
-    case ErrorCategory::NotFound:
-        return "not_found";
-    case ErrorCategory::Io:
-        return "io";
-    case ErrorCategory::Parse:
-        return "parse";
-    case ErrorCategory::Unsupported:
-        return "unsupported";
-    case ErrorCategory::Internal:
-        return "internal";
-    }
-
-    return kUnknownErrorCategory;
 }
 
 std::string FormatErrorCode(ErrorCode code)

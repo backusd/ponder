@@ -1,5 +1,4 @@
 #include <ponder/core/Assert.hpp>
-#include <ponder/core/Library.hpp>
 #include <ponder/core/Log.hpp>
 #include <ponder/core/PonderException.hpp>
 #include <ponder/core/Result.hpp>
@@ -7,10 +6,8 @@
 #include <gtest/gtest.h>
 #include <string_view>
 
-TEST(CoreSmokeTests, ExposesLibraryNameAndConventions)
+TEST(CoreSmokeTests, ExercisesCoreConventions)
 {
-    EXPECT_EQ(pond::core::GetLibraryName(), std::string_view{"core"});
-
     pond::core::Result<int> value = 42;
     ASSERT_TRUE(value.HasValue());
     EXPECT_EQ(value.GetValue(), 42);

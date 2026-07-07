@@ -84,12 +84,11 @@ TASK CORE-000: Record Core Decisions In Local Docs
 TASK CORE-001: Audit Existing Core Public API
     Status: implemented.
 
-    Audit recorded in `libs/core/docs/PublicApiAudit.md`.
+    Initial audit completed. The durable core boundary is now maintained in `libs/core/docs/Boundary.md`.
 
     Review the current public headers:
 
     - `Assert.hpp`
-    - `Library.hpp`
     - `Log.hpp`
     - `PonderException.hpp`
     - `Result.hpp`
@@ -393,7 +392,7 @@ TASK CORE-015: Tighten Public Header Hygiene
 
     Expected coverage:
 
-    - Use the findings in `libs/core/docs/PublicApiAudit.md` as a checklist.
+    - Use `libs/core/docs/Boundary.md` and `libs/core/docs/Codex.md` as the durable boundary checklist.
 
     - Replace heavy includes with forward declarations where appropriate.
     - Keep public headers self-contained.
@@ -402,7 +401,7 @@ TASK CORE-015: Tighten Public Header Hygiene
     - Add or expand tests for header self-containment if useful.
 
 TASK CORE-016: Address High-Signal clang-tidy Findings In Core
-    Status: implemented. See `libs/core/docs/PublicApiAudit.md`.
+    Status: implemented. See `libs/core/docs/Boundary.md` and `libs/core/docs/Codex.md`.
 
     Run clang-tidy against the PCH-free analysis preset and fix high-signal core
     warnings.
@@ -416,7 +415,7 @@ TASK CORE-016: Address High-Signal clang-tidy Findings In Core
     - Document any intentionally deferred tidy warnings.
 
 TASK CORE-017: Expand Core Unit Tests
-    Status: implemented. See `libs/core/docs/PublicApiAudit.md`.
+    Status: implemented. See `libs/core/docs/Boundary.md` and `libs/core/docs/Codex.md`.
 
     Grow `ponder_core_tests` into a real test suite.
 
@@ -437,7 +436,7 @@ TASK CORE-017: Expand Core Unit Tests
 
 TASK CORE-018: Final Core Documentation Pass
     Status: implemented. See `libs/core/docs/Boundary.md`,
-    `libs/core/docs/Codex.md`, `libs/core/docs/PublicApiAudit.md`, and
+    `libs/core/docs/Codex.md`, and
     `docs/adr/0006-core-foundation-contracts.md`.
 
     Update core docs after implementation:

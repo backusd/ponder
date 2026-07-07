@@ -1,6 +1,6 @@
 # Core Library Boundary
 
-Status: current after TASK CORE-018.
+Status: current after the post-CORE-019 audit.
 
 `ponder_core` owns the narrow project-wide foundation code that is safe for most
 other libraries to depend on. It should stay small, dependency-light at its public
@@ -28,7 +28,6 @@ revisiting basic error, diagnostic, and utility conventions.
   handling, debug break, assertion metadata, and scoped handler overrides.
 - `BuildInfo.hpp`: generated configure-time project, build, compiler, platform,
   and CMake metadata.
-- `Library.hpp`: the lightweight `GetLibraryName()` smoke-test API.
 - `Log.hpp`: logging levels, log entries, category-aware logging functions,
   macros, async flush/shutdown controls, and scoped test overrides.
 - `PonderException.hpp`: standalone exceptional-failure type and source-location

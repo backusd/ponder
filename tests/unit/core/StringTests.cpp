@@ -7,6 +7,68 @@
 
 namespace
 {
+constexpr std::string_view kRocketUtf8{"\xF0\x9F\x9A\x80", 4};
+
+constexpr bool Utf8ToWideStringAsciiIsConstexpr()
+{
+    const auto result = pond::core::Utf8ToWideString("Ponder");
+    return result.HasValue() && result.GetValue() == L"Ponder";
+}
+
+constexpr bool Utf8ToWideStringRocketIsConstexpr()
+{
+    const auto result = pond::core::Utf8ToWideString(kRocketUtf8);
+    if (!result.HasValue())
+    {
+        return false;
+    }
+
+    const std::wstring& value = result.GetValue();
+    if constexpr (sizeof(wchar_t) == 2)
+    {
+        return value.size() == 2 && value[0] == static_cast<wchar_t>(0xD83D) &&
+               value[1] == static_cast<wchar_t>(0xDE80);
+    }
+    else
+    {
+        return value.size() == 1 && value[0] == static_cast<wchar_t>(0x0001F680);
+    }
+}
+
+constexpr bool WideStringToUtf8AsciiIsConstexpr()
+{
+    const auto result = pond::core::WideStringToUtf8(L"Ponder");
+    return result.HasValue() && result.GetValue() == "Ponder";
+}
+
+constexpr bool WideStringToUtf8RocketIsConstexpr()
+{
+    std::wstring text;
+    if constexpr (sizeof(wchar_t) == 2)
+    {
+        text.push_back(static_cast<wchar_t>(0xD83D));
+        text.push_back(static_cast<wchar_t>(0xDE80));
+    }
+    else
+    {
+        text.push_back(static_cast<wchar_t>(0x0001F680));
+    }
+
+    const auto result = pond::core::WideStringToUtf8(text);
+    if (!result.HasValue())
+    {
+        return false;
+    }
+
+    const std::string& value = result.GetValue();
+    return value.size() == kRocketUtf8.size() && value[0] == kRocketUtf8[0] &&
+           value[1] == kRocketUtf8[1] && value[2] == kRocketUtf8[2] && value[3] == kRocketUtf8[3];
+}
+
+static_assert(Utf8ToWideStringAsciiIsConstexpr());
+static_assert(Utf8ToWideStringRocketIsConstexpr());
+static_assert(WideStringToUtf8AsciiIsConstexpr());
+static_assert(WideStringToUtf8RocketIsConstexpr());
 [[nodiscard]] std::string MakeBytes(std::initializer_list<unsigned int> bytes)
 {
     std::string text;

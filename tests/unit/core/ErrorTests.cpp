@@ -31,6 +31,10 @@ TEST(ErrorCodeTests, StoresCategoryAndValue)
 TEST(ErrorCategoryTests, UsesCompactUnderlyingTypeAndUnknownFallback)
 {
     static_assert(std::is_same_v<std::underlying_type_t<pond::core::ErrorCategory>, std::uint8_t>);
+    static_assert(pond::core::GetErrorCategoryName(pond::core::ErrorCategory::Parse) ==
+                  std::string_view{"parse"});
+    static_assert(pond::core::GetErrorCategoryName(pond::core::ErrorCategory::Unsupported) ==
+                  std::string_view{"unsupported"});
 
     // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
     const auto unknownCategory = static_cast<pond::core::ErrorCategory>(255);
