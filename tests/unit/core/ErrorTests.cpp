@@ -1,29 +1,41 @@
 #include <ponder/core/Result.hpp>
 #include <ponder/core/StackTrace.hpp>
 
+#include <cstdint>
 #include <format>
 #include <gtest/gtest.h>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace
 {
 TEST(ErrorCodeTests, DefaultsToGeneralZero)
 {
-    constexpr pond::core::ErrorCode code;
+    constexpr pond::core::ErrorCode kCode;
 
-    static_assert(code.GetCategory() == pond::core::ErrorCategory::General);
-    static_assert(code.GetValue() == 0);
+    static_assert(kCode.GetCategory() == pond::core::ErrorCategory::General);
+    static_assert(kCode.GetValue() == 0);
 }
 
 TEST(ErrorCodeTests, StoresCategoryAndValue)
 {
-    constexpr pond::core::ErrorCode code{pond::core::ErrorCategory::InvalidArgument, 42};
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::InvalidArgument, 42};
 
-    static_assert(code.GetCategory() == pond::core::ErrorCategory::InvalidArgument);
-    static_assert(code.GetValue() == 42);
+    static_assert(kCode.GetCategory() == pond::core::ErrorCategory::InvalidArgument);
+    static_assert(kCode.GetValue() == 42);
+}
+
+TEST(ErrorCategoryTests, UsesCompactUnderlyingTypeAndUnknownFallback)
+{
+    static_assert(std::is_same_v<std::underlying_type_t<pond::core::ErrorCategory>, std::uint8_t>);
+
+    // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+    const auto unknownCategory = static_cast<pond::core::ErrorCategory>(255);
+
+    EXPECT_EQ(pond::core::GetErrorCategoryName(unknownCategory), std::string_view{"unknown"});
 }
 
 TEST(ErrorTests, ConstructsWithDefaultCodeMessageLocationAndStackTraceFallback)
@@ -45,10 +57,10 @@ TEST(ErrorTests, ConstructsWithDefaultCodeMessageLocationAndStackTraceFallback)
 
 TEST(ErrorTests, ConstructsWithExplicitCode)
 {
-    constexpr pond::core::ErrorCode code{pond::core::ErrorCategory::NotFound, 7};
-    const pond::core::Error error{code, "missing"};
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::NotFound, 7};
+    const pond::core::Error error{kCode, "missing"};
 
-    EXPECT_TRUE(error.GetCode() == code);
+    EXPECT_TRUE(error.GetCode() == kCode);
     EXPECT_EQ(error.GetMessage(), std::string_view{"missing"});
 }
 
@@ -124,13 +136,13 @@ TEST(SourceLocationTests, FormatsFunctionWhenRequested)
 
 TEST(ErrorFormattingTests, FormatsCategoriesAndErrors)
 {
-    constexpr pond::core::ErrorCode code{pond::core::ErrorCategory::Parse, 12};
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Parse, 12};
     const auto location = std::source_location::current();
-    const pond::core::Error error{code, "bad input", pond::core::StackTrace{}, location};
+    const pond::core::Error error{kCode, "bad input", pond::core::StackTrace{}, location};
 
     EXPECT_EQ(pond::core::GetErrorCategoryName(pond::core::ErrorCategory::Parse),
               std::string_view{"parse"});
-    EXPECT_EQ(pond::core::FormatErrorCode(code), "parse:12");
+    EXPECT_EQ(pond::core::FormatErrorCode(kCode), "parse:12");
 
     const std::string formatted = pond::core::FormatError(error);
     EXPECT_NE(formatted.find("[parse:12] bad input"), std::string::npos);
@@ -139,12 +151,12 @@ TEST(ErrorFormattingTests, FormatsCategoriesAndErrors)
 
 TEST(ErrorPropagationTests, MakeUnexpectedBuildsExplicitError)
 {
-    constexpr pond::core::ErrorCode code{pond::core::ErrorCategory::Unsupported, 3};
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Unsupported, 3};
 
-    pond::core::Result<int> result = pond::core::MakeUnexpected(code, "unsupported");
+    pond::core::Result<int> result = pond::core::MakeUnexpected(kCode, "unsupported");
 
     ASSERT_FALSE(result.HasValue());
-    EXPECT_TRUE(result.GetError().GetCode() == code);
+    EXPECT_TRUE(result.GetError().GetCode() == kCode);
     EXPECT_EQ(result.GetError().GetMessage(), std::string_view{"unsupported"});
 }
 } // namespace

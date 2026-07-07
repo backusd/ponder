@@ -44,8 +44,8 @@ void DefaultVerifyFailureHandler(const AssertionFailure& failure)
     LogMessage(LogLevel::Error, FormatAssertionFailure(failure), failure.GetLocation());
 }
 
-std::atomic<AssertionFailureHandler> g_assertionFailureHandler{DefaultAssertionFailureHandler};
-std::atomic<AssertionFailureHandler> g_verifyFailureHandler{DefaultVerifyFailureHandler};
+std::atomic<AssertionFailureHandler> assertionFailureHandler{DefaultAssertionFailureHandler};
+std::atomic<AssertionFailureHandler> verifyFailureHandler{DefaultVerifyFailureHandler};
 } // namespace
 
 AssertionFailure::AssertionFailure(AssertionFailureKind kind, std::string expression,
@@ -77,12 +77,12 @@ const std::source_location& AssertionFailure::GetLocation() const noexcept
 
 AssertionFailureHandler SetAssertionFailureHandler(AssertionFailureHandler handler) noexcept
 {
-    return g_assertionFailureHandler.exchange(handler ? handler : DefaultAssertionFailureHandler);
+    return assertionFailureHandler.exchange(handler ? handler : DefaultAssertionFailureHandler);
 }
 
 AssertionFailureHandler SetVerifyFailureHandler(AssertionFailureHandler handler) noexcept
 {
-    return g_verifyFailureHandler.exchange(handler ? handler : DefaultVerifyFailureHandler);
+    return verifyFailureHandler.exchange(handler ? handler : DefaultVerifyFailureHandler);
 }
 
 ScopedAssertionFailureHandler::ScopedAssertionFailureHandler(
@@ -144,7 +144,7 @@ void DebugBreak() noexcept
     const AssertionFailure failure{AssertionFailureKind::Assertion, std::string{expression},
                                    std::move(message), location};
 
-    g_assertionFailureHandler.load()(failure);
+    assertionFailureHandler.load()(failure);
 
     DebugBreak();
     std::abort();
@@ -156,7 +156,7 @@ void DebugBreak() noexcept
     const AssertionFailure failure{AssertionFailureKind::Verify, std::string{expression},
                                    std::move(message), location};
 
-    g_verifyFailureHandler.load()(failure);
+    verifyFailureHandler.load()(failure);
 
     throw MakePonderException(FormatAssertionFailure(failure), location);
 }
@@ -166,7 +166,7 @@ void DebugBreak() noexcept
     const AssertionFailure failure{AssertionFailureKind::Unreachable, std::string{},
                                    std::move(message), location};
 
-    g_assertionFailureHandler.load()(failure);
+    assertionFailureHandler.load()(failure);
 
     DebugBreak();
     std::abort();

@@ -14,7 +14,7 @@
 
 namespace pond::core
 {
-enum class ErrorCategory
+enum class ErrorCategory : std::uint8_t
 {
     General,
     InvalidArgument,

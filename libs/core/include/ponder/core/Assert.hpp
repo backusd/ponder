@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <format>
 #include <source_location>
 #include <string>
@@ -8,7 +9,7 @@
 
 namespace pond::core
 {
-enum class AssertionFailureKind
+enum class AssertionFailureKind : std::uint8_t
 {
     Assertion,
     Verify,

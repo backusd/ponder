@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <format>
 #include <gtest/gtest.h>
 #include <mutex>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace
@@ -17,62 +19,62 @@ struct ThrowsDuringFormatting final
 {
 };
 
-int g_fatalHandlerCallCount = 0;
-std::string g_fatalCategory;
-std::string g_fatalMessage;
-std::source_location g_fatalLocation;
-std::atomic_bool g_throwDuringFormatting{true};
-std::mutex g_primaryCaptureMutex;
-std::mutex g_secondaryCaptureMutex;
-std::vector<pond::core::LogEntry> g_primaryCapturedEntries;
-std::vector<pond::core::LogEntry> g_secondaryCapturedEntries;
+int fatalHandlerCallCount = 0;
+std::string fatalCategory;
+std::string fatalMessage;
+std::source_location fatalLocation;
+std::atomic_bool throwDuringFormatting{true};
+std::mutex primaryCaptureMutex;
+std::mutex secondaryCaptureMutex;
+std::vector<pond::core::LogEntry> primaryCapturedEntries;
+std::vector<pond::core::LogEntry> secondaryCapturedEntries;
 
 void ResetFatalCapture()
 {
-    g_fatalHandlerCallCount = 0;
-    g_fatalCategory.clear();
-    g_fatalMessage.clear();
-    g_fatalLocation = {};
+    fatalHandlerCallCount = 0;
+    fatalCategory.clear();
+    fatalMessage.clear();
+    fatalLocation = {};
 }
 
 void CaptureFatalLog(std::string_view category, std::string_view message,
                      std::source_location location)
 {
-    ++g_fatalHandlerCallCount;
-    g_fatalCategory = category;
-    g_fatalMessage = message;
-    g_fatalLocation = location;
+    ++fatalHandlerCallCount;
+    fatalCategory = category;
+    fatalMessage = message;
+    fatalLocation = location;
 }
 
 void CapturePrimaryLogEntry(const pond::core::LogEntry& entry)
 {
-    const std::scoped_lock lock{g_primaryCaptureMutex};
-    g_primaryCapturedEntries.push_back(entry);
+    const std::scoped_lock lock{primaryCaptureMutex};
+    primaryCapturedEntries.push_back(entry);
 }
 
 void CaptureSecondaryLogEntry(const pond::core::LogEntry& entry)
 {
-    const std::scoped_lock lock{g_secondaryCaptureMutex};
-    g_secondaryCapturedEntries.push_back(entry);
+    const std::scoped_lock lock{secondaryCaptureMutex};
+    secondaryCapturedEntries.push_back(entry);
 }
 
 void ClearCapturedLogEntries()
 {
-    const std::scoped_lock lock{g_primaryCaptureMutex, g_secondaryCaptureMutex};
-    g_primaryCapturedEntries.clear();
-    g_secondaryCapturedEntries.clear();
+    const std::scoped_lock lock{primaryCaptureMutex, secondaryCaptureMutex};
+    primaryCapturedEntries.clear();
+    secondaryCapturedEntries.clear();
 }
 
 std::vector<pond::core::LogEntry> GetPrimaryCapturedEntries()
 {
-    const std::scoped_lock lock{g_primaryCaptureMutex};
-    return g_primaryCapturedEntries;
+    const std::scoped_lock lock{primaryCaptureMutex};
+    return primaryCapturedEntries;
 }
 
 std::vector<pond::core::LogEntry> GetSecondaryCapturedEntries()
 {
-    const std::scoped_lock lock{g_secondaryCaptureMutex};
-    return g_secondaryCapturedEntries;
+    const std::scoped_lock lock{secondaryCaptureMutex};
+    return secondaryCapturedEntries;
 }
 
 [[nodiscard]] bool EndsWith(std::string_view value, std::string_view suffix) noexcept
@@ -81,6 +83,7 @@ std::vector<pond::core::LogEntry> GetSecondaryCapturedEntries()
 }
 } // namespace
 
+// NOLINTBEGIN(readability-identifier-naming)
 template <>
 struct std::formatter<ThrowsDuringFormatting>
 {
@@ -92,7 +95,7 @@ struct std::formatter<ThrowsDuringFormatting>
     auto format(const ThrowsDuringFormatting&, std::format_context& context) const
         -> std::format_context::iterator
     {
-        if (g_throwDuringFormatting.load())
+        if (throwDuringFormatting.load())
         {
             throw std::format_error{"intentional formatter failure"};
         }
@@ -100,6 +103,7 @@ struct std::formatter<ThrowsDuringFormatting>
         return context.out();
     }
 };
+// NOLINTEND(readability-identifier-naming)
 
 namespace
 {
@@ -118,6 +122,11 @@ TEST(LogLevelTests, NamesAndOrderingAreDefined)
     EXPECT_EQ(pond::core::GetLogLevelName(pond::core::LogLevel::Warning), "warning");
     EXPECT_EQ(pond::core::GetLogLevelName(pond::core::LogLevel::Error), "error");
     EXPECT_EQ(pond::core::GetLogLevelName(pond::core::LogLevel::Fatal), "fatal");
+    // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+    const auto unknownLevel = static_cast<pond::core::LogLevel>(255);
+    EXPECT_EQ(pond::core::GetLogLevelName(unknownLevel), "unknown");
+
+    static_assert(std::is_same_v<std::underlying_type_t<pond::core::LogLevel>, std::uint8_t>);
 }
 
 TEST(LogCaptureTests, CapturesMessageMetadataAndTimestamp)
@@ -251,14 +260,14 @@ TEST(LogCaptureTests, FatalHandlerScopeRestoresPreviousHandler)
         const auto expectedLine = __LINE__ + 1;
         LOG_FATAL_CATEGORY("fatal-test", "fatal {}", 7);
 
-        EXPECT_EQ(g_fatalHandlerCallCount, 1);
-        EXPECT_EQ(g_fatalCategory, "fatal-test");
-        EXPECT_EQ(g_fatalMessage, "fatal 7");
-        EXPECT_EQ(g_fatalLocation.line(), expectedLine);
+        EXPECT_EQ(fatalHandlerCallCount, 1);
+        EXPECT_EQ(fatalCategory, "fatal-test");
+        EXPECT_EQ(fatalMessage, "fatal 7");
+        EXPECT_EQ(fatalLocation.line(), expectedLine);
     }
 
     LOG_FATAL("after restore");
-    EXPECT_EQ(g_fatalHandlerCallCount, 1);
+    EXPECT_EQ(fatalHandlerCallCount, 1);
 }
 
 TEST(LogCaptureTests, ScopedMinimumLevelRestoresPreviousLevel)

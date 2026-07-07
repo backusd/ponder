@@ -24,6 +24,11 @@ namespace
 void DefaultLogSinkHandler(const LogEntry&) {}
 void DefaultFatalHandler(std::string_view, std::string_view, std::source_location) {}
 
+void SuppressLoggingException() noexcept
+{
+    // Logging is a diagnostic path; failures here must not escape noexcept APIs.
+}
+
 spdlog::level::level_enum ToSpdlogLevel(LogLevel level) noexcept
 {
     switch (level)
@@ -228,6 +233,7 @@ private:
         }
         catch (...)
         {
+            SuppressLoggingException();
         }
     }
 
@@ -255,6 +261,7 @@ private:
         }
         catch (...)
         {
+            SuppressLoggingException();
         }
     }
 
@@ -266,6 +273,7 @@ private:
         }
         catch (...)
         {
+            SuppressLoggingException();
         }
     }
 
@@ -284,6 +292,7 @@ private:
         }
         catch (...)
         {
+            SuppressLoggingException();
         }
     }
 
@@ -375,6 +384,7 @@ void LogMessage(LogLevel level, std::string_view category, std::string_view mess
     }
     catch (...)
     {
+        SuppressLoggingException();
     }
 }
 

@@ -402,6 +402,8 @@ TASK CORE-015: Tighten Public Header Hygiene
     - Add or expand tests for header self-containment if useful.
 
 TASK CORE-016: Address High-Signal clang-tidy Findings In Core
+    Status: implemented. See `libs/core/docs/PublicApiAudit.md`.
+
     Run clang-tidy against the PCH-free analysis preset and fix high-signal core
     warnings.
 
@@ -414,6 +416,8 @@ TASK CORE-016: Address High-Signal clang-tidy Findings In Core
     - Document any intentionally deferred tidy warnings.
 
 TASK CORE-017: Expand Core Unit Tests
+    Status: implemented. See `libs/core/docs/PublicApiAudit.md`.
+
     Grow `ponder_core_tests` into a real test suite.
 
     Expected coverage:
@@ -432,6 +436,10 @@ TASK CORE-017: Expand Core Unit Tests
     test becomes hard to scan.
 
 TASK CORE-018: Final Core Documentation Pass
+    Status: implemented. See `libs/core/docs/Boundary.md`,
+    `libs/core/docs/Codex.md`, `libs/core/docs/PublicApiAudit.md`, and
+    `docs/adr/0006-core-foundation-contracts.md`.
+
     Update core docs after implementation:
 
     - `libs/core/docs/Boundary.md`.
@@ -444,14 +452,24 @@ TASK CORE-018: Final Core Documentation Pass
     future agent needs to pair with root `AGENTS.md`.
 
 TASK CORE-019: Verify Core Locally
-    Run local verification for the completed core phase:
+    Status: implemented on 2026-07-07.
 
-    - Configure and build a supported preset.
-    - Run `ponder_core_tests`.
-    - Run formatting checks.
-    - Run clang-tidy where available.
-    - Confirm no generated files are staged.
+    Local verification completed for the core phase:
 
-    Record any local tool limitations in the relevant developer setup or
-    subsystem documentation rather than recreating a temporary project-structure
-    verification log.
+    - `scripts/check-tools.ps1` found Git, CMake, CTest, MSBuild, Ninja, and
+      Visual Studio LLVM tools. Plain PowerShell still does not expose `cl` and
+      `link` directly; use a Visual Studio Developer shell for MSVC/Ninja builds
+      as documented in `docs/developer-setup.md`.
+    - `cmake --preset windows-ninja-analysis` configured successfully.
+    - `cmake --build --preset windows-ninja-analysis` passed when run from the
+      Visual Studio 2026 Developer Command Prompt environment.
+    - `ctest --preset windows-ninja-analysis` passed: 86/86 tests.
+    - `scripts/format.ps1 -Check` passed with Visual Studio LLVM on `PATH`.
+    - Scoped `clang-tidy` over `libs/core/src` and `tests/unit/core` passed for
+      28 core translation units. Remaining messages were suppressed
+      third-party/system-header noise plus intentional `NOLINT` annotations for
+      deliberate enum fallback tests and the standard `std::formatter` method
+      names.
+    - `git diff --check` passed with expected CRLF normalization warnings.
+    - `git status --short` showed only source/documentation changes and no
+      generated build output staged.

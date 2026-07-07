@@ -23,13 +23,13 @@ configuration, environment, job-system, or application dependencies.
   boundary details in `libs/core/docs/Boundary.md` and implementation guidance in
   this file.
 - Use `Result<T>` for recoverable errors.
-- `Error` should carry category/code, message, source location, and stacktrace if
-  practical.
+- `Error` carries category/code, message, source location, and a best-effort
+  stacktrace.
 - Use `PonderException` only for truly exceptional failures. It must be a
   standalone project type and must not derive from `std::exception` or any other
   type.
-- `PonderException` should not carry `Error`; it should carry a human-readable
-  message, source location, and stacktrace if practical.
+- `PonderException` does not carry `Error`; it carries a human-readable
+  message, source location, and a best-effort stacktrace.
 - Use `throw PONDER_EXCEPTION(...)` or `ThrowPonderException` for throwing
   `PonderException`. These helpers support std::format-style messages and
   source-location capture.
@@ -51,7 +51,7 @@ configuration, environment, job-system, or application dependencies.
 - Fatal logs flush and invoke the configured fatal handler. The default fatal
   handler is no-op for now; code that must terminate should still own that
   termination path explicitly.
-- Logging should capture timestamp, level, file, line, function, and optional
+- Logging records capture timestamp, level, file, line, function, and optional
   category.
 - Prefer `std::source_location` directly in public core APIs when source capture
   is needed.
@@ -72,8 +72,8 @@ configuration, environment, job-system, or application dependencies.
 - `Uuid` is the generic stable identifier primitive. Keep domain-specific IDs
   such as `AssetId`, `NodeId`, and `MoleculeId` in the owning domain library.
   Keep UUID parse/format behavior canonical and deterministic.
-- Core may own build/version information, UUID/stable identifiers, `ScopeExit`,
-  and minimal string conversion helpers.
+- Core owns build/version information, UUID/stable identifiers, `ScopeExit`, and
+  minimal string conversion helpers.
 - Use `ScopeExit` for tiny local cleanup and restoration paths. Cleanup
   callbacks must be `noexcept`; create durable RAII types for reusable resource
   concepts.
@@ -85,6 +85,14 @@ configuration, environment, job-system, or application dependencies.
   code points.
 - Keep string conversion dependency-free and avoid Windows-only APIs in public
   headers.
+- `LogLevel`, `ErrorCategory`, and `AssertionFailureKind` use compact
+  `std::uint8_t` underlying storage; keep future small public enums explicit
+  when their value set is intentionally bounded.
+- `.clang-tidy` intentionally disables `portability-avoid-pragma-once` because
+  the scaffold uses `#pragma once`. Do not churn headers to include guards unless
+  the project-level style decision changes first.
+- Local `const` variables still use normal camelCase names. Reserve `kPascalCase`
+  for true constants rather than every immutable local.
 - Core must not own runtime configuration, environment access, filesystem/path
   utilities, custom allocators, non-copyable helper base types, cancellation,
   progress reporting, domain typed IDs, or job execution.

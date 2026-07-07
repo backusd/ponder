@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <cstdint>
 #include <exception>
 #include <format>
 #include <source_location>
@@ -10,7 +11,7 @@
 
 namespace pond::core
 {
-enum class LogLevel
+enum class LogLevel : std::uint8_t
 {
     Trace = 0,
     Debug = 1,
@@ -53,7 +54,7 @@ using LogFatalHandler = void (*)(std::string_view category, std::string_view mes
 [[nodiscard]] std::string_view GetLogLevelName(LogLevel level) noexcept;
 [[nodiscard]] constexpr bool IsLogLevelEnabled(LogLevel level, LogLevel minimumLevel) noexcept
 {
-    return static_cast<int>(level) >= static_cast<int>(minimumLevel);
+    return static_cast<std::uint8_t>(level) >= static_cast<std::uint8_t>(minimumLevel);
 }
 
 void LogMessage(LogLevel level, std::string_view message,

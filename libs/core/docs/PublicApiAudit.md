@@ -1,251 +1,221 @@
 # Core Public API Audit
 
-Status: implemented for TASK CORE-001.
+Status: current after TASK CORE-018.
+
+This document records the current `ponder_core` public API surface after the core
+foundation implementation pass. Earlier audit findings from CORE-001 through
+CORE-017 have either been implemented, documented as boundary policy, or deferred
+to the owning subsystem.
 
 ## Scope
 
-This audit reviewed the current public core headers and the matching source/test
-files where needed to understand behavior:
+Reviewed public headers:
 
 - `include/ponder/core/Assert.hpp`
+- `include/ponder/core/BuildInfo.hpp`
 - `include/ponder/core/Library.hpp`
 - `include/ponder/core/Log.hpp`
 - `include/ponder/core/PonderException.hpp`
 - `include/ponder/core/Result.hpp`
-- `src/Assert.cpp`
-- `src/Log.cpp`
-- `src/PonderException.cpp`
-- `src/Result.cpp`
-- `tests/unit/core/SmokeTests.cpp`
+- `include/ponder/core/ScopeExit.hpp`
+- `include/ponder/core/StackTrace.hpp`
+- `include/ponder/core/String.hpp`
+- `include/ponder/core/Uuid.hpp`
+
+Reviewed implementation and verification boundaries:
+
+- `libs/core/CMakeLists.txt`
+- `libs/core/src/`
+- `tests/unit/core/`
+- `tests/unit/core/HeaderSelfContainment/`
 
 ## Decision Baseline
 
-Core should stay narrow and foundational. The public API should avoid
-third-party types, use `Result<T>` for recoverable errors, reserve
-`PonderException` for exceptional failures, and provide project-owned behavior
-for diagnostics, assertions, logging, source locations, stacktraces, and small
-utilities.
+Core stays narrow and foundational. It owns error/result conventions,
+exception/throw helpers, assertions, logging, source-location and stacktrace
+conventions, build metadata, UUIDs, and tiny dependency-free utilities that most
+libraries can safely reuse.
 
-The most important resolved decision for this audit is that `PonderException`
-must be a standalone project type and must not derive from `std::exception` or
-any other type.
+Core does not own domain models, IO, platform inspection, filesystem policy,
+threading/job systems, workflow progress/cancellation, runtime configuration,
+custom allocators, or domain typed IDs.
 
-## Summary
+## Current API Snapshot
 
-The existing public API is a useful scaffold, but it is not yet the settled core
-surface. The highest-priority follow-up work is:
+### Error, Result, Source Locations, And Stacktraces
 
-- Replace `PonderException` with the standalone design and update tests away
-  from `what()`.
-- Expand `Error` beyond message/location so it can carry category/code and
-  stacktrace information where practical.
-- Add the missing assertion and verify contracts, including test-scoped handler
-  overrides.
-- Keep logging third-party-free in public headers, then add the planned async
-  backend, test capture hooks, fatal handling, and explicit failure policy.
-- Add header hygiene/self-containment checks as the API becomes real.
+`Result.hpp` defines the recoverable error path:
 
-## Header Findings
+- `ErrorCategory : std::uint8_t` names broad failure categories.
+- `ErrorCode` stores an `ErrorCategory` plus an integer value.
+- `Error` stores `ErrorCode`, human-readable message, `std::source_location`,
+  and a `StackTrace` fallback.
+- `Result<T>` is a `[[nodiscard]]` project wrapper around
+  `std::expected<T, Error>`.
+- `Result<void>` is specialized and aliased as `VoidResult`.
+- `MakeUnexpected(...)` builds explicit unexpected errors for propagation.
 
-### `Assert.hpp`
+`StackTrace.hpp` defines the shared source-location and stacktrace convention:
 
-CORE-005 update:
+- Public APIs use `std::source_location` directly when source capture is needed.
+- Display code uses `FormatSourceLocation` and
+  `FormatSourceLocationWithFunction`.
+- `CaptureStackTrace` is best-effort and may return an empty trace on platforms
+  where useful stack capture is not available yet.
 
-- Assertions now expose scoped handler overrides, `PONDER_VERIFY`,
-  `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`.
-- The findings below are retained as historical audit context for why the
-  assertion work was added.
+### PonderException And Throw Helpers
 
-Current behavior:
+`PonderException.hpp` defines the exceptional failure path:
 
-- Provides `PONDER_ASSERT` and `PONDER_ASSERT_MESSAGE`.
-- Debug builds call `HandleAssertionFailure`.
-- Release builds compile both assertion macros out.
-- `HandleAssertionFailure` logs, calls `DebugBreak`, then aborts.
+- `PonderException` is a standalone final project type.
+- It does not derive from `std::exception` or any other type.
+- It stores a message, source location, and best-effort stacktrace.
+- It deliberately does not store `Error`.
+- `MakePonderException`, `MakeFormattedPonderException`, `ThrowPonderException`,
+  and `PONDER_EXCEPTION(...)` preserve source-location capture and support
+  std::format-style messages.
 
-Mismatches and gaps:
+### Assertions And Verify
 
-- Missing `PONDER_VERIFY`, `PONDER_UNREACHABLE`, and public
-  `PONDER_DEBUG_BREAK` macro.
-- Assertion messages do not support std::format-style arguments yet.
-- There is no scoped handler override for tests.
-- Failure behavior is process-terminating today, which makes direct unit tests
-  awkward until handler overrides exist.
-- `PONDER_VERIFY` needs different release behavior than debug-only assertions:
-  it should remain active and throw on failure.
+`Assert.hpp` defines assertion and verification diagnostics:
 
-Roadmap coverage:
+- `AssertionFailureKind : std::uint8_t` distinguishes assertion, verify, and
+  unreachable failures.
+- `AssertionFailure` stores failure kind, expression, message, and source
+  location.
+- `PONDER_ASSERT` and `PONDER_ASSERT_MESSAGE` are debug-only and compile out in
+  release builds.
+- `PONDER_VERIFY` remains active in release builds and throws `PonderException`
+  on failure.
+- `PONDER_UNREACHABLE` routes through the assertion handler, debug breaks, and
+  aborts.
+- Scoped assertion and verify handlers make global handler changes testable and
+  restorable.
 
-- CORE-005 should replace the current direct failure path with the resolved
-  handler-driven design.
-- CORE-017 should add focused assertion and verify tests.
+### Logging
 
-### `Library.hpp`
+`Log.hpp` defines logging frontend and test hooks:
 
-CORE-010 update:
-
-- Build/version metadata now lives in `BuildInfo.hpp` and its generated
-  implementation source rather than expanding `GetLibraryName()`.
-
-Current behavior:
-
-- Exposes `GetLibraryName()` returning `"core"`.
-
-Remaining note:
-
-- `GetLibraryName()` is still fine as a smoke-test API, but `BuildInfo.hpp` is
-  now the explicit build/version metadata surface.
-
-Roadmap coverage:
-
-- CORE-010 introduced the real build information API.
-- CORE-018 should decide whether `GetLibraryName()` remains useful after build
-  metadata exists.
-
-### `Log.hpp`
-
-CORE-007 update:
-
-- Public logging now defines explicit `LogLevel` ordering, level-name helpers,
-  minimum-level accessors, category-aware `LogMessage` overloads, `FlushLog`,
-  `ShutdownLogging`, fatal-handler hooks, and format-style frontend helpers.
+- `LogLevel : std::uint8_t` defines trace, debug, info, warning, error, and
+  fatal ordering.
+- `LogEntry` captures level, category, message, timestamp, and source location.
 - `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, and
-  `LOG_FATAL` remain the standard macros. Each also has a `_CATEGORY` variant.
-- Formatting failures are reported through logging diagnostics instead of being
-  silently swallowed.
-- `Log.cpp` owns the spdlog sinks, moodycamel queue, dedicated worker thread,
-  flush/shutdown behavior, and fatal-handler dispatch. Third-party logging and
-  queue types remain private implementation details.
-- Fatal logs flush before invoking the configured fatal handler. The default
-  fatal handler is intentionally no-op for now so callers such as assertions can
-  own their terminating behavior.
+  `LOG_FATAL` provide std::format-style logging macros.
+- Each logging macro has a `_CATEGORY` variant.
+- Logging formatting failures are captured as logging diagnostics instead of
+  escaping the no-throw logging path.
+- The backend uses spdlog/fmt and moodycamel privately. Public headers expose
+  only standard-library and project-owned types.
+- `FlushLog` provides deterministic draining; `ShutdownLogging` is for explicit
+  application shutdown paths.
+- Scoped sink, fatal-handler, and minimum-level guards make tests deterministic.
 
-CORE-008 update:
+### Build Metadata
 
-- Logging now exposes `LogEntry`, `LogSinkHandler`, `SetLogSinkHandler`,
-  `ScopedLogSinkHandler`, `ScopedLogFatalHandler`, and
-  `ScopedMinimumLogLevel` for deterministic tests.
-- Capture records include level, category, message, timestamp, and source
-  location using only standard library public types.
-- The scoped sink guard flushes before installing and before restoring so
-  async queued messages are captured by the intended handler.
-- Logging tests now assert each level, category/message formatting, formatting
-  failure diagnostics, fatal handler routing, minimum-level filtering, RAII
-  restoration, and queued flush behavior.
+`BuildInfo.hpp` exposes configure-time build metadata through `GetBuildInfo()`.
+The implementation source is generated in the build tree and is not checked in.
+Reconfigure CMake when Git commit or toolchain metadata needs to refresh.
 
-Remaining gaps:
+### Stable Identifiers
 
-- CORE-015 should keep checking public header hygiene.
-- Future logging work may add richer runtime sink configuration, but the current
-  capture hook is sufficient for deterministic core tests.
-### `PonderException.hpp`
+`Uuid.hpp` defines the generic core-owned UUID primitive:
 
-CORE-004 update: `PonderException` has since been refined into a standalone
-project type with project-owned message access, source location, stacktrace
-fallback storage, and source-location-aware throw helpers.
+- 16-byte value storage.
+- Nil UUID support.
+- Canonical lowercase formatting.
+- Canonical parse support for lowercase and uppercase hexadecimal input.
+- RFC 4122 version/variant helpers.
+- Hashing and comparison support.
+- Deterministic and entropy-backed v4 generation.
 
+Domain-specific IDs belong in their owning libraries.
 
-Current behavior:
+### Small Utilities
 
-- `PonderException` derives from `std::runtime_error`.
-- Message access currently comes from `std::runtime_error::what()`.
-- Stores a source location.
-- Existing smoke tests call `exception.what()`.
+`ScopeExit.hpp` defines a tiny move-only no-throw scope guard for local cleanup
+and temporary state restoration.
 
-Mismatches and gaps:
+`String.hpp` defines dependency-free conversion between project UTF-8
+`std::string` values and platform-width `std::wstring` values. Invalid encodings
+are recoverable parse errors returned through `Result`.
 
-- This directly violates the resolved standalone-type decision.
-- The public header includes `<stdexcept>` only because of the current
-  inheritance design.
-- There is no project-owned message accessor yet.
-- There is no stacktrace support or fallback behavior yet.
-- There are no throw helpers/macros with std::format-style messages and source
-  location capture.
-- Existing tests will need to be updated when inheritance is removed.
+`Library.hpp` currently exposes `GetLibraryName()` and remains useful as a small
+smoke-test API.
 
-Roadmap coverage:
-
-- CORE-004 should replace this type and update existing tests/consumers.
-- CORE-009 should provide the shared stacktrace/source-location convention used
-  here.
-- CORE-017 should cover exception construction and throw helpers.
-
-### `Result.hpp`
-
-CORE-003 update: `Result<T>` has since been refined into a `[[nodiscard]]`
-project-owned wrapper around `std::expected<T, Error>`. The alias finding below is
-retained as historical audit context.
-
-Current behavior:
-
-- `Error` carries message and source location.
-- `Result<T>` is an alias around `std::expected<T, ErrorType>`.
-- `VoidResult` aliases `Result<void>`.
-- `MakeUnexpected` is a small helper.
-
-Mismatches and gaps:
-
-- `Error` does not yet carry category/code.
-- Stacktrace capture and fallback behavior are not present.
-- The expected-like surface is currently just an alias. That may remain
-  acceptable, but the next pass should confirm whether a wrapper is useful for
-  `[[nodiscard]]`, helper consistency, and stable public conventions.
-- Tests only cover a basic value result and one error result.
-
-Roadmap coverage:
-
-- CORE-002 should define the full `Error` model.
-- CORE-003 should confirm the final `Result<T>` shape.
-- CORE-017 should expand tests beyond smoke coverage.
-
-## Cross-Cutting Findings
-
-- CORE-009 settled the shared source-location and stacktrace convention:
-  public APIs use `std::source_location` directly, display code uses
-  `FormatSourceLocation`, and stacktraces are captured through the best-effort
-  `CaptureStackTrace` helpers with empty traces as the portable fallback.
-- The current tests are intentionally small smoke tests. They should be split
-  into focused files as soon as Error, exceptions, assertions, and logging become
-  more than scaffolding.
-- Public headers are self-contained enough for the current scaffold, but
-  self-containment should become explicit test coverage before more libraries
-  depend on core.
-- Existing implementation files use spdlog privately, which matches the
-  dependency boundary decision.
-
-## CORE-015 Header Hygiene Update
+## Header Hygiene Findings
 
 Status: implemented.
 
-The public core headers were reviewed again after the Error, Result,
-PonderException, assertion, logging, build-info, UUID, ScopeExit, and string
-utility work landed.
-
-Findings:
-
-- Public headers do not include or expose spdlog, fmt, moodycamel, or other
+- Public core headers are self-contained and compile when included first in a
+  translation unit.
+- Public core headers do not expose spdlog, fmt, moodycamel, or other
   third-party implementation types.
-- Heavier standard headers that remain in public headers are tied to the current
-  public API surface: `std::format`-based template helpers, `std::expected` in
-  `Result`, value-owned strings/vectors, `std::source_location`, and hashing or
-  comparison support.
-- No obvious public include can be moved to a `.cpp` file without either breaking
-  self-containment or changing the exposed API shape.
-- Header self-containment is now covered by separate compile-only translation
-  units under `tests/unit/core/HeaderSelfContainment/`, one per public core
-  header. These sources are part of `ponder_core_tests`, which does not use core
-  precompiled headers.
+- Every public core header is listed in `libs/core/CMakeLists.txt`.
+- Every public core header has a corresponding compile-only self-containment
+  source under `tests/unit/core/HeaderSelfContainment/`.
+- Heavier standard headers that remain in public headers are tied to template
+  helpers or public value semantics and cannot be moved to `.cpp` files without
+  changing the exposed API shape.
 
 Future public headers should be added to both `libs/core/CMakeLists.txt` and the
 header self-containment source list in `tests/unit/core/CMakeLists.txt`.
-## Roadmap Changes From This Audit
 
-- Mark CORE-001 as implemented and reference this document.
-- Make CORE-004 explicitly update the current smoke test and any consumers that
-  rely on `PonderException::what()`.
-- Make CORE-005 explicitly replace the current direct abort/debug-break path
-  with scoped, testable handlers.
-- Make CORE-007 explicitly preserve the current no-spdlog-public-header boundary
-  while adding async logging.
-- Make CORE-015 use this audit as a checklist for header hygiene and
-  self-containment.
+## clang-tidy And Formatting Findings
+
+Status: implemented for high-signal core findings.
+
+- Small public scoped enums use `std::uint8_t` underlying storage:
+  `AssertionFailureKind`, `ErrorCategory`, and `LogLevel`.
+- Logging implementation catch-all handlers call an explicit internal suppression
+  helper instead of using empty catch blocks in no-throw diagnostic paths.
+- Internal assertion handler globals use the project camelCase variable style.
+- `.clang-tidy` treats local `const` variables as normal camelCase locals so the
+  project can keep using `const` generously without false naming noise.
+- `portability-avoid-pragma-once` is disabled because the repository
+  intentionally uses `#pragma once` across the scaffold. Revisit this only if the
+  project chooses to migrate headers to include guards.
+
+A scoped library/source tidy pass has no enum-size, empty-catch, or core
+implementation naming findings remaining.
+
+## Test Coverage Snapshot
+
+`ponder_core_tests` is now a focused suite rather than a smoke-only target. It
+covers:
+
+- `Result<T>`, `VoidResult`, `Error`, `ErrorCode`, and error formatting.
+- `PonderException`, throw helpers, source locations, and stacktrace fallback.
+- Assertions, verify behavior, unreachable handling, scoped handler restoration,
+  and source-location capture.
+- Logging levels, category/message formatting, formatting failure diagnostics,
+  async queue flushing, fatal handlers, minimum level filtering, and scoped RAII
+  overrides.
+- Build information metadata.
+- UUID parse/format/hash/generation behavior.
+- `ScopeExit` cleanup, dismissal, move transfer, and no-throw contract.
+- UTF-8 and wide-string conversion, including invalid encoding failures.
+- Public header self-containment for every public core header.
+
+The local Windows MSVC debug suite currently runs 86 tests.
+
+## Deferred Work
+
+These items are intentionally not core responsibilities right now:
+
+- General job systems, schedulers, and worker pools.
+- Cancellation and progress contracts.
+- Runtime configuration and feature flags.
+- Environment and filesystem/path utilities.
+- Custom allocator or memory tracking infrastructure.
+- Domain-specific typed IDs.
+- Chemistry, IO, rendering, UI, project format, workflow, compute, and plugin
+  domain behavior.
+
+Route those systems to the owning library or application layer before adding new
+core API.
+
+## Roadmap State
+
+- CORE-001 through CORE-017 are implemented.
+- CORE-018 records this final documentation snapshot.
+- CORE-019 verified the completed core phase locally on 2026-07-07.

@@ -5,7 +5,8 @@ Status
 ------
 
 This roadmap has been updated after the initial project-structure scaffold was
-implemented and verified on 2026-07-05.
+implemented and verified on 2026-07-05, and after the core foundation
+implementation/documentation pass on 2026-07-07.
 
 The roadmap remains flexible. It should describe the direction of the project,
 not freeze every implementation detail forever. When implementation teaches us
@@ -13,11 +14,11 @@ that a decision should change, update the relevant roadmap, decision record, or
 ADR deliberately.
 
 The first milestone should not be "do chemistry calculations," and it should
-not rush directly into user-facing project features. The next phase should
-solidify the bottom of the system first: core error handling, diagnostics,
-assertions, logging, utility conventions, and any cross-cutting primitives that
-future libraries will depend on. User-facing milestones should come after the
-foundation is boring, tested, and difficult to misuse.
+not rush directly into user-facing project features. The current foundation
+phase solidifies the bottom of the system first: core error handling,
+diagnostics, assertions, logging, utility conventions, and cross-cutting
+primitives that future libraries will depend on. User-facing milestones should
+come after the foundation is boring, tested, and difficult to misuse.
 
 
 1. PROJECT STRUCTURE
@@ -261,48 +262,51 @@ tests once packaging exists. CI itself is intentionally deferred for now.
 4. NEXT BUILD SEQUENCE
 ======================
 
-The project-structure foundation is complete. The next sequence should move
-from scaffold to reliable foundation libraries before implementing project
-format, desktop workflows, rendering, plugins, or compute integrations.
+The project-structure foundation is complete. The core implementation,
+documentation, and local verification pass is complete. The next sequence should
+continue from scaffold to reliable foundation libraries before implementing project format,
+desktop workflows, rendering, plugins, or compute integrations.
 
 The guiding rule for this phase:
 
     Build from the bottom up, make each layer boring and tested, and do not
     start advanced features before their foundations are stable.
 
-Step 1: Solidify `ponder_core`
-------------------------------
+Step 1: Solidify `ponder_core` (implementation complete)
+--------------------------------------------------------
 
-Make `ponder_core` the dependable bottom of the dependency graph. Before
-building project files, workflow graphs, renderers, or chemistry features, make
+`ponder_core` now provides the dependable bottom of the dependency graph. Before
+building project files, workflow graphs, renderers, or chemistry features, keep
 the core library's contracts clear and hard to misuse.
 
-The core phase should cover:
+The core phase now covers:
 
 - `Result<T>` and `Error` conventions for recoverable failures.
 - `PonderException` conventions for exceptional failures.
 - Assertion behavior, debug breaks, and release-build behavior.
 - Logging macros, severity levels, source locations, and backend boundaries.
-- Small cross-cutting utility types that are safe for most libraries.
-- Decisions about whether cancellation, progress reporting, threading, or job
-  primitives belong in core or should wait for `ponder_compute`.
+- Source-location and stacktrace conventions.
+- Build metadata, UUIDs, `ScopeExit`, and minimal UTF string conversion.
+- Deferred ownership decisions for cancellation, progress reporting, threading,
+  job execution, filesystem access, runtime configuration, and domain typed IDs.
 
-Detailed planning for this phase lives under `libs/core/docs/`.
+Detailed planning and the final core documentation snapshot live under
+`libs/core/docs/`.
 
-Step 2: Harden core tests and local verification
+Step 2: Verify the completed core phase locally
 ------------------------------------------------
 
-Expand `ponder_core_tests` beyond smoke tests. Add focused unit tests for error
-propagation, exception metadata, assertion behavior that can be tested safely,
-logging sinks, formatting behavior, and any utility primitives added to core.
+Run the final core verification pass: configure and build a supported preset,
+run `ponder_core_tests`, run formatting checks, run the scoped clang-tidy pass,
+and confirm generated files and local build outputs are not staged.
 
-The goal is to make core changes cheap to verify before other libraries depend
-on them heavily.
+The goal is to make the completed core phase cheap to trust before other
+libraries depend on it heavily.
 
 Step 3: Review cross-library dependency direction
 -------------------------------------------------
 
-Once core is stronger, review the bottom-level libraries before adding real
+With core verified locally, review the bottom-level libraries before adding real
 domain behavior:
 
 - `math` should depend only on core when necessary.
@@ -431,14 +435,15 @@ with one engine and one narrow workflow.
 5. NEXT MILESTONES
 ==================
 
-The next substantial milestone should be a foundation milestone, not a
-user-facing feature milestone:
+The current substantial milestone is a foundation milestone, not a user-facing
+feature milestone:
 
     `ponder_core` is stable enough that other libraries can rely on its error,
     diagnostic, assertion, logging, and low-level utility conventions without
     needing to revisit those contracts immediately.
 
-That milestone proves:
+That milestone is now represented by the completed core implementation,
+documentation, and local verification pass. It proves:
 
 - Core systems are reusable outside the GUI.
 - Recoverable errors and exceptional failures have clear conventions.
@@ -447,7 +452,8 @@ That milestone proves:
 - Future project, workflow, plugin, rendering, and compute systems have a stable
   foundation.
 
-After that, the first user-facing application milestone should be:
+After the core verification pass and the remaining bottom-up foundation work,
+the first user-facing application milestone should be:
 
     A desktop application that opens a `.ponder` project, validates project
     metadata, lists project metadata and assets, imports a simple molecule file

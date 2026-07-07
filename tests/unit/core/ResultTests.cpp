@@ -29,13 +29,13 @@ TEST(ResultTests, ConstructsValueInPlace)
 
 TEST(ResultTests, StoresError)
 {
-    constexpr pond::core::ErrorCode code{pond::core::ErrorCategory::InvalidArgument, 12};
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::InvalidArgument, 12};
 
     pond::core::Result<int> result =
-        pond::core::Result<int>::FromError(pond::core::Error{code, "bad value"});
+        pond::core::Result<int>::FromError(pond::core::Error{kCode, "bad value"});
 
     ASSERT_FALSE(result);
-    EXPECT_TRUE(result.GetError().GetCode() == code);
+    EXPECT_TRUE(result.GetError().GetCode() == kCode);
     EXPECT_EQ(result.GetError().GetMessage(), std::string_view{"bad value"});
 }
 
@@ -59,12 +59,40 @@ TEST(ResultTests, SupportsMoveOnlyValues)
     EXPECT_EQ(*result.GetValue(), 5);
 }
 
+TEST(ResultTests, MovesValueFromRvalueResult)
+{
+    auto result = pond::core::Result<std::string>::FromValue("move me");
+
+    std::string value = std::move(result).GetValue();
+
+    EXPECT_EQ(value, "move me");
+}
+
+TEST(ResultTests, MovesErrorFromRvalueResult)
+{
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Parse, 4};
+    auto result = pond::core::Result<int>::FromError(pond::core::Error{kCode, "bad parse"});
+
+    pond::core::Error error = std::move(result).GetError();
+
+    EXPECT_TRUE(error.GetCode() == kCode);
+    EXPECT_EQ(error.GetMessage(), std::string_view{"bad parse"});
+}
+
 TEST(VoidResultTests, DefaultsToSuccess)
 {
     pond::core::VoidResult result;
 
     EXPECT_TRUE(result);
     EXPECT_TRUE(result.HasValue());
+}
+
+TEST(VoidResultTests, ExplicitSuccessCanBeConsumed)
+{
+    pond::core::VoidResult result = pond::core::VoidResult::Success();
+
+    ASSERT_TRUE(result);
+    EXPECT_NO_THROW(result.GetValue());
 }
 
 TEST(VoidResultTests, StoresError)

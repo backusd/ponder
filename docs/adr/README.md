@@ -27,3 +27,4 @@ Each ADR should include:
 - [ADR 0003: Hybrid Plugin ABI Boundary](0003-hybrid-plugin-abi-boundary.md)
 - [ADR 0004: Static Library First](0004-static-library-first.md)
 - [ADR 0005: Native Project Extension](0005-native-project-extension.md)
+- [ADR 0006: Core Foundation Contracts](0006-core-foundation-contracts.md)

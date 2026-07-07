@@ -1,24 +1,26 @@
 #include <ponder/core/Assert.hpp>
 #include <ponder/core/PonderException.hpp>
 
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace
 {
 struct CapturedFailure
 {
-    pond::core::AssertionFailureKind Kind{pond::core::AssertionFailureKind::Assertion};
-    std::string Expression;
-    std::string Message;
-    std::source_location Location;
-    int Count{0};
+    pond::core::AssertionFailureKind kind{pond::core::AssertionFailureKind::Assertion};
+    std::string expression;
+    std::string message;
+    std::source_location location;
+    int count{0};
 };
 
-CapturedFailure g_assertionCapture;
-CapturedFailure g_verifyCapture;
+CapturedFailure assertionCapture;
+CapturedFailure verifyCapture;
 
 void ResetCapture(CapturedFailure& capture)
 {
@@ -27,28 +29,28 @@ void ResetCapture(CapturedFailure& capture)
 
 void Capture(CapturedFailure& capture, const pond::core::AssertionFailure& failure)
 {
-    capture.Kind = failure.GetKind();
-    capture.Expression = std::string{failure.GetExpression()};
-    capture.Message = std::string{failure.GetMessage()};
-    capture.Location = failure.GetLocation();
-    ++capture.Count;
+    capture.kind = failure.GetKind();
+    capture.expression = std::string{failure.GetExpression()};
+    capture.message = std::string{failure.GetMessage()};
+    capture.location = failure.GetLocation();
+    ++capture.count;
 }
 
 void ThrowingAssertionHandler(const pond::core::AssertionFailure& failure)
 {
-    Capture(g_assertionCapture, failure);
+    Capture(assertionCapture, failure);
     throw PONDER_EXCEPTION("assertion captured");
 }
 
 void AlternateThrowingAssertionHandler(const pond::core::AssertionFailure& failure)
 {
-    Capture(g_assertionCapture, failure);
+    Capture(assertionCapture, failure);
     throw PONDER_EXCEPTION("alternate assertion captured");
 }
 
 void CapturingVerifyHandler(const pond::core::AssertionFailure& failure)
 {
-    Capture(g_verifyCapture, failure);
+    Capture(verifyCapture, failure);
 }
 
 TEST(AssertionFailureTests, StoresFailureData)
@@ -81,9 +83,22 @@ TEST(AssertionFailureTests, FormatsFailureMessages)
               "Unreachable code reached (bad branch)");
 }
 
+TEST(AssertionFailureTests, HandlesUnknownFailureKindWithFallbackPrefix)
+{
+    static_assert(
+        std::is_same_v<std::underlying_type_t<pond::core::AssertionFailureKind>, std::uint8_t>);
+
+    // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+    const auto unknownKind = static_cast<pond::core::AssertionFailureKind>(255);
+    const pond::core::AssertionFailure failure{unknownKind, "ready", "unknown",
+                                               std::source_location::current()};
+
+    EXPECT_EQ(pond::core::FormatAssertionFailure(failure), "Failure: ready (unknown)");
+}
+
 TEST(AssertionHandlerTests, ScopedOverrideRestoresPreviousHandler)
 {
-    ResetCapture(g_assertionCapture);
+    ResetCapture(assertionCapture);
 
     const pond::core::ScopedAssertionFailureHandler outer{ThrowingAssertionHandler};
 
@@ -109,14 +124,14 @@ TEST(AssertionHandlerTests, ScopedOverrideRestoresPreviousHandler)
         EXPECT_EQ(exception.GetMessage(), std::string_view{"assertion captured"});
     }
 
-    EXPECT_EQ(g_assertionCapture.Expression, "outer");
-    EXPECT_EQ(g_assertionCapture.Message, "message");
-    EXPECT_EQ(g_assertionCapture.Count, 2);
+    EXPECT_EQ(assertionCapture.expression, "outer");
+    EXPECT_EQ(assertionCapture.message, "message");
+    EXPECT_EQ(assertionCapture.count, 2);
 }
 
 TEST(AssertionMacroTests, FormatsMessageAndCapturesSourceLocation)
 {
-    ResetCapture(g_assertionCapture);
+    ResetCapture(assertionCapture);
     const pond::core::ScopedAssertionFailureHandler handler{ThrowingAssertionHandler};
 
 #if defined(NDEBUG)
@@ -132,11 +147,11 @@ TEST(AssertionMacroTests, FormatsMessageAndCapturesSourceLocation)
     catch (const pond::core::PonderException& exception)
     {
         EXPECT_EQ(exception.GetMessage(), std::string_view{"assertion captured"});
-        EXPECT_EQ(g_assertionCapture.Kind, pond::core::AssertionFailureKind::Assertion);
-        EXPECT_EQ(g_assertionCapture.Expression, "false");
-        EXPECT_EQ(g_assertionCapture.Message, "value 42");
-        EXPECT_STREQ(g_assertionCapture.Location.file_name(), __FILE__);
-        EXPECT_EQ(g_assertionCapture.Location.line(), expectedLine);
+        EXPECT_EQ(assertionCapture.kind, pond::core::AssertionFailureKind::Assertion);
+        EXPECT_EQ(assertionCapture.expression, "false");
+        EXPECT_EQ(assertionCapture.message, "value 42");
+        EXPECT_STREQ(assertionCapture.location.file_name(), __FILE__);
+        EXPECT_EQ(assertionCapture.location.line(), expectedLine);
         return;
     }
 
@@ -146,7 +161,7 @@ TEST(AssertionMacroTests, FormatsMessageAndCapturesSourceLocation)
 
 TEST(VerifyTests, InvokesHandlerFormatsMessageAndThrows)
 {
-    ResetCapture(g_verifyCapture);
+    ResetCapture(verifyCapture);
     const pond::core::ScopedVerifyFailureHandler handler{CapturingVerifyHandler};
 
     const auto expectedLine = __LINE__ + 3;
@@ -157,11 +172,11 @@ TEST(VerifyTests, InvokesHandlerFormatsMessageAndThrows)
     catch (const pond::core::PonderException& exception)
     {
         EXPECT_EQ(exception.GetMessage(), std::string_view{"Verification failed: false (value 7)"});
-        EXPECT_EQ(g_verifyCapture.Kind, pond::core::AssertionFailureKind::Verify);
-        EXPECT_EQ(g_verifyCapture.Expression, "false");
-        EXPECT_EQ(g_verifyCapture.Message, "value 7");
-        EXPECT_STREQ(g_verifyCapture.Location.file_name(), __FILE__);
-        EXPECT_EQ(g_verifyCapture.Location.line(), expectedLine);
+        EXPECT_EQ(verifyCapture.kind, pond::core::AssertionFailureKind::Verify);
+        EXPECT_EQ(verifyCapture.expression, "false");
+        EXPECT_EQ(verifyCapture.message, "value 7");
+        EXPECT_STREQ(verifyCapture.location.file_name(), __FILE__);
+        EXPECT_EQ(verifyCapture.location.line(), expectedLine);
         return;
     }
 
@@ -179,7 +194,7 @@ TEST(VerifyTests, DoesNotEvaluateMessageArgumentsWhenExpressionIsTrue)
 
 TEST(UnreachableTests, InvokesAssertionHandler)
 {
-    ResetCapture(g_assertionCapture);
+    ResetCapture(assertionCapture);
     const pond::core::ScopedAssertionFailureHandler handler{ThrowingAssertionHandler};
 
     const auto expectedLine = __LINE__ + 3;
@@ -195,11 +210,11 @@ TEST(UnreachableTests, InvokesAssertionHandler)
     catch (const pond::core::PonderException& exception)
     {
         EXPECT_EQ(exception.GetMessage(), std::string_view{"assertion captured"});
-        EXPECT_EQ(g_assertionCapture.Kind, pond::core::AssertionFailureKind::Unreachable);
-        EXPECT_TRUE(g_assertionCapture.Expression.empty());
-        EXPECT_EQ(g_assertionCapture.Message, "branch bad");
-        EXPECT_STREQ(g_assertionCapture.Location.file_name(), __FILE__);
-        EXPECT_EQ(g_assertionCapture.Location.line(), expectedLine);
+        EXPECT_EQ(assertionCapture.kind, pond::core::AssertionFailureKind::Unreachable);
+        EXPECT_TRUE(assertionCapture.expression.empty());
+        EXPECT_EQ(assertionCapture.message, "branch bad");
+        EXPECT_STREQ(assertionCapture.location.file_name(), __FILE__);
+        EXPECT_EQ(assertionCapture.location.line(), expectedLine);
         return;
     }
 

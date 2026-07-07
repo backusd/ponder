@@ -1,9 +1,13 @@
 # Core Library Boundary
 
-`ponder_core` owns the narrow project-wide foundation code that is safe for most
-other libraries to depend on.
+Status: current after TASK CORE-018.
 
-## Public API
+`ponder_core` owns the narrow project-wide foundation code that is safe for most
+other libraries to depend on. It should stay small, dependency-light at its public
+boundary, and boring enough that higher-level libraries can rely on it without
+revisiting basic error, diagnostic, and utility conventions.
+
+## Public API Rules
 
 - Public headers live under `include/ponder/core/`.
 - Source code uses the `pond::core` namespace.
@@ -12,36 +16,61 @@ other libraries to depend on.
   clarity, such as `std::string`, `std::string_view`, `std::wstring`,
   `std::wstring_view`, `std::span`, `std::source_location`, and `std::chrono`
   types.
-- Public APIs should not expose third-party types.
+- Public APIs must not expose third-party types.
 - Do not expose `std::filesystem::path` from core APIs for now.
+- Public headers must be self-contained and listed in both `libs/core/CMakeLists.txt`
+  and the header self-containment test sources under
+  `tests/unit/core/HeaderSelfContainment/`.
+
+## Public Headers
+
+- `Assert.hpp`: debug assertions, release-active verification, unreachable
+  handling, debug break, assertion metadata, and scoped handler overrides.
+- `BuildInfo.hpp`: generated configure-time project, build, compiler, platform,
+  and CMake metadata.
+- `Library.hpp`: the lightweight `GetLibraryName()` smoke-test API.
+- `Log.hpp`: logging levels, log entries, category-aware logging functions,
+  macros, async flush/shutdown controls, and scoped test overrides.
+- `PonderException.hpp`: standalone exceptional-failure type and source-location
+  preserving throw helpers.
+- `Result.hpp`: recoverable error model, `Result<T>`, `VoidResult`, and
+  `MakeUnexpected`.
+- `ScopeExit.hpp`: tiny no-throw local cleanup guard.
+- `StackTrace.hpp`: source-location formatting and best-effort stacktrace
+  capture.
+- `String.hpp`: dependency-free UTF-8 and platform-wide string conversion.
+- `Uuid.hpp`: generic stable UUID value type, parse/format, hashing, and v4
+  generation helpers.
 
 ## Responsibilities
 
-- `Error` for recoverable failure details. It should carry category/code,
-  human-readable message, source location, and stacktrace if practical.
-- `Result<T>` for recoverable operations, implemented as a thin `[[nodiscard]]`
-  project-owned wrapper around `std::expected<T, Error>` and supporting
-  `Result<void>`.
-- `PonderException` for truly exceptional, usually unrecoverable failures. It is
-  a standalone project type and must not derive from `std::exception` or any
-  other type. It should carry a human-readable message, source location, and
-  stacktrace if practical, but it should not carry `Error`.
+- Recoverable errors use `Error`, `ErrorCode`, `ErrorCategory`, and `Result<T>`.
+  `Error` carries category/code, human-readable message, source location, and a
+  best-effort stacktrace. `Result<T>` is a thin `[[nodiscard]]` project-owned
+  wrapper around `std::expected<T, Error>` and includes the `Result<void>`
+  specialization aliased as `VoidResult`.
+- Exceptional failures use `PonderException`. It is a standalone project type and
+  must not derive from `std::exception` or any other type. It carries a
+  human-readable message, source location, and best-effort stacktrace, but does
+  not carry `Error`.
 - Throw helper macros/functions for `PonderException`, including
-  `PONDER_EXCEPTION` and `ThrowPonderException`, with std::format-style
-  messages and automatic source-location capture.
-- `PONDER_ASSERT`, `PONDER_ASSERT_MESSAGE`, `PONDER_VERIFY`,
-  `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`.
-- Logging macros and diagnostics for trace, debug, info, warning, error, and
-  fatal levels.
-- Async logging internals using a queue and dedicated logging thread. This is a
+  `PONDER_EXCEPTION` and `ThrowPonderException`, preserve source locations and
+  support std::format-style messages.
+- Assertions use `PONDER_ASSERT`, `PONDER_ASSERT_MESSAGE`, `PONDER_VERIFY`,
+  `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`. Debug-only assertions compile
+  out in release builds; `PONDER_VERIFY` remains active and throws
+  `PonderException` on failure.
+- Logging uses `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`,
+  and `LOG_FATAL`, plus `_CATEGORY` variants. Log records capture timestamp,
+  level, optional category, message, and source location.
+- Async logging internals may use a queue and dedicated logging thread. This is a
   logging implementation detail, not a general job system.
-- Build/version information generated into the build tree and exposed through
+- Build/version information is generated into the build tree and exposed through
   `BuildInfo.hpp`.
-- UUID/stable identifier primitives that are not tied to a domain concept,
-  including the generic `Uuid` value type.
-- Tiny dependency-free helpers such as `ScopeExit`.
-- Minimal string utilities, initially limited to UTF-8 `std::string` and
-  `std::wstring` conversion unless a strong shared need appears.
+- Generic stable identifiers use `Uuid`. Domain-specific IDs should wrap or
+  otherwise use stable representations in their owning libraries.
+- Small dependency-free helpers may live in core when they are broadly useful and
+  have clear tests. Current examples are `ScopeExit` and string conversion.
 
 ## Utility Details
 
@@ -144,7 +173,7 @@ library or application layer is ready to define them:
 Keep this library at the bottom of the dependency graph. All project libraries
 may depend on core, but core must not depend on any project library.
 
-`ponder_core` may use third-party libraries privately. Current or planned private
+`ponder_core` may use third-party libraries privately. Current private
 implementation dependencies include:
 
 - spdlog/fmt for logging implementation details.
