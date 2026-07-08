@@ -13,14 +13,39 @@ namespace pond::core
 class PonderException final
 {
 public:
-    explicit PonderException(std::string message,
-                             std::source_location location = std::source_location::current());
-    PonderException(std::string message, StackTrace stackTrace,
-                    std::source_location location = std::source_location::current());
+    constexpr explicit PonderException(
+        std::string message, std::source_location location = std::source_location::current())
+        : m_message(std::move(message)), m_location(location)
+    {
+        if consteval
+        {
+        }
+        else
+        {
+            m_stackTrace = CaptureStackTrace();
+        }
+    }
 
-    [[nodiscard]] std::string_view GetMessage() const noexcept;
-    [[nodiscard]] const std::source_location& GetLocation() const noexcept;
-    [[nodiscard]] const StackTrace& GetStackTrace() const noexcept;
+    constexpr PonderException(std::string message, StackTrace stackTrace,
+                              std::source_location location = std::source_location::current())
+        : m_message(std::move(message)), m_location(location), m_stackTrace(std::move(stackTrace))
+    {
+    }
+
+    [[nodiscard]] constexpr std::string_view GetMessage() const noexcept
+    {
+        return m_message;
+    }
+
+    [[nodiscard]] constexpr const std::source_location& GetLocation() const noexcept
+    {
+        return m_location;
+    }
+
+    [[nodiscard]] constexpr const StackTrace& GetStackTrace() const noexcept
+    {
+        return m_stackTrace;
+    }
 
 private:
     std::string m_message;
@@ -28,8 +53,18 @@ private:
     StackTrace m_stackTrace;
 };
 
-[[nodiscard]] PonderException MakePonderException(
-    std::string message, std::source_location location = std::source_location::current());
+[[nodiscard]] constexpr PonderException MakePonderException(
+    std::string message, std::source_location location = std::source_location::current())
+{
+    if consteval
+    {
+        return PonderException{std::move(message), StackTrace{}, location};
+    }
+    else
+    {
+        return PonderException{std::move(message), CaptureStackTrace(), location};
+    }
+}
 
 [[noreturn]] void ThrowPonderException(
     std::string message, std::source_location location = std::source_location::current());

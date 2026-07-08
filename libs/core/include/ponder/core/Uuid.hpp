@@ -49,19 +49,55 @@ public:
         return (m_bytes[8] & 0xC0U) == 0x80U;
     }
 
-    [[nodiscard]] std::string ToString() const;
+    [[nodiscard]] constexpr std::string ToString() const
+    {
+        std::string formatted(kCanonicalStringLength, '\0');
+        std::size_t textIndex{0};
+
+        for (std::size_t byteIndex = 0; byteIndex < m_bytes.size(); ++byteIndex)
+        {
+            if (byteIndex == 4 || byteIndex == 6 || byteIndex == 8 || byteIndex == 10)
+            {
+                formatted[textIndex] = '-';
+                ++textIndex;
+            }
+
+            formatted[textIndex] = ToLowerHexDigit(static_cast<Byte>(m_bytes[byteIndex] >> 4U));
+            ++textIndex;
+            formatted[textIndex] = ToLowerHexDigit(m_bytes[byteIndex]);
+            ++textIndex;
+        }
+
+        return formatted;
+    }
 
     [[nodiscard]] friend constexpr auto operator<=>(const Uuid& lhs,
                                                     const Uuid& rhs) noexcept = default;
 
 private:
+    static constexpr std::size_t kCanonicalStringLength{36};
+
+    [[nodiscard]] static constexpr char ToLowerHexDigit(Byte value) noexcept
+    {
+        constexpr std::string_view kDigits{"0123456789abcdef"};
+        return kDigits[value & 0x0FU];
+    }
+
     Bytes m_bytes{};
 };
 
 using UuidEntropySource = bool (*)(std::span<Uuid::Byte, Uuid::kByteCount> bytes) noexcept;
 
 [[nodiscard]] Result<Uuid> ParseUuid(std::string_view text);
-[[nodiscard]] Uuid MakeUuidV4(Uuid::Bytes randomBytes) noexcept;
+
+[[nodiscard]] constexpr Uuid MakeUuidV4(Uuid::Bytes randomBytes) noexcept
+{
+    randomBytes[6] = static_cast<Uuid::Byte>((randomBytes[6] & 0x0FU) | 0x40U);
+    randomBytes[8] = static_cast<Uuid::Byte>((randomBytes[8] & 0x3FU) | 0x80U);
+
+    return Uuid{randomBytes};
+}
+
 [[nodiscard]] Result<Uuid> GenerateUuidV4(UuidEntropySource entropySource);
 [[nodiscard]] Result<Uuid> GenerateUuidV4();
 } // namespace pond::core
@@ -71,7 +107,7 @@ namespace std
 template <>
 struct hash<pond::core::Uuid>
 {
-    [[nodiscard]] std::size_t operator()(const pond::core::Uuid& uuid) const noexcept
+    [[nodiscard]] constexpr std::size_t operator()(const pond::core::Uuid& uuid) const noexcept
     {
         std::size_t hashValue{};
         std::size_t prime{};

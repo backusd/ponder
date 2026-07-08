@@ -10,6 +10,30 @@
 
 namespace
 {
+constexpr bool ExplicitStackTraceConstructorIsConstexpr()
+{
+    const auto location = std::source_location::current();
+    const pond::core::PonderException exception{"constexpr boom", pond::core::StackTrace{},
+                                                location};
+
+    return exception.GetMessage() == std::string_view{"constexpr boom"} &&
+           exception.GetLocation().line() == location.line();
+}
+
+constexpr bool MakePonderExceptionIsConstexpr()
+{
+    const auto location = std::source_location::current();
+    const auto exception = pond::core::MakePonderException("constexpr helper", location);
+
+    return exception.GetMessage() == std::string_view{"constexpr helper"} &&
+           exception.GetLocation().line() == location.line();
+}
+
+static_assert(ExplicitStackTraceConstructorIsConstexpr());
+static_assert(MakePonderExceptionIsConstexpr());
+static_assert(noexcept(std::declval<const pond::core::PonderException&>().GetMessage()));
+static_assert(noexcept(std::declval<const pond::core::PonderException&>().GetLocation()));
+static_assert(noexcept(std::declval<const pond::core::PonderException&>().GetStackTrace()));
 TEST(PonderExceptionTests, IsStandaloneProjectType)
 {
     static_assert(!std::derived_from<pond::core::PonderException, std::exception>);

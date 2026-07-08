@@ -1,6 +1,6 @@
 # Core Library Boundary
 
-Status: current after the post-CORE-019 audit.
+Status: current after final core foundation verification.
 
 `ponder_core` owns the narrow project-wide foundation code that is safe for most
 other libraries to depend on. It should stay small, dependency-light at its public
@@ -39,7 +39,8 @@ revisiting basic error, diagnostic, and utility conventions.
   capture.
 - `String.hpp`: dependency-free UTF-8 and platform-wide string conversion.
 - `Uuid.hpp`: generic stable UUID value type, parse/format, hashing, and v4
-  generation helpers.
+  generation helpers. Pure value operations are constexpr-friendly where the
+  standard library supports them.
 
 ## Responsibilities
 
@@ -70,6 +71,9 @@ revisiting basic error, diagnostic, and utility conventions.
   otherwise use stable representations in their owning libraries.
 - Small dependency-free helpers may live in core when they are broadly useful and
   have clear tests. Current examples are `ScopeExit` and string conversion.
+- Low-level value types and observers should stay constexpr/noexcept where doing so
+  does not hide runtime diagnostics, allocation, stacktrace capture, entropy, or
+  other inherently runtime behavior.
 
 ## Utility Details
 

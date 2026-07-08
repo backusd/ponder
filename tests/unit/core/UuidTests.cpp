@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <gtest/gtest.h>
 #include <span>
 #include <unordered_set>
@@ -33,6 +34,51 @@ namespace
 {
     return false;
 }
+
+constexpr bool UuidValueObserversAreConstexpr()
+{
+    constexpr pond::core::Uuid::Bytes kBytes = MakeSequentialBytes();
+    constexpr pond::core::Uuid kUuid{kBytes};
+    constexpr pond::core::Uuid kSameUuid{kBytes};
+
+    auto differentBytes = kBytes;
+    differentBytes[15] = 42;
+    const pond::core::Uuid differentUuid{differentBytes};
+
+    return pond::core::Uuid{}.IsNil() && pond::core::Uuid::Nil().IsNil() &&
+           kUuid.GetBytes() == kBytes && !kUuid.IsNil() && kUuid == kSameUuid &&
+           kUuid < differentUuid;
+}
+
+constexpr bool UuidVersionAndVariantAreConstexpr()
+{
+    const pond::core::Uuid uuid = pond::core::MakeUuidV4(MakeSequentialBytes());
+
+    return uuid.GetVersion() == 4U && uuid.HasRfc4122Variant() && uuid.GetBytes()[6] == 0x46U &&
+           uuid.GetBytes()[8] == 0x88U;
+}
+
+constexpr bool UuidFormattingIsConstexpr()
+{
+    const pond::core::Uuid nilUuid;
+    const pond::core::Uuid uuid{MakeSequentialBytes()};
+
+    return nilUuid.ToString() == "00000000-0000-0000-0000-000000000000" &&
+           uuid.ToString() == "00010203-0405-0607-0809-0a0b0c0d0e0f";
+}
+
+constexpr bool UuidHashingIsConstexpr()
+{
+    const std::hash<pond::core::Uuid> hash;
+
+    return hash(pond::core::Uuid{}) == hash(pond::core::Uuid::Nil()) &&
+           hash(pond::core::Uuid{}) != hash(pond::core::Uuid{MakeSequentialBytes()});
+}
+
+static_assert(UuidValueObserversAreConstexpr());
+static_assert(UuidVersionAndVariantAreConstexpr());
+static_assert(UuidFormattingIsConstexpr());
+static_assert(UuidHashingIsConstexpr());
 
 TEST(UuidTests, DefaultsToNil)
 {

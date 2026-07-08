@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace
 {
@@ -52,6 +53,24 @@ void CapturingVerifyHandler(const pond::core::AssertionFailure& failure)
 {
     Capture(verifyCapture, failure);
 }
+
+constexpr bool AssertionFailureStoresDataAtCompileTime()
+{
+    const auto location = std::source_location::current();
+    const pond::core::AssertionFailure failure{pond::core::AssertionFailureKind::Verify,
+                                               "value != 0", "bad value", location};
+
+    return failure.GetKind() == pond::core::AssertionFailureKind::Verify &&
+           failure.GetExpression() == std::string_view{"value != 0"} &&
+           failure.GetMessage() == std::string_view{"bad value"} &&
+           failure.GetLocation().line() == location.line();
+}
+
+static_assert(AssertionFailureStoresDataAtCompileTime());
+static_assert(noexcept(std::declval<const pond::core::AssertionFailure&>().GetKind()));
+static_assert(noexcept(std::declval<const pond::core::AssertionFailure&>().GetExpression()));
+static_assert(noexcept(std::declval<const pond::core::AssertionFailure&>().GetMessage()));
+static_assert(noexcept(std::declval<const pond::core::AssertionFailure&>().GetLocation()));
 
 TEST(AssertionFailureTests, StoresFailureData)
 {

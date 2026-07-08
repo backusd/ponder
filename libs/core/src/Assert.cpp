@@ -19,7 +19,7 @@ namespace pond::core
 {
 namespace
 {
-std::string_view GetFailurePrefix(AssertionFailureKind kind) noexcept
+constexpr std::string_view GetFailurePrefix(AssertionFailureKind kind) noexcept
 {
     switch (kind)
     {
@@ -47,33 +47,6 @@ void DefaultVerifyFailureHandler(const AssertionFailure& failure)
 std::atomic<AssertionFailureHandler> assertionFailureHandler{DefaultAssertionFailureHandler};
 std::atomic<AssertionFailureHandler> verifyFailureHandler{DefaultVerifyFailureHandler};
 } // namespace
-
-AssertionFailure::AssertionFailure(AssertionFailureKind kind, std::string expression,
-                                   std::string message, std::source_location location)
-    : m_kind(kind), m_expression(std::move(expression)), m_message(std::move(message)),
-      m_location(location)
-{
-}
-
-AssertionFailureKind AssertionFailure::GetKind() const noexcept
-{
-    return m_kind;
-}
-
-std::string_view AssertionFailure::GetExpression() const noexcept
-{
-    return m_expression;
-}
-
-std::string_view AssertionFailure::GetMessage() const noexcept
-{
-    return m_message;
-}
-
-const std::source_location& AssertionFailure::GetLocation() const noexcept
-{
-    return m_location;
-}
 
 AssertionFailureHandler SetAssertionFailureHandler(AssertionFailureHandler handler) noexcept
 {

@@ -2,10 +2,8 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <random>
 #include <span>
-#include <string>
 #include <string_view>
 
 namespace pond::core
@@ -17,12 +15,6 @@ constexpr std::array<std::size_t, 16> kByteTextOffsets{0,  2,  4,  6,  9,  11, 1
                                                        19, 21, 24, 26, 28, 30, 32, 34};
 constexpr ErrorCode kInvalidUuidFormat{ErrorCategory::Parse, 1};
 constexpr ErrorCode kUuidEntropyFailure{ErrorCategory::Internal, 2};
-
-[[nodiscard]] constexpr char ToLowerHexDigit(std::uint8_t value) noexcept
-{
-    constexpr std::string_view kDigits{"0123456789abcdef"};
-    return kDigits[value & 0x0FU];
-}
 
 [[nodiscard]] constexpr int FromHexDigit(char character) noexcept
 {
@@ -44,7 +36,7 @@ constexpr ErrorCode kUuidEntropyFailure{ErrorCategory::Internal, 2};
     return -1;
 }
 
-[[nodiscard]] bool HasCanonicalHyphenPositions(std::string_view text) noexcept
+[[nodiscard]] constexpr bool HasCanonicalHyphenPositions(std::string_view text) noexcept
 {
     return text[8] == '-' && text[13] == '-' && text[18] == '-' && text[23] == '-';
 }
@@ -76,28 +68,6 @@ constexpr ErrorCode kUuidEntropyFailure{ErrorCategory::Internal, 2};
 }
 } // namespace
 
-std::string Uuid::ToString() const
-{
-    std::string formatted(kCanonicalUuidLength, '\0');
-    std::size_t textIndex{0};
-
-    for (std::size_t byteIndex = 0; byteIndex < m_bytes.size(); ++byteIndex)
-    {
-        if (byteIndex == 4 || byteIndex == 6 || byteIndex == 8 || byteIndex == 10)
-        {
-            formatted[textIndex] = '-';
-            ++textIndex;
-        }
-
-        formatted[textIndex] = ToLowerHexDigit(static_cast<std::uint8_t>(m_bytes[byteIndex] >> 4U));
-        ++textIndex;
-        formatted[textIndex] = ToLowerHexDigit(m_bytes[byteIndex]);
-        ++textIndex;
-    }
-
-    return formatted;
-}
-
 Result<Uuid> ParseUuid(std::string_view text)
 {
     if (text.size() != kCanonicalUuidLength || !HasCanonicalHyphenPositions(text))
@@ -122,14 +92,6 @@ Result<Uuid> ParseUuid(std::string_view text)
     }
 
     return Uuid{bytes};
-}
-
-Uuid MakeUuidV4(Uuid::Bytes randomBytes) noexcept
-{
-    randomBytes[6] = static_cast<Uuid::Byte>((randomBytes[6] & 0x0FU) | 0x40U);
-    randomBytes[8] = static_cast<Uuid::Byte>((randomBytes[8] & 0x3FU) | 0x80U);
-
-    return Uuid{randomBytes};
 }
 
 Result<Uuid> GenerateUuidV4(UuidEntropySource entropySource)

@@ -19,6 +19,9 @@ configuration, environment, job-system, or application dependencies.
 - Stable standard library vocabulary types are allowed when they improve API
   clarity, but avoid `std::filesystem::path` in core for now.
 - Prefer small, boring primitives with clear tests.
+- Keep pure low-level value operations constexpr/noexcept when practical. Do not
+  force constexpr through APIs that need runtime diagnostics, stacktrace capture,
+  entropy, logging, allocation-heavy formatting, or throwing.
 - Do not create individual utility documentation files. Put durable core utility
   boundary details in `libs/core/docs/Boundary.md` and implementation guidance in
   this file.
@@ -93,6 +96,11 @@ configuration, environment, job-system, or application dependencies.
   the project-level style decision changes first.
 - Local `const` variables still use normal camelCase names. Reserve `kPascalCase`
   for true constants rather than every immutable local.
+- Precompiled headers are target-scoped build accelerators only. Keep `.cpp` files
+  explicitly including the headers they use, keep public headers self-contained,
+  and put only stable, widely used, expensive implementation headers in
+  `src/Pch.hpp`. Do not rely on PCH contents to satisfy include dependencies.
+  Analysis presets may disable PCH so tools see normal include relationships.
 - Core must not own runtime configuration, environment access, filesystem/path
   utilities, custom allocators, non-copyable helper base types, cancellation,
   progress reporting, domain typed IDs, or job execution.

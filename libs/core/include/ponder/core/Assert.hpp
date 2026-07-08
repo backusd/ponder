@@ -19,13 +19,32 @@ enum class AssertionFailureKind : std::uint8_t
 class AssertionFailure final
 {
 public:
-    AssertionFailure(AssertionFailureKind kind, std::string expression, std::string message,
-                     std::source_location location);
+    constexpr AssertionFailure(AssertionFailureKind kind, std::string expression,
+                               std::string message, std::source_location location)
+        : m_kind(kind), m_expression(std::move(expression)), m_message(std::move(message)),
+          m_location(location)
+    {
+    }
 
-    [[nodiscard]] AssertionFailureKind GetKind() const noexcept;
-    [[nodiscard]] std::string_view GetExpression() const noexcept;
-    [[nodiscard]] std::string_view GetMessage() const noexcept;
-    [[nodiscard]] const std::source_location& GetLocation() const noexcept;
+    [[nodiscard]] constexpr AssertionFailureKind GetKind() const noexcept
+    {
+        return m_kind;
+    }
+
+    [[nodiscard]] constexpr std::string_view GetExpression() const noexcept
+    {
+        return m_expression;
+    }
+
+    [[nodiscard]] constexpr std::string_view GetMessage() const noexcept
+    {
+        return m_message;
+    }
+
+    [[nodiscard]] constexpr const std::source_location& GetLocation() const noexcept
+    {
+        return m_location;
+    }
 
 private:
     AssertionFailureKind m_kind;
