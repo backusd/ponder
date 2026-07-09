@@ -12,8 +12,8 @@ library. Each task must leave the repository configured, buildable, and tested
 for the behavior introduced by that task.
 
 Every task that adds or changes a public header must add or update that header's
-dedicated SDL-free, PCH-disabled self-containment translation unit in the same
-task.
+dedicated SDL-free self-containment translation unit in the same task. The
+self-containment target is explicitly never assigned a PCH.
 
 ## Guiding Decisions
 
@@ -41,6 +41,8 @@ task.
   and owner-thread-only.
 - Pure tests, SDL-private translation tests, and live SDL integration tests use
   separate targets.
+- `ponder_platform` intentionally uses no PCH. Reintroduce one only after
+  platform-only measurements demonstrate a material benefit.
 - PLAT-013 is the renderer-ready foundation gate. Later platform services do not
   block renderer implementation.
 - PLAT-015 is the complete Dear ImGui platform-adapter gate. UI context, widget,
@@ -57,6 +59,34 @@ task.
 | Renderer-ready | PLAT-004 through PLAT-013 | Windows, input, events, and native interop |
 | Desktop services | PLAT-014 through PLAT-021 | Host services and local verification |
 | Portability matrix | PLAT-022 | Actual Windows, Linux, and macOS evidence |
+
+## Verification Cadence
+
+For intermediate implementation tasks PLAT-010 through PLAT-012 and PLAT-014
+through PLAT-017, reuse one configured supported Debug developer tree and apply
+only the affected rows:
+
+| Change | Minimum build and test |
+| --- | --- |
+| Public header or value contract | Build `ponder_platform_header_tests` and `ponder_platform_tests`; run the complete public/value test executable. |
+| SDL seam, translator, polling, runtime, or window behavior | Build and run the complete `ponder_platform_backend_tests` executable. |
+| Both public and private behavior | Build all three targets above and run both deterministic test executables. |
+| Applicable real SDL behavior or host service | Also build `ponder_platform_integration_tests` and run the affected live tests through one CTest invocation so resource locks apply. |
+| Process support | Also build the project-owned process helper and its owning tests. |
+| Documentation only | Do not rebuild unless CMake, build commands, or generated/public interfaces changed. |
+
+Building an affected test target transitively builds `ponder_platform`.
+Reconfigure only when CMake inputs or source lists change. Run the complete
+affected deterministic executable rather than only the newly added case. Do not
+run a duplicate PCH-off platform build, Release or sanitizer configurations,
+clang-tidy, repository-wide formatting/whitespace checks, or the portability
+matrix after every intermediate task unless that task changes the corresponding
+tooling.
+
+PLAT-013 is the broader renderer-ready Debug gate. PLAT-021 defines the complete
+host-local Debug, Release, analysis, test, formatting, clang-tidy, whitespace,
+dependency, and manual verification gate. PLAT-022 records the cross-platform
+compiler and sanitizer matrix.
 
 ## Task List
 
@@ -94,8 +124,9 @@ Work:
 
 - Add `ponder::core` to `PUBLIC_DEPS` and `ponder::SDL3` to `PRIVATE_DEPS` for
   `ponder_platform`.
-- Keep using `ponder_add_project_library`; it already supplies static linkage,
-  C++23, PCH, warnings-as-errors, sanitizers, and install handling.
+- Keep using `ponder_add_project_library`; it supplies static linkage, C++23,
+  warnings-as-errors, sanitizers, install handling, and explicit opt-in PCH
+  support. Platform intentionally does not opt in to PCH use.
 - Do not add a platform CMake option unless an implemented capability requires
   one.
 - Add one private SDL error adapter that accepts an already selected
@@ -238,8 +269,8 @@ Work:
 Done when:
 
 - No smoke-only platform API remains.
-- Every public header compiles by itself with PCH disabled and without SDL
-  include paths.
+- Every public header compiles by itself in the explicitly PCH-free
+  self-containment target and without SDL include paths.
 - Foundational values have compile-time and runtime tests for defaults,
   validation, comparison, hashing, and units.
 
@@ -412,7 +443,7 @@ Done when:
   moved-from objects, and owner-thread guards.
 - A serialized live SDL test verifies current-host snapshot invariants and a
   hidden window's display ID, pixel density, and display scale. The public
-  header target also builds with precompiled headers disabled.
+  header target is explicitly PCH-free.
 
 TASK PLAT-007: Implement Orthogonal Window State
 ------------------------------------------------
@@ -470,8 +501,7 @@ Done when:
   flags, moves, and owner-thread guards.
 - A serialized dummy-driver test covers hidden-window observations,
   desktop-fullscreen pending state, show/hide visibility, and applicable
-  unsupported capability behavior. The same targets build and pass with
-  precompiled headers disabled.
+  unsupported capability behavior. The same targets are explicitly PCH-free.
 
 TASK PLAT-008: Define Core Typed Events And Translation
 ------------------------------------------------------
@@ -663,14 +693,11 @@ Treat this as the completion gate for renderer implementation.
 
 Work:
 
-- Configure and build a normal supported developer preset.
-- Configure and build with PCH disabled, using an analysis preset where the
-  repository provides one.
+- Configure and build one normal supported Debug developer preset.
 - Build `ponder_platform` and all platform public-header, unit, translation, and
   applicable hidden-window integration targets.
 - Run tests for runtime, multiple windows, display/scale data, window state,
   events, input, cursor services, and native interop.
-- Run formatting and scoped clang-tidy checks for platform files.
 - Confirm platform public consumers inherit core but no SDL compile usage
   requirements.
 - Record the host, compiler, SDL video driver, and any capability-based skips.
@@ -866,7 +893,7 @@ Work:
   clipboard outcomes, external-URI outcomes, dialog outcomes, and process values.
 - Keep all live desktop-window behavior out of `tests/unit/platform`.
 - Confirm every public header has its own SDL-free self-containment translation
-  unit and is compiled with PCH disabled.
+  unit in a target explicitly marked `DISABLE_PRECOMPILE_HEADERS`.
 - Keep the header target free of a direct SDL dependency. A separate translation
   target may include SDL and private implementation headers.
 - Confirm translation tests exercise the exact helper called by production
@@ -904,17 +931,16 @@ Work:
   interactive system dialogs out of automated runs.
 - Serialize tests that touch process-global SDL state or the system clipboard
   using CTest resource locking or an equivalent target-level rule.
-- Extend `ponder_add_project_test` to pass discovery properties, or register the
-  affected integration tests separately, so resource locks and labels apply to
-  the discovered GoogleTests. Do not assume an executable target property will
-  serialize discovered tests.
+- Confirm `ponder_add_project_test` attaches resource locks to the discovered
+  GoogleTests. Extend it with repeatable `LABELS` arguments that are also
+  attached during discovery. Apply a common `platform` label, exactly one of
+  `unit`, `backend`, or `integration`, and an additional `live` label to GUI or
+  system-service tests so scoped CTest runs are reliable.
 - Treat SDL initialization or hidden-window creation failure as a failure on a
   normal GUI host.
 - Skip only after positively detecting an unsupported driver/capability or an
   explicitly selected documented no-display mode. Include the reason in the
   skip message.
-- Label live GUI/service tests separately so local and future CI runs can select
-  them intentionally.
 
 Done when:
 
@@ -942,8 +968,8 @@ Work:
   live tests.
 - Document an opt-in manual dialog smoke procedure that opens and cancels each
   supported dialog kind with and without a parent window.
-- Record the normal and PCH-disabled verification commands for each supported
-  host as they become available.
+- Record intermediate, renderer-gate, host-local completion, analysis, and
+  portability commands for each supported host as they become available.
 - Distinguish host-local completion from the unrun rows of the PLAT-022
   portability matrix.
 
@@ -960,12 +986,30 @@ Treat this as the completion gate for all services in this roadmap.
 
 Work:
 
-- Configure and build the normal developer preset plus a PCH-disabled
-  configuration, using an analysis preset where available.
+- Run the repository tool check, then configure clean primary-host Debug and
+  Release builds. Ensure an analysis configuration provides
+  `compile_commands.json`: use the Windows Ninja analysis preset, or a normal
+  supported single-configuration Linux/macOS preset. That configuration may
+  keep project-wide PCH disabled to audit explicitly opted-in targets; it is
+  not a second platform PCH check.
 - Build `ponder_platform`, SDL-free header tests, pure unit tests, private
   translation tests, integration tests, and the process helper.
-- Run all applicable tests, recording capability-based skips.
-- Run formatting and scoped clang-tidy for platform sources and tests.
+- Run all applicable tests in Debug and Release, with live/system-service tests
+  in one CTest invocation, and record capability-based skips.
+- Use the matching CTest preset where one exists. When a build/configure preset
+  has no test preset, build it and run
+  `ctest --test-dir build/<preset> --output-on-failure` directly; add `-C` for a
+  multi-configuration generator.
+- Run the supported sanitizer preset, currently Linux Clang ASAN/UBSAN, when
+  that host is available.
+- Run `clang-format` in check mode and clang-tidy over platform production,
+  unit, integration, and process-helper translation units. The current wrapper
+  scripts scan the whole repository; a full repository pass is acceptable at
+  this completion gate.
+- Run `git diff HEAD --check` for tracked changed-line whitespace errors. Inspect
+  `git status --short`, apply an equivalent whitespace check to every intended
+  untracked text file before staging it, and reject generated files, logs, build
+  outputs, and local environment files.
 - Confirm the production dependency set remains public core plus private SDL3
   and that no SDL compile usage requirement leaks to consumers.
 - Confirm lifecycle, threading, dialog, process, native-handle,
@@ -974,8 +1018,6 @@ Work:
 - On a capable GUI host, perform and record the manual open/cancel smoke check
   for each dialog kind. On an incapable host, record presentation as unverified
   rather than treating the automated callback-bridge test as native coverage.
-- Confirm generated files, logs, build outputs, and local environment files are
-  not staged.
 - Record host OS, compiler, configuration, SDL video driver, commands, results,
   and skips.
 
@@ -995,10 +1037,13 @@ hosts, but unrun rows remain visibly unverified.
 
 Work:
 
-- Configure, build, and run pure tests on:
-  - Windows with MSVC and clang-cl where supported.
-  - Linux with Clang and GCC.
-  - macOS with AppleClang.
+- Configure, build, and run public-header, pure, and backend tests on:
+  - Windows with MSVC Debug/Release and clang-cl Debug where supported.
+  - Linux with Clang Debug/Release, GCC Debug, and Clang ASAN/UBSAN.
+  - macOS with AppleClang Debug/Release.
+- Use a matching CTest preset where defined. For configurations without one,
+  build first and run `ctest --test-dir build/<preset> --output-on-failure`
+  directly; add `-C` for a multi-configuration generator.
 - Run hidden-window, display/scale, input, native-handle, process, and clipboard
   integration coverage wherever the host and driver support it.
 - Compile `NativeWin32Window` on Windows, `NativeX11Window` and
@@ -1011,8 +1056,8 @@ Work:
 
 Done when:
 
-- Windows, Linux, and macOS rows contain actual successful configure/build/unit
-  results.
+- Windows, Linux, and macOS rows contain actual successful configure, build,
+  public-header, pure, and backend results.
 - Each supported native interop branch has compiled and its applicable live
   behavior has been exercised.
 - Remaining skips and unsupported capabilities are explicit, justified, and

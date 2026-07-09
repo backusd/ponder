@@ -83,7 +83,7 @@ known gaps are follow-up work outside the initial scaffold:
 | Q-BLD-009 | Warnings-as-errors are always enabled for every project build. | Apply to project code; avoid forcing project warning policy onto third-party submodules. |
 | Q-BLD-010 | RTTI is enabled intentionally. | Editor-like systems and plugins may rely on RTTI when useful. |
 | Q-BLD-011 | Exceptions are allowed only for truly exceptional, usually unrecoverable cases. Project-thrown exceptions use `PonderException`. | Recoverable errors should prefer `std::expected` or an expected-like project wrapper. |
-| Q-BLD-012 | Use precompiled headers with modern best practices. | PCH should be target-scoped, private to implementation targets, and not required by public APIs. |
+| Q-BLD-012 | Use precompiled headers only when measurements justify them. | PCH is an explicit per-target opt-in, private to implementation targets, and never required by public APIs. |
 | Q-BLD-013 | Unity/jumbo builds are not supported yet. | Do not add unity build assumptions to the scaffold. |
 | Q-BLD-014 | Do not support C++ modules yet and do not assume future support. | Keep ordinary header/source structure. |
 | Q-BLD-015 | Prepare for installable CMake package exports now, polish later after APIs stabilize. | Write clean target-oriented CMake without over-investing in package exports during the scaffold. |

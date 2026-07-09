@@ -5,7 +5,8 @@ function(ponder_define_project_options)
     option(PONDER_BUILD_APPS "Build ponder applications." ON)
     option(PONDER_BUILD_TOOLS "Build ponder developer tools." ON)
     option(PONDER_BUILD_PLUGINS "Build ponder plugins." ON)
-    option(PONDER_ENABLE_PCH "Enable target-scoped precompiled headers." ON)
+    option(PONDER_ENABLE_PCH
+        "Enable explicitly opted-in target-scoped precompiled headers." ON)
     option(PONDER_ENABLE_ASAN "Enable AddressSanitizer for supported compilers." OFF)
     option(PONDER_ENABLE_UBSAN
         "Enable UndefinedBehaviorSanitizer for supported compilers."

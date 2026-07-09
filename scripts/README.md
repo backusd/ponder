@@ -64,11 +64,13 @@ Use check mode for verification without edits.
 The format scripts also support an optional clang-tidy pass:
 
 ```sh
+scripts/build.sh --preset linux-clang-debug --configure-only
 scripts/format.sh --check --tidy --preset linux-clang-debug
 ```
 
 ```powershell
-.\scripts\format.ps1 -Check -Tidy -Preset windows-msvc-debug
+.\scripts\build.ps1 -Preset windows-ninja-analysis -ConfigureOnly
+.\scripts\format.ps1 -Check -Tidy -Preset windows-ninja-analysis
 ```
 
 `clang-tidy` requires a `compile_commands.json` file in the selected build tree.

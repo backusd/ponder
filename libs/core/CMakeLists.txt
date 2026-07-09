@@ -29,6 +29,8 @@ ponder_add_project_library(core
         src/Uuid.cpp
     PRIVATE_HEADERS
         src/Pch.hpp
+    PCH_HEADER
+        src/Pch.hpp
     PRIVATE_DEPS
         ponder::spdlog
         ponder::moodycamel)

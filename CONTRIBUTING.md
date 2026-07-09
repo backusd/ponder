@@ -35,19 +35,25 @@ git commit -s
 
 ## Formatting And Static Analysis
 
-C++ formatting is controlled by the root `.clang-format` file. Until the
-project adds wrapper scripts, format edited C++ files directly:
+C++ formatting is controlled by the root `.clang-format` file. Use the
+repository wrapper in check mode to verify project C++ files:
 
-```text
-clang-format -i path/to/File.cpp path/to/File.hpp
+```powershell
+.\scripts\format.ps1 -Check
 ```
 
-Static-analysis expectations are captured in the root `.clang-tidy` file. Run
-clang-tidy against a configured build directory when checking source files:
+Static-analysis expectations are captured in the root `.clang-tidy` file. From
+a Visual Studio Developer PowerShell or Command Prompt on Windows, configure the
+Ninja analysis preset so clang-tidy has a compilation database, then run the
+wrapper's tidy pass:
 
-```text
-clang-tidy -p build/windows-msvc-debug path/to/File.cpp
+```powershell
+.\scripts\build.ps1 -Preset windows-ninja-analysis -ConfigureOnly
+.\scripts\format.ps1 -Check -Tidy -Preset windows-ninja-analysis
 ```
+
+The wrapper currently checks all project C++ files, so reserve the full format
+and tidy pass for integration gates unless a task specifically requires it.
 
 Include-what-you-use is not enforced yet. Keep public headers clean manually and
 prefer narrow project-owned wrapper APIs around third-party dependencies.

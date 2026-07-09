@@ -22,7 +22,6 @@ ponder_add_project_library(platform
         src/Window.cpp
         src/WindowProperties.cpp
     PRIVATE_HEADERS
-        src/Pch.hpp
         src/PlatformRuntimeBackend.hpp
         src/PlatformRuntimeState.hpp
         src/RuntimeChildRegistry.hpp
@@ -34,3 +33,7 @@ ponder_add_project_library(platform
         ponder::core
     PRIVATE_DEPS
         ponder::SDL3)
+
+# Keep platform PCH-free until platform-only measurements justify opting in.
+set_target_properties(ponder_platform PROPERTIES
+    DISABLE_PRECOMPILE_HEADERS ON)

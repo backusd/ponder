@@ -16,6 +16,10 @@ privately by SDL3.
 - Declare `ponder::core` as a public target dependency and `ponder::SDL3` as a
   private target dependency. Do not add another production dependency without a
   boundary decision.
+- `ponder_platform` intentionally uses no precompiled header. Every header and
+  source includes its direct dependencies. Do not enable a platform PCH unless
+  platform-only measurements demonstrate a material benefit and this policy is
+  deliberately revised.
 - Keep SDL and OS-specific helpers under `src/`. Use PIMPL or another
   heap-stable private representation for native resource owners.
 - Permit only one logical `PlatformRuntime` per process. Create runtime and
@@ -142,14 +146,32 @@ privately by SDL3.
 
 ## Verification
 
-- Configure and build a supported developer preset.
-- Run SDL-free header/self-containment tests and `ponder_platform_tests`.
-- Run applicable live tests through the separate
-  `ponder_platform_integration_tests` target.
-- Run a PCH-disabled configuration so transitive includes cannot hide missing
-  public-header dependencies.
-- Run formatting and scoped clang-tidy checks for platform files.
+For intermediate implementation tasks:
+
+- Reuse one configured supported Debug developer preset. Reconfigure only when
+  CMake inputs or source lists change.
+- Build `ponder_platform`, `ponder_platform_header_tests`,
+  `ponder_platform_tests`, and `ponder_platform_backend_tests` as required by
+  the affected public and private behavior. Run the complete affected
+  deterministic test executables.
+- Build and run `ponder_platform_integration_tests` through one CTest invocation
+  only when the task changes applicable live SDL behavior. Include the process
+  helper and its owning tests when process support is affected.
+- Do not repeat a PCH-off build: the platform production and public-header
+  targets are already explicitly PCH-free.
+- Defer Release, sanitizer, full formatting, clang-tidy, broad whitespace, and
+  portability checks to the roadmap gates unless the task changes that tooling.
+
+At the renderer and completion gates:
+
+- PLAT-013 runs the complete renderer-ready platform target/test subset on the
+  normal host Debug preset.
+- PLAT-021 runs the full host-local Debug, Release, test, formatting, clang-tidy,
+  whitespace, dependency-boundary, and applicable manual checks. Clang-tidy uses
+  a configuration that provides `compile_commands.json`: the Windows Ninja
+  analysis preset or a normal supported single-configuration Linux/macOS
+  preset.
+- PLAT-022 records the Windows, Linux, and macOS compiler/sanitizer matrix.
 - Serialize integration tests that touch process-global SDL state or the system
-  clipboard.
-- Treat local success as host-local verification. Track Windows, Linux, and
-  macOS portability separately until the matrix is actually run.
+  clipboard, record capability-based skips, and describe local success as
+  host-local until the portability matrix is actually run.

@@ -29,6 +29,7 @@ target_compile_features(ponder_platform_header_tests PRIVATE cxx_std_23)
 target_link_libraries(ponder_platform_header_tests PRIVATE ponder::platform)
 
 set_target_properties(ponder_platform_header_tests PROPERTIES
+    DISABLE_PRECOMPILE_HEADERS ON
     FOLDER "tests")
 
 ponder_enable_warnings(ponder_platform_header_tests)

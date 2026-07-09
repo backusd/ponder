@@ -8,7 +8,7 @@ include(Sanitizers)
 
 function(ponder_add_project_library library_name)
     set(options)
-    set(one_value_args)
+    set(one_value_args PCH_HEADER)
     set(multi_value_args PUBLIC_HEADERS PRIVATE_HEADERS SOURCES PUBLIC_DEPS PRIVATE_DEPS)
 
     cmake_parse_arguments(
@@ -55,8 +55,13 @@ function(ponder_add_project_library library_name)
         FOLDER "libs"
         POSITION_INDEPENDENT_CODE ON)
 
-    set(pch_header "${CMAKE_CURRENT_SOURCE_DIR}/src/Pch.hpp")
-    if(EXISTS "${pch_header}")
+    if(PONDER_LIBRARY_PCH_HEADER)
+        if(IS_ABSOLUTE "${PONDER_LIBRARY_PCH_HEADER}")
+            set(pch_header "${PONDER_LIBRARY_PCH_HEADER}")
+        else()
+            set(pch_header
+                "${CMAKE_CURRENT_SOURCE_DIR}/${PONDER_LIBRARY_PCH_HEADER}")
+        endif()
         ponder_enable_precompiled_headers("${target_name}" "${pch_header}")
     endif()
 
@@ -67,7 +72,7 @@ function(ponder_add_project_library library_name)
 endfunction()
 function(ponder_add_project_executable target_name)
     set(options)
-    set(one_value_args OUTPUT_NAME FOLDER)
+    set(one_value_args OUTPUT_NAME FOLDER PCH_HEADER)
     set(multi_value_args SOURCES PRIVATE_HEADERS PRIVATE_DEPS)
 
     cmake_parse_arguments(
@@ -101,8 +106,13 @@ function(ponder_add_project_executable target_name)
             FOLDER "${PONDER_EXECUTABLE_FOLDER}")
     endif()
 
-    set(pch_header "${CMAKE_CURRENT_SOURCE_DIR}/src/Pch.hpp")
-    if(EXISTS "${pch_header}")
+    if(PONDER_EXECUTABLE_PCH_HEADER)
+        if(IS_ABSOLUTE "${PONDER_EXECUTABLE_PCH_HEADER}")
+            set(pch_header "${PONDER_EXECUTABLE_PCH_HEADER}")
+        else()
+            set(pch_header
+                "${CMAKE_CURRENT_SOURCE_DIR}/${PONDER_EXECUTABLE_PCH_HEADER}")
+        endif()
         ponder_enable_precompiled_headers("${target_name}" "${pch_header}")
     endif()
 

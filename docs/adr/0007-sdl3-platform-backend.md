@@ -188,7 +188,9 @@ A later backend requires another deliberate decision before either public
 interop type is extended.
 
 Pure value and translation tests are separate from live SDL integration tests.
-Header self-containment and a PCH-disabled build verify that SDL does not leak
-through public headers. Integration tests may skip only after positively
-detecting a missing GUI capability; unexpected initialization or window failures
-remain test failures.
+SDL-free public-header self-containment and consumer targets are explicitly
+PCH-free; they verify direct include completeness and that SDL compile usage does
+not leak through the public target. The platform implementation also remains
+PCH-free unless measurements justify deliberately enabling one. Integration
+tests may skip only after positively detecting a missing GUI capability;
+unexpected initialization or window failures remain test failures.
