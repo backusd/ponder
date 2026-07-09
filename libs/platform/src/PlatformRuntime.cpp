@@ -113,6 +113,8 @@ void VerifyBackend(const detail::PlatformRuntimeBackend& backend)
     PONDER_VERIFY(backend.quit != nullptr, "Platform runtime backend is missing quit");
     PONDER_VERIFY(backend.getTicksNanoseconds != nullptr,
                   "Platform runtime backend is missing getTicksNanoseconds");
+    PONDER_VERIFY(backend.pollEvent != nullptr,
+                  "Platform runtime backend is missing pollEvent");
 }
 
 void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
@@ -143,6 +145,24 @@ void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
                   "Platform window backend is missing show");
     PONDER_VERIFY(backend.hide != nullptr,
                   "Platform window backend is missing hide");
+    PONDER_VERIFY(backend.getProperties != nullptr,
+                  "Platform window backend is missing getProperties");
+    PONDER_VERIFY(backend.setFullscreenModeToDesktop != nullptr,
+                  "Platform window backend is missing setFullscreenModeToDesktop");
+    PONDER_VERIFY(backend.setFullscreen != nullptr,
+                  "Platform window backend is missing setFullscreen");
+    PONDER_VERIFY(backend.setBordered != nullptr,
+                  "Platform window backend is missing setBordered");
+    PONDER_VERIFY(backend.setResizable != nullptr,
+                  "Platform window backend is missing setResizable");
+    PONDER_VERIFY(backend.setAlwaysOnTop != nullptr,
+                  "Platform window backend is missing setAlwaysOnTop");
+    PONDER_VERIFY(backend.minimize != nullptr,
+                  "Platform window backend is missing minimize");
+    PONDER_VERIFY(backend.maximize != nullptr,
+                  "Platform window backend is missing maximize");
+    PONDER_VERIFY(backend.restore != nullptr,
+                  "Platform window backend is missing restore");
 }
 
 void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)
@@ -350,9 +370,9 @@ PlatformRuntimeState::~PlatformRuntimeState() noexcept
     PONDER_VERIFY(m_registry.IsEmpty(),
                   "Cannot destroy PlatformRuntime with {} children and {} requests",
                   m_registry.GetChildCount(), m_registry.GetRequestCount());
-    PONDER_VERIFY(m_windowIdsByBackendId.empty(),
+    PONDER_VERIFY(m_windowsByBackendId.empty(),
                   "Cannot destroy PlatformRuntime with {} backend window mappings",
-                  m_windowIdsByBackendId.size());
+                  m_windowsByBackendId.size());
     PONDER_VERIFY(m_backend.hasExpectedRuntimeSubsystems(m_backend.context),
                   "SDL subsystem ownership changed while PlatformRuntime was active");
     BeginRuntimeDestruction();
@@ -395,7 +415,7 @@ void PlatformRuntimeState::UnregisterRequest(const void* request)
     m_registry.UnregisterRequest(request);
 }
 
-WindowId PlatformRuntimeState::RegisterWindow(const void* window,
+WindowId PlatformRuntimeState::RegisterWindow(WindowImpl* window,
                                               std::uint32_t backendWindowId)
 {
     VerifyOwnerThread("window registration");
@@ -406,7 +426,8 @@ WindowId PlatformRuntimeState::RegisterWindow(const void* window,
 
     const WindowId id{m_nextWindowId};
     const auto [iterator, inserted] =
-        m_windowIdsByBackendId.emplace(backendWindowId, id);
+        m_windowsByBackendId.emplace(backendWindowId,
+                                     RuntimeWindowRecord{id, window});
     static_cast<void>(iterator);
     PONDER_VERIFY(inserted, "Backend window ID {} is already registered",
                   backendWindowId);
@@ -417,7 +438,7 @@ WindowId PlatformRuntimeState::RegisterWindow(const void* window,
     }
     catch (...)
     {
-        m_windowIdsByBackendId.erase(backendWindowId);
+        m_windowsByBackendId.erase(backendWindowId);
         throw;
     }
 
@@ -425,23 +446,26 @@ WindowId PlatformRuntimeState::RegisterWindow(const void* window,
     return id;
 }
 
-void PlatformRuntimeState::BeginWindowDestruction(const void* window,
+void PlatformRuntimeState::BeginWindowDestruction(WindowImpl* window,
                                                   std::uint32_t backendWindowId,
                                                   WindowId id)
 {
     VerifyOwnerThread("window destruction");
     PONDER_VERIFY(window != nullptr, "Cannot destroy a null platform window");
 
-    const auto iterator = m_windowIdsByBackendId.find(backendWindowId);
-    PONDER_VERIFY(iterator != m_windowIdsByBackendId.end(),
+    const auto iterator = m_windowsByBackendId.find(backendWindowId);
+    PONDER_VERIFY(iterator != m_windowsByBackendId.end(),
                   "Backend window ID {} is not registered", backendWindowId);
-    PONDER_VERIFY(iterator->second == id,
+    PONDER_VERIFY(iterator->second.id == id,
                   "Backend window ID {} does not match project window ID {}",
                   backendWindowId, id.GetValue());
-    m_windowIdsByBackendId.erase(iterator);
+    PONDER_VERIFY(iterator->second.window == window,
+                  "Backend window ID {} does not match its registered window",
+                  backendWindowId);
+    m_windowsByBackendId.erase(iterator);
 }
 
-void PlatformRuntimeState::FinishWindowDestruction(const void* window)
+void PlatformRuntimeState::FinishWindowDestruction(WindowImpl* window)
 {
     VerifyOwnerThread("window destruction");
     m_registry.UnregisterChild(window);
@@ -451,9 +475,9 @@ std::optional<WindowId> PlatformRuntimeState::FindWindowId(
     std::uint32_t backendWindowId) const
 {
     VerifyOwnerThread("window lookup");
-    const auto iterator = m_windowIdsByBackendId.find(backendWindowId);
-    return iterator != m_windowIdsByBackendId.end()
-             ? std::optional<WindowId>{iterator->second}
+    const auto iterator = m_windowsByBackendId.find(backendWindowId);
+    return iterator != m_windowsByBackendId.end()
+             ? std::optional<WindowId>{iterator->second.id}
              : std::nullopt;
 }
 

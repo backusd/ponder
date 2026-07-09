@@ -53,7 +53,26 @@ privately by SDL3.
 - Use project assertion and logging macros. Log lifecycle messages with the
   `platform` category and keep ignored-event logging at trace level or silent.
 - Use a `std::variant` of typed, owned event payloads. Do not add a redundant
-  event-kind enum or raw SDL escape hatch.
+  event-kind enum or raw SDL escape hatch. Give every event the original SDL
+  monotonic nanosecond timestamp; never resample it with `Now()`.
+- Keep one private `TranslateSdlEvent` production function for PLAT-008 and
+  polling. Resolve required backend IDs through injected private callbacks.
+  Preserve an unresolved destination display only on
+  `WindowDisplayChangedEvent`; drop events whose required identity is stale.
+- Make `PlatformRuntime::PollEvent()` consume SDL events on the runtime owner
+  thread until it can return one translated event or the queue is empty. Never
+  let an unsupported, malformed, or stale event masquerade as an empty queue,
+  and never destroy a window in response to a close request.
+- Update display routing directly around lifecycle events: connect or allocate
+  an added backend display before translation, and translate a removal through
+  its retained project ID before finalizing the disconnected tombstone.
+  Reconcile a previously unseen non-removal display event against the live
+  topology, but never revive a tombstone without an added event.
+- Treat window/display scale, display move, content-scale, and usable-bounds
+  events as re-query notifications. Use optional display-mode extents because
+  SDL's public event contract does not guarantee mode dimensions. Preserve
+  zero window sizes, reject negative window sizes, and map unknown display
+  orientations to `DisplayOrientation::Unknown`.
 - Keep display content scale, window pixel density, window display scale,
   logical size, and pixel size as distinct concepts.
 - Copy display names and all other snapshot data before backend-owned storage
@@ -71,6 +90,21 @@ privately by SDL3.
   display snapshot's base content scale for the window display-scale query.
 - Keep presentation, decoration, minimized/maximized state, visibility,
   resizability, focus, and always-on-top as orthogonal window concepts.
+- Query SDL's current and pending window flags on demand. Treat input focus as
+  focus and hidden state as the inverse of visibility; do not infer either from
+  minimization, presentation, or another property.
+- Make window-state mutators idempotent and do not cache visible asynchronous
+  requests as observed state. SDL merges current and pending flags for hidden
+  windows, so retain only the last successful hidden state request until
+  `Show()` to disambiguate a stale current bit from the new pending bit. Reject
+  simultaneous minimized/maximized flags without that marker as
+  `BackendFailure`.
+- Select the null SDL fullscreen mode before entering desktop fullscreen. Keep
+  exclusive fullscreen absent until platform owns display-mode selection.
+- Classify known unavailable state transitions as `Unsupported` without parsing
+  SDL error text. Detect silently ignored decoration, resizability, and
+  always-on-top setters by comparing the project-relevant backend flag before
+  and after the successful synchronous SDL setter.
 - Keep frame-delta calculation, fixed timestep, frame limiting, event-wait idle
   policy, rendering, Dear ImGui behavior, project policy, chemistry, IO,
   workflow, compute, plugins, and desktop application policy out of platform.

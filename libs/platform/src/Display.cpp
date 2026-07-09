@@ -2,9 +2,10 @@
 
 #include "PlatformRuntimeState.hpp"
 #include "SdlError.hpp"
-#include "WindowState.hpp"
+#include "WindowImpl.hpp"
 
 #include <ponder/core/Assert.hpp>
+#include <ponder/core/Log.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
 #include <ponder/platform/Window.hpp>
@@ -119,6 +120,150 @@ constexpr core::ErrorCode kNotFoundCode =
 
 namespace detail
 {
+std::optional<DisplayId> PlatformRuntimeState::FindConnectedDisplayId(
+    std::uint32_t backendDisplayId) const
+{
+    VerifyOwnerThread("display lookup");
+    if (backendDisplayId == 0)
+    {
+        return std::nullopt;
+    }
+
+    const auto mapping = m_displaysByBackendId.find(backendDisplayId);
+    if (mapping == m_displaysByBackendId.end() || !mapping->second.connected)
+    {
+        return std::nullopt;
+    }
+
+    const auto projectMapping = m_displaysById.find(mapping->second.id);
+    PONDER_VERIFY(projectMapping != m_displaysById.end() &&
+                      projectMapping->second.backendId == backendDisplayId &&
+                      projectMapping->second.connected,
+                  "Connected backend display {} has an inconsistent project mapping",
+                  backendDisplayId);
+    return mapping->second.id;
+}
+
+std::optional<DisplayId> PlatformRuntimeState::FindDisplayIdForRemoval(
+    std::uint32_t backendDisplayId) const
+{
+    VerifyOwnerThread("display removal lookup");
+    if (backendDisplayId == 0)
+    {
+        return std::nullopt;
+    }
+
+    const auto mapping = m_displaysByBackendId.find(backendDisplayId);
+    if (mapping == m_displaysByBackendId.end() ||
+        (!mapping->second.connected && !mapping->second.removalEventPending))
+    {
+        return std::nullopt;
+    }
+
+    const auto projectMapping = m_displaysById.find(mapping->second.id);
+    PONDER_VERIFY(projectMapping != m_displaysById.end() &&
+                      projectMapping->second.backendId == backendDisplayId,
+                  "Backend display {} has an inconsistent removal mapping",
+                  backendDisplayId);
+    return mapping->second.id;
+}
+
+std::optional<DisplayId> PlatformRuntimeState::FindKnownDisplayId(
+    std::uint32_t backendDisplayId) const
+{
+    VerifyOwnerThread("known display lookup");
+    if (backendDisplayId == 0)
+    {
+        return std::nullopt;
+    }
+
+    const auto mapping = m_displaysByBackendId.find(backendDisplayId);
+    if (mapping == m_displaysByBackendId.end())
+    {
+        return std::nullopt;
+    }
+
+    const auto projectMapping = m_displaysById.find(mapping->second.id);
+    PONDER_VERIFY(projectMapping != m_displaysById.end() &&
+                      projectMapping->second.backendId == backendDisplayId,
+                  "Backend display {} has an inconsistent project mapping",
+                  backendDisplayId);
+    return mapping->second.id;
+}
+
+std::optional<DisplayId> PlatformRuntimeState::ConnectDisplayFromEvent(
+    std::uint32_t backendDisplayId)
+{
+    VerifyOwnerThread("display connection event");
+    if (backendDisplayId == 0)
+    {
+        return std::nullopt;
+    }
+
+    const auto current = m_displaysByBackendId.find(backendDisplayId);
+    if (current != m_displaysByBackendId.end() && current->second.connected)
+    {
+        return current->second.id;
+    }
+
+    PONDER_VERIFY(m_nextDisplayId != 0, "Platform display ID space is exhausted");
+    const DisplayId id{m_nextDisplayId};
+    auto nextByBackend = m_displaysByBackendId;
+    auto nextByProject = m_displaysById;
+
+    nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
+    const auto [iterator, inserted] = nextByProject.emplace(
+        id, RuntimeBackendDisplayRecord{backendDisplayId, true});
+    static_cast<void>(iterator);
+    PONDER_VERIFY(inserted, "Platform display ID {} is already registered",
+                  id.GetValue());
+
+    m_displaysByBackendId.swap(nextByBackend);
+    m_displaysById.swap(nextByProject);
+    ++m_nextDisplayId;
+    return id;
+}
+
+void PlatformRuntimeState::DisconnectDisplayFromEvent(
+    std::uint32_t backendDisplayId)
+{
+    VerifyOwnerThread("display disconnection event");
+    const auto mapping = m_displaysByBackendId.find(backendDisplayId);
+    if (mapping == m_displaysByBackendId.end())
+    {
+        return;
+    }
+
+    const auto projectMapping = m_displaysById.find(mapping->second.id);
+    PONDER_VERIFY(projectMapping != m_displaysById.end() &&
+                      projectMapping->second.backendId == backendDisplayId,
+                  "Backend display {} has an inconsistent disconnection mapping",
+                  backendDisplayId);
+    mapping->second.connected = false;
+    mapping->second.removalEventPending = false;
+    projectMapping->second.connected = false;
+}
+
+void PlatformRuntimeState::ReconcileDisplayFromEvent(
+    std::uint32_t backendDisplayId)
+{
+    if (backendDisplayId == 0 ||
+        FindConnectedDisplayId(backendDisplayId).has_value() ||
+        FindKnownDisplayId(backendDisplayId).has_value())
+    {
+        return;
+    }
+
+    auto refresh = RefreshDisplays();
+    if (!refresh.HasValue())
+    {
+        LOG_ERROR_CATEGORY(
+            "platform",
+            "Failed to reconcile display identity while polling an event: {}",
+            refresh.GetError().GetMessage());
+    }
+}
+
 core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
 {
     VerifyOwnerThread("display refresh");
@@ -147,6 +292,10 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
     for (auto& [backendId, record] : nextByBackend)
     {
         static_cast<void>(backendId);
+        if (record.connected)
+        {
+            record.removalEventPending = true;
+        }
         record.connected = false;
     }
     for (auto& [projectId, record] : nextByProject)
@@ -164,7 +313,8 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
         if (wasConnected)
         {
             const DisplayId id = current->second.id;
-            nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true};
+            nextByBackend[backendDisplayId] =
+                RuntimeDisplayRecord{id, true, false};
             const auto project = nextByProject.find(id);
             PONDER_VERIFY(project != nextByProject.end(),
                           "Connected display {} has no project mapping",
@@ -176,7 +326,7 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
         PONDER_VERIFY(nextDisplayId != 0, "Platform display ID space is exhausted");
         const DisplayId id{nextDisplayId};
         ++nextDisplayId;
-        nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true};
+        nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
         const auto [iterator, inserted] = nextByProject.emplace(
             id, RuntimeBackendDisplayRecord{backendDisplayId, true});
         static_cast<void>(iterator);
@@ -445,19 +595,19 @@ core::Result<float> Window::GetDisplayScale() const
 
 namespace detail
 {
-core::Result<DisplayId> WindowState::GetDisplayId() const
+core::Result<DisplayId> WindowImpl::GetDisplayId() const
 {
     VerifyUsable("display query");
     return m_runtime->GetDisplayIdForWindow(m_nativeWindow, m_id);
 }
 
-core::Result<float> WindowState::GetPixelDensity() const
+core::Result<float> WindowImpl::GetPixelDensity() const
 {
     VerifyUsable("pixel density query");
     return m_runtime->GetPixelDensityForWindow(m_nativeWindow, m_id);
 }
 
-core::Result<float> WindowState::GetDisplayScale() const
+core::Result<float> WindowImpl::GetDisplayScale() const
 {
     VerifyUsable("display scale query");
     return m_runtime->GetDisplayScaleForWindow(m_nativeWindow, m_id);

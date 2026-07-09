@@ -1,6 +1,7 @@
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
 
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_timer.h>
@@ -16,12 +17,37 @@
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace
 {
 constexpr char kFocusClickThroughHint[]{"SDL_MOUSE_FOCUS_CLICKTHROUGH"};
 constexpr char kAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
+
+[[nodiscard]] std::uint32_t FindBackendWindowId(std::string_view title)
+{
+    int windowCount{};
+    SDL_Window** const windows = SDL_GetWindows(&windowCount);
+    if (windows == nullptr)
+    {
+        return 0;
+    }
+
+    std::uint32_t id{};
+    for (int index = 0; index < windowCount; ++index)
+    {
+        const char* const candidateTitle = SDL_GetWindowTitle(windows[index]);
+        if (candidateTitle != nullptr && title == candidateTitle)
+        {
+            id = SDL_GetWindowID(windows[index]);
+            break;
+        }
+    }
+
+    SDL_free(windows);
+    return id;
+}
 
 class PlatformRuntimeIntegrationTests : public testing::Test
 {
@@ -179,6 +205,181 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsMultipleLiveHiddenWindows)
 
     second.reset();
     EXPECT_TRUE(moved.GetLogicalSize().HasValue());
+}
+
+TEST_F(PlatformRuntimeIntegrationTests,
+       PollsAndRoutesSyntheticEventsForMultipleLiveWindows)
+{
+    ASSERT_TRUE(
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc firstDesc;
+    firstDesc.title = "Polling Window One";
+    firstDesc.visible = false;
+    auto firstResult = runtime.CreateWindow(firstDesc);
+    ASSERT_TRUE(firstResult.HasValue()) << firstResult.GetError().GetMessage();
+    pond::platform::Window first = std::move(firstResult).GetValue();
+
+    pond::platform::WindowDesc secondDesc;
+    secondDesc.title = "Polling Window Two";
+    secondDesc.visible = false;
+    auto secondResult = runtime.CreateWindow(secondDesc);
+    ASSERT_TRUE(secondResult.HasValue()) << secondResult.GetError().GetMessage();
+    pond::platform::Window second = std::move(secondResult).GetValue();
+
+    const std::uint32_t firstBackendId =
+        FindBackendWindowId(firstDesc.title);
+    const std::uint32_t secondBackendId =
+        FindBackendWindowId(secondDesc.title);
+    ASSERT_NE(firstBackendId, 0U);
+    ASSERT_NE(secondBackendId, 0U);
+    ASSERT_NE(firstBackendId, secondBackendId);
+
+    SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+
+    SDL_Event ignored{};
+    ignored.type = SDL_EVENT_USER;
+    ASSERT_TRUE(SDL_PushEvent(&ignored));
+
+    SDL_Event firstClose{};
+    firstClose.window.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+    firstClose.window.windowID = firstBackendId;
+    ASSERT_TRUE(SDL_PushEvent(&firstClose));
+
+    SDL_Event secondClose{};
+    secondClose.window.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
+    secondClose.window.windowID = secondBackendId;
+    ASSERT_TRUE(SDL_PushEvent(&secondClose));
+
+    SDL_Event quit{};
+    quit.type = SDL_EVENT_QUIT;
+    ASSERT_TRUE(SDL_PushEvent(&quit));
+
+    auto firstEvent = runtime.PollEvent();
+    ASSERT_TRUE(firstEvent.has_value());
+    ASSERT_TRUE(std::holds_alternative<
+                pond::platform::WindowCloseRequestedEvent>(*firstEvent));
+    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*firstEvent)
+                  .windowId,
+              first.GetId());
+
+    auto secondEvent = runtime.PollEvent();
+    ASSERT_TRUE(secondEvent.has_value());
+    ASSERT_TRUE(std::holds_alternative<
+                pond::platform::WindowCloseRequestedEvent>(*secondEvent));
+    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*secondEvent)
+                  .windowId,
+              second.GetId());
+
+    auto quitEvent = runtime.PollEvent();
+    ASSERT_TRUE(quitEvent.has_value());
+    EXPECT_TRUE(
+        std::holds_alternative<pond::platform::QuitRequestedEvent>(*quitEvent));
+    EXPECT_FALSE(runtime.PollEvent().has_value());
+
+    EXPECT_EQ(first.GetTitle(), firstDesc.title);
+    EXPECT_EQ(second.GetTitle(), secondDesc.title);
+}
+
+TEST_F(PlatformRuntimeIntegrationTests,
+       SupportsOrthogonalStateForALiveHiddenWindow)
+{
+    ASSERT_TRUE(
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.title = "Live Hidden State Window";
+    desc.visible = false;
+    desc.resizable = true;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    auto presentation = window.GetPresentation();
+    ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
+    EXPECT_EQ(presentation.GetValue(),
+              pond::platform::WindowPresentation::Windowed);
+    auto decoration = window.GetDecoration();
+    ASSERT_TRUE(decoration.HasValue()) << decoration.GetError().GetMessage();
+    EXPECT_EQ(decoration.GetValue(), pond::platform::WindowDecoration::System);
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+    auto visible = window.IsVisible();
+    ASSERT_TRUE(visible.HasValue()) << visible.GetError().GetMessage();
+    EXPECT_FALSE(visible.GetValue());
+    auto resizable = window.IsResizable();
+    ASSERT_TRUE(resizable.HasValue()) << resizable.GetError().GetMessage();
+    EXPECT_TRUE(resizable.GetValue());
+    auto focused = window.IsFocused();
+    ASSERT_TRUE(focused.HasValue()) << focused.GetError().GetMessage();
+    EXPECT_FALSE(focused.GetValue());
+    auto alwaysOnTop = window.IsAlwaysOnTop();
+    ASSERT_TRUE(alwaysOnTop.HasValue()) << alwaysOnTop.GetError().GetMessage();
+    EXPECT_FALSE(alwaysOnTop.GetValue());
+
+    ASSERT_TRUE(window.SetPresentation(
+                           pond::platform::WindowPresentation::DesktopFullscreen)
+                    .HasValue());
+    presentation = window.GetPresentation();
+    ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
+    EXPECT_EQ(presentation.GetValue(),
+              pond::platform::WindowPresentation::DesktopFullscreen);
+    ASSERT_TRUE(window.SetPresentation(pond::platform::WindowPresentation::Windowed)
+                    .HasValue());
+    presentation = window.GetPresentation();
+    ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
+    EXPECT_EQ(presentation.GetValue(),
+              pond::platform::WindowPresentation::Windowed);
+
+    ASSERT_TRUE(window.Show().HasValue());
+    visible = window.IsVisible();
+    ASSERT_TRUE(visible.HasValue()) << visible.GetError().GetMessage();
+    EXPECT_TRUE(visible.GetValue());
+    ASSERT_TRUE(window.Hide().HasValue());
+    visible = window.IsVisible();
+    ASSERT_TRUE(visible.HasValue()) << visible.GetError().GetMessage();
+    EXPECT_FALSE(visible.GetValue());
+
+    ASSERT_TRUE(window.Restore().HasValue());
+    const auto expectUnsupported =
+        [](const pond::core::VoidResult& result)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::Unsupported));
+        };
+    expectUnsupported(window.Minimize());
+    expectUnsupported(window.Maximize());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+
+    expectUnsupported(
+        window.SetDecoration(pond::platform::WindowDecoration::Borderless));
+    expectUnsupported(window.SetResizable(false));
+    expectUnsupported(window.SetAlwaysOnTop(true));
+
+    decoration = window.GetDecoration();
+    ASSERT_TRUE(decoration.HasValue()) << decoration.GetError().GetMessage();
+    EXPECT_EQ(decoration.GetValue(), pond::platform::WindowDecoration::System);
+    resizable = window.IsResizable();
+    ASSERT_TRUE(resizable.HasValue()) << resizable.GetError().GetMessage();
+    EXPECT_TRUE(resizable.GetValue());
+    alwaysOnTop = window.IsAlwaysOnTop();
+    ASSERT_TRUE(alwaysOnTop.HasValue()) << alwaysOnTop.GetError().GetMessage();
+    EXPECT_FALSE(alwaysOnTop.GetValue());
 }
 
 TEST_F(PlatformRuntimeIntegrationTests,

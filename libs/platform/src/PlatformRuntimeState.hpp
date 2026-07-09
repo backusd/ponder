@@ -6,6 +6,7 @@
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Identifiers.hpp>
+#include <ponder/platform/PlatformEvent.hpp>
 #include <ponder/platform/Timing.hpp>
 
 #include <array>
@@ -18,7 +19,7 @@
 
 namespace pond::platform::detail
 {
-class WindowState;
+class WindowImpl;
 
 struct RuntimeHintSnapshot final
 {
@@ -38,12 +39,19 @@ struct RuntimeDisplayRecord final
 {
     DisplayId id;
     bool connected{};
+    bool removalEventPending{};
 };
 
 struct RuntimeBackendDisplayRecord final
 {
     std::uint32_t backendId{};
     bool connected{};
+};
+
+struct RuntimeWindowRecord final
+{
+    WindowId id;
+    WindowImpl* window{};
 };
 
 class PlatformRuntimeState final
@@ -69,15 +77,20 @@ public:
     void RegisterRequest(const void* request);
     void UnregisterRequest(const void* request);
 
-    [[nodiscard]] WindowId RegisterWindow(const void* window,
+    [[nodiscard]] WindowId RegisterWindow(WindowImpl* window,
                                           std::uint32_t backendWindowId);
-    void BeginWindowDestruction(const void* window, std::uint32_t backendWindowId,
+    void BeginWindowDestruction(WindowImpl* window, std::uint32_t backendWindowId,
                                 WindowId id);
-    void FinishWindowDestruction(const void* window);
+    void FinishWindowDestruction(WindowImpl* window);
     [[nodiscard]] std::optional<WindowId> FindWindowId(
         std::uint32_t backendWindowId) const;
+    [[nodiscard]] std::optional<DisplayId> FindConnectedDisplayId(
+        std::uint32_t backendDisplayId) const;
+    [[nodiscard]] std::optional<DisplayId> FindDisplayIdForRemoval(
+        std::uint32_t backendDisplayId) const;
 
     [[nodiscard]] PlatformTimestamp Now() const;
+    [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
     [[nodiscard]] core::Result<DisplayInfo> GetDisplayInfo(DisplayId id);
     [[nodiscard]] core::Result<DisplayId> GetDisplayIdForWindow(
@@ -88,11 +101,18 @@ public:
         void* nativeWindow, WindowId windowId) const;
 
 private:
-    friend class WindowState;
+    friend class WindowImpl;
 
     [[nodiscard]] core::Result<std::vector<std::uint32_t>> RefreshDisplays();
     [[nodiscard]] core::Result<DisplayInfo> QueryDisplayInfo(
         DisplayId id, std::uint32_t backendDisplayId) const;
+    [[nodiscard]] std::optional<DisplayId> FindKnownDisplayId(
+        std::uint32_t backendDisplayId) const;
+    [[nodiscard]] std::optional<DisplayId> ConnectDisplayFromEvent(
+        std::uint32_t backendDisplayId);
+    void DisconnectDisplayFromEvent(std::uint32_t backendDisplayId);
+    void ReconcileDisplayFromEvent(std::uint32_t backendDisplayId);
+    void ObserveWindowShownEvent(std::uint32_t backendWindowId);
 
     PlatformRuntimeBackend m_backend;
     PlatformWindowBackend m_windowBackend;
@@ -102,7 +122,7 @@ private:
     RuntimeMetadataSnapshots m_metadata;
     std::thread::id m_ownerThread;
     RuntimeChildRegistry m_registry;
-    std::unordered_map<std::uint32_t, WindowId> m_windowIdsByBackendId;
+    std::unordered_map<std::uint32_t, RuntimeWindowRecord> m_windowsByBackendId;
     WindowId::ValueType m_nextWindowId{1};
     std::unordered_map<std::uint32_t, RuntimeDisplayRecord> m_displaysByBackendId;
     std::unordered_map<DisplayId, RuntimeBackendDisplayRecord> m_displaysById;

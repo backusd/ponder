@@ -2,6 +2,7 @@
 
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Display.hpp>
+#include <ponder/platform/PlatformEvent.hpp>
 #include <ponder/platform/Timing.hpp>
 #include <ponder/platform/Window.hpp>
 
@@ -38,6 +39,7 @@ public:
     PlatformRuntime& operator=(PlatformRuntime&&) noexcept;
 
     [[nodiscard]] PlatformTimestamp Now() const;
+    [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<Window> CreateWindow(const WindowDesc& desc);
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
     [[nodiscard]] core::Result<DisplayInfo> GetDisplayInfo(DisplayId id);

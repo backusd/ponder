@@ -1,5 +1,6 @@
 #include "PlatformRuntimeBackend.hpp"
 
+#include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_platform_defines.h>
@@ -150,6 +151,11 @@ void Quit(void*) noexcept
     return SDL_GetTicksNS();
 }
 
+[[nodiscard]] bool PollEvent(void*, SDL_Event* event) noexcept
+{
+    return SDL_PollEvent(event);
+}
+
 [[nodiscard]] void* CreateWindow(void*, const BackendWindowCreateDesc& desc) noexcept
 {
     return SDL_CreateWindow(desc.title, desc.width, desc.height,
@@ -216,6 +222,130 @@ void DestroyWindow(void*, void* window) noexcept
 [[nodiscard]] bool HideWindow(void*, void* window) noexcept
 {
     return SDL_HideWindow(static_cast<SDL_Window*>(window));
+}
+
+[[nodiscard]] bool GetWindowProperties(
+    void*, void* window, BackendWindowProperties* properties) noexcept
+{
+    const SDL_WindowFlags flags =
+        SDL_GetWindowFlags(static_cast<SDL_Window*>(window));
+    *properties = BackendWindowProperties{
+        (flags & SDL_WINDOW_FULLSCREEN) != 0,
+        (flags & SDL_WINDOW_HIDDEN) != 0,
+        (flags & SDL_WINDOW_BORDERLESS) != 0,
+        (flags & SDL_WINDOW_RESIZABLE) != 0,
+        (flags & SDL_WINDOW_MINIMIZED) != 0,
+        (flags & SDL_WINDOW_MAXIMIZED) != 0,
+        (flags & SDL_WINDOW_INPUT_FOCUS) != 0,
+        (flags & SDL_WINDOW_ALWAYS_ON_TOP) != 0};
+    return true;
+}
+
+[[nodiscard]] BackendWindowOperationResult SetFullscreenModeToDesktop(
+    void*, void* window) noexcept
+{
+    return SDL_SetWindowFullscreenMode(static_cast<SDL_Window*>(window), nullptr)
+             ? BackendWindowOperationResult::Succeeded
+             : BackendWindowOperationResult::Failed;
+}
+
+[[nodiscard]] BackendWindowOperationResult SetWindowFullscreen(
+    void*, void* window, bool fullscreen) noexcept
+{
+    return SDL_SetWindowFullscreen(static_cast<SDL_Window*>(window), fullscreen)
+             ? BackendWindowOperationResult::Succeeded
+             : BackendWindowOperationResult::Failed;
+}
+
+[[nodiscard]] BackendWindowOperationResult SetWindowBordered(
+    void*, void* window, bool bordered) noexcept
+{
+    SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
+    const bool currentlyBordered =
+        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
+    if (currentlyBordered == bordered)
+    {
+        return BackendWindowOperationResult::Succeeded;
+    }
+
+    if (!SDL_SetWindowBordered(sdlWindow, bordered))
+    {
+        return BackendWindowOperationResult::Failed;
+    }
+
+    const bool nowBordered =
+        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
+    return nowBordered == bordered ? BackendWindowOperationResult::Succeeded
+                                   : BackendWindowOperationResult::Unsupported;
+}
+
+[[nodiscard]] BackendWindowOperationResult SetWindowResizable(
+    void*, void* window, bool resizable) noexcept
+{
+    SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
+    const bool currentlyResizable =
+        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
+    if (currentlyResizable == resizable)
+    {
+        return BackendWindowOperationResult::Succeeded;
+    }
+
+    if (!SDL_SetWindowResizable(sdlWindow, resizable))
+    {
+        return BackendWindowOperationResult::Failed;
+    }
+
+    const bool nowResizable =
+        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
+    return nowResizable == resizable ? BackendWindowOperationResult::Succeeded
+                                     : BackendWindowOperationResult::Unsupported;
+}
+
+[[nodiscard]] BackendWindowOperationResult SetWindowAlwaysOnTop(
+    void*, void* window, bool alwaysOnTop) noexcept
+{
+    SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
+    const bool currentlyAlwaysOnTop =
+        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+    if (currentlyAlwaysOnTop == alwaysOnTop)
+    {
+        return BackendWindowOperationResult::Succeeded;
+    }
+
+    if (!SDL_SetWindowAlwaysOnTop(sdlWindow, alwaysOnTop))
+    {
+        return BackendWindowOperationResult::Failed;
+    }
+
+    const bool nowAlwaysOnTop =
+        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+    return nowAlwaysOnTop == alwaysOnTop
+             ? BackendWindowOperationResult::Succeeded
+             : BackendWindowOperationResult::Unsupported;
+}
+
+[[nodiscard]] BackendWindowOperationResult MinimizeWindow(
+    void*, void* window) noexcept
+{
+    return SDL_MinimizeWindow(static_cast<SDL_Window*>(window))
+             ? BackendWindowOperationResult::Succeeded
+             : BackendWindowOperationResult::Unsupported;
+}
+
+[[nodiscard]] BackendWindowOperationResult MaximizeWindow(
+    void*, void* window) noexcept
+{
+    return SDL_MaximizeWindow(static_cast<SDL_Window*>(window))
+             ? BackendWindowOperationResult::Succeeded
+             : BackendWindowOperationResult::Unsupported;
+}
+
+[[nodiscard]] BackendWindowOperationResult RestoreWindow(
+    void*, void* window) noexcept
+{
+    return SDL_RestoreWindow(static_cast<SDL_Window*>(window))
+             ? BackendWindowOperationResult::Succeeded
+             : BackendWindowOperationResult::Unsupported;
 }
 
 [[nodiscard]] bool EnumerateDisplays(void*,
@@ -334,7 +464,16 @@ constexpr PlatformWindowBackend kSdlWindowBackend{
     SetWindowSize,
     SetWindowMinimumSize,
     ShowWindow,
-    HideWindow};
+    HideWindow,
+    GetWindowProperties,
+    SetFullscreenModeToDesktop,
+    SetWindowFullscreen,
+    SetWindowBordered,
+    SetWindowResizable,
+    SetWindowAlwaysOnTop,
+    MinimizeWindow,
+    MaximizeWindow,
+    RestoreWindow};
 
 constexpr PlatformDisplayBackend kSdlDisplayBackend{
     nullptr,
@@ -361,7 +500,8 @@ constexpr PlatformRuntimeBackend kSdlBackend{
     ResetHint,
     InitializeVideo,
     Quit,
-    GetTicksNanoseconds};
+    GetTicksNanoseconds,
+    PollEvent};
 
 std::atomic<const PlatformRuntimeBackend*> backendOverride{nullptr};
 std::atomic<const PlatformWindowBackend*> windowBackendOverride{nullptr};

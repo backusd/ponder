@@ -2,8 +2,10 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace
 {
@@ -12,6 +14,9 @@ static_assert(!std::is_copy_assignable_v<pond::platform::PlatformRuntime>);
 static_assert(std::is_nothrow_move_constructible_v<pond::platform::PlatformRuntime>);
 static_assert(std::is_nothrow_move_assignable_v<pond::platform::PlatformRuntime>);
 static_assert(std::is_nothrow_destructible_v<pond::platform::PlatformRuntime>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>().PollEvent()),
+              std::optional<pond::platform::PlatformEvent>>);
 
 TEST(PlatformRuntimeDescTests, ProvidesStableApplicationMetadataDefaults)
 {

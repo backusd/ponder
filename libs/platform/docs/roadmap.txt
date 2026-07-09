@@ -417,34 +417,66 @@ Done when:
 TASK PLAT-007: Implement Orthogonal Window State
 ------------------------------------------------
 
+Status: completed on 2026-07-09.
+
 Model independent window properties independently.
 
 Work:
 
-- Add a presentation type for windowed and desktop-fullscreen behavior.
-- Defer exclusive fullscreen until a project-owned display-mode enumeration and
-  selection contract is designed from a real renderer/application requirement.
-- Keep system decoration versus borderless-window behavior separate from
-  presentation.
-- Keep normal, minimized, and maximized state separate from visibility,
-  resizability, focus, and always-on-top state.
-- Provide minimize, maximize, restore, presentation, decoration, resizable, and
-  always-on-top operations where SDL supports them.
+- Add `WindowPresentation` with `Windowed` and `DesktopFullscreen`,
+  `WindowDecoration` with `System` and `Borderless`, and `WindowState` with
+  `Normal`, `Minimized`, and `Maximized`. Do not add a compound `WindowMode`.
+- Add independent `Window` queries and mutators for presentation, decoration,
+  normal/minimized/maximized state, visibility, input focus, resizability, and
+  always-on-top state. Keep `Show()` and `Hide()` as the visibility mutators;
+  focus remains observation-only.
+- Make `DesktopFullscreen` explicitly select SDL's null fullscreen mode before
+  entering fullscreen. Defer exclusive fullscreen until a project-owned
+  display-mode enumeration and selection contract is designed from a real
+  renderer/application requirement.
 - Use `pond::core::VoidResult` for fallible mutators and
-  `pond::core::Result<T>` for fallible queries.
-- Document operations whose visible effect is asynchronous under the host window
-  manager; a successful result means SDL accepted the request, not that the OS
-  has already emitted the resulting event.
-- Preserve valid behavior for hidden integration-test windows.
+  `pond::core::Result<T>` for fallible queries. Forged presentation or
+  decoration values return `InvalidArgument`. Known unavailable operations,
+  including maximizing a non-resizable window, return `Unsupported`; other SDL
+  failures return contextual `BackendFailure` without parsing error text.
+- Query current backend flags on demand rather than caching visible requested
+  state. `IsVisible()` means not hidden, minimization does not imply hidden, and
+  `IsFocused()` means input focus rather than mouse focus. Because SDL merges
+  current and pending flags, retain the last successful hidden state request
+  only until `Show()` to disambiguate an old current bit from a new opposite
+  pending bit. Simultaneous minimized and maximized flags without that marker
+  are malformed backend data.
+- Keep mutators idempotent. For hidden windows, normalize an opposite pending
+  minimize/maximize request before submitting the new one and make the latest
+  successful hidden request authoritative until the window is shown.
+- Treat presentation and visible state changes as potentially asynchronous.
+  Success means SDL accepted the request, not that the window manager has
+  applied it or emitted the resulting event. `Restore()` is an OS restore
+  request and can restore a minimized window to its prior maximized state.
+- Keep decoration and resizability independently represented, but return
+  `Unsupported` when requesting a different value while fullscreen because SDL
+  does not support those changes there. Detect SDL drivers that silently ignore
+  decoration, resizability, or always-on-top changes through the private typed
+  backend seam.
 
 Done when:
 
-- No overloaded `WindowMode` can express contradictory state.
-- State transitions and unsupported-capability errors have pure and applicable
-  live tests.
+- SDL-free value and header tests freeze the exact enum alternatives and prove
+  the public state header has no SDL dependency.
+- Deterministic backend tests cover every independent query and mutator,
+  idempotence, hidden-state normalization from both initially hidden and
+  visible-then-hidden states, asynchronous accepted requests, invalid enum
+  values, unsupported capabilities, contextual backend failures, contradictory
+  flags, moves, and owner-thread guards.
+- A serialized dummy-driver test covers hidden-window observations,
+  desktop-fullscreen pending state, show/hide visibility, and applicable
+  unsupported capability behavior. The same targets build and pass with
+  precompiled headers disabled.
 
 TASK PLAT-008: Define Core Typed Events And Translation
 ------------------------------------------------------
+
+Status: completed on 2026-07-09.
 
 Define the event vocabulary needed before input and service extensions.
 
@@ -453,20 +485,30 @@ Work:
 - Define `PlatformEvent` as a `std::variant` of small typed event structs. Do
   not add a parallel event-kind enum.
 - Add alternatives for global quit; window close, move, logical resize, pixel
-  resize, focus, visibility, state, display, and scale changes.
+  resize, focus, visibility, state, presentation, display, and scale changes.
+  Presentation maps SDL enter/leave-fullscreen events independently from
+  minimized/maximized state.
 - Add window-scoped pointer-enter and pointer-leave alternatives so UI can clear
   hover state without consuming SDL events.
 - Add display-added, removed, moved, desktop-mode-changed,
   current-mode-changed, orientation-changed, content-scale-changed, and
   usable-bounds-changed alternatives where SDL supplies them.
-- Store `PlatformTimestamp` on every event.
-- Require `WindowId` only for events that are necessarily window-scoped.
+- Store `PlatformTimestamp` on every event, preserving SDL's monotonic
+  nanosecond timestamp rather than resampling it.
+- Require `WindowId` only for events that are necessarily window-scoped. Keep
+  the destination `DisplayId` optional on a window-display change so the
+  useful notification survives a missing or not-yet-resolvable destination.
+- Carry positive desktop/current display-mode dimensions as optional
+  `ScreenExtent` values. Keep display-scale, display-move, content-scale, and
+  usable-bounds changes as re-query notifications because SDL supplies no new
+  value.
 - Own all strings and other callback/event payloads before SDL storage expires.
 - Define one private SDL-to-project production translator interface and exercise
   it from the SDL-private translation-test target. PLAT-009 wires this exact
   function into polling.
-- Translate unknown values to explicit `Unknown` alternatives when preserving
-  the event is useful; otherwise return no project event.
+- Map unknown display orientations to `DisplayOrientation::Unknown`. Return no
+  project event for unsupported event types, unrepresentable timestamps,
+  malformed required dimensions, or unresolved required window/display IDs.
 - Keep SDL-free header tests separate from the translation target so SDL include
   paths cannot mask a public leak.
 
@@ -478,6 +520,8 @@ Done when:
 
 TASK PLAT-009: Implement Polling And Multi-Window Routing
 --------------------------------------------------------
+
+Status: completed on 2026-07-09.
 
 Connect SDL's process-global queue to project-owned events.
 
@@ -494,6 +538,9 @@ Work:
   at trace level at most.
 - Preserve global quit separately from per-window close requests.
 - Never destroy a window automatically in response to a close request.
+- Prepare display registry state around translation: connect/allocate an added
+  display before translating it, and resolve a removed display through its
+  retained backend-ID mapping before marking it disconnected.
 - Update display/window snapshots or invalidate cached observations when the
   translated event requires it.
 

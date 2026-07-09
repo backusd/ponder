@@ -5,6 +5,7 @@
 #include <ponder/platform/PlatformRuntime.hpp>
 
 #include <SDL3/SDL_error.h>
+#include <SDL3/SDL_events.h>
 
 #include <gtest/gtest.h>
 
@@ -14,6 +15,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <limits>
 #include <list>
 #include <optional>
@@ -23,6 +25,7 @@
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace
@@ -31,6 +34,8 @@ using pond::platform::detail::ApplicationMetadataProperty;
 using pond::platform::detail::BackendDisplayOrientation;
 using pond::platform::detail::BackendScreenRectangle;
 using pond::platform::detail::BackendWindowCreateDesc;
+using pond::platform::detail::BackendWindowOperationResult;
+using pond::platform::detail::BackendWindowProperties;
 using pond::platform::detail::PlatformDisplayBackend;
 using pond::platform::detail::PlatformRuntimeBackend;
 using pond::platform::detail::PlatformWindowBackend;
@@ -56,7 +61,15 @@ struct FakeWindow final
     float pixelDensity{1.0F};
     float displayScale{1.0F};
     bool visible{};
+    bool desktopFullscreen{};
+    bool borderless{};
     bool resizable{};
+    bool minimized{};
+    bool maximized{};
+    bool pendingMinimized{};
+    bool pendingMaximized{};
+    bool inputFocus{};
+    bool alwaysOnTop{};
     bool highPixelDensity{};
     pond::platform::WindowGraphicsCompatibility graphicsCompatibility{
         pond::platform::WindowGraphicsCompatibility::Default};
@@ -71,6 +84,12 @@ struct FakeDisplay final
     float refreshRateHertz{};
     BackendDisplayOrientation orientation{BackendDisplayOrientation::Unknown};
     float contentScale{1.0F};
+};
+
+struct QueuedBackendEvent final
+{
+    SDL_Event event{};
+    std::optional<std::vector<std::uint32_t>> connectedDisplayIds;
 };
 
 struct FakeRuntimeBackend final
@@ -92,6 +111,9 @@ struct FakeRuntimeBackend final
     std::size_t scriptedBackendWindowIdIndex{};
     std::string failingWindowOperation;
     int windowFailuresRemaining{};
+    std::string unsupportedWindowOperation;
+    int unsupportedWindowOperationsRemaining{};
+    bool applyWindowOperationEffects{true};
     std::string failingDisplayOperation;
     int displayFailuresRemaining{};
     std::optional<std::uint32_t> disconnectDisplayOnFailure;
@@ -107,6 +129,7 @@ struct FakeRuntimeBackend final
     int createWindowCalls{};
     int destroyWindowCalls{};
     int enumerateDisplayCalls{};
+    int pollEventCalls{};
     bool policiesObservedDuringInitialization{};
     bool metadataObservedDuringInitialization{};
     bool attemptCreateDuringRestoration{};
@@ -118,6 +141,7 @@ struct FakeRuntimeBackend final
     std::list<FakeWindow> windows;
     std::vector<std::uint32_t> connectedDisplayIds;
     std::unordered_map<std::uint32_t, FakeDisplay> displays;
+    std::deque<QueuedBackendEvent> eventQueue;
     std::vector<std::string> calls;
 };
 
@@ -137,6 +161,52 @@ struct FakeRuntimeBackend final
     return fake.displays.at(backendDisplayId);
 }
 
+[[nodiscard]] SDL_Event MakeQueuedQuitEvent(std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.quit.type = SDL_EVENT_QUIT;
+    event.quit.timestamp = timestamp;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeQueuedWindowEvent(
+    SDL_EventType type, std::uint32_t backendWindowId,
+    std::int32_t data1 = 0, std::int32_t data2 = 0,
+    std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.window.type = type;
+    event.window.timestamp = timestamp;
+    event.window.windowID = backendWindowId;
+    event.window.data1 = data1;
+    event.window.data2 = data2;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeQueuedDisplayEvent(
+    SDL_EventType type, std::uint32_t backendDisplayId,
+    std::int32_t data1 = 0, std::int32_t data2 = 0,
+    std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.display.type = type;
+    event.display.timestamp = timestamp;
+    event.display.displayID = backendDisplayId;
+    event.display.data1 = data1;
+    event.display.data2 = data2;
+    return event;
+}
+
+template <typename Event>
+void ExpectPolledEvent(
+    const std::optional<pond::platform::PlatformEvent>& event,
+    const Event& expected)
+{
+    ASSERT_TRUE(event.has_value());
+    ASSERT_TRUE(std::holds_alternative<Event>(*event));
+    EXPECT_EQ(std::get<Event>(*event), expected);
+}
+
 [[nodiscard]] bool FailWindowOperation(FakeRuntimeBackend& fake,
                                        std::string_view operation)
 {
@@ -150,6 +220,25 @@ struct FakeRuntimeBackend final
     const std::string message = "synthetic " + std::string{operation} + " failure";
     static_cast<void>(SDL_SetError("%s", message.c_str()));
     return true;
+}
+
+[[nodiscard]] BackendWindowOperationResult GetWindowOperationResult(
+    FakeRuntimeBackend& fake, std::string_view operation)
+{
+    if (fake.unsupportedWindowOperation == operation &&
+        fake.unsupportedWindowOperationsRemaining != 0)
+    {
+        --fake.unsupportedWindowOperationsRemaining;
+        const std::string message =
+            "synthetic " + std::string{operation} + " unsupported";
+        static_cast<void>(SDL_SetError("%s", message.c_str()));
+        return BackendWindowOperationResult::Unsupported;
+    }
+    if (FailWindowOperation(fake, operation))
+    {
+        return BackendWindowOperationResult::Failed;
+    }
+    return BackendWindowOperationResult::Succeeded;
 }
 
 [[nodiscard]] bool FailDisplayOperation(FakeRuntimeBackend& fake,
@@ -178,6 +267,49 @@ struct FakeRuntimeBackend final
 {
     const auto iterator = fake.hints.find(name);
     return iterator != fake.hints.end() ? iterator->second.c_str() : nullptr;
+}
+
+[[nodiscard]] int CountRejectedWindowStateCalls(pond::platform::Window& window)
+{
+    int rejectedCalls{};
+    const auto invoke =
+        [&rejectedCalls](auto&& operation)
+        {
+            try
+            {
+                operation();
+            }
+            catch (const pond::core::PonderException&)
+            {
+                ++rejectedCalls;
+            }
+        };
+
+    invoke([&window]() { static_cast<void>(window.GetPresentation()); });
+    invoke(
+        [&window]()
+        {
+            static_cast<void>(window.SetPresentation(
+                pond::platform::WindowPresentation::DesktopFullscreen));
+        });
+    invoke([&window]() { static_cast<void>(window.GetDecoration()); });
+    invoke(
+        [&window]()
+        {
+            static_cast<void>(window.SetDecoration(
+                pond::platform::WindowDecoration::Borderless));
+        });
+    invoke([&window]() { static_cast<void>(window.GetState()); });
+    invoke([&window]() { static_cast<void>(window.Minimize()); });
+    invoke([&window]() { static_cast<void>(window.Maximize()); });
+    invoke([&window]() { static_cast<void>(window.Restore()); });
+    invoke([&window]() { static_cast<void>(window.IsVisible()); });
+    invoke([&window]() { static_cast<void>(window.IsResizable()); });
+    invoke([&window]() { static_cast<void>(window.SetResizable(false)); });
+    invoke([&window]() { static_cast<void>(window.IsFocused()); });
+    invoke([&window]() { static_cast<void>(window.IsAlwaysOnTop()); });
+    invoke([&window]() { static_cast<void>(window.SetAlwaysOnTop(true)); });
+    return rejectedCalls;
 }
 
 void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackend& fake)
@@ -321,6 +453,26 @@ void FakeQuit(void* context)
     ++fake.tickCalls;
     fake.calls.emplace_back("ticks");
     return fake.ticks;
+}
+
+[[nodiscard]] bool FakePollEvent(void* context, SDL_Event* event)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    ++fake.pollEventCalls;
+    fake.calls.emplace_back("poll-event");
+    if (fake.eventQueue.empty())
+    {
+        return false;
+    }
+
+    QueuedBackendEvent queued = std::move(fake.eventQueue.front());
+    fake.eventQueue.pop_front();
+    if (queued.connectedDisplayIds.has_value())
+    {
+        fake.connectedDisplayIds = std::move(*queued.connectedDisplayIds);
+    }
+    *event = queued.event;
+    return true;
 }
 
 [[nodiscard]] void* FakeCreateWindow(void* context,
@@ -502,7 +654,29 @@ void FakeDestroyWindow(void* context, void* window)
     {
         return false;
     }
-    GetFakeWindow(window).visible = true;
+    FakeWindow& fakeWindow = GetFakeWindow(window);
+    if (fakeWindow.visible)
+    {
+        return true;
+    }
+    if (fakeWindow.pendingMinimized)
+    {
+        fakeWindow.minimized = true;
+        fakeWindow.maximized = false;
+    }
+    else if (fakeWindow.pendingMaximized)
+    {
+        fakeWindow.minimized = false;
+        fakeWindow.maximized = true;
+    }
+    else
+    {
+        fakeWindow.minimized = false;
+        fakeWindow.maximized = false;
+    }
+    fakeWindow.pendingMinimized = false;
+    fakeWindow.pendingMaximized = false;
+    fakeWindow.visible = true;
     return true;
 }
 
@@ -514,8 +688,179 @@ void FakeDestroyWindow(void* context, void* window)
     {
         return false;
     }
-    GetFakeWindow(window).visible = false;
+    FakeWindow& fakeWindow = GetFakeWindow(window);
+    if (fakeWindow.visible)
+    {
+        fakeWindow.pendingMinimized = fakeWindow.minimized;
+        fakeWindow.pendingMaximized = fakeWindow.maximized;
+        fakeWindow.visible = false;
+    }
     return true;
+}
+
+[[nodiscard]] bool FakeGetWindowProperties(
+    void* context, void* window, BackendWindowProperties* properties)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("get-window-properties");
+    if (FailWindowOperation(fake, "get-window-properties"))
+    {
+        return false;
+    }
+
+    const FakeWindow& fakeWindow = GetFakeWindow(window);
+    *properties = BackendWindowProperties{
+        .desktopFullscreen = fakeWindow.desktopFullscreen,
+        .hidden = !fakeWindow.visible,
+        .borderless = fakeWindow.borderless,
+        .resizable = fakeWindow.resizable,
+        .minimized = fakeWindow.minimized || fakeWindow.pendingMinimized,
+        .maximized = fakeWindow.maximized || fakeWindow.pendingMaximized,
+        .inputFocus = fakeWindow.inputFocus,
+        .alwaysOnTop = fakeWindow.alwaysOnTop};
+    return true;
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeSetFullscreenModeToDesktop(
+    void* context, void*)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-window-fullscreen-mode-to-desktop");
+    return GetWindowOperationResult(fake,
+                                    "set-window-fullscreen-mode-to-desktop");
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeSetWindowFullscreen(
+    void* context, void* window, bool fullscreen)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-window-fullscreen");
+    const BackendWindowOperationResult result =
+        GetWindowOperationResult(fake, "set-window-fullscreen");
+    if (result == BackendWindowOperationResult::Succeeded &&
+        fake.applyWindowOperationEffects)
+    {
+        GetFakeWindow(window).desktopFullscreen = fullscreen;
+    }
+    return result;
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeSetWindowBordered(
+    void* context, void* window, bool bordered)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-window-bordered");
+    const BackendWindowOperationResult result =
+        GetWindowOperationResult(fake, "set-window-bordered");
+    if (result == BackendWindowOperationResult::Succeeded &&
+        fake.applyWindowOperationEffects)
+    {
+        GetFakeWindow(window).borderless = !bordered;
+    }
+    return result;
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeSetWindowResizable(
+    void* context, void* window, bool resizable)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-window-resizable");
+    const BackendWindowOperationResult result =
+        GetWindowOperationResult(fake, "set-window-resizable");
+    if (result == BackendWindowOperationResult::Succeeded &&
+        fake.applyWindowOperationEffects)
+    {
+        GetFakeWindow(window).resizable = resizable;
+    }
+    return result;
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeSetWindowAlwaysOnTop(
+    void* context, void* window, bool alwaysOnTop)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-window-always-on-top");
+    const BackendWindowOperationResult result =
+        GetWindowOperationResult(fake, "set-window-always-on-top");
+    if (result == BackendWindowOperationResult::Succeeded &&
+        fake.applyWindowOperationEffects)
+    {
+        GetFakeWindow(window).alwaysOnTop = alwaysOnTop;
+    }
+    return result;
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeMinimizeWindow(
+    void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("minimize-window");
+    const BackendWindowOperationResult result =
+        GetWindowOperationResult(fake, "minimize-window");
+    if (result == BackendWindowOperationResult::Succeeded &&
+        fake.applyWindowOperationEffects)
+    {
+        FakeWindow& fakeWindow = GetFakeWindow(window);
+        if (fakeWindow.visible)
+        {
+            fakeWindow.minimized = true;
+            fakeWindow.maximized = false;
+        }
+        else
+        {
+            fakeWindow.pendingMinimized = true;
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeMaximizeWindow(
+    void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("maximize-window");
+    const BackendWindowOperationResult result =
+        GetWindowOperationResult(fake, "maximize-window");
+    if (result == BackendWindowOperationResult::Succeeded &&
+        fake.applyWindowOperationEffects)
+    {
+        FakeWindow& fakeWindow = GetFakeWindow(window);
+        if (fakeWindow.visible)
+        {
+            fakeWindow.minimized = false;
+            fakeWindow.maximized = true;
+        }
+        else
+        {
+            fakeWindow.pendingMaximized = true;
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] BackendWindowOperationResult FakeRestoreWindow(
+    void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("restore-window");
+    const BackendWindowOperationResult result =
+        GetWindowOperationResult(fake, "restore-window");
+    if (result == BackendWindowOperationResult::Succeeded &&
+        fake.applyWindowOperationEffects)
+    {
+        FakeWindow& fakeWindow = GetFakeWindow(window);
+        if (fakeWindow.visible)
+        {
+            fakeWindow.minimized = false;
+            fakeWindow.maximized = false;
+        }
+        else
+        {
+            fakeWindow.pendingMinimized = false;
+            fakeWindow.pendingMaximized = false;
+        }
+    }
+    return result;
 }
 
 [[nodiscard]] bool FakeEnumerateDisplays(
@@ -653,7 +998,8 @@ void FakeDestroyWindow(void* context, void* window)
         FakeResetHint,
         FakeInitializeVideo,
         FakeQuit,
-        FakeGetTicksNanoseconds};
+        FakeGetTicksNanoseconds,
+        FakePollEvent};
 }
 
 [[nodiscard]] PlatformWindowBackend MakeWindowBackend(FakeRuntimeBackend& fake)
@@ -672,7 +1018,16 @@ void FakeDestroyWindow(void* context, void* window)
         FakeSetWindowSize,
         FakeSetWindowMinimumSize,
         FakeShowWindow,
-        FakeHideWindow};
+        FakeHideWindow,
+        FakeGetWindowProperties,
+        FakeSetFullscreenModeToDesktop,
+        FakeSetWindowFullscreen,
+        FakeSetWindowBordered,
+        FakeSetWindowResizable,
+        FakeSetWindowAlwaysOnTop,
+        FakeMinimizeWindow,
+        FakeMaximizeWindow,
+        FakeRestoreWindow};
 }
 
 [[nodiscard]] PlatformDisplayBackend MakeDisplayBackend(FakeRuntimeBackend& fake)
@@ -1527,6 +1882,667 @@ TEST_F(PlatformRuntimeBackendTests, RejectsWindowUseFromTheWrongThread)
     EXPECT_EQ(m_fake.calls.size(), callCount);
 }
 
+TEST_F(PlatformRuntimeBackendTests, ExposesIndependentOrthogonalWindowProperties)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    desc.resizable = true;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    auto presentation = window.GetPresentation();
+    ASSERT_TRUE(presentation.HasValue());
+    EXPECT_EQ(presentation.GetValue(),
+              pond::platform::WindowPresentation::Windowed);
+    auto decoration = window.GetDecoration();
+    ASSERT_TRUE(decoration.HasValue());
+    EXPECT_EQ(decoration.GetValue(), pond::platform::WindowDecoration::System);
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+    auto visible = window.IsVisible();
+    ASSERT_TRUE(visible.HasValue());
+    EXPECT_FALSE(visible.GetValue());
+    auto resizable = window.IsResizable();
+    ASSERT_TRUE(resizable.HasValue());
+    EXPECT_TRUE(resizable.GetValue());
+    auto focused = window.IsFocused();
+    ASSERT_TRUE(focused.HasValue());
+    EXPECT_FALSE(focused.GetValue());
+    auto alwaysOnTop = window.IsAlwaysOnTop();
+    ASSERT_TRUE(alwaysOnTop.HasValue());
+    EXPECT_FALSE(alwaysOnTop.GetValue());
+
+    FakeWindow& backendWindow = m_fake.windows.front();
+    backendWindow.inputFocus = true;
+    focused = window.IsFocused();
+    ASSERT_TRUE(focused.HasValue());
+    EXPECT_TRUE(focused.GetValue());
+
+    ASSERT_TRUE(window.SetPresentation(
+                           pond::platform::WindowPresentation::DesktopFullscreen)
+                    .HasValue());
+    presentation = window.GetPresentation();
+    ASSERT_TRUE(presentation.HasValue());
+    EXPECT_EQ(presentation.GetValue(),
+              pond::platform::WindowPresentation::DesktopFullscreen);
+    EXPECT_TRUE(backendWindow.desktopFullscreen);
+    EXPECT_TRUE(backendWindow.inputFocus);
+
+    ASSERT_TRUE(window.SetPresentation(pond::platform::WindowPresentation::Windowed)
+                    .HasValue());
+    ASSERT_TRUE(
+        window.SetDecoration(pond::platform::WindowDecoration::Borderless)
+            .HasValue());
+    decoration = window.GetDecoration();
+    ASSERT_TRUE(decoration.HasValue());
+    EXPECT_EQ(decoration.GetValue(),
+              pond::platform::WindowDecoration::Borderless);
+
+    ASSERT_TRUE(window.SetResizable(false).HasValue());
+    resizable = window.IsResizable();
+    ASSERT_TRUE(resizable.HasValue());
+    EXPECT_FALSE(resizable.GetValue());
+    ASSERT_TRUE(window.SetAlwaysOnTop(true).HasValue());
+    alwaysOnTop = window.IsAlwaysOnTop();
+    ASSERT_TRUE(alwaysOnTop.HasValue());
+    EXPECT_TRUE(alwaysOnTop.GetValue());
+
+    ASSERT_TRUE(window.Minimize().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Minimized);
+    ASSERT_TRUE(window.Restore().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+
+    ASSERT_TRUE(window.SetResizable(true).HasValue());
+    ASSERT_TRUE(window.Maximize().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Maximized);
+    ASSERT_TRUE(window.Restore().HasValue());
+
+    visible = window.IsVisible();
+    ASSERT_TRUE(visible.HasValue());
+    EXPECT_FALSE(visible.GetValue());
+    decoration = window.GetDecoration();
+    ASSERT_TRUE(decoration.HasValue());
+    EXPECT_EQ(decoration.GetValue(),
+              pond::platform::WindowDecoration::Borderless);
+    focused = window.IsFocused();
+    ASSERT_TRUE(focused.HasValue());
+    EXPECT_TRUE(focused.GetValue());
+    alwaysOnTop = window.IsAlwaysOnTop();
+    ASSERT_TRUE(alwaysOnTop.HasValue());
+    EXPECT_TRUE(alwaysOnTop.GetValue());
+
+    ASSERT_TRUE(window.Show().HasValue());
+    visible = window.IsVisible();
+    ASSERT_TRUE(visible.HasValue());
+    EXPECT_TRUE(visible.GetValue());
+    ASSERT_TRUE(window.Hide().HasValue());
+    visible = window.IsVisible();
+    ASSERT_TRUE(visible.HasValue());
+    EXPECT_FALSE(visible.GetValue());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       NormalizesOppositeStateTransitionsForHiddenWindows)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    ASSERT_TRUE(window.Maximize().HasValue());
+    std::size_t firstCall = m_fake.calls.size();
+    ASSERT_TRUE(window.Minimize().HasValue());
+    const std::array<std::string_view, 3> minimizeCalls{
+        "get-window-properties", "restore-window", "minimize-window"};
+    ASSERT_GE(m_fake.calls.size(), firstCall + minimizeCalls.size());
+    EXPECT_TRUE(std::ranges::equal(
+        minimizeCalls,
+        std::span{m_fake.calls}.subspan(firstCall, minimizeCalls.size())));
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Minimized);
+
+    firstCall = m_fake.calls.size();
+    ASSERT_TRUE(window.Maximize().HasValue());
+    const std::array<std::string_view, 3> maximizeCalls{
+        "get-window-properties", "restore-window", "maximize-window"};
+    ASSERT_GE(m_fake.calls.size(), firstCall + maximizeCalls.size());
+    EXPECT_TRUE(std::ranges::equal(
+        maximizeCalls,
+        std::span{m_fake.calls}.subspan(firstCall, maximizeCalls.size())));
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Maximized);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       LastHiddenStateRequestWinsAfterHidingAStatefulVisibleWindow)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    FakeWindow& backendWindow = m_fake.windows.front();
+
+    ASSERT_TRUE(window.Show().HasValue());
+    ASSERT_TRUE(window.Maximize().HasValue());
+    ASSERT_TRUE(backendWindow.maximized);
+    ASSERT_FALSE(backendWindow.pendingMaximized);
+    ASSERT_TRUE(window.Hide().HasValue());
+    ASSERT_TRUE(backendWindow.maximized);
+    ASSERT_TRUE(backendWindow.pendingMaximized);
+
+    ASSERT_TRUE(window.Minimize().HasValue());
+    ASSERT_TRUE(backendWindow.maximized);
+    ASSERT_TRUE(backendWindow.pendingMinimized);
+    ASSERT_FALSE(backendWindow.pendingMaximized);
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Minimized);
+
+    ASSERT_TRUE(window.Restore().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+    ASSERT_TRUE(window.Show().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+
+    ASSERT_TRUE(window.Minimize().HasValue());
+    ASSERT_TRUE(backendWindow.minimized);
+    ASSERT_FALSE(backendWindow.pendingMinimized);
+    ASSERT_TRUE(window.Hide().HasValue());
+    ASSERT_TRUE(backendWindow.minimized);
+    ASSERT_TRUE(backendWindow.pendingMinimized);
+
+    ASSERT_TRUE(window.Maximize().HasValue());
+    ASSERT_TRUE(backendWindow.minimized);
+    ASSERT_FALSE(backendWindow.pendingMinimized);
+    ASSERT_TRUE(backendWindow.pendingMaximized);
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Maximized);
+
+    ASSERT_TRUE(window.Restore().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+    ASSERT_TRUE(window.Show().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       SuccessfulRequestsDoNotOptimisticallyChangeObservedProperties)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    ASSERT_TRUE(window.Show().HasValue());
+    m_fake.applyWindowOperationEffects = false;
+
+    ASSERT_TRUE(window.SetPresentation(
+                           pond::platform::WindowPresentation::DesktopFullscreen)
+                    .HasValue());
+    auto presentation = window.GetPresentation();
+    ASSERT_TRUE(presentation.HasValue());
+    EXPECT_EQ(presentation.GetValue(),
+              pond::platform::WindowPresentation::Windowed);
+
+    ASSERT_TRUE(
+        window.SetDecoration(pond::platform::WindowDecoration::Borderless)
+            .HasValue());
+    auto decoration = window.GetDecoration();
+    ASSERT_TRUE(decoration.HasValue());
+    EXPECT_EQ(decoration.GetValue(), pond::platform::WindowDecoration::System);
+
+    ASSERT_TRUE(window.SetResizable(false).HasValue());
+    auto resizable = window.IsResizable();
+    ASSERT_TRUE(resizable.HasValue());
+    EXPECT_TRUE(resizable.GetValue());
+
+    ASSERT_TRUE(window.SetAlwaysOnTop(true).HasValue());
+    auto alwaysOnTop = window.IsAlwaysOnTop();
+    ASSERT_TRUE(alwaysOnTop.HasValue());
+    EXPECT_FALSE(alwaysOnTop.GetValue());
+
+    ASSERT_TRUE(window.Minimize().HasValue());
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+    ASSERT_TRUE(window.Maximize().HasValue());
+    state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RejectsForgedWindowPropertyEnumsWithoutBackendCalls)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto expectInvalidArgument =
+        [](const pond::core::VoidResult& result)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::InvalidArgument));
+        };
+
+    const std::size_t callCount = m_fake.calls.size();
+    expectInvalidArgument(window.SetPresentation(
+        static_cast<pond::platform::WindowPresentation>(0xFF)));
+    EXPECT_EQ(m_fake.calls.size(), callCount);
+    expectInvalidArgument(window.SetDecoration(
+        static_cast<pond::platform::WindowDecoration>(0xFF)));
+    EXPECT_EQ(m_fake.calls.size(), callCount);
+}
+
+TEST_F(PlatformRuntimeBackendTests, AvoidsBackendMutationsForIdempotentStateRequests)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto countCalls =
+        [this](std::string_view operation)
+        {
+            return std::ranges::count(m_fake.calls, operation);
+        };
+
+    ASSERT_TRUE(
+        window.SetPresentation(pond::platform::WindowPresentation::Windowed)
+            .HasValue());
+    ASSERT_TRUE(window.SetDecoration(pond::platform::WindowDecoration::System)
+                    .HasValue());
+    ASSERT_TRUE(window.SetResizable(true).HasValue());
+    ASSERT_TRUE(window.SetAlwaysOnTop(false).HasValue());
+    ASSERT_TRUE(window.Restore().HasValue());
+    EXPECT_EQ(countCalls("set-window-fullscreen-mode-to-desktop"), 0);
+    EXPECT_EQ(countCalls("set-window-fullscreen"), 0);
+    EXPECT_EQ(countCalls("set-window-bordered"), 0);
+    EXPECT_EQ(countCalls("set-window-resizable"), 0);
+    EXPECT_EQ(countCalls("set-window-always-on-top"), 0);
+    EXPECT_EQ(countCalls("restore-window"), 0);
+
+    ASSERT_TRUE(window.Minimize().HasValue());
+    EXPECT_EQ(countCalls("minimize-window"), 1);
+    ASSERT_TRUE(window.Minimize().HasValue());
+    EXPECT_EQ(countCalls("minimize-window"), 1);
+
+    ASSERT_TRUE(window.Restore().HasValue());
+    const auto restoreCallCount = countCalls("restore-window");
+    ASSERT_TRUE(window.Restore().HasValue());
+    EXPECT_EQ(countCalls("restore-window"), restoreCallCount);
+
+    ASSERT_TRUE(window.Maximize().HasValue());
+    EXPECT_EQ(countCalls("maximize-window"), 1);
+    ASSERT_TRUE(window.Maximize().HasValue());
+    EXPECT_EQ(countCalls("maximize-window"), 1);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       ReportsNonResizableAndBackendUnsupportedWindowOperations)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    desc.resizable = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto expectUnsupported =
+        [](const pond::core::VoidResult& result, std::string_view operation)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::Unsupported));
+            EXPECT_NE(result.GetError().GetMessage().find(operation),
+                      std::string_view::npos);
+        };
+    const auto configureUnsupported =
+        [this](std::string operation)
+        {
+            m_fake.unsupportedWindowOperation = std::move(operation);
+            m_fake.unsupportedWindowOperationsRemaining = 1;
+        };
+
+    const auto maximizeCallsBefore =
+        std::ranges::count(m_fake.calls, std::string_view{"maximize-window"});
+    expectUnsupported(window.Maximize(), "non-resizable");
+    EXPECT_EQ(std::ranges::count(m_fake.calls,
+                                 std::string_view{"maximize-window"}),
+              maximizeCallsBefore);
+
+    FakeWindow& backendWindow = m_fake.windows.front();
+    backendWindow.resizable = true;
+
+    configureUnsupported("minimize-window");
+    auto result = window.Minimize();
+    expectUnsupported(result, "SDL_MinimizeWindow");
+    EXPECT_NE(result.GetError().GetMessage().find(
+                  "synthetic minimize-window unsupported"),
+              std::string_view::npos);
+
+    configureUnsupported("maximize-window");
+    result = window.Maximize();
+    expectUnsupported(result, "SDL_MaximizeWindow");
+    EXPECT_NE(result.GetError().GetMessage().find(
+                  "synthetic maximize-window unsupported"),
+              std::string_view::npos);
+
+    backendWindow.minimized = true;
+    configureUnsupported("restore-window");
+    result = window.Restore();
+    expectUnsupported(result, "SDL_RestoreWindow");
+    EXPECT_NE(result.GetError().GetMessage().find(
+                  "synthetic restore-window unsupported"),
+              std::string_view::npos);
+}
+
+TEST_F(PlatformRuntimeBackendTests, ReportsTypedUnsupportedPropertyRequests)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto configureUnsupported =
+        [this](std::string operation)
+        {
+            m_fake.unsupportedWindowOperation = std::move(operation);
+            m_fake.unsupportedWindowOperationsRemaining = 1;
+        };
+    const auto expectUnsupported =
+        [](const pond::core::VoidResult& result, std::string_view operation)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::Unsupported));
+            EXPECT_NE(result.GetError().GetMessage().find(operation),
+                      std::string_view::npos);
+            EXPECT_NE(result.GetError().GetMessage().find("window 1"),
+                      std::string_view::npos);
+        };
+
+    configureUnsupported("set-window-fullscreen-mode-to-desktop");
+    expectUnsupported(
+        window.SetPresentation(
+            pond::platform::WindowPresentation::DesktopFullscreen),
+        "SDL_SetWindowFullscreenMode");
+
+    configureUnsupported("set-window-fullscreen");
+    expectUnsupported(
+        window.SetPresentation(
+            pond::platform::WindowPresentation::DesktopFullscreen),
+        "SDL_SetWindowFullscreen");
+
+    configureUnsupported("set-window-bordered");
+    expectUnsupported(
+        window.SetDecoration(pond::platform::WindowDecoration::Borderless),
+        "SDL_SetWindowBordered");
+    configureUnsupported("set-window-resizable");
+    expectUnsupported(window.SetResizable(false), "SDL_SetWindowResizable");
+    configureUnsupported("set-window-always-on-top");
+    expectUnsupported(window.SetAlwaysOnTop(true), "SDL_SetWindowAlwaysOnTop");
+
+    FakeWindow& backendWindow = m_fake.windows.front();
+    backendWindow.desktopFullscreen = true;
+    const std::size_t callCount = m_fake.calls.size();
+    expectUnsupported(
+        window.SetDecoration(pond::platform::WindowDecoration::Borderless),
+        "decoration");
+    EXPECT_EQ(m_fake.calls.size(), callCount + 1);
+    expectUnsupported(window.SetResizable(false), "resizability");
+    EXPECT_EQ(m_fake.calls.size(), callCount + 2);
+}
+
+TEST_F(PlatformRuntimeBackendTests, ReportsContextualWindowPropertyFailures)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto configureFailure =
+        [this](std::string operation)
+        {
+            m_fake.failingWindowOperation = std::move(operation);
+            m_fake.windowFailuresRemaining = 1;
+        };
+    const auto expectBackendFailure =
+        [](const auto& result, std::string_view operation)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::BackendFailure));
+            EXPECT_NE(result.GetError().GetMessage().find(operation),
+                      std::string_view::npos);
+            EXPECT_NE(result.GetError().GetMessage().find("window 1"),
+                      std::string_view::npos);
+        };
+
+    configureFailure("set-window-fullscreen-mode-to-desktop");
+    expectBackendFailure(
+        window.SetPresentation(
+            pond::platform::WindowPresentation::DesktopFullscreen),
+        "SDL_SetWindowFullscreenMode");
+    configureFailure("set-window-fullscreen");
+    expectBackendFailure(
+        window.SetPresentation(
+            pond::platform::WindowPresentation::DesktopFullscreen),
+        "SDL_SetWindowFullscreen");
+    configureFailure("set-window-bordered");
+    expectBackendFailure(
+        window.SetDecoration(pond::platform::WindowDecoration::Borderless),
+        "SDL_SetWindowBordered");
+    configureFailure("set-window-resizable");
+    expectBackendFailure(window.SetResizable(false), "SDL_SetWindowResizable");
+    configureFailure("set-window-always-on-top");
+    expectBackendFailure(window.SetAlwaysOnTop(true), "SDL_SetWindowAlwaysOnTop");
+    configureFailure("minimize-window");
+    expectBackendFailure(window.Minimize(), "SDL_MinimizeWindow");
+    configureFailure("maximize-window");
+    expectBackendFailure(window.Maximize(), "SDL_MaximizeWindow");
+
+    m_fake.windows.front().minimized = true;
+    configureFailure("restore-window");
+    expectBackendFailure(window.Restore(), "SDL_RestoreWindow");
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       ReportsPropertyQueryFailuresAndContradictoryWindowState)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto configurePropertiesFailure =
+        [this]()
+        {
+            m_fake.failingWindowOperation = "get-window-properties";
+            m_fake.windowFailuresRemaining = 1;
+        };
+    const auto expectPropertiesFailure =
+        [](const auto& result)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::BackendFailure));
+            EXPECT_NE(result.GetError().GetMessage().find("SDL_GetWindowFlags"),
+                      std::string_view::npos);
+            EXPECT_NE(result.GetError().GetMessage().find("window 1"),
+                      std::string_view::npos);
+        };
+
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.GetPresentation());
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.GetDecoration());
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.GetState());
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.IsVisible());
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.IsResizable());
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.IsFocused());
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.IsAlwaysOnTop());
+    configurePropertiesFailure();
+    expectPropertiesFailure(window.SetAlwaysOnTop(true));
+
+    FakeWindow& backendWindow = m_fake.windows.front();
+    backendWindow.minimized = true;
+    backendWindow.maximized = true;
+    auto state = window.GetState();
+    ASSERT_FALSE(state.HasValue());
+    EXPECT_EQ(state.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(state.GetError().GetMessage().find("contradictory"),
+              std::string_view::npos);
+
+    const auto minimizeCalls =
+        std::ranges::count(m_fake.calls, std::string_view{"minimize-window"});
+    const auto maximizeCalls =
+        std::ranges::count(m_fake.calls, std::string_view{"maximize-window"});
+    const auto restoreCalls =
+        std::ranges::count(m_fake.calls, std::string_view{"restore-window"});
+    const auto expectContradictory =
+        [](const pond::core::VoidResult& result)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::BackendFailure));
+            EXPECT_NE(result.GetError().GetMessage().find("contradictory"),
+                      std::string_view::npos);
+        };
+    expectContradictory(window.Minimize());
+    expectContradictory(window.Maximize());
+    expectContradictory(window.Restore());
+    EXPECT_EQ(std::ranges::count(m_fake.calls,
+                                 std::string_view{"minimize-window"}),
+              minimizeCalls);
+    EXPECT_EQ(std::ranges::count(m_fake.calls,
+                                 std::string_view{"maximize-window"}),
+              maximizeCalls);
+    EXPECT_EQ(std::ranges::count(m_fake.calls,
+                                 std::string_view{"restore-window"}),
+              restoreCalls);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       GuardsEveryWindowStateApiAfterMoveAndAcrossThreads)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    pond::platform::Window movedWindow = std::move(window);
+
+    const std::size_t callCount = m_fake.calls.size();
+    EXPECT_EQ(CountRejectedWindowStateCalls(window), 14);
+    EXPECT_EQ(m_fake.calls.size(), callCount);
+
+    std::atomic_int rejectedCalls{};
+    std::thread worker{
+        [&movedWindow, &rejectedCalls]()
+        {
+            rejectedCalls.store(CountRejectedWindowStateCalls(movedWindow));
+        }};
+    worker.join();
+
+    EXPECT_EQ(rejectedCalls.load(), 14);
+    EXPECT_EQ(m_fake.calls.size(), callCount);
+}
+
 TEST_F(PlatformRuntimeBackendTests, EnumeratesOwnedDisplaySnapshots)
 {
     m_fake.connectedDisplayIds = {41, 73};
@@ -2066,5 +3082,537 @@ TEST_F(PlatformRuntimeBackendTests, GuardsNewWindowDisplayApisAfterMoveAndAcross
 
     EXPECT_EQ(rejectedCalls.load(), 3);
     EXPECT_EQ(m_fake.calls.size(), callCount);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       PollingContinuesPastIgnoredEventsUntilAProjectEventIsAvailable)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    SDL_Event unknown{};
+    unknown.type = SDL_EVENT_USER;
+    unknown.common.timestamp = 100;
+    m_fake.eventQueue.push_back({.event = unknown});
+
+    SDL_Event deferred{};
+    deferred.key.type = SDL_EVENT_KEY_DOWN;
+    deferred.key.timestamp = 200;
+    deferred.key.windowID = 999;
+    m_fake.eventQueue.push_back({.event = deferred});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(SDL_EVENT_WINDOW_RESIZED, 999, -1, 480,
+                                        300)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_CLOSE_REQUESTED, 999, 0, 0, 400)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_MOVED, 999, 0, 0,
+                                         500)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedQuitEvent(
+             std::numeric_limits<std::uint64_t>::max())});
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(700)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{700}}});
+    EXPECT_TRUE(m_fake.eventQueue.empty());
+    EXPECT_EQ(m_fake.pollEventCalls, 7);
+
+    EXPECT_FALSE(runtime.PollEvent().has_value());
+    EXPECT_EQ(m_fake.pollEventCalls, 8);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       PollingReturnsEmptyOnlyAfterDrainingEveryIgnoredEvent)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    SDL_Event unknown{};
+    unknown.type = SDL_EVENT_USER;
+    unknown.common.timestamp = 100;
+    m_fake.eventQueue.push_back({.event = unknown});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_CLOSE_REQUESTED, 404, 0, 0, 200)});
+
+    EXPECT_FALSE(runtime.PollEvent().has_value());
+    EXPECT_TRUE(m_fake.eventQueue.empty());
+    EXPECT_EQ(m_fake.pollEventCalls, 3);
+}
+
+TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedEventsForMultipleWindows)
+{
+    m_fake.scriptedBackendWindowIds = {41, 73};
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto firstResult = runtime.CreateWindow(desc);
+    auto secondResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(firstResult.HasValue());
+    ASSERT_TRUE(secondResult.HasValue());
+    pond::platform::Window first = std::move(firstResult).GetValue();
+    pond::platform::Window second = std::move(secondResult).GetValue();
+    ASSERT_EQ(first.GetId(), pond::platform::WindowId{1});
+    ASSERT_EQ(second.GetId(), pond::platform::WindowId{2});
+
+    m_fake.eventQueue.push_back(
+        {.event =
+             MakeQueuedWindowEvent(SDL_EVENT_WINDOW_MOVED, 73, -250, 90, 100)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_FOCUS_GAINED, 41, 0, 0, 200)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_CLOSE_REQUESTED, 73, 0, 0, 300)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowMovedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = second.GetId(),
+            .position = {-250, 90}});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowFocusChangedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}},
+            .windowId = first.GetId(),
+            .focused = true});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowCloseRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}},
+            .windowId = second.GetId()});
+    EXPECT_EQ(m_fake.destroyWindowCalls, 0);
+    EXPECT_EQ(first.GetId(), pond::platform::WindowId{1});
+    EXPECT_EQ(second.GetId(), pond::platform::WindowId{2});
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       KeepsGlobalQuitSeparateFromWindowCloseWithoutDestroyingTheWindow)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    const std::uint32_t backendWindowId = m_fake.windows.front().backendId;
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_CLOSE_REQUESTED, backendWindowId, 0, 0, 100)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(200)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowCloseRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = window.GetId()});
+    EXPECT_EQ(m_fake.destroyWindowCalls, 0);
+    EXPECT_EQ(window.GetId(), pond::platform::WindowId{1});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}}});
+    EXPECT_EQ(m_fake.destroyWindowCalls, 0);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       PollingShownInvalidatesTheHiddenStateDisambiguationMarker)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    const std::uint32_t backendWindowId = m_fake.windows.front().backendId;
+
+    ASSERT_TRUE(window.Maximize().HasValue());
+    FakeWindow& backendWindow = m_fake.windows.front();
+    ASSERT_TRUE(backendWindow.pendingMaximized);
+
+    backendWindow.visible = true;
+    backendWindow.maximized = true;
+    backendWindow.pendingMaximized = false;
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_SHOWN, backendWindowId, 0, 0, 100)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowVisibilityChangedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = window.GetId(),
+            .visible = true});
+
+    backendWindow.visible = false;
+    backendWindow.maximized = false;
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       IgnoresDestroyedWindowEventsAndDoesNotReuseProjectWindowIds)
+{
+    m_fake.scriptedBackendWindowIds = {55, 55};
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto firstResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(firstResult.HasValue());
+    std::optional<pond::platform::Window> first;
+    first.emplace(std::move(firstResult).GetValue());
+    const pond::platform::WindowId firstId = first->GetId();
+    first.reset();
+    ASSERT_EQ(m_fake.destroyWindowCalls, 1);
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_CLOSE_REQUESTED, 55, 0, 0, 100)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(200)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}}});
+    EXPECT_EQ(m_fake.pollEventCalls, 2);
+
+    auto secondResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(secondResult.HasValue());
+    pond::platform::Window second = std::move(secondResult).GetValue();
+    EXPECT_EQ(second.GetId(), pond::platform::WindowId{2});
+    EXPECT_NE(second.GetId(), firstId);
+
+    m_fake.eventQueue.push_back(
+        {.event =
+             MakeQueuedWindowEvent(SDL_EVENT_WINDOW_MOVED, 55, 8, 9, 300)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowMovedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}},
+            .windowId = second.GetId(),
+            .position = {8, 9}});
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RoutesDisplayAdditionRemovalAndReconnectionWithStableTombstones)
+{
+    m_fake.connectedDisplayIds = {10};
+    m_fake.displays.emplace(
+        10, FakeDisplay{10, "Original", {0, 0, 1280, 720},
+                        {0, 0, 1280, 680}, 60.0F,
+                        BackendDisplayOrientation::Landscape, 1.0F});
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto initialDisplays = runtime.EnumerateDisplays();
+    ASSERT_TRUE(initialDisplays.HasValue());
+    ASSERT_EQ(initialDisplays.GetValue().size(), 1U);
+    const pond::platform::DisplayId originalId =
+        initialDisplays.GetValue().front().id;
+    EXPECT_EQ(originalId, pond::platform::DisplayId{1});
+
+    m_fake.displays.emplace(
+        20, FakeDisplay{20, "Added", {1280, 0, 1920, 1080},
+                        {1280, 0, 1920, 1040}, 120.0F,
+                        BackendDisplayOrientation::Landscape, 1.5F});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_ADDED, 20, 0, 0,
+                                         100),
+         .connectedDisplayIds = std::vector<std::uint32_t>{10, 20}});
+    std::optional<pond::platform::PlatformEvent> added = runtime.PollEvent();
+    ASSERT_TRUE(added.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::DisplayAddedEvent>(*added));
+    const pond::platform::DisplayId addedId =
+        std::get<pond::platform::DisplayAddedEvent>(*added).displayId;
+    EXPECT_EQ(addedId, pond::platform::DisplayId{2});
+    EXPECT_TRUE(runtime.GetDisplayInfo(addedId).HasValue());
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_REMOVED, 10, 0, 0,
+                                         200),
+         .connectedDisplayIds = std::vector<std::uint32_t>{20}});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DisplayRemovedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}},
+            .displayId = originalId});
+
+    auto stale = runtime.GetDisplayInfo(originalId);
+    ASSERT_FALSE(stale.HasValue());
+    EXPECT_EQ(stale.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::NotFound));
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_ADDED, 10, 0, 0,
+                                         300),
+         .connectedDisplayIds = std::vector<std::uint32_t>{20, 10}});
+    std::optional<pond::platform::PlatformEvent> readded = runtime.PollEvent();
+    ASSERT_TRUE(readded.has_value());
+    ASSERT_TRUE(
+        std::holds_alternative<pond::platform::DisplayAddedEvent>(*readded));
+    const pond::platform::DisplayId readdedId =
+        std::get<pond::platform::DisplayAddedEvent>(*readded).displayId;
+    EXPECT_EQ(readdedId, pond::platform::DisplayId{3});
+    EXPECT_NE(readdedId, originalId);
+    EXPECT_TRUE(runtime.GetDisplayInfo(readdedId).HasValue());
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_REMOVED, 999, 0, 0,
+                                         400),
+         .connectedDisplayIds = std::vector<std::uint32_t>{20, 10}});
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(500)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{500}}});
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RoutesInitialDisplayEventsBeforeAnyDisplayQuery)
+{
+    m_fake.connectedDisplayIds = {31};
+    m_fake.displays.emplace(
+        31, FakeDisplay{31, "Initial", {0, 0, 1920, 1080},
+                        {0, 0, 1920, 1040}, 60.0F,
+                        BackendDisplayOrientation::Landscape, 1.0F});
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_MOVED, 31, 0, 0,
+                                         100)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DisplayMovedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .displayId = pond::platform::DisplayId{1}});
+
+    auto displays = runtime.EnumerateDisplays();
+    ASSERT_TRUE(displays.HasValue());
+    ASSERT_EQ(displays.GetValue().size(), 1U);
+    EXPECT_EQ(displays.GetValue().front().id, pond::platform::DisplayId{1});
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RetainsDisplayIdentityWhenAQueryObservesRemovalBeforePolling)
+{
+    m_fake.connectedDisplayIds = {10};
+    m_fake.displays.emplace(
+        10, FakeDisplay{10, "Original", {0, 0, 1280, 720},
+                        {0, 0, 1280, 680}, 60.0F,
+                        BackendDisplayOrientation::Landscape, 1.0F});
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto initialDisplays = runtime.EnumerateDisplays();
+    ASSERT_TRUE(initialDisplays.HasValue());
+    ASSERT_EQ(initialDisplays.GetValue().size(), 1U);
+    const pond::platform::DisplayId removedId =
+        initialDisplays.GetValue().front().id;
+
+    m_fake.connectedDisplayIds.clear();
+    auto disconnectedDisplays = runtime.EnumerateDisplays();
+    ASSERT_TRUE(disconnectedDisplays.HasValue());
+    EXPECT_TRUE(disconnectedDisplays.GetValue().empty());
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_REMOVED, 10, 0, 0,
+                                         100)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DisplayRemovedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .displayId = removedId});
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_REMOVED, 10, 0, 0,
+                                         200)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(300)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}}});
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       ReusesDisplayIdentityWhenAQueryObservesAdditionBeforePolling)
+{
+    m_fake.connectedDisplayIds = {10};
+    m_fake.displays.emplace(
+        10, FakeDisplay{10, "Original", {0, 0, 1280, 720},
+                        {0, 0, 1280, 680}, 60.0F,
+                        BackendDisplayOrientation::Landscape, 1.0F});
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto initialDisplays = runtime.EnumerateDisplays();
+    ASSERT_TRUE(initialDisplays.HasValue());
+    ASSERT_EQ(initialDisplays.GetValue().size(), 1U);
+
+    m_fake.displays.emplace(
+        20, FakeDisplay{20, "Added", {1280, 0, 1920, 1080},
+                        {1280, 0, 1920, 1040}, 120.0F,
+                        BackendDisplayOrientation::Landscape, 1.5F});
+    m_fake.connectedDisplayIds = {10, 20};
+    auto refreshedDisplays = runtime.EnumerateDisplays();
+    ASSERT_TRUE(refreshedDisplays.HasValue());
+    ASSERT_EQ(refreshedDisplays.GetValue().size(), 2U);
+    const pond::platform::DisplayId refreshedId =
+        refreshedDisplays.GetValue()[1].id;
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_ADDED, 20, 0, 0,
+                                         100)});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DisplayAddedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .displayId = refreshedId});
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RoutesOptionalWindowDestinationDisplaysThroughTheRuntimeRegistry)
+{
+    m_fake.connectedDisplayIds = {31};
+    m_fake.displays.emplace(
+        31, FakeDisplay{31, "Destination", {0, 0, 1920, 1080},
+                        {0, 0, 1920, 1040}, 60.0F,
+                        BackendDisplayOrientation::Landscape, 1.0F});
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto displays = runtime.EnumerateDisplays();
+    ASSERT_TRUE(displays.HasValue());
+    ASSERT_EQ(displays.GetValue().size(), 1U);
+    const pond::platform::DisplayId displayId = displays.GetValue().front().id;
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    const std::uint32_t backendWindowId = m_fake.windows.front().backendId;
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_DISPLAY_CHANGED, backendWindowId, 31, 0, 100)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_DISPLAY_CHANGED, backendWindowId, 999, 0, 200)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(
+             SDL_EVENT_WINDOW_DISPLAY_CHANGED, backendWindowId, 0, 0, 300)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowDisplayChangedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = window.GetId(),
+            .displayId = displayId});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowDisplayChangedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}},
+            .windowId = window.GetId(),
+            .displayId = std::nullopt});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowDisplayChangedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}},
+            .windowId = window.GetId(),
+            .displayId = std::nullopt});
+}
+
+TEST_F(PlatformRuntimeBackendTests, GuardsPollEventAfterMoveAndAcrossThreads)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    pond::platform::PlatformRuntime movedRuntime = std::move(runtime);
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(100)});
+
+    EXPECT_THROW(static_cast<void>(runtime.PollEvent()),
+                 pond::core::PonderException);
+    EXPECT_EQ(m_fake.pollEventCalls, 0);
+
+    std::atomic_bool rejected{false};
+    std::thread worker{
+        [&movedRuntime, &rejected]()
+        {
+            try
+            {
+                static_cast<void>(movedRuntime.PollEvent());
+            }
+            catch (const pond::core::PonderException&)
+            {
+                rejected.store(true);
+            }
+        }};
+    worker.join();
+    EXPECT_TRUE(rejected.load());
+    EXPECT_EQ(m_fake.pollEventCalls, 0);
+
+    ExpectPolledEvent(
+        movedRuntime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}}});
+    EXPECT_EQ(m_fake.pollEventCalls, 1);
 }
 } // namespace

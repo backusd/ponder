@@ -4,7 +4,7 @@
 #include "PlatformRuntimeState.hpp"
 #include "SdlError.hpp"
 #include "StringValidation.hpp"
-#include "WindowState.hpp"
+#include "WindowImpl.hpp"
 
 #include <ponder/core/Assert.hpp>
 #include <ponder/core/ScopeExit.hpp>
@@ -128,7 +128,7 @@ constexpr core::ErrorCode kUnsupportedCode =
 
 namespace detail
 {
-core::Result<std::unique_ptr<WindowState>> WindowState::Create(
+core::Result<std::unique_ptr<WindowImpl>> WindowImpl::Create(
     PlatformRuntimeState& runtime, const WindowDesc& desc)
 {
     runtime.VerifyOwnerThread("window creation");
@@ -136,7 +136,7 @@ core::Result<std::unique_ptr<WindowState>> WindowState::Create(
     core::VoidResult validation = Validate(desc);
     if (!validation.HasValue())
     {
-        return core::Result<std::unique_ptr<WindowState>>::FromError(
+        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
             std::move(validation).GetError());
     }
 
@@ -152,7 +152,7 @@ core::Result<std::unique_ptr<WindowState>> WindowState::Create(
     void* const nativeWindow = backend.create(backend.context, backendDesc);
     if (nativeWindow == nullptr)
     {
-        return core::Result<std::unique_ptr<WindowState>>::FromError(
+        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_CreateWindow", "window"));
     }
 
@@ -168,7 +168,7 @@ core::Result<std::unique_ptr<WindowState>> WindowState::Create(
             static_cast<int>(desc.minimumLogicalSize->width),
             static_cast<int>(desc.minimumLogicalSize->height)))
     {
-        return core::Result<std::unique_ptr<WindowState>>::FromError(
+        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_SetWindowMinimumSize",
                               "window creation"));
     }
@@ -177,12 +177,12 @@ core::Result<std::unique_ptr<WindowState>> WindowState::Create(
         backend.getId(backend.context, nativeWindow);
     if (backendWindowId == 0)
     {
-        return core::Result<std::unique_ptr<WindowState>>::FromError(
+        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowID",
                               "window creation"));
     }
 
-    auto state = std::make_unique<WindowState>(
+    auto state = std::make_unique<WindowImpl>(
         runtime, backend, nativeWindow, backendWindowId,
         desc.graphicsCompatibility);
     destroyNativeWindow.Dismiss();
@@ -194,23 +194,23 @@ core::Result<std::unique_ptr<WindowState>> WindowState::Create(
     {
         core::Error error = CaptureSdlFailure(
             kBackendFailureCode, "SDL_ShowWindow", "window creation");
-        return core::Result<std::unique_ptr<WindowState>>::FromError(
+        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
             std::move(error));
     }
 
-    return core::Result<std::unique_ptr<WindowState>>::FromValue(std::move(state));
+    return core::Result<std::unique_ptr<WindowImpl>>::FromValue(std::move(state));
 }
 
-WindowState::WindowState(PlatformRuntimeState& runtime, PlatformWindowBackend backend,
-                         void* nativeWindow, std::uint32_t backendWindowId,
-                         WindowGraphicsCompatibility graphicsCompatibility) noexcept
+WindowImpl::WindowImpl(PlatformRuntimeState& runtime, PlatformWindowBackend backend,
+                       void* nativeWindow, std::uint32_t backendWindowId,
+                       WindowGraphicsCompatibility graphicsCompatibility) noexcept
     : m_runtime(&runtime), m_backend(backend), m_nativeWindow(nativeWindow),
       m_backendWindowId(backendWindowId),
       m_graphicsCompatibility(graphicsCompatibility)
 {
 }
 
-WindowState::~WindowState() noexcept
+WindowImpl::~WindowImpl() noexcept
 {
     PONDER_VERIFY(m_runtime != nullptr, "Window runtime state is missing");
     m_runtime->VerifyOwnerThread("window destruction");
@@ -231,7 +231,7 @@ WindowState::~WindowState() noexcept
     }
 }
 
-void WindowState::CommitRegistration(WindowId id) noexcept
+void WindowImpl::CommitRegistration(WindowId id) noexcept
 {
     PONDER_VERIFY(id.IsValid(), "Cannot commit an invalid platform window ID");
     PONDER_VERIFY(!m_registered, "Platform window is already registered");
@@ -239,7 +239,12 @@ void WindowState::CommitRegistration(WindowId id) noexcept
     m_registered = true;
 }
 
-void WindowState::VerifyUsable(std::string_view operation) const
+void WindowImpl::ObserveShownEvent() noexcept
+{
+    m_hiddenStateRequest.reset();
+}
+
+void WindowImpl::VerifyUsable(std::string_view operation) const
 {
     PONDER_VERIFY(m_runtime != nullptr, "Cannot use a window without runtime state");
     PONDER_VERIFY(m_registered, "Cannot use an unregistered window");
@@ -247,24 +252,24 @@ void WindowState::VerifyUsable(std::string_view operation) const
     m_runtime->VerifyOwnerThread(operation);
 }
 
-std::string WindowState::GetErrorContext() const
+std::string WindowImpl::GetErrorContext() const
 {
     return "window " + std::to_string(m_id.GetValue());
 }
 
-WindowId WindowState::GetId() const
+WindowId WindowImpl::GetId() const
 {
     VerifyUsable("ID query");
     return m_id;
 }
 
-WindowGraphicsCompatibility WindowState::GetGraphicsCompatibility() const
+WindowGraphicsCompatibility WindowImpl::GetGraphicsCompatibility() const
 {
     VerifyUsable("graphics compatibility query");
     return m_graphicsCompatibility;
 }
 
-std::string WindowState::GetTitle() const
+std::string WindowImpl::GetTitle() const
 {
     VerifyUsable("title query");
     const char* const title = m_backend.getTitle(m_backend.context, m_nativeWindow);
@@ -272,7 +277,7 @@ std::string WindowState::GetTitle() const
     return std::string{title};
 }
 
-core::VoidResult WindowState::SetTitle(std::string_view title)
+core::VoidResult WindowImpl::SetTitle(std::string_view title)
 {
     VerifyUsable("title update");
     if (!IsValidUtf8WithoutEmbeddedNull(title))
@@ -294,7 +299,7 @@ core::VoidResult WindowState::SetTitle(std::string_view title)
     return core::VoidResult::Success();
 }
 
-core::Result<ScreenPosition> WindowState::GetPosition() const
+core::Result<ScreenPosition> WindowImpl::GetPosition() const
 {
     VerifyUsable("position query");
     int x{};
@@ -322,7 +327,7 @@ core::Result<ScreenPosition> WindowState::GetPosition() const
     return ScreenPosition{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
 }
 
-core::VoidResult WindowState::SetPosition(ScreenPosition position)
+core::VoidResult WindowImpl::SetPosition(ScreenPosition position)
 {
     VerifyUsable("position update");
     core::VoidResult validation = ValidatePosition(position);
@@ -343,7 +348,7 @@ core::VoidResult WindowState::SetPosition(ScreenPosition position)
     return core::VoidResult::Success();
 }
 
-core::Result<LogicalSize> WindowState::GetLogicalSize() const
+core::Result<LogicalSize> WindowImpl::GetLogicalSize() const
 {
     VerifyUsable("logical size query");
     int width{};
@@ -364,7 +369,7 @@ core::Result<LogicalSize> WindowState::GetLogicalSize() const
                        static_cast<std::uint32_t>(height)};
 }
 
-core::Result<PixelSize> WindowState::GetPixelSize() const
+core::Result<PixelSize> WindowImpl::GetPixelSize() const
 {
     VerifyUsable("pixel size query");
     int width{};
@@ -386,7 +391,7 @@ core::Result<PixelSize> WindowState::GetPixelSize() const
                      static_cast<std::uint32_t>(height)};
 }
 
-core::VoidResult WindowState::SetLogicalSize(LogicalSize size)
+core::VoidResult WindowImpl::SetLogicalSize(LogicalSize size)
 {
     VerifyUsable("logical size update");
     core::VoidResult validation =
@@ -408,7 +413,7 @@ core::VoidResult WindowState::SetLogicalSize(LogicalSize size)
     return core::VoidResult::Success();
 }
 
-core::VoidResult WindowState::Show()
+core::VoidResult WindowImpl::Show()
 {
     VerifyUsable("show");
     const std::string context = GetErrorContext();
@@ -418,10 +423,11 @@ core::VoidResult WindowState::Show()
             CaptureSdlFailure(kBackendFailureCode, "SDL_ShowWindow", context));
     }
 
+    m_hiddenStateRequest.reset();
     return core::VoidResult::Success();
 }
 
-core::VoidResult WindowState::Hide()
+core::VoidResult WindowImpl::Hide()
 {
     VerifyUsable("hide");
     const std::string context = GetErrorContext();
@@ -439,7 +445,7 @@ core::Result<Window> PlatformRuntime::CreateWindow(const WindowDesc& desc)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from PlatformRuntime");
 
-    auto stateResult = detail::WindowState::Create(*m_state, desc);
+    auto stateResult = detail::WindowImpl::Create(*m_state, desc);
     if (!stateResult.HasValue())
     {
         return core::Result<Window>::FromError(
@@ -449,7 +455,7 @@ core::Result<Window> PlatformRuntime::CreateWindow(const WindowDesc& desc)
     return Window{std::move(stateResult).GetValue()};
 }
 
-Window::Window(std::unique_ptr<detail::WindowState> state) noexcept
+Window::Window(std::unique_ptr<detail::WindowImpl> state) noexcept
     : m_state(std::move(state))
 {
 }

@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <vector>
 
+union SDL_Event;
+
 namespace pond::platform::detail
 {
 enum class ApplicationMetadataProperty : std::uint8_t
@@ -25,6 +27,25 @@ struct BackendWindowCreateDesc final
         WindowGraphicsCompatibility::Default};
 };
 
+struct BackendWindowProperties final
+{
+    bool desktopFullscreen{};
+    bool hidden{};
+    bool borderless{};
+    bool resizable{};
+    bool minimized{};
+    bool maximized{};
+    bool inputFocus{};
+    bool alwaysOnTop{};
+};
+
+enum class BackendWindowOperationResult : std::uint8_t
+{
+    Succeeded,
+    Unsupported,
+    Failed
+};
+
 struct PlatformWindowBackend final
 {
     void* context{};
@@ -41,6 +62,21 @@ struct PlatformWindowBackend final
     bool (*setMinimumSize)(void* context, void* window, int width, int height){};
     bool (*show)(void* context, void* window){};
     bool (*hide)(void* context, void* window){};
+    bool (*getProperties)(void* context, void* window,
+                          BackendWindowProperties* properties){};
+    BackendWindowOperationResult (*setFullscreenModeToDesktop)(void* context,
+                                                                void* window){};
+    BackendWindowOperationResult (*setFullscreen)(void* context, void* window,
+                                                   bool fullscreen){};
+    BackendWindowOperationResult (*setBordered)(void* context, void* window,
+                                                 bool bordered){};
+    BackendWindowOperationResult (*setResizable)(void* context, void* window,
+                                                  bool resizable){};
+    BackendWindowOperationResult (*setAlwaysOnTop)(void* context, void* window,
+                                                    bool alwaysOnTop){};
+    BackendWindowOperationResult (*minimize)(void* context, void* window){};
+    BackendWindowOperationResult (*maximize)(void* context, void* window){};
+    BackendWindowOperationResult (*restore)(void* context, void* window){};
 };
 
 enum class BackendDisplayOrientation : std::uint8_t
@@ -95,6 +131,7 @@ struct PlatformRuntimeBackend final
     bool (*initializeVideo)(void* context){};
     void (*quit)(void* context){};
     std::uint64_t (*getTicksNanoseconds)(void* context){};
+    bool (*pollEvent)(void* context, SDL_Event* event){};
 };
 
 inline constexpr char kMouseFocusClickThroughHint[]{"SDL_MOUSE_FOCUS_CLICKTHROUGH"};

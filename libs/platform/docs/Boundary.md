@@ -78,11 +78,33 @@ Status: platform contracts revised on 2026-07-08.
   get/set, logical-size get/set, pixel-size observation, and show/hide. Visible
   windows are staged hidden until creation commits, so callers never receive a
   partially registered native window.
-- Separate operations and observations for:
-  - Windowed and desktop-fullscreen presentation.
-  - System decoration versus a borderless window.
-  - Normal, minimized, and maximized state.
-  - Visibility, focus, resizability, and always-on-top state.
+- `WindowPresentation` contains `Windowed` and `DesktopFullscreen` only.
+  Desktop fullscreen explicitly uses SDL's null fullscreen mode; exclusive
+  fullscreen remains deferred until platform owns a display-mode selection
+  contract.
+- `WindowDecoration` contains `System` and `Borderless`. `WindowState` contains
+  `Normal`, `Minimized`, and `Maximized`. These remain separate from
+  presentation, visibility, input focus, resizability, and always-on-top state;
+  there is no compound `WindowMode`.
+- `Window` exposes independent live queries and mutators for those properties.
+  `IsVisible()` means the window is not hidden, so a minimized window remains
+  visible. `IsFocused()` observes input focus, not mouse focus. Focus has no
+  platform mutator, and `Show()`/`Hide()` remain the visibility mutators.
+- Window state queries include SDL's current and pending flags. SDL merges those
+  sources and can retain an old current state bit while a hidden window stages
+  the opposite pending state. Platform therefore retains only the last
+  successful hidden state request as a disambiguation marker until `Show()`;
+  all other state remains live backend data. Simultaneous minimized and
+  maximized flags without that marker are `BackendFailure`.
+- Window-manager presentation and state requests may be asynchronous. Success
+  means the request was accepted, not that the observed state already changed.
+  `Restore()` requests the OS restore behavior and may restore a minimized
+  window to its prior maximized state.
+- Mutators are idempotent. Maximizing a non-resizable window and positively
+  identified unavailable backend operations return `Unsupported`. Decoration
+  and resizability cannot change while fullscreen. Drivers that silently ignore
+  a requested decoration, resizability, or always-on-top change are also
+  reported as `Unsupported` when the backend flag does not latch.
 - Window close requests are events. Platform never destroys a window merely
   because the OS requested close.
 
@@ -125,7 +147,16 @@ Status: platform contracts revised on 2026-07-08.
 - A `std::variant` of typed, project-owned event structs with owned payloads.
   There is no parallel event-kind enum.
 - Global quit, window, display, keyboard, text/composition, mouse, inbound
-  drag-and-drop, and dialog-completion events.
+  drag-and-drop, and dialog-completion events. The core window vocabulary
+  distinguishes close, move, logical-size, pixel-size, focus, visibility,
+  minimized/maximized state, presentation, display, display-scale, and
+  pointer-boundary changes.
+- Window display changes preserve an optional destination `DisplayId` when the
+  backend reports no current display or the destination is not yet resolvable.
+  Display-scale, display-position, content-scale, and usable-bounds events are
+  re-query notifications because SDL provides no corresponding value.
+  Desktop/current display-mode changes carry an optional `ScreenExtent` when
+  SDL supplies positive dimensions.
 - Required `WindowId` values only on events that are necessarily window-scoped;
   input events may represent a missing target when SDL supplies no window.
 - Event timestamps expressed as a strong chrono nanosecond value in SDL's
@@ -133,8 +164,17 @@ Status: platform contracts revised on 2026-07-08.
   timestamp differences are semantically meaningful.
 - A monotonic `Now()` primitive in the same clock domain. Frame deltas and frame
   pacing remain application policy.
+- One private production translator owns SDL-to-project event conversion.
+  Unrepresentable timestamps, malformed required data, unresolved required
+  identities, and unsupported SDL events produce no project event. Future
+  display-orientation values map to `DisplayOrientation::Unknown`.
 - Polling that skips unknown, unsupported, and stale SDL events until it returns
   one translated event or the SDL queue is genuinely empty.
+- Display additions enter the runtime identity registry before their event is
+  returned. Removals retain their prior project identity through translation
+  and become disconnected tombstones afterward. A previously unseen
+  non-removal display event reconciles the live topology before translation;
+  it does not revive a disconnected tombstone.
 - Project-owned physical and logical key values, modifiers, repeat state, UTF-8
   text, and IME composition ranges.
 - Text-input start/stop, active-state, composition clearing, and IME input-area
