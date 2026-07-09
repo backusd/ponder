@@ -214,7 +214,16 @@ WindowImpl::~WindowImpl() noexcept
 {
     PONDER_VERIFY(m_runtime != nullptr, "Window runtime state is missing");
     m_runtime->VerifyOwnerThread("window destruction");
+    PONDER_VERIFY(m_pendingDialogRequestCount == 0,
+                  "Cannot destroy a platform window with {} pending dialog requests",
+                  m_pendingDialogRequestCount);
     PONDER_VERIFY(m_nativeWindow != nullptr, "Window native state is missing");
+
+    if (m_cocoaMetalView != nullptr)
+    {
+        m_backend.destroyMetalView(m_backend.context, m_cocoaMetalView);
+        m_cocoaMetalView = nullptr;
+    }
 
     if (m_registered)
     {
@@ -242,6 +251,18 @@ void WindowImpl::CommitRegistration(WindowId id) noexcept
 void WindowImpl::ObserveShownEvent() noexcept
 {
     m_hiddenStateRequest.reset();
+}
+
+void WindowImpl::IncrementPendingDialogRequestCount() noexcept
+{
+    ++m_pendingDialogRequestCount;
+}
+
+void WindowImpl::DecrementPendingDialogRequestCount() noexcept
+{
+    PONDER_VERIFY(m_pendingDialogRequestCount > 0,
+                  "Cannot complete an unknown pending dialog request for a platform window");
+    --m_pendingDialogRequestCount;
 }
 
 void WindowImpl::VerifyUsable(std::string_view operation) const

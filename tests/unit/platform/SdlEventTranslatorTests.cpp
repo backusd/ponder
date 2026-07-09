@@ -3,6 +3,9 @@
 #include <ponder/platform/PlatformEvent.hpp>
 
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_pen.h>
+#include <SDL3/SDL_touch.h>
 #include <SDL3/SDL_video.h>
 
 #include <gtest/gtest.h>
@@ -10,6 +13,7 @@
 #include <array>
 #include <bit>
 #include <chrono>
+#include <filesystem>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -112,6 +116,61 @@ struct ResolverState final
     return event;
 }
 
+[[nodiscard]] SDL_Event MakeMouseMotionEvent(
+    float x = 12.25F, float y = -8.5F, float relativeX = 3.75F,
+    float relativeY = -1.5F, std::uint32_t backendWindowId = kBackendWindowId,
+    std::uint64_t timestamp = kTimestampNanoseconds, SDL_MouseID which = 0)
+{
+    SDL_Event event{};
+    event.motion.type = SDL_EVENT_MOUSE_MOTION;
+    event.motion.timestamp = timestamp;
+    event.motion.windowID = backendWindowId;
+    event.motion.which = which;
+    event.motion.x = x;
+    event.motion.y = y;
+    event.motion.xrel = relativeX;
+    event.motion.yrel = relativeY;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeMouseButtonEvent(
+    SDL_EventType type, std::uint8_t button = SDL_BUTTON_LEFT,
+    float x = 12.25F, float y = -8.5F,
+    std::uint32_t backendWindowId = kBackendWindowId,
+    std::uint64_t timestamp = kTimestampNanoseconds, SDL_MouseID which = 0)
+{
+    SDL_Event event{};
+    event.button.type = type;
+    event.button.timestamp = timestamp;
+    event.button.windowID = backendWindowId;
+    event.button.which = which;
+    event.button.button = button;
+    event.button.down = type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+    event.button.x = x;
+    event.button.y = y;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeMouseWheelEvent(
+    float horizontal = 1.25F, float vertical = -2.5F,
+    SDL_MouseWheelDirection direction = SDL_MOUSEWHEEL_NORMAL,
+    float x = 12.25F, float y = -8.5F,
+    std::uint32_t backendWindowId = kBackendWindowId,
+    std::uint64_t timestamp = kTimestampNanoseconds, SDL_MouseID which = 0)
+{
+    SDL_Event event{};
+    event.wheel.type = SDL_EVENT_MOUSE_WHEEL;
+    event.wheel.timestamp = timestamp;
+    event.wheel.windowID = backendWindowId;
+    event.wheel.which = which;
+    event.wheel.x = horizontal;
+    event.wheel.y = vertical;
+    event.wheel.direction = direction;
+    event.wheel.mouse_x = x;
+    event.wheel.mouse_y = y;
+    return event;
+}
+
 [[nodiscard]] SDL_Event MakeTextInputEvent(
     const char* text, std::uint32_t backendWindowId = kBackendWindowId,
     std::uint64_t timestamp = kTimestampNanoseconds)
@@ -136,6 +195,23 @@ struct ResolverState final
     event.edit.text = text;
     event.edit.start = start;
     event.edit.length = length;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeDropEvent(
+    SDL_EventType type, const char* data = nullptr, const char* source = nullptr,
+    float x = 12.25F, float y = -8.5F,
+    std::uint32_t backendWindowId = kBackendWindowId,
+    std::uint64_t timestamp = kTimestampNanoseconds)
+{
+    SDL_Event event{};
+    event.drop.type = type;
+    event.drop.timestamp = timestamp;
+    event.drop.windowID = backendWindowId;
+    event.drop.x = x;
+    event.drop.y = y;
+    event.drop.source = source;
+    event.drop.data = data;
     return event;
 }
 
@@ -356,6 +432,160 @@ TEST_F(SdlEventTranslatorTests, EnforcesKeyTypeAndDownStateConsistency)
 }
 
 TEST_F(SdlEventTranslatorTests,
+       TranslatesFiniteMouseMotionFromMouseTouchAndPenSources)
+{
+    constexpr std::array<SDL_MouseID, 3> kSources{
+        0, SDL_TOUCH_MOUSEID, SDL_PEN_MOUSEID};
+    for (const SDL_MouseID source : kSources)
+    {
+        ExpectTranslatedEvent(
+            Translate(MakeMouseMotionEvent(
+                -27.5F, 14.25F, 3.5F, -6.75F, kBackendWindowId,
+                kTimestampNanoseconds, source)),
+            pond::platform::MouseMotionEvent{
+                .timestamp = MakeTimestamp(),
+                .windowId = kWindowId,
+                .position = {-27.5F, 14.25F},
+                .relativeMovement = {3.5F, -6.75F}});
+    }
+}
+
+TEST_F(SdlEventTranslatorTests,
+       MapsEveryMouseButtonAndEnforcesPressStateConsistency)
+{
+    struct ButtonCase final
+    {
+        std::uint8_t backend;
+        pond::platform::MouseButton expected;
+    };
+
+    constexpr std::array<ButtonCase, 6> kButtonCases{{
+        {SDL_BUTTON_LEFT, pond::platform::MouseButton::Left},
+        {SDL_BUTTON_RIGHT, pond::platform::MouseButton::Right},
+        {SDL_BUTTON_MIDDLE, pond::platform::MouseButton::Middle},
+        {SDL_BUTTON_X1, pond::platform::MouseButton::X1},
+        {SDL_BUTTON_X2, pond::platform::MouseButton::X2},
+        {0xFFU, pond::platform::MouseButton::Unknown},
+    }};
+
+    for (const ButtonCase& buttonCase : kButtonCases)
+    {
+        ExpectTranslatedEvent(
+            Translate(MakeMouseButtonEvent(
+                SDL_EVENT_MOUSE_BUTTON_DOWN, buttonCase.backend, -9.5F,
+                4.25F, kBackendWindowId, kTimestampNanoseconds,
+                SDL_PEN_MOUSEID)),
+            pond::platform::MouseButtonEvent{
+                .timestamp = MakeTimestamp(),
+                .windowId = kWindowId,
+                .position = {-9.5F, 4.25F},
+                .button = buttonCase.expected,
+                .pressed = true});
+    }
+
+    ExpectTranslatedEvent(
+        Translate(MakeMouseButtonEvent(
+            SDL_EVENT_MOUSE_BUTTON_UP, SDL_BUTTON_RIGHT, 5.5F, -2.25F,
+            kBackendWindowId, kTimestampNanoseconds, SDL_TOUCH_MOUSEID)),
+        pond::platform::MouseButtonEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .position = {5.5F, -2.25F},
+            .button = pond::platform::MouseButton::Right,
+            .pressed = false});
+
+    SDL_Event inconsistentDown =
+        MakeMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN);
+    inconsistentDown.button.down = false;
+    EXPECT_FALSE(Translate(inconsistentDown).has_value());
+
+    SDL_Event inconsistentUp =
+        MakeMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_UP);
+    inconsistentUp.button.down = true;
+    EXPECT_FALSE(Translate(inconsistentUp).has_value());
+}
+
+TEST_F(SdlEventTranslatorTests,
+       NormalizesMouseWheelDirectionAndRejectsUnknownDirections)
+{
+    ExpectTranslatedEvent(
+        Translate(MakeMouseWheelEvent(
+            2.25F, -3.5F, SDL_MOUSEWHEEL_NORMAL, -8.75F, 11.5F,
+            kBackendWindowId, kTimestampNanoseconds, SDL_TOUCH_MOUSEID)),
+        pond::platform::MouseWheelEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .position = {-8.75F, 11.5F},
+            .horizontal = 2.25F,
+            .vertical = -3.5F});
+
+    ExpectTranslatedEvent(
+        Translate(MakeMouseWheelEvent(
+            4.5F, -6.25F, SDL_MOUSEWHEEL_FLIPPED, 7.0F, -12.0F,
+            kBackendWindowId, kTimestampNanoseconds, SDL_PEN_MOUSEID)),
+        pond::platform::MouseWheelEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .position = {7.0F, -12.0F},
+            .horizontal = -4.5F,
+            .vertical = 6.25F});
+
+    EXPECT_FALSE(
+        Translate(MakeMouseWheelEvent(
+            1.0F, 1.0F, static_cast<SDL_MouseWheelDirection>(0x7FFF)))
+            .has_value());
+}
+
+TEST_F(SdlEventTranslatorTests,
+       DropsNonFiniteMousePayloadValuesBeforeResolvingTargets)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float infinity = std::numeric_limits<float>::infinity();
+    const auto expectRejected =
+        [this](const SDL_Event& event)
+        {
+            EXPECT_FALSE(Translate(event).has_value());
+        };
+
+    m_resolvers.windowRequests.clear();
+
+    SDL_Event event = MakeMouseMotionEvent();
+    event.motion.x = nan;
+    expectRejected(event);
+    event = MakeMouseMotionEvent();
+    event.motion.y = infinity;
+    expectRejected(event);
+    event = MakeMouseMotionEvent();
+    event.motion.xrel = -infinity;
+    expectRejected(event);
+    event = MakeMouseMotionEvent();
+    event.motion.yrel = nan;
+    expectRejected(event);
+
+    event = MakeMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN);
+    event.button.x = nan;
+    expectRejected(event);
+    event = MakeMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_UP);
+    event.button.y = infinity;
+    expectRejected(event);
+
+    event = MakeMouseWheelEvent();
+    event.wheel.mouse_x = -infinity;
+    expectRejected(event);
+    event = MakeMouseWheelEvent();
+    event.wheel.mouse_y = nan;
+    expectRejected(event);
+    event = MakeMouseWheelEvent();
+    event.wheel.x = infinity;
+    expectRejected(event);
+    event = MakeMouseWheelEvent();
+    event.wheel.y = nan;
+    expectRejected(event);
+
+    EXPECT_TRUE(m_resolvers.windowRequests.empty());
+}
+
+TEST_F(SdlEventTranslatorTests,
        PreservesTargetlessInputAndDropsStaleNonzeroTargets)
 {
     m_resolvers.windowRequests.clear();
@@ -381,6 +611,31 @@ TEST_F(SdlEventTranslatorTests,
             *composition));
     EXPECT_FALSE(std::get<pond::platform::TextCompositionEvent>(*composition)
                      .windowId.has_value());
+
+    SDL_Event motionEvent = MakeMouseMotionEvent();
+    motionEvent.motion.windowID = 0;
+    auto motion = Translate(motionEvent);
+    ASSERT_TRUE(motion.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::MouseMotionEvent>(*motion));
+    EXPECT_FALSE(std::get<pond::platform::MouseMotionEvent>(*motion)
+                     .windowId.has_value());
+
+    SDL_Event buttonEvent =
+        MakeMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN);
+    buttonEvent.button.windowID = 0;
+    auto button = Translate(buttonEvent);
+    ASSERT_TRUE(button.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::MouseButtonEvent>(*button));
+    EXPECT_FALSE(std::get<pond::platform::MouseButtonEvent>(*button)
+                     .windowId.has_value());
+
+    SDL_Event wheelEvent = MakeMouseWheelEvent();
+    wheelEvent.wheel.windowID = 0;
+    auto wheel = Translate(wheelEvent);
+    ASSERT_TRUE(wheel.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::MouseWheelEvent>(*wheel));
+    EXPECT_FALSE(std::get<pond::platform::MouseWheelEvent>(*wheel)
+                     .windowId.has_value());
     EXPECT_TRUE(m_resolvers.windowRequests.empty());
 
     EXPECT_FALSE(Translate(MakeKeyboardEvent(
@@ -390,8 +645,18 @@ TEST_F(SdlEventTranslatorTests,
     EXPECT_FALSE(Translate(MakeTextInputEvent("stale", 999)).has_value());
     EXPECT_FALSE(
         Translate(MakeTextCompositionEvent("stale", 0, 0, 999)).has_value());
+
+    motionEvent = MakeMouseMotionEvent();
+    motionEvent.motion.windowID = 999;
+    EXPECT_FALSE(Translate(motionEvent).has_value());
+    buttonEvent = MakeMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_UP);
+    buttonEvent.button.windowID = 999;
+    EXPECT_FALSE(Translate(buttonEvent).has_value());
+    wheelEvent = MakeMouseWheelEvent();
+    wheelEvent.wheel.windowID = 999;
+    EXPECT_FALSE(Translate(wheelEvent).has_value());
     EXPECT_EQ(m_resolvers.windowRequests,
-              (std::vector<std::uint32_t>{999, 999, 999}));
+              (std::vector<std::uint32_t>{999, 999, 999, 999, 999, 999}));
 }
 
 TEST_F(SdlEventTranslatorTests, OwnsAndValidatesUtf8TextInput)
@@ -416,6 +681,138 @@ TEST_F(SdlEventTranslatorTests, OwnsAndValidatesUtf8TextInput)
     const char invalidUtf8[]{
         static_cast<char>(0xC0), static_cast<char>(0xAF), '\0'};
     EXPECT_FALSE(Translate(MakeTextInputEvent(invalidUtf8)).has_value());
+}
+
+TEST_F(SdlEventTranslatorTests, TranslatesAndOwnsEveryDropEvent)
+{
+    std::string source{"source-app"};
+    std::string path{"C:/tmp/molecule.sdf"};
+    std::string text{"ligand \xF0\x9F\xA7\xAA", 11};
+
+    std::optional<pond::platform::PlatformEvent> begin =
+        Translate(MakeDropEvent(SDL_EVENT_DROP_BEGIN, nullptr, source.c_str(),
+                                0.0F, 0.0F, kBackendWindowId, 100));
+    std::optional<pond::platform::PlatformEvent> position =
+        Translate(MakeDropEvent(SDL_EVENT_DROP_POSITION, nullptr, source.c_str(),
+                                -4.5F, 8.25F, kBackendWindowId, 200));
+    std::optional<pond::platform::PlatformEvent> file =
+        Translate(MakeDropEvent(SDL_EVENT_DROP_FILE, path.c_str(), source.c_str(),
+                                1.5F, 2.25F, kBackendWindowId, 300));
+    std::optional<pond::platform::PlatformEvent> droppedText =
+        Translate(MakeDropEvent(SDL_EVENT_DROP_TEXT, text.c_str(), source.c_str(),
+                                3.5F, 4.25F, kBackendWindowId, 400));
+    std::optional<pond::platform::PlatformEvent> complete =
+        Translate(MakeDropEvent(SDL_EVENT_DROP_COMPLETE, nullptr, source.c_str(),
+                                5.5F, 6.25F, kBackendWindowId, 500));
+
+    source.assign("overwritten-source");
+    path.assign("overwritten-path");
+    text.assign("overwritten-text");
+
+    ExpectTranslatedEvent(
+        begin,
+        pond::platform::DropBeginEvent{
+            .timestamp = MakeTimestamp(100),
+            .windowId = kWindowId,
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+    ExpectTranslatedEvent(
+        position,
+        pond::platform::DropPositionEvent{
+            .timestamp = MakeTimestamp(200),
+            .windowId = kWindowId,
+            .position = {-4.5F, 8.25F},
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+    ExpectTranslatedEvent(
+        file,
+        pond::platform::DroppedFileEvent{
+            .timestamp = MakeTimestamp(300),
+            .windowId = kWindowId,
+            .path = std::filesystem::path{"C:/tmp/molecule.sdf"},
+            .position = {1.5F, 2.25F},
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+    ExpectTranslatedEvent(
+        droppedText,
+        pond::platform::DroppedTextEvent{
+            .timestamp = MakeTimestamp(400),
+            .windowId = kWindowId,
+            .text = std::string{"ligand \xF0\x9F\xA7\xAA", 11},
+            .position = {3.5F, 4.25F},
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+    ExpectTranslatedEvent(
+        complete,
+        pond::platform::DropCompleteEvent{
+            .timestamp = MakeTimestamp(500),
+            .windowId = kWindowId,
+            .position = {5.5F, 6.25F},
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+}
+
+TEST_F(SdlEventTranslatorTests,
+       PreservesTargetlessDropsAndDoesNotRequireSequenceState)
+{
+    m_resolvers.windowRequests.clear();
+
+    ExpectTranslatedEvent(
+        Translate(MakeDropEvent(SDL_EVENT_DROP_BEGIN, nullptr, nullptr, 0.0F,
+                                0.0F, 0)),
+        pond::platform::DropBeginEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = std::nullopt,
+            .sourceApplication = std::nullopt});
+    ExpectTranslatedEvent(
+        Translate(MakeDropEvent(SDL_EVENT_DROP_COMPLETE, nullptr, nullptr,
+                                7.5F, 9.25F, 0)),
+        pond::platform::DropCompleteEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = std::nullopt,
+            .position = {7.5F, 9.25F},
+            .sourceApplication = std::nullopt});
+    ExpectTranslatedEvent(
+        Translate(MakeDropEvent(SDL_EVENT_DROP_FILE, "targetless.sdf", nullptr,
+                                1.0F, 2.0F, 0)),
+        pond::platform::DroppedFileEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = std::nullopt,
+            .path = std::filesystem::path{"targetless.sdf"},
+            .position = {1.0F, 2.0F},
+            .sourceApplication = std::nullopt});
+    EXPECT_TRUE(m_resolvers.windowRequests.empty());
+
+    constexpr std::uint32_t kUnknownBackendWindowId{999};
+    EXPECT_FALSE(Translate(MakeDropEvent(SDL_EVENT_DROP_TEXT, "stale", nullptr,
+                                         1.0F, 2.0F,
+                                         kUnknownBackendWindowId))
+                     .has_value());
+    ASSERT_EQ(m_resolvers.windowRequests.size(), 1U);
+    EXPECT_EQ(m_resolvers.windowRequests.back(), kUnknownBackendWindowId);
+}
+
+TEST_F(SdlEventTranslatorTests, RejectsMalformedDropPayloadsBeforeResolvingTargets)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float infinity = std::numeric_limits<float>::infinity();
+    const char invalidUtf8[]{
+        static_cast<char>(0xC0), static_cast<char>(0xAF), '\0'};
+
+    m_resolvers.windowRequests.clear();
+    EXPECT_FALSE(Translate(MakeDropEvent(SDL_EVENT_DROP_FILE)).has_value());
+    EXPECT_FALSE(Translate(MakeDropEvent(SDL_EVENT_DROP_TEXT)).has_value());
+    EXPECT_FALSE(
+        Translate(MakeDropEvent(SDL_EVENT_DROP_FILE, invalidUtf8)).has_value());
+    EXPECT_FALSE(
+        Translate(MakeDropEvent(SDL_EVENT_DROP_TEXT, invalidUtf8)).has_value());
+    EXPECT_FALSE(Translate(MakeDropEvent(SDL_EVENT_DROP_POSITION, nullptr,
+                                         invalidUtf8))
+                     .has_value());
+    EXPECT_FALSE(
+        Translate(MakeDropEvent(SDL_EVENT_DROP_POSITION, nullptr, nullptr, nan,
+                                1.0F))
+            .has_value());
+    EXPECT_FALSE(
+        Translate(MakeDropEvent(SDL_EVENT_DROP_COMPLETE, nullptr, nullptr, 1.0F,
+                                infinity))
+            .has_value());
+    EXPECT_TRUE(m_resolvers.windowRequests.empty());
 }
 
 TEST_F(SdlEventTranslatorTests,
@@ -725,6 +1122,10 @@ TEST_F(SdlEventTranslatorTests, EnforcesTimestampRepresentationBounds)
         SDL_EVENT_WINDOW_CLOSE_REQUESTED,
         std::numeric_limits<std::uint64_t>::max());
     EXPECT_FALSE(Translate(overflowedWindow).has_value());
+
+    SDL_Event overflowedMouse = MakeMouseMotionEvent();
+    overflowedMouse.motion.timestamp = std::numeric_limits<std::uint64_t>::max();
+    EXPECT_FALSE(Translate(overflowedMouse).has_value());
     EXPECT_TRUE(m_resolvers.windowRequests.empty());
 }
 
@@ -792,19 +1193,20 @@ TEST_F(SdlEventTranslatorTests, DropsRequiredZeroUnresolvedAndInvalidIds)
                      MakeDisplayEvent(SDL_EVENT_DISPLAY_MOVED),
                      missingResolvers)
                      .has_value());
+    EXPECT_FALSE(pond::platform::detail::TranslateSdlEvent(
+                     MakeMouseMotionEvent(), missingResolvers)
+                     .has_value());
 }
 
 TEST_F(SdlEventTranslatorTests,
        DropsIgnoredAndUnknownKindsWithoutResolvingIds)
 {
-    constexpr std::array<Uint32, 9> kIgnoredTypes{
+    constexpr std::array<Uint32, 7> kIgnoredTypes{
         SDL_EVENT_WINDOW_EXPOSED,
         SDL_EVENT_WINDOW_METAL_VIEW_RESIZED,
         SDL_EVENT_WINDOW_HIT_TEST,
         SDL_EVENT_WINDOW_DESTROYED,
         SDL_EVENT_TEXT_EDITING_CANDIDATES,
-        SDL_EVENT_MOUSE_MOTION,
-        SDL_EVENT_DROP_FILE,
         SDL_EVENT_USER,
         0xFFFF'FFFEU,
     };

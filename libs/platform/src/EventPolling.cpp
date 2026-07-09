@@ -62,6 +62,12 @@ std::optional<PlatformEvent> PlatformRuntimeState::PollEvent()
 {
     VerifyOwnerThread("event polling");
 
+    if (std::optional<PlatformEvent> dialogCompletion = PollDialogCompletion();
+        dialogCompletion.has_value())
+    {
+        return dialogCompletion;
+    }
+
     while (true)
     {
         SDL_Event event{};

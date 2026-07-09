@@ -1,16 +1,26 @@
 #include "PlatformRuntimeBackend.hpp"
 
+#include <SDL3/SDL_clipboard.h>
+#include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_metal.h>
+#include <SDL3/SDL_misc.h>
+#include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_platform_defines.h>
+#include <SDL3/SDL_properties.h>
 #include <SDL3/SDL_rect.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 
 #include <atomic>
+#include <limits>
 #include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace pond::platform::detail
@@ -32,6 +42,29 @@ bool IsWindowGraphicsCompatibilitySupported(
     }
 
     return false;
+}
+
+BackendNativeWindowDriver GetNativeWindowDriver(
+    std::string_view driverName) noexcept
+{
+    if (driverName == "windows")
+    {
+        return BackendNativeWindowDriver::Win32;
+    }
+    if (driverName == "x11")
+    {
+        return BackendNativeWindowDriver::X11;
+    }
+    if (driverName == "wayland")
+    {
+        return BackendNativeWindowDriver::Wayland;
+    }
+    if (driverName == "cocoa")
+    {
+        return BackendNativeWindowDriver::Cocoa;
+    }
+
+    return BackendNativeWindowDriver::Unsupported;
 }
 
 std::uint64_t BuildSdlWindowFlags(const BackendWindowCreateDesc& desc) noexcept
@@ -74,6 +107,37 @@ struct SdlDisplayListDeleter final
         SDL_free(displays);
     }
 };
+
+[[nodiscard]] constexpr BackendNativeWindowHandleResult
+NativeHandleSucceeded() noexcept
+{
+    return BackendNativeWindowHandleResult{
+        .status = BackendNativeWindowHandleStatus::Succeeded};
+}
+
+[[nodiscard]] constexpr BackendNativeWindowHandleResult
+NativeHandleUnsupported(const char* message) noexcept
+{
+    return BackendNativeWindowHandleResult{
+        .status = BackendNativeWindowHandleStatus::Unsupported,
+        .message = message};
+}
+
+[[nodiscard]] constexpr BackendNativeWindowHandleResult
+NativeHandleFailure(const char* message) noexcept
+{
+    return BackendNativeWindowHandleResult{
+        .status = BackendNativeWindowHandleStatus::Failed, .message = message};
+}
+
+[[nodiscard]] constexpr BackendNativeWindowHandleResult
+NativeHandleSdlFailure(const char* operation) noexcept
+{
+    return BackendNativeWindowHandleResult{
+        .status = BackendNativeWindowHandleStatus::Failed,
+        .operation = operation,
+        .captureSdlError = true};
+}
 
 [[nodiscard]] bool IsMainThread(void*) noexcept
 {
@@ -156,6 +220,145 @@ void Quit(void*) noexcept
 [[nodiscard]] bool PollEvent(void*, SDL_Event* event) noexcept
 {
     return SDL_PollEvent(event);
+}
+
+[[nodiscard]] bool SupportsGlobalMouse(void*) noexcept
+{
+    const char* const driver = SDL_GetCurrentVideoDriver();
+    if (driver == nullptr)
+    {
+        return false;
+    }
+
+    const std::string_view name{driver};
+    return name == "windows" || name == "cocoa" || name == "x11";
+}
+
+void GetGlobalMousePosition(void*, float* x, float* y) noexcept
+{
+    static_cast<void>(SDL_GetGlobalMouseState(x, y));
+}
+
+[[nodiscard]] bool SetMouseCapture(void*, bool enabled) noexcept
+{
+    return SDL_CaptureMouse(enabled);
+}
+
+[[nodiscard]] std::optional<SDL_SystemCursor> ToSdlSystemCursor(
+    SystemCursorShape shape) noexcept
+{
+    switch (shape)
+    {
+    case SystemCursorShape::Default:
+        return SDL_SYSTEM_CURSOR_DEFAULT;
+    case SystemCursorShape::TextInput:
+        return SDL_SYSTEM_CURSOR_TEXT;
+    case SystemCursorShape::Move:
+        return SDL_SYSTEM_CURSOR_MOVE;
+    case SystemCursorShape::ResizeNorthSouth:
+        return SDL_SYSTEM_CURSOR_NS_RESIZE;
+    case SystemCursorShape::ResizeEastWest:
+        return SDL_SYSTEM_CURSOR_EW_RESIZE;
+    case SystemCursorShape::ResizeNortheastSouthwest:
+        return SDL_SYSTEM_CURSOR_NESW_RESIZE;
+    case SystemCursorShape::ResizeNorthwestSoutheast:
+        return SDL_SYSTEM_CURSOR_NWSE_RESIZE;
+    case SystemCursorShape::Pointer:
+        return SDL_SYSTEM_CURSOR_POINTER;
+    case SystemCursorShape::Wait:
+        return SDL_SYSTEM_CURSOR_WAIT;
+    case SystemCursorShape::Progress:
+        return SDL_SYSTEM_CURSOR_PROGRESS;
+    case SystemCursorShape::NotAllowed:
+        return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
+    }
+
+    return std::nullopt;
+}
+
+[[nodiscard]] void* CreateSystemCursor(void*, SystemCursorShape shape) noexcept
+{
+    const std::optional<SDL_SystemCursor> cursor = ToSdlSystemCursor(shape);
+    return cursor.has_value() ? SDL_CreateSystemCursor(*cursor) : nullptr;
+}
+
+[[nodiscard]] bool SetCursor(void*, void* cursor) noexcept
+{
+    return SDL_SetCursor(static_cast<SDL_Cursor*>(cursor));
+}
+
+void DestroyCursor(void*, void* cursor) noexcept
+{
+    SDL_DestroyCursor(static_cast<SDL_Cursor*>(cursor));
+}
+
+[[nodiscard]] bool ShowCursor(void*) noexcept
+{
+    return SDL_ShowCursor();
+}
+
+[[nodiscard]] bool HideCursor(void*) noexcept
+{
+    return SDL_HideCursor();
+}
+
+[[nodiscard]] bool IsCursorVisible(void*) noexcept
+{
+    return SDL_CursorVisible();
+}
+
+[[nodiscard]] bool SupportsClipboardText(void*) noexcept
+{
+    return true;
+}
+
+[[nodiscard]] BackendClipboardTextResult GetClipboardText(void*)
+{
+    static_cast<void>(SDL_ClearError());
+    char* const text = SDL_GetClipboardText();
+    const char* const rawError = SDL_GetError();
+    return BackendClipboardTextResult{
+        .text = text,
+        .errorText = rawError != nullptr ? std::string{rawError} : std::string{}};
+}
+
+void FreeClipboardText(void*, char* text) noexcept
+{
+    SDL_free(text);
+}
+
+[[nodiscard]] bool SetClipboardText(void*, const char* text) noexcept
+{
+    return SDL_SetClipboardText(text);
+}
+
+[[nodiscard]] bool OpenExternalUri(void*, const char* uri) noexcept
+{
+    return SDL_OpenURL(uri);
+}
+
+void ShowDialog(void*, const BackendDialogRequestDesc& desc) noexcept
+{
+    auto* const parentWindow = static_cast<SDL_Window*>(desc.parentWindow);
+    switch (desc.kind)
+    {
+    case BackendDialogKind::OpenFile:
+        SDL_ShowOpenFileDialog(desc.callback, desc.userdata, parentWindow,
+                               desc.filters, desc.filterCount,
+                               desc.defaultLocation,
+                               desc.allowMultipleSelection);
+        break;
+    case BackendDialogKind::SaveFile:
+        SDL_ShowSaveFileDialog(desc.callback, desc.userdata, parentWindow,
+                               desc.filters, desc.filterCount,
+                               desc.defaultLocation);
+        break;
+    case BackendDialogKind::OpenFolder:
+        SDL_ShowOpenFolderDialog(desc.callback, desc.userdata, parentWindow,
+                                 desc.defaultLocation,
+                                 desc.allowMultipleSelection);
+        break;
+    }
 }
 
 [[nodiscard]] void* CreateWindow(void*, const BackendWindowCreateDesc& desc) noexcept
@@ -383,6 +586,179 @@ void DestroyWindow(void*, void* window) noexcept
     return SDL_SetTextInputArea(sdlWindow, &rectangle, area->cursorOffset);
 }
 
+[[nodiscard]] bool SetWindowMouseGrab(
+    void*, void* window, bool grabbed) noexcept
+{
+    return SDL_SetWindowMouseGrab(static_cast<SDL_Window*>(window), grabbed);
+}
+
+[[nodiscard]] bool IsWindowMouseGrabbed(void*, void* window) noexcept
+{
+    return SDL_GetWindowMouseGrab(static_cast<SDL_Window*>(window));
+}
+
+[[nodiscard]] bool SetWindowRelativeMouseMode(
+    void*, void* window, bool enabled) noexcept
+{
+    return SDL_SetWindowRelativeMouseMode(
+        static_cast<SDL_Window*>(window), enabled);
+}
+
+[[nodiscard]] bool IsWindowRelativeMouseModeEnabled(
+    void*, void* window) noexcept
+{
+    return SDL_GetWindowRelativeMouseMode(static_cast<SDL_Window*>(window));
+}
+
+[[nodiscard]] BackendNativeWindowHandleResult GetWin32NativeWindowHandle(
+    SDL_PropertiesID properties, NativeWindowHandle* handle) noexcept
+{
+    void* const instance = SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);
+    void* const window = SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+    if (instance == nullptr || window == nullptr)
+    {
+        return NativeHandleFailure(
+            "SDL window is missing Win32 native properties.");
+    }
+
+    *handle = NativeWin32Window{.instance = instance, .window = window};
+    return NativeHandleSucceeded();
+}
+
+[[nodiscard]] BackendNativeWindowHandleResult GetX11NativeWindowHandle(
+    SDL_PropertiesID properties, NativeWindowHandle* handle) noexcept
+{
+    void* const display = SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+    const Sint64 window = SDL_GetNumberProperty(
+        properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    if (display == nullptr || window <= 0)
+    {
+        return NativeHandleFailure(
+            "SDL window is missing X11 native properties.");
+    }
+    if constexpr (sizeof(std::uintptr_t) < sizeof(Sint64))
+    {
+        if (window > static_cast<Sint64>(
+                         std::numeric_limits<std::uintptr_t>::max()))
+        {
+            return NativeHandleFailure(
+                "SDL X11 window property is too large for uintptr_t.");
+        }
+    }
+
+    *handle = NativeX11Window{.display = display,
+                              .window = static_cast<std::uintptr_t>(window)};
+    return NativeHandleSucceeded();
+}
+
+[[nodiscard]] BackendNativeWindowHandleResult GetWaylandNativeWindowHandle(
+    SDL_PropertiesID properties, NativeWindowHandle* handle) noexcept
+{
+    void* const display = SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+    void* const surface = SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+    if (display == nullptr || surface == nullptr)
+    {
+        return NativeHandleFailure(
+            "SDL window is missing Wayland native properties.");
+    }
+
+    *handle = NativeWaylandWindow{.display = display, .surface = surface};
+    return NativeHandleSucceeded();
+}
+
+[[nodiscard]] BackendNativeWindowHandleResult GetCocoaNativeWindowHandle(
+    void* window, void** cachedMetalView, NativeWindowHandle* handle) noexcept
+{
+    if (cachedMetalView == nullptr)
+    {
+        return NativeHandleFailure(
+            "Cocoa Metal view storage is unavailable.");
+    }
+
+    SDL_MetalView view = static_cast<SDL_MetalView>(*cachedMetalView);
+    if (view == nullptr)
+    {
+        view = SDL_Metal_CreateView(static_cast<SDL_Window*>(window));
+        if (view == nullptr)
+        {
+            return NativeHandleSdlFailure("SDL_Metal_CreateView");
+        }
+        *cachedMetalView = view;
+    }
+
+    void* const layer = SDL_Metal_GetLayer(view);
+    if (layer == nullptr)
+    {
+        return NativeHandleSdlFailure("SDL_Metal_GetLayer");
+    }
+
+    *handle = NativeCocoaWindow{.metalLayer = layer};
+    return NativeHandleSucceeded();
+}
+
+[[nodiscard]] BackendNativeWindowHandleResult GetNativeWindowHandle(
+    void*, void* window, void** cachedMetalView,
+    NativeWindowHandle* handle) noexcept
+{
+    if (handle == nullptr)
+    {
+        return NativeHandleFailure(
+            "Native window handle output storage is unavailable.");
+    }
+
+    const char* const currentDriver = SDL_GetCurrentVideoDriver();
+    if (currentDriver == nullptr)
+    {
+        return NativeHandleFailure(
+            "SDL current video driver is unavailable.");
+    }
+
+    const BackendNativeWindowDriver driver =
+        GetNativeWindowDriver(currentDriver);
+    if (driver == BackendNativeWindowDriver::Cocoa)
+    {
+        return GetCocoaNativeWindowHandle(window, cachedMetalView, handle);
+    }
+    if (driver == BackendNativeWindowDriver::Unsupported)
+    {
+        return NativeHandleUnsupported(
+            "Native window handles are unsupported by this SDL video driver.");
+    }
+
+    const SDL_PropertiesID properties =
+        SDL_GetWindowProperties(static_cast<SDL_Window*>(window));
+    if (properties == 0)
+    {
+        return NativeHandleSdlFailure("SDL_GetWindowProperties");
+    }
+
+    switch (driver)
+    {
+    case BackendNativeWindowDriver::Win32:
+        return GetWin32NativeWindowHandle(properties, handle);
+    case BackendNativeWindowDriver::X11:
+        return GetX11NativeWindowHandle(properties, handle);
+    case BackendNativeWindowDriver::Wayland:
+        return GetWaylandNativeWindowHandle(properties, handle);
+    case BackendNativeWindowDriver::Cocoa:
+    case BackendNativeWindowDriver::Unsupported:
+        break;
+    }
+
+    return NativeHandleUnsupported(
+        "Native window handles are unsupported by this SDL video driver.");
+}
+
+void DestroyMetalView(void*, void* metalView) noexcept
+{
+    SDL_Metal_DestroyView(static_cast<SDL_MetalView>(metalView));
+}
+
 [[nodiscard]] bool EnumerateDisplays(void*,
                                      std::vector<std::uint32_t>& displayIds)
 {
@@ -513,7 +889,13 @@ constexpr PlatformWindowBackend kSdlWindowBackend{
     StopWindowTextInput,
     IsWindowTextInputActive,
     ClearWindowTextComposition,
-    SetWindowTextInputArea};
+    SetWindowTextInputArea,
+    SetWindowMouseGrab,
+    IsWindowMouseGrabbed,
+    SetWindowRelativeMouseMode,
+    IsWindowRelativeMouseModeEnabled,
+    GetNativeWindowHandle,
+    DestroyMetalView};
 
 constexpr PlatformDisplayBackend kSdlDisplayBackend{
     nullptr,
@@ -541,7 +923,22 @@ constexpr PlatformRuntimeBackend kSdlBackend{
     InitializeVideo,
     Quit,
     GetTicksNanoseconds,
-    PollEvent};
+    PollEvent,
+    SupportsGlobalMouse,
+    GetGlobalMousePosition,
+    SetMouseCapture,
+    CreateSystemCursor,
+    SetCursor,
+    DestroyCursor,
+    ShowCursor,
+    HideCursor,
+    IsCursorVisible,
+    SupportsClipboardText,
+    GetClipboardText,
+    FreeClipboardText,
+    SetClipboardText,
+    OpenExternalUri,
+    ShowDialog};
 
 std::atomic<const PlatformRuntimeBackend*> backendOverride{nullptr};
 std::atomic<const PlatformWindowBackend*> windowBackendOverride{nullptr};

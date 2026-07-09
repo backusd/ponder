@@ -67,6 +67,36 @@ private:
     ValueType m_value{};
 };
 
+class DialogRequestId final
+{
+public:
+    using ValueType = std::uint64_t;
+
+    constexpr DialogRequestId() noexcept = default;
+    explicit constexpr DialogRequestId(ValueType value) noexcept : m_value(value) {}
+
+    [[nodiscard]] static constexpr DialogRequestId Invalid() noexcept
+    {
+        return DialogRequestId{};
+    }
+
+    [[nodiscard]] constexpr ValueType GetValue() const noexcept
+    {
+        return m_value;
+    }
+
+    [[nodiscard]] constexpr bool IsValid() const noexcept
+    {
+        return m_value != 0;
+    }
+
+    [[nodiscard]] friend constexpr auto operator<=>(const DialogRequestId& lhs,
+                                                    const DialogRequestId& rhs) noexcept = default;
+
+private:
+    ValueType m_value{};
+};
+
 namespace detail
 {
 [[nodiscard]] constexpr std::size_t HashIdentifierValue(std::uint64_t value) noexcept
@@ -115,6 +145,16 @@ struct hash<pond::platform::DisplayId>
 {
     [[nodiscard]] constexpr std::size_t operator()(
         pond::platform::DisplayId id) const noexcept
+    {
+        return pond::platform::detail::HashIdentifierValue(id.GetValue());
+    }
+};
+
+template <>
+struct hash<pond::platform::DialogRequestId>
+{
+    [[nodiscard]] constexpr std::size_t operator()(
+        pond::platform::DialogRequestId id) const noexcept
     {
         return pond::platform::detail::HashIdentifierValue(id.GetValue());
     }

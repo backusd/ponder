@@ -3,7 +3,7 @@
 `ponder_platform` owns reusable operating-system and desktop-platform
 integration.
 
-Status: platform contracts revised on 2026-07-08.
+Status: platform contracts revised on 2026-07-09.
 
 ## Decision Records
 
@@ -157,8 +157,10 @@ Status: platform contracts revised on 2026-07-08.
   re-query notifications because SDL provides no corresponding value.
   Desktop/current display-mode changes carry an optional `ScreenExtent` when
   SDL supplies positive dimensions.
-- Required `WindowId` values only on events that are necessarily window-scoped;
-  input events may represent a missing target when SDL supplies no window.
+- Required `WindowId` values only on events that are necessarily window-scoped.
+  Keyboard, text/composition, and mouse input events use
+  `std::optional<WindowId>`: backend window ID zero becomes no target, while a
+  nonzero stale or unresolved target causes the event to be dropped.
 - Event timestamps expressed as a strong chrono nanosecond value in SDL's
   monotonic tick domain, with the same epoch as `SDL_GetTicksNS()`. Only
   timestamp differences are semantically meaningful.
@@ -184,12 +186,43 @@ Status: platform contracts revised on 2026-07-08.
 - Window text-input start/stop, live active-state query, composition clearing,
   and logical IME input-area/cursor control. Logical area values round to the
   nearest backend integer after finite/range validation.
-- Mouse motion, buttons, and wheel events. Window grab/relative mode remain on
-  `Window`; global capture, global position, cursor visibility, and standard
-  system cursor selection live on `PlatformRuntime`. Custom cursor images are
-  deferred.
-- Window-scoped pointer-enter and pointer-leave events. Wheel values use positive
-  X for right and positive Y for up.
+- `MouseMotionEvent`, `MouseButtonEvent`, and `MouseWheelEvent` preserve
+  floating logical positions. Motion also preserves floating relative
+  movement; button events distinguish left, right, middle, X1, X2, and
+  `Unknown`; wheel events expose horizontal and vertical floating values.
+  Every position, relative-movement component, and wheel value must be finite
+  or the event is dropped. Motion coordinates follow window-logical axes,
+  including positive Y downward. Wheel values are normalized separately so
+  positive X means right and positive Y means up.
+- Inbound drag-and-drop uses `DropBeginEvent`, `DroppedFileEvent`,
+  `DroppedTextEvent`, `DropPositionEvent`, and `DropCompleteEvent`. Window
+  targets are optional using the same zero/stale rules as keyboard, text, and
+  mouse input. Begin events carry no position; the other drop events carry a
+  finite logical position. File payloads are owned `std::filesystem::path`
+  values, text payloads are owned UTF-8 strings, and available source
+  application text is copied. Platform does not keep global state merely to
+  validate begin/complete ordering; malformed payloads are dropped.
+- `Window::SetMouseGrab()` and `Window::SetRelativeMouseMode()` are fallible
+  window-scoped operations. `IsMouseGrabbed()` and
+  `IsRelativeMouseModeEnabled()` are live, infallible observations and are not
+  cached by platform. A hidden window's pending grab request is not necessarily
+  visible through SDL's live grab query, so every mouse-grab setter request is
+  forwarded to the backend.
+- `PlatformRuntime::SetMouseCapture()` controls explicit global capture.
+  `GetGlobalMousePosition()` returns a floating desktop-relative
+  `LogicalPoint`. Enabling capture or querying a meaningful global position
+  returns `Unsupported` when the active video driver cannot provide the
+  capability; disabling capture remains an idempotent cleanup operation.
+  Platform exposes no capture-state query because SDL has no direct,
+  authoritative global query and capture may be released asynchronously on
+  focus loss.
+- `PlatformRuntime::SetSystemCursor()` selects a standard shape without
+  changing visibility. `ShowCursor()`, `HideCursor()`, and
+  `IsCursorVisible()` control and observe visibility separately. Runtime lazily
+  creates and caches each selected SDL system cursor; selection does not
+  transfer ownership, and every cached cursor is destroyed before SDL
+  shutdown. Custom cursor images are deferred.
+- Window-scoped pointer-enter and pointer-leave events.
 - System cursors for default, text input, move, north-south/east-west and both
   diagonal resizes, pointer, wait, progress, and not-allowed. A UI request for
   no cursor maps to cursor hiding rather than another shape.
@@ -206,12 +239,15 @@ Status: platform contracts revised on 2026-07-08.
   - `NativeX11Window`: `void* display` and `std::uintptr_t window`.
   - `NativeWaylandWindow`: `void* display` and `void* surface`.
   - `NativeCocoaWindow`: `void* metalLayer`.
-- Native interop is available only for Vulkan-compatible windows using SDL video
-  drivers `"windows"`, `"x11"`, `"wayland"`, and `"cocoa"`. A `Default`
-  window is incompatible; every other driver returns `Unsupported`.
+- `Window::GetNativeHandle()` is available only for Vulkan-compatible windows
+  using SDL video drivers `"windows"`, `"x11"`, `"wayland"`, and
+  `"cocoa"`. A `Default` window returns `InvalidArgument`; every other
+  driver returns `Unsupported`.
 - Native data is a borrowed snapshot. It is valid only on the runtime owner
-  thread while the owning window and relevant native state remain valid; callers
-  re-query it after documented native-window state changes.
+  thread while the owning window and relevant native state remain valid. Callers
+  re-query after window destruction/recreation, show/hide, presentation,
+  minimized/maximized restore, display migration, or any renderer-owned surface
+  teardown/rebuild boundary where stale native state would matter.
 - On macOS, each Vulkan-compatible `Window` lazily owns at most one cached
   `SDL_MetalView`. Repeated queries expose the same borrowed `CAMetalLayer*`, and
   platform destroys the view before that window.
@@ -231,12 +267,16 @@ Status: platform contracts revised on 2026-07-08.
 ### Clipboard, External URIs, Dialogs, And Processes
 
 - Owner-thread UTF-8 text clipboard get/set operations on `PlatformRuntime`.
-  Rich MIME and binary clipboard data are deferred.
+  Set operations validate UTF-8 and embedded nulls before SDL receives a
+  null-terminated copy. Rich MIME and binary clipboard data are deferred.
 - Owner-thread `OpenExternalUri(std::string_view)` on `PlatformRuntime`, backed
-  privately by SDL and returning a contextual `VoidResult`.
+  privately by SDL and returning a contextual `VoidResult`. Platform validates
+  only non-empty null-free UTF-8 input and deliberately does not own
+  scheme-specific shell policy.
 - Clipboard reads explicitly distinguish successful empty text from SDL failure
   by clearing SDL error state before the ambiguous call and checking it
-  immediately afterward; error text is still never parsed.
+  immediately afterward before SDL-owned text is freed; error text is still
+  never parsed.
 - Inbound file and text drag-and-drop with owned payloads. Outbound dragging is
   deferred.
 - Asynchronous `PlatformRuntime` open-file, save-file, and open-folder requests

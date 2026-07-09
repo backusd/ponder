@@ -6,6 +6,7 @@
 
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_mouse.h>
 
 #include <gtest/gtest.h>
 
@@ -16,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
 #include <limits>
 #include <list>
 #include <optional>
@@ -31,7 +33,13 @@
 namespace
 {
 using pond::platform::detail::ApplicationMetadataProperty;
+using pond::platform::detail::BackendClipboardTextResult;
+using pond::platform::detail::BackendDialogKind;
+using pond::platform::detail::BackendDialogRequestDesc;
 using pond::platform::detail::BackendDisplayOrientation;
+using pond::platform::detail::BackendNativeWindowDriver;
+using pond::platform::detail::BackendNativeWindowHandleResult;
+using pond::platform::detail::BackendNativeWindowHandleStatus;
 using pond::platform::detail::BackendScreenRectangle;
 using pond::platform::detail::BackendTextInputArea;
 using pond::platform::detail::BackendWindowCreateDesc;
@@ -45,6 +53,21 @@ using pond::platform::detail::PlatformWindowBackend;
 {
     return static_cast<std::size_t>(property);
 }
+
+constexpr std::array<pond::platform::SystemCursorShape,
+                     pond::platform::detail::kSystemCursorShapeCount>
+    kSystemCursorShapes{
+        pond::platform::SystemCursorShape::Default,
+        pond::platform::SystemCursorShape::TextInput,
+        pond::platform::SystemCursorShape::Move,
+        pond::platform::SystemCursorShape::ResizeNorthSouth,
+        pond::platform::SystemCursorShape::ResizeEastWest,
+        pond::platform::SystemCursorShape::ResizeNortheastSouthwest,
+        pond::platform::SystemCursorShape::ResizeNorthwestSoutheast,
+        pond::platform::SystemCursorShape::Pointer,
+        pond::platform::SystemCursorShape::Wait,
+        pond::platform::SystemCursorShape::Progress,
+        pond::platform::SystemCursorShape::NotAllowed};
 
 struct FakeWindow final
 {
@@ -73,10 +96,18 @@ struct FakeWindow final
     bool alwaysOnTop{};
     bool highPixelDensity{};
     bool textInputActive{};
+    bool mouseGrabbed{};
+    bool relativeMouseModeEnabled{};
     int clearedTextCompositions{};
     std::optional<BackendTextInputArea> textInputArea;
     pond::platform::WindowGraphicsCompatibility graphicsCompatibility{
         pond::platform::WindowGraphicsCompatibility::Default};
+};
+
+struct FakeCursor final
+{
+    pond::platform::SystemCursorShape shape{
+        pond::platform::SystemCursorShape::Default};
 };
 
 struct FakeDisplay final
@@ -94,6 +125,17 @@ struct QueuedBackendEvent final
 {
     SDL_Event event{};
     std::optional<std::vector<std::uint32_t>> connectedDisplayIds;
+};
+
+struct FakeDialogLaunch final
+{
+    BackendDialogKind kind{BackendDialogKind::OpenFile};
+    void* parentWindow{};
+    std::vector<pond::platform::DialogFileFilter> filters;
+    std::optional<std::string> defaultLocation;
+    bool allowMultipleSelection{};
+    SDL_DialogFileCallback callback{};
+    void* userdata{};
 };
 
 struct FakeRuntimeBackend final
@@ -120,8 +162,33 @@ struct FakeRuntimeBackend final
     bool applyWindowOperationEffects{true};
     std::string failingDisplayOperation;
     int displayFailuresRemaining{};
+    std::string nativeVideoDriver{"windows"};
+    void* nativeWin32Instance{reinterpret_cast<void*>(std::uintptr_t{0x1000})};
+    void* nativeWin32Window{reinterpret_cast<void*>(std::uintptr_t{0x2000})};
+    void* nativeX11Display{reinterpret_cast<void*>(std::uintptr_t{0x3000})};
+    std::uintptr_t nativeX11Window{0x4000};
+    void* nativeWaylandDisplay{reinterpret_cast<void*>(std::uintptr_t{0x5000})};
+    void* nativeWaylandSurface{reinterpret_cast<void*>(std::uintptr_t{0x6000})};
+    void* nativeCocoaMetalView{reinterpret_cast<void*>(std::uintptr_t{0x7000})};
+    void* nativeCocoaMetalLayer{reinterpret_cast<void*>(std::uintptr_t{0x8000})};
+    int createMetalViewCalls{};
+    int destroyMetalViewCalls{};
     std::optional<std::uint32_t> disconnectDisplayOnFailure;
     bool destroyOverwritesError{};
+    bool globalMouseSupported{true};
+    pond::platform::LogicalPoint globalMousePosition{100.0F, 200.0F};
+    bool mouseCaptureEnabled{};
+    bool cursorVisible{true};
+    std::string failingMouseOperation;
+    int mouseFailuresRemaining{};
+    bool clipboardTextSupported{true};
+    std::string clipboardText;
+    std::string clipboardReadBuffer;
+    std::string clipboardGetError;
+    bool clipboardGetReturnsNull{};
+    int clipboardFreeCalls{};
+    std::string failingServiceOperation;
+    int serviceFailuresRemaining{};
 
     int mainThreadChecks{};
     int initializedSubsystemChecks{};
@@ -139,10 +206,19 @@ struct FakeRuntimeBackend final
     bool attemptCreateDuringRestoration{};
     bool attemptedCreateDuringRestoration{};
     std::optional<pond::core::ErrorCode> restorationCreateError;
+    bool cursorsPresentAtQuit{};
 
     std::array<std::optional<std::string>, 3> metadata;
     std::unordered_map<std::string, std::string> hints;
     std::list<FakeWindow> windows;
+    std::list<FakeCursor> cursors;
+    void* activeCursor{};
+    std::vector<pond::platform::SystemCursorShape> createdCursorShapes;
+    std::vector<pond::platform::SystemCursorShape> selectedCursorShapes;
+    std::vector<pond::platform::SystemCursorShape> destroyedCursorShapes;
+    std::vector<void*> destroyedMetalViews;
+    std::vector<std::string> openedExternalUris;
+    std::vector<FakeDialogLaunch> dialogLaunches;
     std::vector<std::uint32_t> connectedDisplayIds;
     std::unordered_map<std::uint32_t, FakeDisplay> displays;
     std::deque<QueuedBackendEvent> eventQueue;
@@ -157,6 +233,11 @@ struct FakeRuntimeBackend final
 [[nodiscard]] FakeWindow& GetFakeWindow(void* window)
 {
     return *static_cast<FakeWindow*>(window);
+}
+
+[[nodiscard]] FakeCursor& GetFakeCursor(void* cursor)
+{
+    return *static_cast<FakeCursor*>(cursor);
 }
 
 [[nodiscard]] FakeDisplay& GetFakeDisplay(FakeRuntimeBackend& fake,
@@ -246,6 +327,68 @@ struct FakeRuntimeBackend final
     return event;
 }
 
+[[nodiscard]] SDL_Event MakeQueuedMouseMotionEvent(
+    std::uint32_t backendWindowId, float x, float y, float xRelative,
+    float yRelative, std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.motion.type = SDL_EVENT_MOUSE_MOTION;
+    event.motion.timestamp = timestamp;
+    event.motion.windowID = backendWindowId;
+    event.motion.x = x;
+    event.motion.y = y;
+    event.motion.xrel = xRelative;
+    event.motion.yrel = yRelative;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeQueuedMouseButtonEvent(
+    SDL_EventType type, std::uint32_t backendWindowId, std::uint8_t button,
+    float x, float y, std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.button.type = type;
+    event.button.timestamp = timestamp;
+    event.button.windowID = backendWindowId;
+    event.button.button = button;
+    event.button.down = type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+    event.button.x = x;
+    event.button.y = y;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeQueuedMouseWheelEvent(
+    std::uint32_t backendWindowId, float horizontal, float vertical,
+    float mouseX, float mouseY, std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.wheel.type = SDL_EVENT_MOUSE_WHEEL;
+    event.wheel.timestamp = timestamp;
+    event.wheel.windowID = backendWindowId;
+    event.wheel.x = horizontal;
+    event.wheel.y = vertical;
+    event.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+    event.wheel.mouse_x = mouseX;
+    event.wheel.mouse_y = mouseY;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeQueuedDropEvent(
+    SDL_EventType type, std::uint32_t backendWindowId,
+    const char* data = nullptr, const char* source = nullptr,
+    float x = 0.0F, float y = 0.0F, std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.drop.type = type;
+    event.drop.timestamp = timestamp;
+    event.drop.windowID = backendWindowId;
+    event.drop.data = data;
+    event.drop.source = source;
+    event.drop.x = x;
+    event.drop.y = y;
+    return event;
+}
+
 template <typename Event>
 void ExpectPolledEvent(
     const std::optional<pond::platform::PlatformEvent>& event,
@@ -309,6 +452,38 @@ void ExpectPolledEvent(
         std::erase(fake.connectedDisplayIds, disconnectedId);
         fake.disconnectDisplayOnFailure.reset();
     }
+    return true;
+}
+
+[[nodiscard]] bool FailMouseOperation(FakeRuntimeBackend& fake,
+                                      std::string_view operation)
+{
+    if (fake.failingMouseOperation != operation ||
+        fake.mouseFailuresRemaining == 0)
+    {
+        return false;
+    }
+
+    --fake.mouseFailuresRemaining;
+    const std::string message =
+        "synthetic " + std::string{operation} + " failure";
+    static_cast<void>(SDL_SetError("%s", message.c_str()));
+    return true;
+}
+
+[[nodiscard]] bool FailServiceOperation(FakeRuntimeBackend& fake,
+                                        std::string_view operation)
+{
+    if (fake.failingServiceOperation != operation ||
+        fake.serviceFailuresRemaining == 0)
+    {
+        return false;
+    }
+
+    --fake.serviceFailuresRemaining;
+    const std::string message =
+        "synthetic " + std::string{operation} + " failure";
+    static_cast<void>(SDL_SetError("%s", message.c_str()));
     return true;
 }
 
@@ -389,6 +564,127 @@ void ExpectPolledEvent(
                 pond::platform::TextInputArea{}));
         });
     invoke([&window]() { static_cast<void>(window.ClearTextInputArea()); });
+    return rejectedCalls;
+}
+
+[[nodiscard]] int CountRejectedWindowMouseCalls(
+    pond::platform::Window& window)
+{
+    int rejectedCalls{};
+    const auto invoke =
+        [&rejectedCalls](auto&& operation)
+        {
+            try
+            {
+                operation();
+            }
+            catch (const pond::core::PonderException&)
+            {
+                ++rejectedCalls;
+            }
+        };
+
+    invoke([&window]() { static_cast<void>(window.SetMouseGrab(true)); });
+    invoke([&window]() { static_cast<void>(window.IsMouseGrabbed()); });
+    invoke(
+        [&window]()
+        {
+            static_cast<void>(window.SetRelativeMouseMode(true));
+        });
+    invoke(
+        [&window]()
+        {
+            static_cast<void>(window.IsRelativeMouseModeEnabled());
+        });
+    return rejectedCalls;
+}
+
+[[nodiscard]] int CountRejectedRuntimeMouseCalls(
+    pond::platform::PlatformRuntime& runtime)
+{
+    int rejectedCalls{};
+    const auto invoke =
+        [&rejectedCalls](auto&& operation)
+        {
+            try
+            {
+                operation();
+            }
+            catch (const pond::core::PonderException&)
+            {
+                ++rejectedCalls;
+            }
+        };
+
+    invoke([&runtime]() { static_cast<void>(runtime.SetMouseCapture(true)); });
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(runtime.GetGlobalMousePosition());
+        });
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(runtime.SetSystemCursor(
+                pond::platform::SystemCursorShape::Default));
+        });
+    invoke([&runtime]() { static_cast<void>(runtime.ShowCursor()); });
+    invoke([&runtime]() { static_cast<void>(runtime.HideCursor()); });
+    invoke([&runtime]() { static_cast<void>(runtime.IsCursorVisible()); });
+    return rejectedCalls;
+}
+
+[[nodiscard]] int CountRejectedRuntimeServiceCalls(
+    pond::platform::PlatformRuntime& runtime)
+{
+    int rejectedCalls{};
+    const auto invoke =
+        [&rejectedCalls](auto&& operation)
+        {
+            try
+            {
+                operation();
+            }
+            catch (const pond::core::PonderException&)
+            {
+                ++rejectedCalls;
+            }
+        };
+
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(runtime.GetClipboardText());
+        });
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(runtime.SetClipboardText("clipboard"));
+        });
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(
+                runtime.OpenExternalUri("https://example.invalid/ponder"));
+        });
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(runtime.ShowOpenFileDialog(
+                pond::platform::OpenFileDialogDesc{}));
+        });
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(runtime.ShowSaveFileDialog(
+                pond::platform::SaveFileDialogDesc{}));
+        });
+    invoke(
+        [&runtime]()
+        {
+            static_cast<void>(runtime.ShowOpenFolderDialog(
+                pond::platform::OpenFolderDialogDesc{}));
+        });
     return rejectedCalls;
 }
 
@@ -522,6 +818,7 @@ void FakeQuit(void* context)
     FakeRuntimeBackend& fake = GetFake(context);
     ++fake.quitCalls;
     fake.calls.emplace_back("quit");
+    fake.cursorsPresentAtQuit = !fake.cursors.empty();
     fake.initializedSubsystems = false;
     fake.metadata = {};
     fake.hints.clear();
@@ -553,6 +850,238 @@ void FakeQuit(void* context)
     }
     *event = queued.event;
     return true;
+}
+
+[[nodiscard]] bool FakeSupportsGlobalMouse(void* context)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("supports-global-mouse");
+    return fake.globalMouseSupported;
+}
+
+void FakeGetGlobalMousePosition(void* context, float* x, float* y)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("get-global-mouse-position");
+    *x = fake.globalMousePosition.x;
+    *y = fake.globalMousePosition.y;
+}
+
+[[nodiscard]] bool FakeSetMouseCapture(void* context, bool enabled)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-mouse-capture");
+    if (FailMouseOperation(fake, "set-mouse-capture"))
+    {
+        return false;
+    }
+
+    fake.mouseCaptureEnabled = enabled;
+    return true;
+}
+
+[[nodiscard]] void* FakeCreateSystemCursor(
+    void* context, pond::platform::SystemCursorShape shape)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("create-system-cursor");
+    fake.createdCursorShapes.push_back(shape);
+    if (FailMouseOperation(fake, "create-system-cursor"))
+    {
+        return nullptr;
+    }
+
+    fake.cursors.emplace_back(FakeCursor{shape});
+    return &fake.cursors.back();
+}
+
+[[nodiscard]] bool FakeSetCursor(void* context, void* cursor)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-cursor");
+    fake.selectedCursorShapes.push_back(GetFakeCursor(cursor).shape);
+    if (FailMouseOperation(fake, "set-cursor"))
+    {
+        return false;
+    }
+
+    fake.activeCursor = cursor;
+    return true;
+}
+
+void FakeDestroyCursor(void* context, void* cursor)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("destroy-cursor");
+    const auto iterator = std::ranges::find_if(
+        fake.cursors,
+        [cursor](const FakeCursor& candidate)
+        {
+            return &candidate == cursor;
+        });
+    if (iterator == fake.cursors.end())
+    {
+        return;
+    }
+
+    fake.destroyedCursorShapes.push_back(iterator->shape);
+    if (fake.activeCursor == cursor)
+    {
+        fake.activeCursor = nullptr;
+    }
+    fake.cursors.erase(iterator);
+}
+
+[[nodiscard]] bool FakeShowCursor(void* context)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("show-cursor");
+    if (FailMouseOperation(fake, "show-cursor"))
+    {
+        return false;
+    }
+
+    fake.cursorVisible = true;
+    return true;
+}
+
+[[nodiscard]] bool FakeHideCursor(void* context)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("hide-cursor");
+    if (FailMouseOperation(fake, "hide-cursor"))
+    {
+        return false;
+    }
+
+    fake.cursorVisible = false;
+    return true;
+}
+
+[[nodiscard]] bool FakeIsCursorVisible(void* context)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("is-cursor-visible");
+    return fake.cursorVisible;
+}
+
+[[nodiscard]] bool FakeSupportsClipboardText(void* context)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("supports-clipboard-text");
+    return fake.clipboardTextSupported;
+}
+
+[[nodiscard]] BackendClipboardTextResult FakeGetClipboardText(void* context)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("get-clipboard-text");
+    if (fake.clipboardGetReturnsNull)
+    {
+        const std::string error =
+            fake.clipboardGetError.empty()
+                ? "synthetic get-clipboard-text failure"
+                : fake.clipboardGetError;
+        static_cast<void>(SDL_SetError("%s", error.c_str()));
+        return BackendClipboardTextResult{.text = nullptr, .errorText = error};
+    }
+
+    fake.clipboardReadBuffer = fake.clipboardText;
+    return BackendClipboardTextResult{
+        .text = fake.clipboardReadBuffer.data(),
+        .errorText = fake.clipboardGetError};
+}
+
+void FakeFreeClipboardText(void* context, char* text)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("free-clipboard-text");
+    ++fake.clipboardFreeCalls;
+    if (text == fake.clipboardReadBuffer.data())
+    {
+        fake.clipboardReadBuffer = "freed clipboard text";
+    }
+}
+
+[[nodiscard]] bool FakeSetClipboardText(void* context, const char* text)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-clipboard-text");
+    if (FailServiceOperation(fake, "set-clipboard-text"))
+    {
+        return false;
+    }
+
+    fake.clipboardText = text;
+    return true;
+}
+
+[[nodiscard]] bool FakeOpenExternalUri(void* context, const char* uri)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("open-external-uri");
+    if (FailServiceOperation(fake, "open-external-uri"))
+    {
+        return false;
+    }
+
+    fake.openedExternalUris.emplace_back(uri);
+    return true;
+}
+
+void FakeShowDialog(void* context, const BackendDialogRequestDesc& desc)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("show-dialog");
+
+    FakeDialogLaunch launch{
+        .kind = desc.kind,
+        .parentWindow = desc.parentWindow,
+        .defaultLocation = desc.defaultLocation != nullptr
+                             ? std::optional<std::string>{desc.defaultLocation}
+                             : std::nullopt,
+        .allowMultipleSelection = desc.allowMultipleSelection,
+        .callback = desc.callback,
+        .userdata = desc.userdata};
+    if (desc.filters != nullptr)
+    {
+        for (int index = 0; index < desc.filterCount; ++index)
+        {
+            launch.filters.push_back(pond::platform::DialogFileFilter{
+                .name = desc.filters[index].name,
+                .pattern = desc.filters[index].pattern});
+        }
+    }
+    fake.dialogLaunches.push_back(std::move(launch));
+}
+
+void CompleteDialogSelection(FakeDialogLaunch& launch,
+                             std::span<const std::string> paths,
+                             int selectedFilter)
+{
+    std::vector<const char*> fileList;
+    fileList.reserve(paths.size() + 1U);
+    for (const std::string& path : paths)
+    {
+        fileList.push_back(path.c_str());
+    }
+    fileList.push_back(nullptr);
+
+    launch.callback(launch.userdata, fileList.data(), selectedFilter);
+}
+
+void CompleteDialogCancellation(FakeDialogLaunch& launch)
+{
+    const char* const fileList[]{nullptr};
+    launch.callback(launch.userdata, fileList, -1);
+}
+
+void CompleteDialogFailure(FakeDialogLaunch& launch, std::string_view message)
+{
+    static_cast<void>(SDL_SetError("%.*s", static_cast<int>(message.size()),
+                                   message.data()));
+    launch.callback(launch.userdata, nullptr, -1);
+    static_cast<void>(SDL_ClearError());
 }
 
 [[nodiscard]] void* FakeCreateWindow(void* context,
@@ -1003,6 +1532,149 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
+[[nodiscard]] bool FakeSetWindowMouseGrab(
+    void* context, void* window, bool grabbed)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-window-mouse-grab");
+    if (FailWindowOperation(fake, "set-window-mouse-grab"))
+    {
+        return false;
+    }
+
+    if (fake.applyWindowOperationEffects)
+    {
+        GetFakeWindow(window).mouseGrabbed = grabbed;
+    }
+    return true;
+}
+
+[[nodiscard]] bool FakeIsWindowMouseGrabbed(void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("is-window-mouse-grabbed");
+    return GetFakeWindow(window).mouseGrabbed;
+}
+
+[[nodiscard]] bool FakeSetWindowRelativeMouseMode(
+    void* context, void* window, bool enabled)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-window-relative-mouse-mode");
+    if (FailWindowOperation(fake, "set-window-relative-mouse-mode"))
+    {
+        return false;
+    }
+
+    if (fake.applyWindowOperationEffects)
+    {
+        GetFakeWindow(window).relativeMouseModeEnabled = enabled;
+    }
+    return true;
+}
+
+[[nodiscard]] bool FakeIsWindowRelativeMouseModeEnabled(
+    void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("is-window-relative-mouse-mode-enabled");
+    return GetFakeWindow(window).relativeMouseModeEnabled;
+}
+
+[[nodiscard]] BackendNativeWindowHandleResult FakeGetNativeWindowHandle(
+    void* context, void*, void** cachedMetalView,
+    pond::platform::NativeWindowHandle* handle)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("get-native-handle");
+    const BackendWindowOperationResult operationResult =
+        GetWindowOperationResult(fake, "get-native-handle");
+    if (operationResult == BackendWindowOperationResult::Unsupported)
+    {
+        return BackendNativeWindowHandleResult{
+            .status = BackendNativeWindowHandleStatus::Unsupported,
+            .message = "synthetic native window unsupported"};
+    }
+    if (operationResult == BackendWindowOperationResult::Failed)
+    {
+        return BackendNativeWindowHandleResult{
+            .status = BackendNativeWindowHandleStatus::Failed,
+            .operation = "get-native-handle",
+            .captureSdlError = true};
+    }
+
+    switch (pond::platform::detail::GetNativeWindowDriver(
+        fake.nativeVideoDriver))
+    {
+    case BackendNativeWindowDriver::Win32:
+        if (fake.nativeWin32Instance == nullptr ||
+            fake.nativeWin32Window == nullptr)
+        {
+            return BackendNativeWindowHandleResult{
+                .status = BackendNativeWindowHandleStatus::Failed,
+                .message = "missing fake Win32 data"};
+        }
+        *handle = pond::platform::NativeWin32Window{
+            .instance = fake.nativeWin32Instance,
+            .window = fake.nativeWin32Window};
+        break;
+    case BackendNativeWindowDriver::X11:
+        if (fake.nativeX11Display == nullptr || fake.nativeX11Window == 0)
+        {
+            return BackendNativeWindowHandleResult{
+                .status = BackendNativeWindowHandleStatus::Failed,
+                .message = "missing fake X11 data"};
+        }
+        *handle = pond::platform::NativeX11Window{
+            .display = fake.nativeX11Display,
+            .window = fake.nativeX11Window};
+        break;
+    case BackendNativeWindowDriver::Wayland:
+        if (fake.nativeWaylandDisplay == nullptr ||
+            fake.nativeWaylandSurface == nullptr)
+        {
+            return BackendNativeWindowHandleResult{
+                .status = BackendNativeWindowHandleStatus::Failed,
+                .message = "missing fake Wayland data"};
+        }
+        *handle = pond::platform::NativeWaylandWindow{
+            .display = fake.nativeWaylandDisplay,
+            .surface = fake.nativeWaylandSurface};
+        break;
+    case BackendNativeWindowDriver::Cocoa:
+        if (cachedMetalView == nullptr)
+        {
+            return BackendNativeWindowHandleResult{
+                .status = BackendNativeWindowHandleStatus::Failed,
+                .message = "missing fake Cocoa cache storage"};
+        }
+        if (*cachedMetalView == nullptr)
+        {
+            ++fake.createMetalViewCalls;
+            fake.calls.emplace_back("create-metal-view");
+            *cachedMetalView = fake.nativeCocoaMetalView;
+        }
+        *handle = pond::platform::NativeCocoaWindow{
+            .metalLayer = fake.nativeCocoaMetalLayer};
+        break;
+    case BackendNativeWindowDriver::Unsupported:
+        return BackendNativeWindowHandleResult{
+            .status = BackendNativeWindowHandleStatus::Unsupported,
+            .message = "synthetic unsupported video driver"};
+    }
+
+    return BackendNativeWindowHandleResult{
+        .status = BackendNativeWindowHandleStatus::Succeeded};
+}
+
+void FakeDestroyMetalView(void* context, void* metalView)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    ++fake.destroyMetalViewCalls;
+    fake.destroyedMetalViews.push_back(metalView);
+    fake.calls.emplace_back("destroy-metal-view");
+}
+
 [[nodiscard]] bool FakeEnumerateDisplays(
     void* context, std::vector<std::uint32_t>& displayIds)
 {
@@ -1139,7 +1811,22 @@ void FakeDestroyWindow(void* context, void* window)
         FakeInitializeVideo,
         FakeQuit,
         FakeGetTicksNanoseconds,
-        FakePollEvent};
+        FakePollEvent,
+        FakeSupportsGlobalMouse,
+        FakeGetGlobalMousePosition,
+        FakeSetMouseCapture,
+        FakeCreateSystemCursor,
+        FakeSetCursor,
+        FakeDestroyCursor,
+        FakeShowCursor,
+        FakeHideCursor,
+        FakeIsCursorVisible,
+        FakeSupportsClipboardText,
+        FakeGetClipboardText,
+        FakeFreeClipboardText,
+        FakeSetClipboardText,
+        FakeOpenExternalUri,
+        FakeShowDialog};
 }
 
 [[nodiscard]] PlatformWindowBackend MakeWindowBackend(FakeRuntimeBackend& fake)
@@ -1172,7 +1859,13 @@ void FakeDestroyWindow(void* context, void* window)
         FakeStopWindowTextInput,
         FakeIsWindowTextInputActive,
         FakeClearWindowTextComposition,
-        FakeSetWindowTextInputArea};
+        FakeSetWindowTextInputArea,
+        FakeSetWindowMouseGrab,
+        FakeIsWindowMouseGrabbed,
+        FakeSetWindowRelativeMouseMode,
+        FakeIsWindowRelativeMouseModeEnabled,
+        FakeGetNativeWindowHandle,
+        FakeDestroyMetalView};
 }
 
 [[nodiscard]] PlatformDisplayBackend MakeDisplayBackend(FakeRuntimeBackend& fake)
@@ -3192,6 +3885,8 @@ TEST_F(PlatformRuntimeBackendTests, GuardsNewWindowDisplayApisAfterMoveAndAcross
                  pond::core::PonderException);
     EXPECT_THROW(static_cast<void>(window.GetDisplayScale()),
                  pond::core::PonderException);
+    EXPECT_THROW(static_cast<void>(window.GetNativeHandle()),
+                 pond::core::PonderException);
     EXPECT_EQ(m_fake.calls.size(), callCount);
 
     std::atomic_int rejectedCalls{};
@@ -3222,13 +3917,174 @@ TEST_F(PlatformRuntimeBackendTests, GuardsNewWindowDisplayApisAfterMoveAndAcross
             {
                 ++rejectedCalls;
             }
+            try
+            {
+                static_cast<void>(movedWindow.GetNativeHandle());
+            }
+            catch (const pond::core::PonderException&)
+            {
+                ++rejectedCalls;
+            }
         }};
     worker.join();
 
-    EXPECT_EQ(rejectedCalls.load(), 3);
+    EXPECT_EQ(rejectedCalls.load(), 4);
     EXPECT_EQ(m_fake.calls.size(), callCount);
 }
 
+TEST_F(PlatformRuntimeBackendTests, ExposesNativeHandlesForApprovedDrivers)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    desc.graphicsCompatibility =
+        pond::platform::WindowGraphicsCompatibility::Vulkan;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    std::optional<pond::platform::Window> window;
+    window.emplace(std::move(windowResult).GetValue());
+
+    m_fake.nativeVideoDriver = "windows";
+    auto win32Result = window->GetNativeHandle();
+    ASSERT_TRUE(win32Result.HasValue()) << win32Result.GetError().GetMessage();
+    ASSERT_TRUE(std::holds_alternative<pond::platform::NativeWin32Window>(
+        win32Result.GetValue()));
+    EXPECT_EQ(std::get<pond::platform::NativeWin32Window>(win32Result.GetValue()),
+              (pond::platform::NativeWin32Window{
+                  .instance = m_fake.nativeWin32Instance,
+                  .window = m_fake.nativeWin32Window}));
+
+    m_fake.nativeVideoDriver = "x11";
+    auto x11Result = window->GetNativeHandle();
+    ASSERT_TRUE(x11Result.HasValue()) << x11Result.GetError().GetMessage();
+    ASSERT_TRUE(std::holds_alternative<pond::platform::NativeX11Window>(
+        x11Result.GetValue()));
+    EXPECT_EQ(std::get<pond::platform::NativeX11Window>(x11Result.GetValue()),
+              (pond::platform::NativeX11Window{
+                  .display = m_fake.nativeX11Display,
+                  .window = m_fake.nativeX11Window}));
+
+    m_fake.nativeVideoDriver = "wayland";
+    auto waylandResult = window->GetNativeHandle();
+    ASSERT_TRUE(waylandResult.HasValue())
+        << waylandResult.GetError().GetMessage();
+    ASSERT_TRUE(std::holds_alternative<pond::platform::NativeWaylandWindow>(
+        waylandResult.GetValue()));
+    EXPECT_EQ(
+        std::get<pond::platform::NativeWaylandWindow>(waylandResult.GetValue()),
+        (pond::platform::NativeWaylandWindow{
+            .display = m_fake.nativeWaylandDisplay,
+            .surface = m_fake.nativeWaylandSurface}));
+
+    m_fake.nativeVideoDriver = "cocoa";
+    auto cocoaResult = window->GetNativeHandle();
+    ASSERT_TRUE(cocoaResult.HasValue()) << cocoaResult.GetError().GetMessage();
+    ASSERT_TRUE(std::holds_alternative<pond::platform::NativeCocoaWindow>(
+        cocoaResult.GetValue()));
+    EXPECT_EQ(std::get<pond::platform::NativeCocoaWindow>(cocoaResult.GetValue()),
+              (pond::platform::NativeCocoaWindow{
+                  .metalLayer = m_fake.nativeCocoaMetalLayer}));
+    EXPECT_EQ(m_fake.createMetalViewCalls, 1);
+
+    auto secondCocoaResult = window->GetNativeHandle();
+    ASSERT_TRUE(secondCocoaResult.HasValue())
+        << secondCocoaResult.GetError().GetMessage();
+    EXPECT_EQ(std::get<pond::platform::NativeCocoaWindow>(
+                  secondCocoaResult.GetValue()),
+              (pond::platform::NativeCocoaWindow{
+                  .metalLayer = m_fake.nativeCocoaMetalLayer}));
+    EXPECT_EQ(m_fake.createMetalViewCalls, 1);
+
+    window.reset();
+    EXPECT_EQ(m_fake.destroyMetalViewCalls, 1);
+    ASSERT_EQ(m_fake.destroyedMetalViews.size(), 1U);
+    EXPECT_EQ(m_fake.destroyedMetalViews.front(), m_fake.nativeCocoaMetalView);
+    const auto metalDestroy =
+        std::ranges::find(m_fake.calls, "destroy-metal-view");
+    const auto windowDestroy = std::ranges::find(m_fake.calls, "destroy-window");
+    ASSERT_NE(metalDestroy, m_fake.calls.end());
+    ASSERT_NE(windowDestroy, m_fake.calls.end());
+    EXPECT_LT(metalDestroy, windowDestroy);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RejectsNativeHandlesForDefaultWindowsAndUnsupportedDrivers)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc defaultDesc;
+    defaultDesc.visible = false;
+    auto defaultWindowResult = runtime.CreateWindow(defaultDesc);
+    ASSERT_TRUE(defaultWindowResult.HasValue());
+    pond::platform::Window defaultWindow =
+        std::move(defaultWindowResult).GetValue();
+
+    const std::size_t callCount = m_fake.calls.size();
+    auto invalidResult = defaultWindow.GetNativeHandle();
+    ASSERT_FALSE(invalidResult.HasValue());
+    EXPECT_EQ(invalidResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+    EXPECT_EQ(m_fake.calls.size(), callCount);
+
+    pond::platform::WindowDesc vulkanDesc;
+    vulkanDesc.visible = false;
+    vulkanDesc.graphicsCompatibility =
+        pond::platform::WindowGraphicsCompatibility::Vulkan;
+    auto vulkanWindowResult = runtime.CreateWindow(vulkanDesc);
+    ASSERT_TRUE(vulkanWindowResult.HasValue());
+    pond::platform::Window vulkanWindow =
+        std::move(vulkanWindowResult).GetValue();
+
+    m_fake.nativeVideoDriver = "dummy";
+    auto unsupportedResult = vulkanWindow.GetNativeHandle();
+    ASSERT_FALSE(unsupportedResult.HasValue());
+    EXPECT_EQ(unsupportedResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+}
+
+TEST_F(PlatformRuntimeBackendTests, ReportsNativeHandleBackendFailures)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    desc.graphicsCompatibility =
+        pond::platform::WindowGraphicsCompatibility::Vulkan;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    m_fake.failingWindowOperation = "get-native-handle";
+    m_fake.windowFailuresRemaining = 1;
+    auto failedResult = window.GetNativeHandle();
+    ASSERT_FALSE(failedResult.HasValue());
+    EXPECT_EQ(failedResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(failedResult.GetError().GetMessage().find("get-native-handle"),
+              std::string::npos);
+
+    m_fake.nativeWin32Window = nullptr;
+    auto missingResult = window.GetNativeHandle();
+    ASSERT_FALSE(missingResult.HasValue());
+    EXPECT_EQ(missingResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(missingResult.GetError().GetMessage().find("missing fake Win32"),
+              std::string::npos);
+}
 TEST_F(PlatformRuntimeBackendTests,
        PollingContinuesPastIgnoredEventsUntilAProjectEventIsAvailable)
 {
@@ -3973,6 +4829,982 @@ TEST_F(PlatformRuntimeBackendTests,
         {
             rejectedCalls.store(
                 CountRejectedWindowTextInputCalls(movedWindow));
+        }};
+    worker.join();
+    EXPECT_EQ(rejectedCalls.load(), 6);
+    EXPECT_EQ(m_fake.calls, callsBefore);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       ExposesLiveWindowMouseGrabAndRelativeModeState)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto windowResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    EXPECT_FALSE(window.IsMouseGrabbed());
+    ASSERT_TRUE(window.SetMouseGrab(true).HasValue());
+    EXPECT_TRUE(window.IsMouseGrabbed());
+    ASSERT_TRUE(window.SetMouseGrab(true).HasValue());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "set-window-mouse-grab"), 2);
+
+    ASSERT_TRUE(window.SetMouseGrab(false).HasValue());
+    EXPECT_FALSE(window.IsMouseGrabbed());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "set-window-mouse-grab"), 3);
+
+    EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
+    ASSERT_TRUE(window.SetRelativeMouseMode(true).HasValue());
+    EXPECT_TRUE(window.IsRelativeMouseModeEnabled());
+    ASSERT_TRUE(window.SetRelativeMouseMode(true).HasValue());
+    EXPECT_EQ(std::ranges::count(
+                  m_fake.calls, "set-window-relative-mouse-mode"),
+              1);
+
+    ASSERT_TRUE(window.SetRelativeMouseMode(false).HasValue());
+    EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
+    ASSERT_TRUE(window.SetRelativeMouseMode(false).HasValue());
+    EXPECT_EQ(std::ranges::count(
+                  m_fake.calls, "set-window-relative-mouse-mode"),
+              2);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RoutesInterleavedMouseEventsAcrossWindowsAndSkipsStaleTargets)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto firstResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(firstResult.HasValue());
+    pond::platform::Window first = std::move(firstResult).GetValue();
+    auto secondResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(secondResult.HasValue());
+    pond::platform::Window second = std::move(secondResult).GetValue();
+
+    const std::uint32_t firstBackendId = m_fake.windows.front().backendId;
+    const std::uint32_t secondBackendId = m_fake.windows.back().backendId;
+    m_fake.eventQueue.push_back({.event = MakeQueuedMouseMotionEvent(
+                                     firstBackendId, 10.5F, -2.25F,
+                                     1.5F, -0.5F, 100)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedMouseButtonEvent(
+                                     SDL_EVENT_MOUSE_BUTTON_DOWN,
+                                     secondBackendId, SDL_BUTTON_X2,
+                                     3.0F, 4.0F, 200)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedMouseWheelEvent(
+                                     firstBackendId, -0.5F, 1.25F,
+                                     8.0F, 9.0F, 300)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedMouseMotionEvent(
+                                     999, 1.0F, 2.0F, 3.0F, 4.0F, 400)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(500)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::MouseMotionEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = first.GetId(),
+            .position = {10.5F, -2.25F},
+            .relativeMovement = {1.5F, -0.5F}});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::MouseButtonEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}},
+            .windowId = second.GetId(),
+            .position = {3.0F, 4.0F},
+            .button = pond::platform::MouseButton::X2,
+            .pressed = true});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::MouseWheelEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}},
+            .windowId = first.GetId(),
+            .position = {8.0F, 9.0F},
+            .horizontal = -0.5F,
+            .vertical = 1.25F});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{500}}});
+    EXPECT_EQ(m_fake.pollEventCalls, 5);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RoutesInterleavedDropEventsAcrossWindowsAndSkipsStaleTargets)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto firstResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(firstResult.HasValue());
+    pond::platform::Window first = std::move(firstResult).GetValue();
+    auto secondResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(secondResult.HasValue());
+    pond::platform::Window second = std::move(secondResult).GetValue();
+
+    const std::uint32_t firstBackendId = m_fake.windows.front().backendId;
+    const std::uint32_t secondBackendId = m_fake.windows.back().backendId;
+    const std::string source{"source-app"};
+    const std::string path{"C:/tmp/dropped.sdf"};
+    const std::string text{"C1=CC=CC=C1"};
+
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDropEvent(SDL_EVENT_DROP_TEXT, 999, "stale",
+                                      source.c_str(), 1.0F, 2.0F, 50)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDropEvent(SDL_EVENT_DROP_BEGIN, firstBackendId,
+                                      nullptr, source.c_str(), 0.0F, 0.0F,
+                                      100)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDropEvent(SDL_EVENT_DROP_FILE, secondBackendId,
+                                      path.c_str(), source.c_str(), 3.0F,
+                                      4.0F, 200)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDropEvent(SDL_EVENT_DROP_TEXT, secondBackendId,
+                                      text.c_str(), nullptr, 5.0F, 6.0F,
+                                      300)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDropEvent(SDL_EVENT_DROP_POSITION, firstBackendId,
+                                      nullptr, source.c_str(), 7.0F, 8.0F,
+                                      400)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedDropEvent(SDL_EVENT_DROP_COMPLETE, 0, nullptr,
+                                      nullptr, 9.0F, 10.0F, 500)});
+    m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(600)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DropBeginEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = first.GetId(),
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DroppedFileEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}},
+            .windowId = second.GetId(),
+            .path = std::filesystem::path{"C:/tmp/dropped.sdf"},
+            .position = {3.0F, 4.0F},
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DroppedTextEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}},
+            .windowId = second.GetId(),
+            .text = text,
+            .position = {5.0F, 6.0F},
+            .sourceApplication = std::nullopt});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DropPositionEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{400}},
+            .windowId = first.GetId(),
+            .position = {7.0F, 8.0F},
+            .sourceApplication = std::optional<std::string>{"source-app"}});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::DropCompleteEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{500}},
+            .windowId = std::nullopt,
+            .position = {9.0F, 10.0F},
+            .sourceApplication = std::nullopt});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::QuitRequestedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{600}}});
+    EXPECT_EQ(m_fake.pollEventCalls, 7);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       ReportsWindowMouseFailuresWithoutCachingRequestedState)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto windowResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto expectError =
+        [](const pond::core::VoidResult& result,
+           pond::platform::PlatformErrorCode code,
+           std::string_view operation)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(code));
+            EXPECT_NE(result.GetError().GetMessage().find(operation),
+                      std::string_view::npos);
+            EXPECT_NE(result.GetError().GetMessage().find("window 1"),
+                      std::string_view::npos);
+        };
+
+    m_fake.failingWindowOperation = "set-window-mouse-grab";
+    m_fake.windowFailuresRemaining = 1;
+    expectError(window.SetMouseGrab(true),
+                pond::platform::PlatformErrorCode::BackendFailure,
+                "SDL_SetWindowMouseGrab");
+    EXPECT_FALSE(window.IsMouseGrabbed());
+
+    m_fake.failingWindowOperation.clear();
+    m_fake.applyWindowOperationEffects = false;
+    EXPECT_TRUE(window.SetMouseGrab(true).HasValue());
+    EXPECT_FALSE(window.IsMouseGrabbed());
+
+    m_fake.applyWindowOperationEffects = true;
+    m_fake.failingWindowOperation = "set-window-relative-mouse-mode";
+    m_fake.windowFailuresRemaining = 1;
+    expectError(window.SetRelativeMouseMode(true),
+                pond::platform::PlatformErrorCode::BackendFailure,
+                "SDL_SetWindowRelativeMouseMode");
+    EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
+
+    m_fake.failingWindowOperation.clear();
+    m_fake.applyWindowOperationEffects = false;
+    expectError(window.SetRelativeMouseMode(true),
+                pond::platform::PlatformErrorCode::Unsupported,
+                "SDL_SetWindowRelativeMouseMode");
+    EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       HandlesGlobalMouseCapabilityCaptureAndPosition)
+{
+    m_fake.globalMouseSupported = false;
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    const pond::core::VoidResult unsupportedCapture =
+        runtime.SetMouseCapture(true);
+    ASSERT_FALSE(unsupportedCapture.HasValue());
+    EXPECT_EQ(unsupportedCapture.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_FALSE(m_fake.mouseCaptureEnabled);
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "set-mouse-capture"), 0);
+
+    EXPECT_TRUE(runtime.SetMouseCapture(false).HasValue());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "set-mouse-capture"), 0);
+
+    const auto unsupportedPosition = runtime.GetGlobalMousePosition();
+    ASSERT_FALSE(unsupportedPosition.HasValue());
+    EXPECT_EQ(unsupportedPosition.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_EQ(std::ranges::count(
+                  m_fake.calls, "get-global-mouse-position"),
+              0);
+
+    m_fake.globalMouseSupported = true;
+    m_fake.globalMousePosition = {-12.5F, 300.25F};
+    const auto position = runtime.GetGlobalMousePosition();
+    ASSERT_TRUE(position.HasValue());
+    EXPECT_EQ(position.GetValue(), m_fake.globalMousePosition);
+
+    ASSERT_TRUE(runtime.SetMouseCapture(true).HasValue());
+    EXPECT_TRUE(m_fake.mouseCaptureEnabled);
+    ASSERT_TRUE(runtime.SetMouseCapture(false).HasValue());
+    EXPECT_FALSE(m_fake.mouseCaptureEnabled);
+
+    m_fake.failingMouseOperation = "set-mouse-capture";
+    m_fake.mouseFailuresRemaining = 1;
+    const pond::core::VoidResult failedCapture =
+        runtime.SetMouseCapture(true);
+    ASSERT_FALSE(failedCapture.HasValue());
+    EXPECT_EQ(failedCapture.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(failedCapture.GetError().GetMessage().find("SDL_CaptureMouse"),
+              std::string_view::npos);
+    EXPECT_FALSE(m_fake.mouseCaptureEnabled);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RejectsNonFiniteGlobalMousePositions)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    const std::array<pond::platform::LogicalPoint, 2> invalidPositions{{
+        {std::numeric_limits<float>::quiet_NaN(), 1.0F},
+        {1.0F, std::numeric_limits<float>::infinity()},
+    }};
+    for (const pond::platform::LogicalPoint position : invalidPositions)
+    {
+        m_fake.globalMousePosition = position;
+        const auto result = runtime.GetGlobalMousePosition();
+        ASSERT_FALSE(result.HasValue());
+        EXPECT_EQ(result.GetError().GetCode(),
+                  pond::platform::ToErrorCode(
+                      pond::platform::PlatformErrorCode::BackendFailure));
+        EXPECT_NE(result.GetError().GetMessage().find(
+                      "SDL_GetGlobalMouseState"),
+                  std::string_view::npos);
+    }
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       LazilyCachesEverySystemCursorAndDestroysThemBeforeQuit)
+{
+    {
+        auto runtimeResult = pond::platform::PlatformRuntime::Create(
+            pond::platform::PlatformRuntimeDesc{});
+        ASSERT_TRUE(runtimeResult.HasValue());
+        pond::platform::PlatformRuntime runtime =
+            std::move(runtimeResult).GetValue();
+
+        for (const pond::platform::SystemCursorShape shape :
+             kSystemCursorShapes)
+        {
+            ASSERT_TRUE(runtime.SetSystemCursor(shape).HasValue());
+        }
+        EXPECT_TRUE(std::ranges::equal(
+            m_fake.createdCursorShapes, kSystemCursorShapes));
+        EXPECT_TRUE(std::ranges::equal(
+            m_fake.selectedCursorShapes, kSystemCursorShapes));
+        EXPECT_EQ(m_fake.cursors.size(), kSystemCursorShapes.size());
+
+        for (const pond::platform::SystemCursorShape shape :
+             kSystemCursorShapes)
+        {
+            ASSERT_TRUE(runtime.SetSystemCursor(shape).HasValue());
+        }
+        EXPECT_EQ(m_fake.createdCursorShapes.size(),
+                  kSystemCursorShapes.size());
+        EXPECT_EQ(m_fake.selectedCursorShapes.size(),
+                  kSystemCursorShapes.size() * 2);
+
+        const std::size_t createCalls = m_fake.createdCursorShapes.size();
+        const std::size_t setCalls = m_fake.selectedCursorShapes.size();
+        const auto invalidShape =
+            static_cast<pond::platform::SystemCursorShape>(255);
+        const pond::core::VoidResult invalidResult =
+            runtime.SetSystemCursor(invalidShape);
+        ASSERT_FALSE(invalidResult.HasValue());
+        EXPECT_EQ(invalidResult.GetError().GetCode(),
+                  pond::platform::ToErrorCode(
+                      pond::platform::PlatformErrorCode::InvalidArgument));
+        EXPECT_EQ(m_fake.createdCursorShapes.size(), createCalls);
+        EXPECT_EQ(m_fake.selectedCursorShapes.size(), setCalls);
+    }
+
+    EXPECT_FALSE(m_fake.cursorsPresentAtQuit);
+    EXPECT_TRUE(m_fake.cursors.empty());
+    EXPECT_EQ(m_fake.activeCursor, nullptr);
+    EXPECT_TRUE(std::ranges::equal(
+        m_fake.destroyedCursorShapes, kSystemCursorShapes));
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "destroy-cursor"),
+              static_cast<std::ptrdiff_t>(kSystemCursorShapes.size()));
+
+    const auto quit = std::ranges::find(m_fake.calls, "quit");
+    ASSERT_NE(quit, m_fake.calls.end());
+    EXPECT_EQ(std::find(quit, m_fake.calls.end(), "destroy-cursor"),
+              m_fake.calls.end());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RetriesCursorCreationAndReusesCursorAfterSelectionFailure)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    m_fake.failingMouseOperation = "create-system-cursor";
+    m_fake.mouseFailuresRemaining = 1;
+    const pond::core::VoidResult createFailure =
+        runtime.SetSystemCursor(pond::platform::SystemCursorShape::TextInput);
+    ASSERT_FALSE(createFailure.HasValue());
+    EXPECT_NE(createFailure.GetError().GetMessage().find(
+                  "SDL_CreateSystemCursor"),
+              std::string_view::npos);
+    EXPECT_TRUE(m_fake.cursors.empty());
+
+    ASSERT_TRUE(runtime.SetSystemCursor(
+        pond::platform::SystemCursorShape::TextInput).HasValue());
+    EXPECT_EQ(std::ranges::count(
+                  m_fake.createdCursorShapes,
+                  pond::platform::SystemCursorShape::TextInput),
+              2);
+
+    m_fake.failingMouseOperation = "set-cursor";
+    m_fake.mouseFailuresRemaining = 1;
+    const pond::core::VoidResult setFailure =
+        runtime.SetSystemCursor(pond::platform::SystemCursorShape::Pointer);
+    ASSERT_FALSE(setFailure.HasValue());
+    EXPECT_NE(setFailure.GetError().GetMessage().find("SDL_SetCursor"),
+              std::string_view::npos);
+    EXPECT_EQ(std::ranges::count(
+                  m_fake.createdCursorShapes,
+                  pond::platform::SystemCursorShape::Pointer),
+              1);
+
+    ASSERT_TRUE(runtime.SetSystemCursor(
+        pond::platform::SystemCursorShape::Pointer).HasValue());
+    EXPECT_EQ(std::ranges::count(
+                  m_fake.createdCursorShapes,
+                  pond::platform::SystemCursorShape::Pointer),
+              1);
+    EXPECT_EQ(std::ranges::count(
+                  m_fake.selectedCursorShapes,
+                  pond::platform::SystemCursorShape::Pointer),
+              2);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       MakesCursorVisibilityIdempotentAndPreservesStateOnFailure)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    EXPECT_TRUE(runtime.IsCursorVisible());
+    ASSERT_TRUE(runtime.ShowCursor().HasValue());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "show-cursor"), 0);
+
+    ASSERT_TRUE(runtime.HideCursor().HasValue());
+    EXPECT_FALSE(runtime.IsCursorVisible());
+    ASSERT_TRUE(runtime.HideCursor().HasValue());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "hide-cursor"), 1);
+
+    ASSERT_TRUE(runtime.ShowCursor().HasValue());
+    EXPECT_TRUE(runtime.IsCursorVisible());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "show-cursor"), 1);
+
+    m_fake.failingMouseOperation = "hide-cursor";
+    m_fake.mouseFailuresRemaining = 1;
+    const pond::core::VoidResult hideFailure = runtime.HideCursor();
+    ASSERT_FALSE(hideFailure.HasValue());
+    EXPECT_NE(hideFailure.GetError().GetMessage().find("SDL_HideCursor"),
+              std::string_view::npos);
+    EXPECT_TRUE(runtime.IsCursorVisible());
+
+    m_fake.cursorVisible = false;
+    m_fake.failingMouseOperation = "show-cursor";
+    m_fake.mouseFailuresRemaining = 1;
+    const pond::core::VoidResult showFailure = runtime.ShowCursor();
+    ASSERT_FALSE(showFailure.HasValue());
+    EXPECT_NE(showFailure.GetError().GetMessage().find("SDL_ShowCursor"),
+              std::string_view::npos);
+    EXPECT_FALSE(runtime.IsCursorVisible());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       LaunchesAsynchronousDialogsWithOwnedDescriptorsAndStableIds)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto windowResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    pond::platform::OpenFileDialogDesc openDesc{
+        .parentWindowId = window.GetId(),
+        .defaultLocation = std::filesystem::path{"C:/tmp/input.sdf"},
+        .filters = {{.name = "Molecules", .pattern = "sdf;mol"},
+                    {.name = "All", .pattern = "*"}},
+        .allowMultipleSelection = true};
+    auto openId = runtime.ShowOpenFileDialog(openDesc);
+    ASSERT_TRUE(openId.HasValue()) << openId.GetError().GetMessage();
+    EXPECT_EQ(openId.GetValue(), pond::platform::DialogRequestId{1});
+
+    openDesc.filters.front().name = "mutated";
+    openDesc.filters.front().pattern = "xyz";
+    openDesc.defaultLocation = std::filesystem::path{"C:/tmp/mutated"};
+
+    pond::platform::SaveFileDialogDesc saveDesc{
+        .defaultLocation = std::filesystem::path{"C:/tmp/output.sdf"},
+        .filters = {{.name = "Molecules", .pattern = "sdf"}}};
+    auto saveId = runtime.ShowSaveFileDialog(saveDesc);
+    ASSERT_TRUE(saveId.HasValue()) << saveId.GetError().GetMessage();
+    EXPECT_EQ(saveId.GetValue(), pond::platform::DialogRequestId{2});
+
+    pond::platform::OpenFolderDialogDesc folderDesc{
+        .defaultLocation = std::filesystem::path{"C:/tmp"},
+        .allowMultipleSelection = true};
+    auto folderId = runtime.ShowOpenFolderDialog(folderDesc);
+    ASSERT_TRUE(folderId.HasValue()) << folderId.GetError().GetMessage();
+    EXPECT_EQ(folderId.GetValue(), pond::platform::DialogRequestId{3});
+
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 3U);
+    EXPECT_EQ(m_fake.dialogLaunches[0].kind, BackendDialogKind::OpenFile);
+    EXPECT_EQ(m_fake.dialogLaunches[0].parentWindow, &m_fake.windows.front());
+    ASSERT_EQ(m_fake.dialogLaunches[0].filters.size(), 2U);
+    EXPECT_EQ(m_fake.dialogLaunches[0].filters[0].name, "Molecules");
+    EXPECT_EQ(m_fake.dialogLaunches[0].filters[0].pattern, "sdf;mol");
+    EXPECT_EQ(m_fake.dialogLaunches[0].defaultLocation, "C:/tmp/input.sdf");
+    EXPECT_TRUE(m_fake.dialogLaunches[0].allowMultipleSelection);
+
+    EXPECT_EQ(m_fake.dialogLaunches[1].kind, BackendDialogKind::SaveFile);
+    EXPECT_FALSE(m_fake.dialogLaunches[1].parentWindow != nullptr);
+    ASSERT_EQ(m_fake.dialogLaunches[1].filters.size(), 1U);
+    EXPECT_FALSE(m_fake.dialogLaunches[1].allowMultipleSelection);
+
+    EXPECT_EQ(m_fake.dialogLaunches[2].kind, BackendDialogKind::OpenFolder);
+    EXPECT_TRUE(m_fake.dialogLaunches[2].filters.empty());
+    EXPECT_EQ(m_fake.dialogLaunches[2].defaultLocation, "C:/tmp");
+    EXPECT_TRUE(m_fake.dialogLaunches[2].allowMultipleSelection);
+
+    CompleteDialogCancellation(m_fake.dialogLaunches[0]);
+    CompleteDialogCancellation(m_fake.dialogLaunches[1]);
+    CompleteDialogCancellation(m_fake.dialogLaunches[2]);
+    EXPECT_TRUE(runtime.PollEvent().has_value());
+    EXPECT_TRUE(runtime.PollEvent().has_value());
+    EXPECT_TRUE(runtime.PollEvent().has_value());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RejectsInvalidDialogDescriptorsAndParentsBeforeBackendLaunch)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::OpenFileDialogDesc invalidParent;
+    invalidParent.parentWindowId = pond::platform::WindowId::Invalid();
+    auto invalidParentResult = runtime.ShowOpenFileDialog(invalidParent);
+    ASSERT_FALSE(invalidParentResult.HasValue());
+    EXPECT_EQ(invalidParentResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    pond::platform::OpenFileDialogDesc missingParent;
+    missingParent.parentWindowId = pond::platform::WindowId{999};
+    auto missingParentResult = runtime.ShowOpenFileDialog(missingParent);
+    ASSERT_FALSE(missingParentResult.HasValue());
+    EXPECT_EQ(missingParentResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::NotFound));
+
+    pond::platform::OpenFileDialogDesc emptyDefault;
+    emptyDefault.defaultLocation = std::filesystem::path{};
+    auto emptyDefaultResult = runtime.ShowOpenFileDialog(emptyDefault);
+    ASSERT_FALSE(emptyDefaultResult.HasValue());
+    EXPECT_EQ(emptyDefaultResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    pond::platform::OpenFileDialogDesc invalidFilterName;
+    invalidFilterName.filters.push_back(
+        pond::platform::DialogFileFilter{.name = "", .pattern = "sdf"});
+    auto invalidFilterNameResult =
+        runtime.ShowOpenFileDialog(invalidFilterName);
+    ASSERT_FALSE(invalidFilterNameResult.HasValue());
+    EXPECT_EQ(invalidFilterNameResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    pond::platform::OpenFileDialogDesc invalidFilterPattern;
+    invalidFilterPattern.filters.push_back(
+        pond::platform::DialogFileFilter{.name = "Molecules", .pattern = "s df"});
+    auto invalidFilterPatternResult =
+        runtime.ShowOpenFileDialog(invalidFilterPattern);
+    ASSERT_FALSE(invalidFilterPatternResult.HasValue());
+    EXPECT_EQ(invalidFilterPatternResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    const std::string invalidUtf8{static_cast<char>(0xC0),
+                                  static_cast<char>(0xAF)};
+    pond::platform::OpenFileDialogDesc invalidUtf8Filter;
+    invalidUtf8Filter.filters.push_back(
+        pond::platform::DialogFileFilter{.name = invalidUtf8, .pattern = "sdf"});
+    auto invalidUtf8Result = runtime.ShowOpenFileDialog(invalidUtf8Filter);
+    ASSERT_FALSE(invalidUtf8Result.HasValue());
+    EXPECT_EQ(invalidUtf8Result.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    EXPECT_TRUE(m_fake.dialogLaunches.empty());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "show-dialog"), 0);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       DeliversDialogCompletionsInCallbackFifoOrder)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto firstId = runtime.ShowOpenFileDialog(pond::platform::OpenFileDialogDesc{
+        .filters = {{.name = "Molecules", .pattern = "sdf;mol"}}});
+    auto secondId = runtime.ShowSaveFileDialog(pond::platform::SaveFileDialogDesc{});
+    auto thirdId = runtime.ShowOpenFolderDialog(pond::platform::OpenFolderDialogDesc{});
+    ASSERT_TRUE(firstId.HasValue());
+    ASSERT_TRUE(secondId.HasValue());
+    ASSERT_TRUE(thirdId.HasValue());
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 3U);
+
+    CompleteDialogCancellation(m_fake.dialogLaunches[1]);
+    const std::vector<std::string> selectedPaths{"C:/tmp/a.sdf", "C:/tmp/b.mol"};
+    CompleteDialogSelection(m_fake.dialogLaunches[0], selectedPaths, 0);
+    CompleteDialogFailure(m_fake.dialogLaunches[2], "synthetic dialog failure");
+
+    std::optional<pond::platform::PlatformEvent> event = runtime.PollEvent();
+    ASSERT_TRUE(event.has_value());
+    const auto* completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
+    ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->requestId, secondId.GetValue());
+    EXPECT_TRUE(std::holds_alternative<pond::platform::DialogCancellation>(
+        completed->outcome));
+
+    event = runtime.PollEvent();
+    ASSERT_TRUE(event.has_value());
+    completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
+    ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->requestId, firstId.GetValue());
+    const auto& selection = std::get<pond::platform::DialogSelection>(
+        completed->outcome);
+    ASSERT_EQ(selection.paths.size(), 2U);
+    EXPECT_EQ(selection.paths[0], std::filesystem::path{"C:/tmp/a.sdf"});
+    EXPECT_EQ(selection.paths[1], std::filesystem::path{"C:/tmp/b.mol"});
+    ASSERT_TRUE(selection.selectedFilterIndex.has_value());
+    EXPECT_EQ(*selection.selectedFilterIndex, 0U);
+
+    event = runtime.PollEvent();
+    ASSERT_TRUE(event.has_value());
+    completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
+    ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->requestId, thirdId.GetValue());
+    const auto& failure = std::get<pond::platform::DialogFailure>(
+        completed->outcome);
+    EXPECT_EQ(failure.error.GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(failure.error.GetMessage().find("synthetic dialog failure"),
+              std::string_view::npos);
+
+    EXPECT_FALSE(runtime.PollEvent().has_value());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       CopiesDialogCallbackPayloadsAndAcceptsCrossThreadCompletion)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto requestId = runtime.ShowOpenFileDialog(pond::platform::OpenFileDialogDesc{});
+    ASSERT_TRUE(requestId.HasValue());
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 1U);
+
+    std::vector<std::string> paths{"C:/tmp/threaded.sdf"};
+    std::thread worker{
+        [this, &paths]()
+        {
+            CompleteDialogSelection(m_fake.dialogLaunches.front(), paths, -1);
+            paths.front() = "C:/tmp/mutated-after-callback.sdf";
+        }};
+    worker.join();
+
+    std::optional<pond::platform::PlatformEvent> event = runtime.PollEvent();
+    ASSERT_TRUE(event.has_value());
+    const auto* completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
+    ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->requestId, requestId.GetValue());
+    const auto& selection = std::get<pond::platform::DialogSelection>(
+        completed->outcome);
+    ASSERT_EQ(selection.paths.size(), 1U);
+    EXPECT_EQ(selection.paths.front(), std::filesystem::path{"C:/tmp/threaded.sdf"});
+    EXPECT_FALSE(selection.selectedFilterIndex.has_value());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       DeliversDialogCompletionExactlyOnceForDuplicateCallbacks)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto requestId = runtime.ShowOpenFileDialog(pond::platform::OpenFileDialogDesc{});
+    ASSERT_TRUE(requestId.HasValue());
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 1U);
+
+    CompleteDialogCancellation(m_fake.dialogLaunches.front());
+    const std::vector<std::string> latePaths{"C:/tmp/late.sdf"};
+    CompleteDialogSelection(m_fake.dialogLaunches.front(), latePaths, -1);
+
+    std::optional<pond::platform::PlatformEvent> event = runtime.PollEvent();
+    ASSERT_TRUE(event.has_value());
+    const auto* completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
+    ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->requestId, requestId.GetValue());
+    EXPECT_TRUE(std::holds_alternative<pond::platform::DialogCancellation>(
+        completed->outcome));
+    EXPECT_FALSE(runtime.PollEvent().has_value());
+}
+TEST_F(PlatformRuntimeBackendTests,
+       GetsClipboardTextAndDistinguishesEmptyTextFromFailure)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    m_fake.clipboardText = "C6H6";
+    auto text = runtime.GetClipboardText();
+    ASSERT_TRUE(text.HasValue());
+    EXPECT_EQ(text.GetValue(), "C6H6");
+    EXPECT_EQ(m_fake.clipboardFreeCalls, 1);
+    EXPECT_EQ(m_fake.clipboardReadBuffer, "freed clipboard text");
+
+    m_fake.clipboardText.clear();
+    m_fake.clipboardGetError.clear();
+    auto emptyText = runtime.GetClipboardText();
+    ASSERT_TRUE(emptyText.HasValue());
+    EXPECT_TRUE(emptyText.GetValue().empty());
+    EXPECT_EQ(m_fake.clipboardFreeCalls, 2);
+
+    m_fake.clipboardGetError = "synthetic empty clipboard failure";
+    auto emptyFailure = runtime.GetClipboardText();
+    ASSERT_FALSE(emptyFailure.HasValue());
+    EXPECT_EQ(emptyFailure.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(emptyFailure.GetError().GetMessage().find("SDL_GetClipboardText"),
+              std::string_view::npos);
+    EXPECT_NE(emptyFailure.GetError().GetMessage().find(
+                  "synthetic empty clipboard failure"),
+              std::string_view::npos);
+    EXPECT_EQ(m_fake.clipboardFreeCalls, 3);
+
+    m_fake.clipboardGetReturnsNull = true;
+    m_fake.clipboardGetError = "synthetic null clipboard failure";
+    auto nullFailure = runtime.GetClipboardText();
+    ASSERT_FALSE(nullFailure.HasValue());
+    EXPECT_EQ(nullFailure.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(nullFailure.GetError().GetMessage().find(
+                  "synthetic null clipboard failure"),
+              std::string_view::npos);
+    EXPECT_EQ(m_fake.clipboardFreeCalls, 3);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       HandlesClipboardCapabilityValidationAndSetFailures)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    ASSERT_TRUE(runtime.SetClipboardText("H2O").HasValue());
+    EXPECT_EQ(m_fake.clipboardText, "H2O");
+    ASSERT_TRUE(runtime.SetClipboardText("").HasValue());
+    EXPECT_TRUE(m_fake.clipboardText.empty());
+
+    const auto setCallsBeforeValidation =
+        std::ranges::count(m_fake.calls, "set-clipboard-text");
+    const std::string embeddedNullText{"Na\0Cl", 5};
+    const pond::core::VoidResult embeddedNull =
+        runtime.SetClipboardText(embeddedNullText);
+    ASSERT_FALSE(embeddedNull.HasValue());
+    EXPECT_EQ(embeddedNull.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    const std::string invalidUtf8{static_cast<char>(0xC0),
+                                  static_cast<char>(0xAF)};
+    const pond::core::VoidResult invalidUtf8Result =
+        runtime.SetClipboardText(invalidUtf8);
+    ASSERT_FALSE(invalidUtf8Result.HasValue());
+    EXPECT_EQ(invalidUtf8Result.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "set-clipboard-text"),
+              setCallsBeforeValidation);
+
+    m_fake.clipboardTextSupported = false;
+    const pond::core::VoidResult unsupported =
+        runtime.SetClipboardText("unsupported");
+    ASSERT_FALSE(unsupported.HasValue());
+    EXPECT_EQ(unsupported.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "set-clipboard-text"),
+              setCallsBeforeValidation);
+
+    const auto unsupportedRead = runtime.GetClipboardText();
+    ASSERT_FALSE(unsupportedRead.HasValue());
+    EXPECT_EQ(unsupportedRead.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "get-clipboard-text"), 0);
+
+    m_fake.clipboardTextSupported = true;
+    m_fake.failingServiceOperation = "set-clipboard-text";
+    m_fake.serviceFailuresRemaining = 1;
+    const pond::core::VoidResult backendFailure =
+        runtime.SetClipboardText("backend failure");
+    ASSERT_FALSE(backendFailure.HasValue());
+    EXPECT_EQ(backendFailure.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(backendFailure.GetError().GetMessage().find(
+                  "SDL_SetClipboardText"),
+              std::string_view::npos);
+    EXPECT_TRUE(m_fake.clipboardText.empty());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       OpensExternalUrisThroughTheDeterministicBackendSeam)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    const pond::core::VoidResult empty = runtime.OpenExternalUri("");
+    ASSERT_FALSE(empty.HasValue());
+    EXPECT_EQ(empty.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    const std::string embeddedNullUri{"https://example.invalid/\0tail", 29};
+    const pond::core::VoidResult embeddedNull =
+        runtime.OpenExternalUri(embeddedNullUri);
+    ASSERT_FALSE(embeddedNull.HasValue());
+    EXPECT_EQ(embeddedNull.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    const std::string invalidUtf8{static_cast<char>(0xC0),
+                                  static_cast<char>(0xAF)};
+    const pond::core::VoidResult invalidUtf8Result =
+        runtime.OpenExternalUri(invalidUtf8);
+    ASSERT_FALSE(invalidUtf8Result.HasValue());
+    EXPECT_EQ(invalidUtf8Result.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+    EXPECT_TRUE(m_fake.openedExternalUris.empty());
+
+    ASSERT_TRUE(runtime.OpenExternalUri(
+                           "https://example.invalid/ponder?molecule=H2O")
+                    .HasValue());
+    ASSERT_EQ(m_fake.openedExternalUris.size(), 1U);
+    EXPECT_EQ(m_fake.openedExternalUris.back(),
+              "https://example.invalid/ponder?molecule=H2O");
+
+    m_fake.failingServiceOperation = "open-external-uri";
+    m_fake.serviceFailuresRemaining = 1;
+    const pond::core::VoidResult backendFailure =
+        runtime.OpenExternalUri("https://example.invalid/failure");
+    ASSERT_FALSE(backendFailure.HasValue());
+    EXPECT_EQ(backendFailure.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(backendFailure.GetError().GetMessage().find("SDL_OpenURL"),
+              std::string_view::npos);
+    EXPECT_EQ(m_fake.openedExternalUris.size(), 1U);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       GuardsClipboardAndExternalUriApisAfterMoveAndAcrossThreads)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    pond::platform::PlatformRuntime movedRuntime = std::move(runtime);
+
+    const auto callsBefore = m_fake.calls;
+    EXPECT_EQ(CountRejectedRuntimeServiceCalls(runtime), 6);
+    EXPECT_EQ(m_fake.calls, callsBefore);
+
+    std::atomic_int rejectedCalls{};
+    std::thread worker{
+        [&movedRuntime, &rejectedCalls]()
+        {
+            rejectedCalls.store(
+                CountRejectedRuntimeServiceCalls(movedRuntime));
+        }};
+    worker.join();
+    EXPECT_EQ(rejectedCalls.load(), 6);
+    EXPECT_EQ(m_fake.calls, callsBefore);
+
+    ASSERT_TRUE(movedRuntime.SetClipboardText("owner thread").HasValue());
+    auto text = movedRuntime.GetClipboardText();
+    ASSERT_TRUE(text.HasValue());
+    EXPECT_EQ(text.GetValue(), "owner thread");
+    ASSERT_TRUE(movedRuntime.OpenExternalUri(
+                               "https://example.invalid/owner-thread")
+                    .HasValue());
+    ASSERT_EQ(m_fake.openedExternalUris.size(), 1U);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       GuardsEveryMouseApiAfterMoveAndAcrossThreads)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    {
+        auto windowResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+        ASSERT_TRUE(windowResult.HasValue());
+        pond::platform::Window window = std::move(windowResult).GetValue();
+        pond::platform::Window movedWindow = std::move(window);
+
+        const auto callsBefore = m_fake.calls;
+        EXPECT_EQ(CountRejectedWindowMouseCalls(window), 4);
+        EXPECT_EQ(m_fake.calls, callsBefore);
+
+        std::atomic_int rejectedCalls{};
+        std::thread worker{
+            [&movedWindow, &rejectedCalls]()
+            {
+                rejectedCalls.store(
+                    CountRejectedWindowMouseCalls(movedWindow));
+            }};
+        worker.join();
+        EXPECT_EQ(rejectedCalls.load(), 4);
+        EXPECT_EQ(m_fake.calls, callsBefore);
+    }
+
+    pond::platform::PlatformRuntime movedRuntime = std::move(runtime);
+    const auto callsBefore = m_fake.calls;
+    EXPECT_EQ(CountRejectedRuntimeMouseCalls(runtime), 6);
+    EXPECT_EQ(m_fake.calls, callsBefore);
+
+    std::atomic_int rejectedCalls{};
+    std::thread worker{
+        [&movedRuntime, &rejectedCalls]()
+        {
+            rejectedCalls.store(
+                CountRejectedRuntimeMouseCalls(movedRuntime));
         }};
     worker.join();
     EXPECT_EQ(rejectedCalls.load(), 6);

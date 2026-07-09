@@ -1,0 +1,825 @@
+# Math Library Roadmap
+
+Status: implementation plan for the first renderer-ready `ponder_math` library.
+
+This roadmap implements fixed-size, concrete `float` math and collision facilities for 3D
+rendering. It does not add renderer resources, backend types, chemistry operations, arbitrary-size
+linear algebra, public bulk APIs, or instruction-set-specific public contracts.
+
+MATH-Q002 explicitly requires viewport mapping, project/unproject, and collision at the
+renderer-ready gate. That answer overrides the viewport deferral proposed and accepted by
+reference in MATH-Q008. The remaining MATH-Q008 projection and NDC decisions still apply. The
+viewport contract is therefore fixed here as continuous coordinates with a top-left origin and +Y
+down, NDC edges mapped to viewport edges, no half-pixel offset, and linear mapping from NDC depth
+`[0, 1]` to the viewport depth interval. The renderer remains responsible for configuring Vulkan
+viewport-Y adaptation.
+
+Each implementation task must leave the repository configured, buildable, and tested for the
+behavior it introduces. Every task that adds or changes a public header must add or update that
+header's dedicated self-containment translation unit in the same task. The header-test target is
+explicitly built without a precompiled header.
+
+## Guiding Decisions
+
+- DirectXMath and DirectXCollision are capability, correctness, and performance references only.
+  There is no source, naming, layout, or numerical-compatibility promise.
+- DirectX headers may appear only in Windows-only math reference tests. Production library targets,
+  public headers, ordinary unit tests, and consumer compile tests never include or depend on them.
+- The public vocabulary uses `Vector2`, `Vector3`, `Vector4`, `Matrix3x3`, `Matrix4x4`, and
+  `Quaternion` in `pond::math`.
+- The initial API contains concrete, unsuffixed `float` types only. Public scalar templates and
+  `double`, integer, and half-precision families are deferred.
+- Named free functions are preferred. Operators are provided only when their meaning is
+  unambiguous. Component multiplication and division, dot products, and cross products are named.
+- The world convention is right-handed, Y up, and -Z forward. Values are active column vectors,
+  multiplied as `matrix * vector`. `B * A` applies A first and B second. Quaternion composition
+  follows the same reading order.
+- Matrices use column-major contiguous storage. Translation occupies the final column.
+- `Vector2`, `Vector3`, and `Vector4` are compact 8-, 12-, and 16-byte values with public named
+  components. `Matrix3x3` and `Matrix4x4` are compact 36- and 64-byte values. `Quaternion` is a
+  16-byte value with invariant-preserving accessors.
+- CPU layout guarantees do not promise compatibility with vertex, storage-buffer, or uniform-buffer
+  layouts. Explicit renderer packing types remain outside math.
+- Vectors and matrices default to zero. Quaternions default to identity. Exact `operator==` remains
+  distinct from caller-toleranced near comparison and quaternion same-rotation comparison.
+- `Radians` and `Degrees` are strong values with explicit conversion. Rotation APIs consume
+  `Radians`. Euler construction and extraction are deferred.
+- Positions, displacements, directions, and normals use `Vector3`. Named point, vector, and normal
+  transform functions encode their different behavior. Dedicated TRS and affine value types are
+  deferred.
+- Recoverable invalid input and mathematically unavailable results use `pond::core::Result<T>` with
+  stable math error codes. Ordinary unchecked scalar arithmetic follows IEEE behavior.
+- Default algorithms favor accuracy and documented tolerance stability. Fast-math, reassociation,
+  estimate operations, and bit-identical cross-host guarantees are not part of the contract.
+- Projection is right-handed and looks down -Z. NDC has +Y up and depth `[0, 1]`. Every projection
+  call explicitly selects forward or reverse Z. Finite and infinite-far perspective and finite
+  orthographic projections are included.
+- Viewport space has a top-left origin and +Y down. Mapping uses continuous edge coordinates, no
+  half-pixel correction, and an explicit viewport depth interval.
+- The initial collision matrix contains only frustum/AABB classification, frustum/sphere
+  classification, ray/AABB interval hits, and ray/triangle hits with barycentrics.
+- Collision boundary contact intersects, containment is inclusive, and uncertain culling results
+  are retained. Rays and planes normalize valid finite nonzero directions during construction.
+- The renderer-ready gate includes scalar, vector, matrix, quaternion, transform, camera,
+  projection, clip/NDC, viewport, project/unproject, and the complete initial collision matrix.
+- Public bulk APIs, handwritten SIMD, estimate variants, and performance-specific specialization are
+  explicitly deferred until representative profiling establishes a need.
+
+## Milestones
+
+| Milestone | Tasks | Result |
+| --- | --- | --- |
+| Contracts | MATH-000 through MATH-001 | Durable contracts, errors, build, and test seams |
+| Numeric foundation | MATH-002 through MATH-004 | Scalars, angles, and vectors |
+| Linear algebra | MATH-005 through MATH-011 | Matrices, quaternions, and transforms |
+| Camera and screen mapping | MATH-012 through MATH-015 | View, projection, NDC, and viewport |
+| Collision-ready | MATH-016 through MATH-020 | Required culling and picking queries |
+| Renderer-ready | MATH-021 through MATH-022 | Audited renderer-facing foundation |
+| Host-local completion | MATH-023 through MATH-024 | Documentation and local verification |
+| Portability matrix | MATH-025 | Actual supported-host evidence |
+
+## Verification Cadence
+
+Maintain these separate targets:
+
+- `ponder_math_header_tests` contains one translation unit per public header, has no PCH, and has
+  only the dependencies inherited by a normal `ponder::math` consumer.
+- `ponder_math_tests` contains deterministic, platform-independent unit, property, and regression
+  tests. It never includes DirectX headers.
+- `ponder_math_reference_tests` exists only on Windows and contains every use of DirectXMath and
+  DirectXCollision. It converts conventions explicitly and supplements rather than replaces the
+  independent tests.
+- `ponder_math_examples` is established in MATH-023 as a PCH-free compile target for the public
+  documentation examples and links only `ponder::math`.
+
+For every intermediate implementation task:
+
+- Reconfigure when CMake inputs or source lists change.
+- Build `ponder_math_header_tests` and `ponder_math_tests` after a public API change, then run the
+  complete math unit executable rather than only the new cases.
+- On Windows, also build and run `ponder_math_reference_tests` when the changed operation has a
+  meaningful DirectXMath or DirectXCollision comparison.
+- Use independent golden values, algebraic properties, and edge tests on every host. Do not treat
+  DirectX behavior as the specification for project-specific failure or uncertainty semantics.
+- Keep differential inputs finite, valid, and away from documented collision uncertainty bounds
+  unless the test specifically verifies an intentional semantic difference.
+- Do not run Release, sanitizers, repository-wide analysis, or the portability matrix after every
+  task. MATH-022 is the renderer-ready Debug gate, MATH-024 is the complete host-local gate, and
+  MATH-025 is the cross-platform gate.
+
+## Task List
+
+TASK MATH-000: Freeze Math Contracts And Deferrals
+--------------------------------------------------
+
+Record the resolved decisions in durable documentation before implementation begins.
+
+Work:
+
+- Update math boundary documentation with the public scope, dependency direction, vocabulary,
+  algebra convention, coordinate convention, storage order, exact layout promises, and numerical
+  contract.
+- Record DirectXMath and DirectXCollision as Windows test references only, with no production or
+  source-compatibility commitment.
+- Record the exact projection contract: right-handed -Z, NDC +Y up, depth `[0, 1]`, and explicit
+  forward- or reverse-Z selection.
+- Record that MATH-Q002 overrides only the viewport deferral in MATH-Q008. Fix viewport space as
+  top-left, +Y down, continuous edge coordinates, no half-pixel offset, and linear mapping into an
+  explicit depth interval.
+- Record active column-vector transforms, `B * A` composition order, final-column translation, and
+  matching quaternion composition order.
+- Record the exact four-row collision query matrix and its inclusive boundary, normalized input,
+  rich result, and conservative culling semantics.
+- Update `deferred.md` with every explicit omission and remove `open-questions.txt` only after all
+  unique decisions have been preserved.
+- Add `docs/adr/0009-fixed-size-rendering-math.md` for the public algebra, coordinate, layout, and
+  numerical contracts that affect multiple libraries, and add it to `docs/adr/README.md`.
+
+Done when:
+
+- `Boundary.md`, `Codex.md`, applicable ADRs, `deferred.md`, and this roadmap agree.
+- No implementation choice needed by MATH-001 through MATH-025 remains solely in the answered
+  question file.
+- Renderer and import/export code can cite one unambiguous math convention without a global switch.
+
+TASK MATH-001: Establish Build, Error, And Test Foundations
+-----------------------------------------------------------
+
+Replace the scaffold with the dependency and verification structure used by all later tasks.
+
+Work:
+
+- Add `ponder::core` as a public dependency of `ponder_math`; add no renderer, Vulkan, platform, UI,
+  chemistry, or third-party math dependency.
+- Reserve numeric block `0x0002'0000` through `0x0002'FFFF` for math errors.
+- Add stable `MathErrorCode` values `InvalidArgument`, `NonFiniteInput`, `DegenerateInput`,
+  `SingularMatrix`, and `UndefinedHomogeneousCoordinate`, plus a constexpr conversion to
+  `pond::core::ErrorCode`.
+- Map invalid and non-finite caller inputs to `InvalidArgument`; map mathematically unavailable
+  degenerate, singular, and homogeneous results to `General`; map an unknown forged math code to
+  `Internal` without discarding its numeric value.
+- Establish `ponder_math_header_tests` as an explicitly PCH-free self-containment target.
+- Establish `ponder_math_tests` for platform-independent behavior.
+- Establish `ponder_math_reference_tests` only on Windows. Keep all DirectX includes, adapters, and
+  compile requirements inside that test target.
+- Compile a Windows reference-test source that directly includes `<DirectXMath.h>` and
+  `<DirectXCollision.h>`. Missing Windows SDK reference headers fail the supported Windows build;
+  do not silently omit the target or its tests.
+- Add a consumer link test proving `ponder::math` supplies core while exposing no DirectX, Vulkan,
+  renderer, platform, or private include path.
+- Remove smoke-only library files and tests only after the first real error header and replacement
+  tests exist. List every public/private header and source explicitly in CMake.
+
+Done when:
+
+- A clean supported Debug configuration builds the library and all applicable math test targets.
+- Every error value and category mapping, including a forged unknown value, has a constexpr test.
+- The first public header compiles by itself without PCH or DirectX include paths.
+- DirectX headers are absent from the production target's sources and compile usage requirements.
+
+TASK MATH-002: Implement Scalar Helpers And Strong Angles
+---------------------------------------------------------
+
+Provide the scalar vocabulary required by all later numeric types.
+
+Work:
+
+- Add `kPi`, `kTwoPi`, and `kHalfPi` as inline constexpr `float` constants.
+- Add finite checks and a validated `Tolerance` value containing caller-provided, non-negative,
+  finite absolute and relative tolerances. Its checked factory returns
+  `pond::core::Result<Tolerance>`; do not provide a default or universal epsilon.
+- Add scalar `IsNear` accepting `Tolerance`. For finite operands, compare absolute difference
+  against the greater of the absolute tolerance and relative tolerance scaled by operand magnitude;
+  return false if either operand is non-finite.
+- Add only the common scalar interpolation and clamping helpers needed by later tasks. Preserve
+  ordinary IEEE behavior in unchecked arithmetic.
+- Add strong `Radians` and `Degrees` values with zero defaults, explicit scalar construction,
+  explicit value access, exact equality, and explicit `ToRadians`/`ToDegrees` conversion.
+- Make non-transcendental operations constexpr where the standard library and compiler permit it.
+- Add or update each public header's dedicated PCH-free self-containment translation unit.
+
+Done when:
+
+- Unit tests cover exact constants, signed zero, subnormal-scale values, large values, NaN,
+  infinities, invalid tolerances, and absolute-versus-relative comparison behavior.
+- Angle conversions round-trip within caller-selected tolerances and cannot occur implicitly.
+- The complete header and unit targets build and pass.
+
+TASK MATH-003: Define Vector Value And Layout Contracts
+-------------------------------------------------------
+
+Introduce compact vector values without prematurely adding their algorithms.
+
+Work:
+
+- Add `Vector2`, `Vector3`, and `Vector4` with public `x`, `y`, `z`, and `w` fields as applicable.
+- Default every vector to zero and provide explicit component constructors and `Zero()` factories.
+- Provide const and mutable `At(index)` access returning
+  `pond::core::Result<std::reference_wrapper<float>>` (const-qualified as appropriate). Return
+  `InvalidArgument` for an out-of-range index; do not use assertions for caller-reachable input.
+- Define exact component-wise `operator==`; do not add vector-by-vector `operator*` or `operator/`.
+- Guarantee standard layout, trivial copying, natural alignment, contiguous components, and exact
+  sizes of 8, 12, and 16 bytes.
+- Keep public headers independent of third-party and instruction-set headers.
+- Add one dedicated PCH-free self-containment translation unit for each vector header.
+
+Done when:
+
+- Compile-time assertions freeze size, alignment, standard layout, trivial copying, and component
+  offsets.
+- Unit tests cover default/component construction, mutation, indexing, exact equality, and zero
+  factories.
+- Every invalid index returns `InvalidArgument` without terminating or accessing invalid storage.
+- The complete header and unit targets build and pass.
+
+TASK MATH-004: Implement Vector Algebra And Checked Normalization
+----------------------------------------------------------------
+
+Complete the initial algorithms shared by the three vector types.
+
+Work:
+
+- Add vector addition, subtraction, unary negation, and scalar multiplication and division.
+- Add named `ComponentMultiply` and `ComponentDivide` operations rather than ambiguous vector
+  multiplication operators.
+- Add `Dot` for all vector dimensions and `Cross` for `Vector3`.
+- Add squared length, length, squared distance, distance, component min/max, and interpolation.
+- Add `Normalize` returning `pond::core::Result<VectorN>`. Reject zero-length, non-finite, or
+  numerically unnormalizable inputs with the stable math codes.
+- Add component-wise vector near comparison accepting `Tolerance`; exact equality remains
+  unchanged.
+- Use accurate square root and division by default. Do not add estimate or unchecked-normalize
+  variants.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Independent tests cover basis vectors, algebraic identities, cross-product orientation,
+  normalization, interpolation, large/small magnitudes, and every failure category.
+- Seeded property tests cover finite inputs without making random generation part of the library.
+- Windows reference tests compare valid finite operations with DirectXMath through explicit
+  adapters.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-005: Define Matrix Value, Storage, And Access Contracts
+----------------------------------------------------------------
+
+Introduce matrix representations separately from matrix algorithms.
+
+Work:
+
+- Add `Matrix3x3` and `Matrix4x4` with zero defaults and explicit `Zero()` and `Identity()`
+  factories.
+- Store scalars contiguously in column-major order with exact 36- and 64-byte natural layouts.
+- Provide explicit scalar and column construction. Add checked row/column retrieval and checked
+  `At(row, column)` element access, returning `InvalidArgument` for an out-of-range index while
+  keeping storage order independent from algebra notation.
+- Define exact component-wise equality and component-wise near comparison accepting `Tolerance`.
+- Do not expose GPU packing types, instruction-set types, or third-party matrix types.
+- Add one dedicated PCH-free self-containment translation unit for each matrix header.
+
+Done when:
+
+- Compile-time assertions freeze size, alignment, standard layout, trivial copying, and scalar
+  contiguity.
+- Tests prove column-major storage, valid and invalid row/column access, zero defaults, identity
+  factories, exact equality, and caller-toleranced near comparison.
+- The complete header and unit targets build and pass.
+
+TASK MATH-006: Implement Matrix3x3 Algebra And Checked Inversion
+---------------------------------------------------------------
+
+Complete the 3x3 algebra needed for rotations and normal transforms.
+
+Work:
+
+- Add matrix addition, subtraction, scalar multiplication/division, transpose, and determinant.
+- Add `Matrix3x3 * Vector3` and `Matrix3x3 * Matrix3x3` with active column-vector semantics.
+- Add checked inverse returning `pond::core::Result<Matrix3x3>` for finite nonsingular matrices.
+- Detect singular and non-finite inputs without using a fixed universal comparison epsilon.
+- Preserve the rule that `B * A` applies A first and B second.
+- Update the matrix public-header self-containment translation units.
+
+Done when:
+
+- Tests cover identity, diagonal, rotation, scale, shear, transpose, determinant, composition order,
+  inverse identities, singular matrices, and non-finite values.
+- Tests include well-conditioned randomized matrices checked against an independent higher-precision
+  calculation.
+- Windows reference tests compare valid finite operations with DirectXMath after explicit storage
+  and convention conversion.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-007: Implement Matrix4x4 Algebra And Checked Inversion
+---------------------------------------------------------------
+
+Complete homogeneous 4x4 algebra without adding semantic transform helpers yet.
+
+Work:
+
+- Add matrix addition, subtraction, scalar multiplication/division, transpose, and determinant.
+- Add `Matrix4x4 * Vector4` and `Matrix4x4 * Matrix4x4` with active column-vector semantics.
+- Add checked inverse returning `pond::core::Result<Matrix4x4>` for finite nonsingular matrices.
+- Detect singular and non-finite inputs with the same documented policy as `Matrix3x3`.
+- Preserve final-column translation values through multiplication and inversion.
+- Update the matrix public-header self-containment translation units.
+
+Done when:
+
+- Tests cover identity, diagonal, affine, projective, transpose, determinant, composition order,
+  inverse identities, singular matrices, and non-finite values.
+- Well-conditioned randomized matrices are checked against an independent higher-precision
+  calculation.
+- Windows reference tests compare valid finite operations with DirectXMath through explicit
+  adapters.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-008: Implement Quaternion Representation And Factories
+----------------------------------------------------------------
+
+Introduce an invariant-preserving unit-rotation value.
+
+Work:
+
+- Add `Quaternion` with private `(x, y, z, w)` storage and read-only component accessors.
+- Default to identity and provide an explicit `Identity()` factory.
+- Add checked construction from four components. Normalize finite nonzero input and reject zero or
+  non-finite input.
+- Add checked axis-angle construction consuming `Radians`. Normalize a finite nonzero axis and
+  reject invalid angle or axis input.
+- Define exact representation equality; defer same-rotation comparison to MATH-009.
+- Guarantee a 16-byte, standard-layout, trivially copyable representation without mutable fields.
+- Add the dedicated PCH-free quaternion-header translation unit.
+
+Done when:
+
+- Compile-time assertions freeze size, alignment, layout, trivial copying, and copy/move contracts.
+- Tests cover identity, component order, normalization, principal-axis rotations, zero/non-finite
+  failures, and exact equality.
+- Windows reference tests compare valid axis-angle construction with DirectXMath.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-009: Implement Quaternion Algebra And Interpolation
+-------------------------------------------------------------
+
+Complete rotation composition, application, and shortest-path interpolation.
+
+Work:
+
+- Add quaternion composition with `B * A` applying A first and B second.
+- Restore unit length after composition rather than allowing accumulated drift to escape.
+- Add conjugate/inverse behavior appropriate to a unit quaternion and direct vector rotation.
+- Add shortest-path spherical interpolation. Reject non-finite interpolation parameters and restore
+  unit length in small-angle and ordinary paths.
+- Add component near comparison accepting `Tolerance` and a separate same-rotation comparison
+  accepting `Tolerance` that treats `q` and `-q` as equivalent.
+- Do not add Euler angles, dual quaternions, or estimate interpolation.
+- Update the quaternion public-header self-containment translation unit.
+
+Done when:
+
+- Tests cover identity, inverse, composition order, vector rotation, repeated-composition drift,
+  `q`/`-q`, antipodal endpoints, small angles, 180-degree rotations, and invalid parameters.
+- Interpolation endpoints and finite intermediate results remain unit rotations.
+- Windows reference tests compare valid operations with DirectXMath.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-010: Implement Quaternion And Matrix Rotation Conversions
+------------------------------------------------------------------
+
+Make quaternion and matrix rotations interchangeable without introducing Euler policy.
+
+Work:
+
+- Add conversion from `Quaternion` to `Matrix3x3` and rotation-only `Matrix4x4`.
+- Add checked conversion from `Matrix3x3` and the linear part of `Matrix4x4` to `Quaternion`.
+- Require finite, orthonormal, proper rotation input for matrix-to-quaternion conversion. Accept
+  caller-supplied `Tolerance` rather than embedding a universal epsilon.
+- Reject reflection, scale, shear, singular, and non-finite inputs with stable math errors.
+- Preserve right-handed active-rotation and composition conventions in both directions.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests cover identity, all principal axes, arbitrary axes, near-180-degree cases, round trips,
+  composition equivalence, and each invalid matrix category.
+- Matrix and quaternion application rotate the same vectors within caller-selected tolerances.
+- Windows reference tests compare valid conversions with DirectXMath.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-011: Implement Matrix Transform Construction And Semantic Transforms
+------------------------------------------------------------------------------
+
+Provide matrix-based transforms while keeping dedicated transform values deferred.
+
+Work:
+
+- Add `Matrix4x4` factories for translation, non-uniform scale, principal-axis rotation, and
+  quaternion rotation.
+- Add named `TransformPoint`, `TransformVector`, and `TransformNormal` functions.
+- Make point transformation use homogeneous `w = 1` and vector transformation use `w = 0`.
+- Make normal transformation use the inverse transpose of the upper-left `Matrix3x3`, return a
+  recoverable error for singular input, and return the transformed value without silently
+  normalizing it.
+- Support composition containing non-uniform scale, negative scale, and shear through matrices.
+- Do not add TRS, compact affine, decomposition, or transform-interpolation types.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests distinguish point, vector, and normal translation behavior.
+- Tests cover non-uniform and negative scale, shear, inverse-transpose normals, singular normal
+  transforms, and the documented composition order.
+- Quaternion-derived and axis-derived matrix rotations agree.
+- Windows reference tests compare valid affine construction and transforms with DirectXMath.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-012: Implement Checked View Construction
+--------------------------------------------------
+
+Construct camera view matrices using the canonical world and algebra conventions.
+
+Work:
+
+- Add checked right-handed `LookAt` and `LookTo` construction using Y-up, -Z-forward examples as the
+  canonical orientation.
+- Reject non-finite eye, target, direction, or up values.
+- Reject coincident eye/target, zero direction, zero up, and parallel direction/up inputs as
+  degenerate.
+- Return a world-to-view `Matrix4x4` under active column-vector semantics.
+- Keep passive basis-change APIs and alternate handedness helpers deferred.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests cover the canonical origin camera, translated and rotated cameras, arbitrary valid up
+  vectors, world-to-view mapping, inverse recovery, and every invalid input category.
+- Look-at and equivalent look-direction calls produce the same result.
+- Windows reference tests compare valid views with the right-handed DirectXMath helper after
+  explicit convention conversion.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-013: Implement Perspective And Orthographic Projection
+----------------------------------------------------------------
+
+Provide all initial projection forms with explicit depth direction.
+
+Work:
+
+- Add a scoped forward-Z/reverse-Z choice required by every projection call.
+- Add checked finite perspective construction from vertical `Radians`, aspect ratio, near distance,
+  and far distance.
+- Add checked infinite-far perspective construction for both depth directions.
+- Add checked finite orthographic construction with explicit extents and near/far distances.
+- Produce right-handed -Z clip coordinates, NDC +Y up, and NDC depth `[0, 1]`.
+- Reject non-finite values, non-positive aspect/extents, invalid field of view, non-positive near
+  distance, and invalid finite near/far ordering.
+- Do not include Vulkan viewport flipping in projection matrices.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests prove near/far depth mapping for finite forward and reverse Z.
+- Tests prove the infinite-far limits, X/Y frustum edges, orthographic mapping, handedness, and
+  every validation failure.
+- Windows reference tests compare finite forward-Z forms with DirectXMath through explicit
+  adapters; independent tests cover forms without an equivalent reference helper.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-014: Implement Clip And NDC Transformation Helpers
+------------------------------------------------------------
+
+Make homogeneous transformation and perspective division explicit.
+
+Work:
+
+- Add named transformation from a 3D point and world-to-clip matrix to clip-space `Vector4`.
+- Add checked perspective division from clip coordinates to NDC `Vector3`.
+- Add a convenience checked world-to-NDC operation that composes those two steps.
+- Preserve valid negative `w`; reject zero, non-finite, or numerically unusable `w` with
+  `UndefinedHomogeneousCoordinate`.
+- Do not silently clamp NDC values to the canonical cube.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests cover canonical frustum corners, interior/exterior points, positive and negative `w`, zero
+  and non-finite `w`, and composed versus separate calls.
+- Projection tests demonstrate NDC +Y up and depth `[0, 1]` for both depth directions.
+- The complete header and unit targets build and pass.
+
+TASK MATH-015: Implement Viewport Mapping And Project/Unproject
+--------------------------------------------------------------
+
+Implement the viewport capability explicitly added to the renderer-ready gate by MATH-Q002.
+
+Work:
+
+- Add a validated `Viewport` value with finite top-left origin, positive finite width/height, and a
+  finite ordered minimum/maximum depth interval.
+- Define viewport coordinates as continuous, top-left-origin, and +Y down.
+- Map NDC `(-1, +1)` to the top-left viewport edge and `(+1, -1)` to the bottom-right edge. Do not
+  add a half-pixel or pixel-center offset.
+- Map NDC depth `[0, 1]` linearly into the explicit viewport depth interval.
+- Add checked NDC-to-viewport and viewport-to-NDC helpers.
+- Add checked `Project` using a combined world-to-clip matrix and checked `Unproject` using its
+  inverse. Propagate homogeneous and singular-matrix failures.
+- Keep Vulkan structures and negative-height viewport setup in renderer-private code.
+- Add the dedicated PCH-free viewport-header translation unit and update related headers.
+
+Done when:
+
+- Tests cover viewport corners, center, arbitrary origin, non-default depth intervals, both
+  projection depth directions, invalid descriptors, and no-half-pixel behavior.
+- World-to-screen-to-world round trips pass for representative perspective and orthographic points.
+- Singular transforms and undefined homogeneous results return stable errors.
+- The complete header and unit targets build and pass.
+
+TASK MATH-016: Define Validated Collision Values
+------------------------------------------------
+
+Introduce only the geometry required by the approved culling and picking workflows.
+
+Work:
+
+- Add `Ray`, `Plane`, `Sphere`, `AxisAlignedBox`, `Triangle`, and `Frustum` with private state where
+  required to preserve construction invariants.
+- Define a plane as `Dot(normal, point) + offset = 0`. Normalize finite nonzero normals and adjust
+  the offset during checked construction.
+- Normalize finite nonzero ray directions during checked construction so every returned ray
+  parameter is world distance.
+- Accept zero-radius spheres, zero extents, point boxes, and zero-area triangles as valid finite
+  values. Zero-area triangles simply have no surface hit.
+- Reject negative radii, inverted box bounds, and all non-finite geometry with stable math errors.
+- Build a frustum from a finite world-to-clip matrix using the library's NDC inequalities.
+- Support finite and infinite-far projections; represent the absent infinite far plane explicitly
+  instead of attempting to normalize a zero plane.
+- Expose only the accessors required to inspect immutable validated values.
+- Add dedicated PCH-free self-containment translation units for every collision public header.
+
+Done when:
+
+- Tests cover every valid degenerate value, every invalid construction path, normalization and
+  scale preservation, plane equation behavior, and accessor values.
+- Frustum construction covers perspective, reverse-Z, infinite-far, and orthographic matrices.
+- Collision values remain independent of DirectXCollision types and headers.
+- The complete header and unit targets build and pass.
+
+TASK MATH-017: Implement Frustum Classification
+-----------------------------------------------
+
+Implement conservative renderer visibility queries.
+
+Work:
+
+- Add `Disjoint`, `Intersects`, and `Contains` classification results.
+- Add frustum/AABB and frustum/sphere classification only.
+- Treat boundary contact as intersection and containment as inclusive.
+- Derive a scale-aware floating-point error bound from the magnitudes used in each plane test and
+  `std::numeric_limits<float>::epsilon()`; do not use one fixed world-space epsilon.
+- Return `Disjoint` only when the complete shape lies outside beyond the documented bound.
+- Return `Contains` only when the complete shape lies inside beyond the documented bound; return
+  `Intersects` for boundary and numerically uncertain cases.
+- Skip an absent far plane for an infinite-far frustum.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests cover inside, outside, crossing, tangent, corner, zero-size, very large, very small, finite,
+  and infinite-far cases.
+- Higher-precision oracle tests demonstrate that uncertain objects are retained rather than falsely
+  rejected for the tested finite domain.
+- Windows reference tests compare cases outside the uncertainty region with DirectXCollision and
+  separately document intentional boundary differences.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-018: Implement Ray/AABB Intersection
+----------------------------------------------
+
+Provide the interval result required by renderer picking.
+
+Work:
+
+- Add an immutable hit value containing nearest entry and exit world distances.
+- Add ray/AABB intersection returning `std::optional<RayBoxHit>`.
+- Treat the ray as the half-line beginning at its origin and accept boundary contact.
+- Return entry distance zero when the origin is inside or on the box and the non-negative exit
+  distance for the forward ray.
+- Preserve a zero-width interval for a tangent hit.
+- Handle zero box extents and ray directions parallel to one or more slabs without division-driven
+  NaN control flow.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests cover hits, misses, tangency, parallel axes, point/flat boxes, inside origins, boundary
+  origins, negative raw entry values, and distance reconstruction.
+- Seeded cases agree with an independent higher-precision slab oracle.
+- Windows reference tests compare equivalent valid cases with DirectXCollision.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-019: Implement Ray/Triangle Intersection
+--------------------------------------------------
+
+Provide nearest world-distance and barycentric data for picking.
+
+Work:
+
+- Add an immutable hit value containing world distance and three barycentric coordinates ordered to
+  match the triangle's three vertices.
+- Add double-sided ray/triangle intersection returning `std::optional<RayTriangleHit>`.
+- Accept vertex and edge contact and a forward hit at distance zero.
+- Return no hit behind the ray origin or for a zero-area triangle.
+- Use a documented scale-aware uncertainty policy for nearly parallel and nearly degenerate cases;
+  do not add back-face policy or a caller epsilon to the initial API.
+- Ensure barycentrics reconstruct the hit point within the documented floating-point tolerance.
+- Update every affected PCH-free public-header translation unit.
+
+Done when:
+
+- Tests cover both windings, face/edge/vertex hits, distance zero, misses, behind-origin hits,
+  parallel rays, zero-area triangles, and large/small coordinate scales.
+- Seeded cases agree with an independent higher-precision oracle outside the uncertainty region.
+- Windows reference tests compare equivalent valid cases with DirectXCollision.
+- The complete header, unit, and applicable reference targets pass.
+
+TASK MATH-020: Verify The Collision-Ready Milestone
+--------------------------------------------------
+
+Audit the complete initial collision matrix as one coherent contract.
+
+Work:
+
+- Confirm the public API contains exactly frustum/AABB, frustum/sphere, ray/AABB, and ray/triangle
+  query rows and no inferred pairwise matrix.
+- Audit checked construction, inclusive boundaries, normalized directions, world-distance results,
+  barycentric order, and conservative uncertainty behavior.
+- Add deterministic seeded regression corpora spanning all four query rows and finite coordinate
+  scales documented as supported by the tests.
+- Run higher-precision oracle checks on every host.
+- On Windows, run DirectXCollision differential checks for comparable finite cases outside the
+  project uncertainty bounds.
+- Confirm DirectX headers and adapters remain isolated to `ponder_math_reference_tests`.
+- Build every collision-related PCH-free header translation unit.
+
+Done when:
+
+- Every selected query has focused deterministic, degenerate, boundary, randomized, and oracle
+  coverage.
+- Culling tests demonstrate no false rejection within the documented tested domain.
+- Picking results reconstruct their hit geometry and report world distance.
+- All header, unit, and applicable Windows reference tests pass.
+- OBBs, capsules, segments, swept tests, closest-distance queries, bounds-overlap pairs, and all
+  unselected combinations remain deferred.
+
+TASK MATH-021: Audit Public API, Layout, And Test Coverage
+---------------------------------------------------------
+
+Harden the complete initial API before the renderer-ready gate.
+
+Work:
+
+- Confirm every public header has its own translation unit in the explicitly PCH-free
+  `ponder_math_header_tests` target.
+- Confirm every public header includes what it uses and depends only on public core and standard
+  library headers.
+- Audit exact sizes, alignments, standard-layout and trivial-copy guarantees, defaults, exact
+  equality, `Tolerance`-based comparison, `constexpr`, `[[nodiscard]]`, and `noexcept`
+  contracts.
+- Audit active column-vector, composition, handedness, storage, NDC, viewport, angle, quaternion,
+  and collision semantics across names, comments, and tests.
+- Confirm every recoverable public failure returns the stable expected math code and useful context.
+- Confirm no test relies on PCH contents, include order, undefined behavior, fast-math, or DirectX
+  as its only oracle.
+- Remove tests that merely duplicate implementation details without protecting public behavior.
+
+Done when:
+
+- Every promised public contract has a focused deterministic test or compile-time assertion.
+- All public headers compile independently and in representative consumer combinations.
+- Production and ordinary test dependency graphs contain no DirectX, Vulkan, renderer, platform,
+  UI, chemistry, or ISA-specific dependency.
+- The complete header, unit, and Windows reference targets pass.
+
+TASK MATH-022: Verify The Renderer-Ready Foundation
+--------------------------------------------------
+
+Treat this as the completion gate before renderer implementation depends on `ponder::math`.
+
+Work:
+
+- Configure and build one normal supported Debug developer preset.
+- Build `ponder_math`, `ponder_math_header_tests`, `ponder_math_tests`, and the Windows-only
+  `ponder_math_reference_tests` where applicable.
+- Add a renderer-shaped compile and behavior test that constructs world, view, finite and
+  infinite-far projection matrices; transforms points, vectors, and normals; projects and
+  unprojects; builds a frustum; classifies bounds; and performs both picking queries.
+- Exercise forward and reverse Z, including reverse-Z infinite-far perspective.
+- Run the complete math unit and applicable reference executables, not only the integration-shaped
+  cases.
+- Confirm consumers inherit core but no DirectX, Vulkan, renderer, platform, UI, or ISA compile
+  usage requirements.
+- Confirm generated files, logs, build output, and local environment files are not staged.
+- Record host OS, compiler, architecture, configuration, commands, results, and any justified skips.
+
+Done when:
+
+- Scalar, vector, matrix, quaternion, transform, camera, projection, NDC, viewport, collision, and
+  layout contracts are host-locally verified together.
+- The renderer-shaped test performs culling and picking entirely through project-owned types.
+- Collision is complete; renderer readiness is not declared at the earlier linear-algebra milestone.
+- The result is described as host-local Debug evidence, not cross-platform certification.
+
+TASK MATH-023: Complete Public Documentation And Examples
+---------------------------------------------------------
+
+Make the implemented contracts usable without reading implementation tests.
+
+Work:
+
+- Document world axes, active column-vector algebra, multiplication order, storage order, exact CPU
+  layouts, and the separation from GPU packing.
+- Document strong angles, quaternion invariants, exact versus near versus same-rotation comparison,
+  and checked failure behavior.
+- Document all projection forms, forward/reverse Z, NDC, viewport origin/Y direction, edge mapping,
+  lack of half-pixel offset, and renderer-owned Vulkan viewport adaptation.
+- Document point/vector/normal transform differences and why normal transformation can fail and does
+  not silently normalize.
+- Document collision construction, classification, hit values, inclusive boundaries, conservative
+  uncertainty, and the exact supported query matrix.
+- Add small examples for camera construction, reverse-Z projection, project/unproject, frustum
+  culling, and ray picking to a PCH-free `ponder_math_examples` compile target that links only
+  `ponder::math`.
+- Audit `deferred.md` against every intentional omission in the implementation and roadmap.
+- Keep renderer resources, Vulkan types, application policy, and chemistry examples outside math.
+
+Done when:
+
+- A contributor can use every renderer-ready capability without inferring a convention.
+- Examples compile against only `ponder::math` and its inherited core dependency.
+- Documentation and tests state the same failure, coordinate, layout, and collision contracts.
+- Documentation-only verification follows the cadence above unless an example or interface changed.
+
+TASK MATH-024: Verify Complete Host-Local Math
+---------------------------------------------
+
+Treat this as the host-local completion gate for the initial library.
+
+Work:
+
+- Run the repository tool check, then configure clean primary-host Debug and Release builds.
+- Build the library, all PCH-free public-header tests, all unit tests, the documentation examples,
+  the renderer-shaped test, and Windows reference tests where applicable.
+- Run every applicable test in Debug and Release.
+- Run the supported sanitizer preset, currently Linux Clang ASAN/UBSAN, when that host is available.
+- Run `clang-format` in check mode and clang-tidy over math production and test translation units.
+  A repository-wide wrapper pass is acceptable when the tooling cannot scope the run.
+- Run `git diff HEAD --check`, inspect `git status --short`, and apply an equivalent whitespace
+  check to every intended untracked text file before staging.
+- Reject generated files, logs, build outputs, benchmark artifacts, and local environment files.
+- Confirm the production dependency set remains public core only and that DirectX remains isolated
+  to the Windows reference-test target.
+- Confirm all intended deferred features remain absent from the public API and present in
+  `deferred.md`.
+- Record host OS, compiler, architecture, configurations, commands, results, and skips.
+
+Done when:
+
+- Every initial math capability is locally built, tested, formatted, and analyzed in the applicable
+  configurations.
+- Renderer-ready status from MATH-022 remains valid after documentation and audit changes.
+- No generated or local-only artifact is part of the intended change.
+- Completion is explicitly described as host-local pending MATH-025.
+
+TASK MATH-025: Run The Cross-Platform Portability Matrix
+-------------------------------------------------------
+
+Collect actual evidence for supported hosts, compilers, and architectures.
+
+Work:
+
+- Configure, build, and run public-header, documentation-example, unit, and renderer-shaped tests
+  on:
+  - Windows with MSVC Debug/Release and clang-cl Debug where supported.
+  - Linux with Clang Debug/Release, GCC Debug, and Clang ASAN/UBSAN.
+  - macOS with AppleClang Debug/Release.
+- Run Windows DirectXMath and DirectXCollision reference tests in their isolated target.
+- Exercise x86-64 and ARM64 on supported available hosts without changing public types or semantics
+  for either instruction set.
+- Use matching configure, build, and test presets where defined. When no test preset exists, build
+  first and run CTest directly against the configured build tree.
+- Record unrun host/compiler/architecture rows as unverified rather than passed.
+- Add CI jobs when CI exists; until then maintain dated manual evidence with exact OS, compiler,
+  architecture, configuration, commands, and results.
+- File scoped follow-up tasks for real numerical, compiler, or architecture differences rather than
+  weakening the documented contract or adding undocumented conditionals.
+- Reconfirm that DirectX headers never enter production or non-Windows test compilation.
+
+Done when:
+
+- Windows, Linux, and macOS rows contain actual successful configure, build, public-header, unit,
+  and renderer-shaped results for the required compiler configurations.
+- Applicable x86-64 and ARM64 rows contain actual evidence or remain explicitly unverified.
+- The Windows reference suite passes without changing the independent project test expectations.
+- Remaining skips, unavailable rows, and tolerated cross-host numerical differences are explicit,
+  justified, and linked to follow-up work.

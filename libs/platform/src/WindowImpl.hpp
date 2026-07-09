@@ -5,6 +5,7 @@
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Window.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -34,6 +35,7 @@ public:
 
     [[nodiscard]] WindowId GetId() const;
     [[nodiscard]] WindowGraphicsCompatibility GetGraphicsCompatibility() const;
+    [[nodiscard]] core::Result<NativeWindowHandle> GetNativeHandle() const;
     [[nodiscard]] std::string GetTitle() const;
     [[nodiscard]] core::VoidResult SetTitle(std::string_view title);
     [[nodiscard]] core::Result<ScreenPosition> GetPosition() const;
@@ -66,6 +68,10 @@ public:
     [[nodiscard]] core::VoidResult ClearTextComposition();
     [[nodiscard]] core::VoidResult SetTextInputArea(TextInputArea area);
     [[nodiscard]] core::VoidResult ClearTextInputArea();
+    [[nodiscard]] core::VoidResult SetMouseGrab(bool grabbed);
+    [[nodiscard]] bool IsMouseGrabbed() const;
+    [[nodiscard]] core::VoidResult SetRelativeMouseMode(bool enabled);
+    [[nodiscard]] bool IsRelativeMouseModeEnabled() const;
 
 private:
     friend class PlatformRuntimeState;
@@ -74,6 +80,8 @@ private:
         std::string_view operation) const;
     void CommitRegistration(WindowId id) noexcept;
     void ObserveShownEvent() noexcept;
+    void IncrementPendingDialogRequestCount() noexcept;
+    void DecrementPendingDialogRequestCount() noexcept;
     void VerifyUsable(std::string_view operation) const;
     [[nodiscard]] std::string GetErrorContext() const;
 
@@ -84,7 +92,9 @@ private:
     WindowId m_id;
     WindowGraphicsCompatibility m_graphicsCompatibility{
         WindowGraphicsCompatibility::Default};
+    mutable void* m_cocoaMetalView{};
     std::optional<::pond::platform::WindowState> m_hiddenStateRequest;
+    std::size_t m_pendingDialogRequestCount{};
     bool m_registered{};
 };
 } // namespace pond::platform::detail

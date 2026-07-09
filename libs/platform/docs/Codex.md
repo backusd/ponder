@@ -68,6 +68,34 @@ privately by SDL3.
 - Composition selections are optional Unicode-character-index ranges, not UTF-8
   byte ranges. Preserve a present zero-length range; any negative backend start
   or length means the selection is unavailable.
+- Mouse motion, button, and wheel events use optional targets under the same
+  zero/missing and nonzero/stale rules as keyboard and text input. Preserve the
+  floating logical position on every mouse event and relative movement on
+  motion. Drop an event if any position, relative-movement, or wheel component
+  is not finite.
+- Drag-and-drop events use the same optional-target rule: backend window ID zero
+  becomes targetless, while a stale nonzero target drops the event. `DropBegin`
+  has no position; dropped-file, dropped-text, drop-position, and drop-complete
+  require finite logical positions. Copy and validate source-application text,
+  dropped UTF-8 text, and file-name bytes before SDL event storage expires;
+  file names become owned `std::filesystem::path` values. Treat every SDL drop
+  event independently and do not retain global sequence state just to match
+  begin/complete pairs.
+- Clipboard text and external-URI APIs are owner-thread `PlatformRuntime`
+  services. Validate null-free UTF-8 before set/open calls, copy incoming views
+  to null-terminated storage before SDL, and keep all SDL allocation/free and
+  `SDL_OpenURL` details private.
+- Clipboard reads are the one SDL error-snapshot exception: clear SDL error
+  state immediately before `SDL_GetClipboardText()`, copy the error string
+  immediately afterward, then copy/free the returned text. Treat empty text plus
+  a captured error as failure, and never parse error text for capability
+  decisions.
+- Automated external-URI tests must use the private backend seam and must not
+  open a browser or other host application.
+- Map mouse buttons to the closed project vocabulary, preserving unsupported
+  backend values as `MouseButton::Unknown`. Normalize flipped wheel input
+  exactly once so positive horizontal means right and positive vertical means
+  up; do not guess how to normalize a future unknown wheel direction.
 - Keep one private `TranslateSdlEvent` production function for PLAT-008 and
   polling. Resolve required backend IDs through injected private callbacks.
   Preserve an unresolved destination display only on
@@ -90,6 +118,21 @@ privately by SDL3.
   Validate IME areas before SDL, round logical coordinates to the nearest
   backend integer, and return contextual failures from fallible text-input
   operations.
+- Keep mouse-grab and relative-mode state live on `Window`; do not cache their
+  infallible backend queries. Keep global capture, global mouse position,
+  system-cursor selection, and cursor visibility on `PlatformRuntime`.
+- Always forward `SetMouseGrab()` requests to SDL. A hidden window can retain
+  a pending grab request while SDL's live grab query reports false, so using the
+  query to suppress a release would leave stale pending state.
+- Return `Unsupported` without parsing error text when the active driver cannot
+  provide explicit global capture or a meaningful desktop-relative mouse
+  position. Do not invent a capture-state query or cache capture state because
+  SDL may release capture on focus loss. Keep capture disabling available as
+  an idempotent cleanup operation.
+- Lazily create and cache standard SDL system cursors in runtime state. Cursor
+  selection never transfers ownership and never changes visibility; show/hide
+  remain separate operations. Destroy every cached cursor before SDL shutdown,
+  including rollback and teardown paths.
 - Keep display content scale, window pixel density, window display scale,
   logical size, and pixel size as distinct concepts.
 - Copy display names and all other snapshot data before backend-owned storage
@@ -140,9 +183,15 @@ privately by SDL3.
   centered/undefined sentinels before calling SDL.
 - Keep native interop to the approved Win32, X11, Wayland, and Cocoa Metal-layer
   payloads from ADR 0008. Values are tagged, borrowed, narrow, and OS-header-free.
+- Return `InvalidArgument` for native-handle queries on non-Vulkan windows,
+  `Unsupported` for video drivers outside `"windows"`, `"x11"`, `"wayland"`,
+  and `"cocoa"`, and `BackendFailure` for malformed or missing approved
+  backend data. Do not return a partially populated handle.
 - On macOS, each Vulkan-compatible window owns at most one cached SDL Metal view;
   repeated queries expose the same borrowed layer, and the view is destroyed
-  before that SDL window.
+  before that SDL window. Consumers re-query borrowed native snapshots after
+  window show/hide, presentation/state changes, display migration, or renderer
+  presentation teardown/rebuild boundaries where stale state would matter.
 - Never create a Vulkan surface in platform. Render owns every `VkSurfaceKHR` and
   destroys presentation state before its platform window. This ordering is
   caller-enforced because the platform registry cannot observe render resources.

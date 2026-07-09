@@ -4,6 +4,7 @@
 
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace
 {
@@ -13,6 +14,23 @@ static_assert(!std::is_copy_assignable_v<pond::platform::Window>);
 static_assert(std::is_nothrow_move_constructible_v<pond::platform::Window>);
 static_assert(std::is_nothrow_move_assignable_v<pond::platform::Window>);
 static_assert(std::is_nothrow_destructible_v<pond::platform::Window>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::Window&>().SetMouseGrab(true)),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const pond::platform::Window&>().IsMouseGrabbed()),
+              bool>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::Window&>().SetRelativeMouseMode(true)),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const pond::platform::Window&>()
+                           .IsRelativeMouseModeEnabled()),
+              bool>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const pond::platform::Window&>()
+                           .GetNativeHandle()),
+              pond::core::Result<pond::platform::NativeWindowHandle>>);
 
 TEST(WindowDescTests, ProvidesStableDefaults)
 {

@@ -115,6 +115,36 @@ void VerifyBackend(const detail::PlatformRuntimeBackend& backend)
                   "Platform runtime backend is missing getTicksNanoseconds");
     PONDER_VERIFY(backend.pollEvent != nullptr,
                   "Platform runtime backend is missing pollEvent");
+    PONDER_VERIFY(backend.supportsGlobalMouse != nullptr,
+                  "Platform runtime backend is missing supportsGlobalMouse");
+    PONDER_VERIFY(backend.getGlobalMousePosition != nullptr,
+                  "Platform runtime backend is missing getGlobalMousePosition");
+    PONDER_VERIFY(backend.setMouseCapture != nullptr,
+                  "Platform runtime backend is missing setMouseCapture");
+    PONDER_VERIFY(backend.createSystemCursor != nullptr,
+                  "Platform runtime backend is missing createSystemCursor");
+    PONDER_VERIFY(backend.setCursor != nullptr,
+                  "Platform runtime backend is missing setCursor");
+    PONDER_VERIFY(backend.destroyCursor != nullptr,
+                  "Platform runtime backend is missing destroyCursor");
+    PONDER_VERIFY(backend.showCursor != nullptr,
+                  "Platform runtime backend is missing showCursor");
+    PONDER_VERIFY(backend.hideCursor != nullptr,
+                  "Platform runtime backend is missing hideCursor");
+    PONDER_VERIFY(backend.isCursorVisible != nullptr,
+                  "Platform runtime backend is missing isCursorVisible");
+    PONDER_VERIFY(backend.supportsClipboardText != nullptr,
+                  "Platform runtime backend is missing supportsClipboardText");
+    PONDER_VERIFY(backend.getClipboardText != nullptr,
+                  "Platform runtime backend is missing getClipboardText");
+    PONDER_VERIFY(backend.freeClipboardText != nullptr,
+                  "Platform runtime backend is missing freeClipboardText");
+    PONDER_VERIFY(backend.setClipboardText != nullptr,
+                  "Platform runtime backend is missing setClipboardText");
+    PONDER_VERIFY(backend.openExternalUri != nullptr,
+                  "Platform runtime backend is missing openExternalUri");
+    PONDER_VERIFY(backend.showDialog != nullptr,
+                  "Platform runtime backend is missing showDialog");
 }
 
 void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
@@ -173,6 +203,18 @@ void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
                   "Platform window backend is missing clearTextComposition");
     PONDER_VERIFY(backend.setTextInputArea != nullptr,
                   "Platform window backend is missing setTextInputArea");
+    PONDER_VERIFY(backend.setMouseGrab != nullptr,
+                  "Platform window backend is missing setMouseGrab");
+    PONDER_VERIFY(backend.isMouseGrabbed != nullptr,
+                  "Platform window backend is missing isMouseGrabbed");
+    PONDER_VERIFY(backend.setRelativeMouseMode != nullptr,
+                  "Platform window backend is missing setRelativeMouseMode");
+    PONDER_VERIFY(backend.isRelativeMouseModeEnabled != nullptr,
+                  "Platform window backend is missing isRelativeMouseModeEnabled");
+    PONDER_VERIFY(backend.getNativeHandle != nullptr,
+                  "Platform window backend is missing getNativeHandle");
+    PONDER_VERIFY(backend.destroyMetalView != nullptr,
+                  "Platform window backend is missing destroyMetalView");
 }
 
 void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)
@@ -388,6 +430,7 @@ PlatformRuntimeState::~PlatformRuntimeState() noexcept
     BeginRuntimeDestruction();
 
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime shutting down");
+    DestroySystemCursors();
     m_backend.quit(m_backend.context);
     RestoreApplicationMetadata(m_backend, m_metadata);
     RestoreRuntimeHints(m_backend, m_focusClickThrough, m_autoCapture);

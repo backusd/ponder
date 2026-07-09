@@ -46,7 +46,10 @@ references only, with no source, naming, layout, or numerical-compatibility prom
 plus unambiguous arithmetic operators. Keep vector-by-vector multiplication, dot product, and cross
 product explicit as `ComponentMultiply`, `Dot`, and `Cross`.
 
-Answer:
+Answer: Go with the recommendation. Also, use DirectXMath and DirectXCollision when unit testing 
+on a Windows machine. However, DirectXMath and DirectXCollision should never be included in the 
+library itself - only math unit tests.
+
 
 ### MATH-Q002: Renderer-Ready Milestone
 
@@ -73,7 +76,9 @@ projection construction, and clip/NDC helpers at the renderer-ready gate. Defer 
 project/unproject, collision, and public bulk APIs. Renderer work should begin after the
 linear-algebra and view/projection gate without waiting for collision.
 
-Answer:
+Answer: Implement everything in your recommendation and also include viewport mapping,
+project/unproject, and collision. Do not yet implement any public bulk APIs.
+
 
 ### MATH-Q003: Scalar And Concrete Type Policy
 
@@ -87,7 +92,8 @@ half-precision, and public scalar templates until a concrete consumer establishe
 semantics. If a double family is later needed, give it distinct names rather than changing existing
 types.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q004: Semantic 3D And Transform Types
 
@@ -106,7 +112,8 @@ their differing behavior. Start with matrices only, including translation, rotat
 composition, and checked inversion. Matrices naturally support non-uniform scale, negative scale,
 and shear; defer dedicated TRS/affine types, decomposition, and transform interpolation.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ## Coordinate, Transform, And Rotation Conventions
 
@@ -120,7 +127,8 @@ Recommendation: Use a right-handed world with Y up and -Z forward. Make this the
 convention; add explicitly named conversion helpers for other conventions only when an importer,
 exporter, or backend establishes a concrete need. Do not use a global convention switch.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q006: Transform Action And Multiplication Convention
 
@@ -139,7 +147,8 @@ first and B second; quaternion multiplication must follow the same reading order
 therefore occupies the final matrix column. If passive basis changes are later needed, give them
 explicitly different names.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q007: Storage, CPU Layout, And GPU Interchange
 
@@ -162,7 +171,8 @@ naturally aligned, and compact at 8/12/16 bytes, with public named fields and in
 rather than mutable fields. Freeze these CPU guarantees before API stability, but use explicit
 renderer packing types for vertex, storage-buffer, and uniform-buffer layouts.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q008: Projection, NDC, And Viewport Policy
 
@@ -183,7 +193,8 @@ perspective plus orthographic projection. Prefer reverse-Z with an infinite far 
 renderer. The renderer owns Vulkan viewport-Y adaptation. Clip/NDC helpers gate renderer work; defer
 viewport mapping and project/unproject.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q009: Angles And Quaternion Policy
 
@@ -203,7 +214,8 @@ input; composition and interpolation restore normalization. Use unit, shortest-p
 Euler construction/extraction until a required workflow can select an explicit order and
 intrinsic/extrinsic convention.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ## Public Semantics And Numerical Behavior
 
@@ -221,7 +233,8 @@ representation equality. Provide named near-equality helpers that require caller
 absolute and relative tolerances, with no universal default epsilon. Provide a separate
 same-rotation comparison because q and -q represent the same rotation.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q011: Failure Categories And Reporting
 
@@ -248,7 +261,8 @@ mathematically unavailable results, with distinct stable math error codes; accep
 behavior. Assertions remain for internal invariants, and explicitly named unchecked variants should
 be added only where a measured hot path needs them.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q012: Determinism And Floating-Point Contract
 
@@ -264,7 +278,8 @@ Intentional `std::fma` is allowed when it is part of a documented algorithm and 
 tolerance. Accurate operations are the default; any estimate variants must be explicitly named and
 introduced only after measurement.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q013: SIMD And Bulk-Workload Milestones
 
@@ -284,7 +299,8 @@ ARM64 implementations when profiling justifies handwritten paths. Likely bulk ca
 and bounds transforms and frustum culling, but public span APIs require representative workload
 evidence. Use frame-budget and regression thresholds rather than an arbitrary speedup target.
 
-Answer:
+Answer: Implement the exact recommendation. Defer SIMD and bulk operations for now
+
 
 ## Geometry And Collision Scope
 
@@ -307,7 +323,8 @@ and ray/triangle nearest world-distance hit with barycentrics. Defer OBBs, capsu
 tests, closest-distance queries, bounds-overlap pairs, and every other combination until a concrete
 consumer names it.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ### MATH-Q015: Collision Results And Edge Semantics
 
@@ -330,7 +347,8 @@ checked construction. Normalize finite nonzero ray directions on construction so
 distance, and normalize plane normals. Culling should reject only beyond a documented conservative
 error bound and retain boundary or numerically uncertain objects.
 
-Answer:
+Answer: Implement the exact recommendation.
+
 
 ## Provisional Deferrals
 

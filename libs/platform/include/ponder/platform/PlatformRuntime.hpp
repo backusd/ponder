@@ -1,7 +1,10 @@
 #pragma once
 
 #include <ponder/core/Result.hpp>
+#include <ponder/platform/Dialog.hpp>
 #include <ponder/platform/Display.hpp>
+#include <ponder/platform/Geometry.hpp>
+#include <ponder/platform/Mouse.hpp>
 #include <ponder/platform/PlatformEvent.hpp>
 #include <ponder/platform/Timing.hpp>
 #include <ponder/platform/Window.hpp>
@@ -9,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace pond::platform
@@ -43,6 +47,24 @@ public:
     [[nodiscard]] core::Result<Window> CreateWindow(const WindowDesc& desc);
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
     [[nodiscard]] core::Result<DisplayInfo> GetDisplayInfo(DisplayId id);
+
+    [[nodiscard]] core::VoidResult SetMouseCapture(bool enabled);
+    [[nodiscard]] core::Result<LogicalPoint> GetGlobalMousePosition() const;
+    [[nodiscard]] core::VoidResult SetSystemCursor(SystemCursorShape shape);
+    [[nodiscard]] core::VoidResult ShowCursor();
+    [[nodiscard]] core::VoidResult HideCursor();
+    [[nodiscard]] bool IsCursorVisible() const;
+
+    [[nodiscard]] core::Result<std::string> GetClipboardText() const;
+    [[nodiscard]] core::VoidResult SetClipboardText(std::string_view text);
+    [[nodiscard]] core::VoidResult OpenExternalUri(std::string_view uri);
+
+    [[nodiscard]] core::Result<DialogRequestId> ShowOpenFileDialog(
+        const OpenFileDialogDesc& desc);
+    [[nodiscard]] core::Result<DialogRequestId> ShowSaveFileDialog(
+        const SaveFileDialogDesc& desc);
+    [[nodiscard]] core::Result<DialogRequestId> ShowOpenFolderDialog(
+        const OpenFolderDialogDesc& desc);
 
 private:
     explicit PlatformRuntime(std::unique_ptr<detail::PlatformRuntimeState> state) noexcept;

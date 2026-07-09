@@ -613,6 +613,8 @@ Done when:
 TASK PLAT-011: Implement Mouse And Standard Cursor Services
 ----------------------------------------------------------
 
+Status: completed on 2026-07-09.
+
 Add pointer primitives needed by desktop UI and later viewports.
 
 Work:
@@ -648,6 +650,8 @@ Done when:
 
 TASK PLAT-012: Implement Native Window Interop
 ----------------------------------------------
+
+Status: completed on 2026-07-09.
 
 Expose only the borrowed native data approved by PLAT-002.
 
@@ -689,7 +693,9 @@ Done when:
 - Public-header and native-branch tests cover tag/payload invariants.
 
 TASK PLAT-013: Verify The Renderer-Ready Foundation
---------------------------------------------------
+---------------------------------------------------
+
+Status: Completed on 2026-07-09.
 
 Treat this as the completion gate for renderer implementation.
 
@@ -714,8 +720,33 @@ Done when:
   process services.
 - The result is described as host-local, not cross-platform certification.
 
+Host-local verification record, 2026-07-09:
+
+- Preset: `windows-msvc-debug`.
+- Host/toolchain: Windows-10.0.26200, Visual Studio 2026 Developer Command
+  Prompt v18.7.3, MSVC toolchain from Visual Studio 18 Community.
+- SDL video drivers reported by configure: `dummy`, `offscreen`, `windows`.
+- Built `ponder_platform`, `ponder_platform_header_tests`,
+  `ponder_platform_tests`, `ponder_platform_backend_tests`, and
+  `ponder_platform_integration_tests`.
+- Ran `ponder_platform_tests.exe`: 32 tests passed.
+- Ran `ponder_platform_backend_tests.exe`: 105 tests passed.
+- Ran CTest with `-R "^PlatformRuntimeIntegrationTests\\."`: 8 tests passed and
+  1 test skipped. The skipped test was the native-handle unsupported-driver
+  check because the dummy driver could not create a Vulkan-compatible window.
+- Confirmed the CMake boundary still exposes `ponder::core` publicly and keeps
+  `ponder::SDL3` private to `ponder_platform`; public-header tests link only
+  against `ponder::platform`.
+- Confirmed with `git status --short` that generated files, logs, build
+  outputs, and local environment files were not staged. Existing source/docs
+  changes remain unstaged.
+- This is a host-local renderer-readiness result, not cross-platform
+  certification.
+
 TASK PLAT-014: Implement Inbound Drag-And-Drop
 ---------------------------------------------
+
+Status: Completed on 2026-07-09.
 
 Expose SDL drop sequences through owned project events.
 
@@ -741,6 +772,8 @@ Done when:
 
 TASK PLAT-015: Implement Clipboard And External URI Services
 ------------------------------------------------------------
+
+Status: completed on 2026-07-09.
 
 Provide the host services needed by desktop consumers and complete the
 project-owned UI adapter contract.
@@ -783,6 +816,8 @@ Done when:
 
 TASK PLAT-016: Implement Asynchronous File And Folder Dialogs
 -------------------------------------------------------------
+
+Status: completed on 2026-07-09.
 
 Wrap SDL's callback API in an owner-thread event contract.
 
@@ -837,6 +872,8 @@ Done when:
 
 TASK PLAT-017: Implement Shell-Free Process Launching
 ----------------------------------------------------
+
+Status: completed on 2026-07-09.
 
 Add a deterministic low-level process primitive without compute-job policy.
 

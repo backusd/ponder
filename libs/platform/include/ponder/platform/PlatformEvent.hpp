@@ -1,13 +1,16 @@
 #pragma once
 
+#include <ponder/platform/Dialog.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Identifiers.hpp>
 #include <ponder/platform/Keyboard.hpp>
+#include <ponder/platform/Mouse.hpp>
 #include <ponder/platform/TextInput.hpp>
 #include <ponder/platform/Timing.hpp>
 #include <ponder/platform/WindowState.hpp>
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <variant>
@@ -257,6 +260,107 @@ struct TextCompositionEvent final
                                          const TextCompositionEvent& rhs) = default;
 };
 
+struct MouseMotionEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    LogicalPoint position{};
+    LogicalPoint relativeMovement{};
+
+    [[nodiscard]] friend bool operator==(const MouseMotionEvent& lhs,
+                                         const MouseMotionEvent& rhs) = default;
+};
+
+struct MouseButtonEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    LogicalPoint position{};
+    MouseButton button{MouseButton::Unknown};
+    bool pressed{};
+
+    [[nodiscard]] friend bool operator==(const MouseButtonEvent& lhs,
+                                         const MouseButtonEvent& rhs) = default;
+};
+
+struct MouseWheelEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    LogicalPoint position{};
+    float horizontal{};
+    float vertical{};
+
+    [[nodiscard]] friend bool operator==(const MouseWheelEvent& lhs,
+                                         const MouseWheelEvent& rhs) = default;
+};
+
+struct DropBeginEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    std::optional<std::string> sourceApplication;
+
+    [[nodiscard]] friend bool operator==(const DropBeginEvent& lhs,
+                                         const DropBeginEvent& rhs) = default;
+};
+
+struct DroppedFileEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    std::filesystem::path path;
+    LogicalPoint position{};
+    std::optional<std::string> sourceApplication;
+
+    [[nodiscard]] friend bool operator==(const DroppedFileEvent& lhs,
+                                         const DroppedFileEvent& rhs) = default;
+};
+
+struct DroppedTextEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    std::string text;
+    LogicalPoint position{};
+    std::optional<std::string> sourceApplication;
+
+    [[nodiscard]] friend bool operator==(const DroppedTextEvent& lhs,
+                                         const DroppedTextEvent& rhs) = default;
+};
+
+struct DropPositionEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    LogicalPoint position{};
+    std::optional<std::string> sourceApplication;
+
+    [[nodiscard]] friend bool operator==(const DropPositionEvent& lhs,
+                                         const DropPositionEvent& rhs) = default;
+};
+
+struct DropCompleteEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    LogicalPoint position{};
+    std::optional<std::string> sourceApplication;
+
+    [[nodiscard]] friend bool operator==(const DropCompleteEvent& lhs,
+                                         const DropCompleteEvent& rhs) = default;
+};
+
+struct DialogCompletedEvent final
+{
+    PlatformTimestamp timestamp{};
+    DialogRequestId requestId;
+    DialogOutcome outcome;
+
+    [[nodiscard]] friend bool operator==(const DialogCompletedEvent& lhs,
+                                         const DialogCompletedEvent& rhs) = default;
+};
+
 using PlatformEvent = std::variant<
     QuitRequestedEvent,
     WindowCloseRequestedEvent,
@@ -281,5 +385,14 @@ using PlatformEvent = std::variant<
     DisplayUsableBoundsChangedEvent,
     KeyboardKeyEvent,
     TextInputEvent,
-    TextCompositionEvent>;
+    TextCompositionEvent,
+    MouseMotionEvent,
+    MouseButtonEvent,
+    MouseWheelEvent,
+    DropBeginEvent,
+    DroppedFileEvent,
+    DroppedTextEvent,
+    DropPositionEvent,
+    DropCompleteEvent,
+    DialogCompletedEvent>;
 } // namespace pond::platform

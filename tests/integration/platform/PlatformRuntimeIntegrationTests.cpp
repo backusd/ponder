@@ -1,6 +1,8 @@
+#include <ponder/core/ScopeExit.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
 
+#include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
@@ -13,6 +15,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -343,6 +346,99 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
 }
 
 TEST_F(PlatformRuntimeIntegrationTests,
+       SupportsLiveMouseStateWithoutRetainingCapture)
+{
+    ASSERT_TRUE(
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.title = "Live Mouse State Window";
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    auto restoreMouseState = pond::core::MakeScopeExit(
+        [&runtime, &window]() noexcept
+        {
+            static_cast<void>(runtime.SetMouseCapture(false));
+            static_cast<void>(window.SetRelativeMouseMode(false));
+            static_cast<void>(window.SetMouseGrab(false));
+            static_cast<void>(runtime.ShowCursor());
+        });
+
+    EXPECT_FALSE(window.IsMouseGrabbed());
+    ASSERT_TRUE(window.SetMouseGrab(true).HasValue());
+    ASSERT_TRUE(window.SetMouseGrab(false).HasValue());
+    EXPECT_FALSE(window.IsMouseGrabbed());
+
+    EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
+    ASSERT_TRUE(window.SetRelativeMouseMode(true).HasValue());
+    EXPECT_TRUE(window.IsRelativeMouseModeEnabled());
+    ASSERT_TRUE(window.SetRelativeMouseMode(false).HasValue());
+    EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
+
+    const pond::core::VoidResult captureResult =
+        runtime.SetMouseCapture(true);
+    ASSERT_FALSE(captureResult.HasValue());
+    EXPECT_EQ(captureResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_TRUE(runtime.SetMouseCapture(false).HasValue());
+
+    const auto globalPosition = runtime.GetGlobalMousePosition();
+    ASSERT_FALSE(globalPosition.HasValue());
+    EXPECT_EQ(globalPosition.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+
+    ASSERT_TRUE(runtime.HideCursor().HasValue());
+    EXPECT_FALSE(runtime.IsCursorVisible());
+    ASSERT_TRUE(runtime.ShowCursor().HasValue());
+    EXPECT_TRUE(runtime.IsCursorVisible());
+}
+
+TEST_F(PlatformRuntimeIntegrationTests,
+       SupportsLiveClipboardTextAndRestoresPreviousText)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    if (!runtimeResult.HasValue())
+    {
+        GTEST_SKIP()
+            << "Live clipboard requires an available SDL video driver: "
+            << runtimeResult.GetError().GetMessage();
+    }
+
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    auto previousTextResult = runtime.GetClipboardText();
+    ASSERT_TRUE(previousTextResult.HasValue())
+        << previousTextResult.GetError().GetMessage();
+    const std::string previousText = previousTextResult.GetValue();
+    auto restoreClipboard = pond::core::MakeScopeExit(
+        [&runtime, &previousText]() noexcept
+        {
+            static_cast<void>(runtime.SetClipboardText(previousText));
+        });
+
+    constexpr std::string_view kClipboardText{
+        "ponder platform clipboard round trip"};
+    const pond::core::VoidResult setResult =
+        runtime.SetClipboardText(kClipboardText);
+    ASSERT_TRUE(setResult.HasValue()) << setResult.GetError().GetMessage();
+    EXPECT_TRUE(SDL_HasClipboardText());
+
+    auto textResult = runtime.GetClipboardText();
+    ASSERT_TRUE(textResult.HasValue()) << textResult.GetError().GetMessage();
+    EXPECT_EQ(textResult.GetValue(), kClipboardText);
+}
+
+TEST_F(PlatformRuntimeIntegrationTests,
        PollsAndRoutesSyntheticEventsForMultipleLiveWindows)
 {
     ASSERT_TRUE(
@@ -391,6 +487,27 @@ TEST_F(PlatformRuntimeIntegrationTests,
     secondClose.window.windowID = secondBackendId;
     ASSERT_TRUE(SDL_PushEvent(&secondClose));
 
+    const std::string droppedPath{"C:/tmp/live-drop.sdf"};
+    const std::string droppedText{"H2O"};
+    constexpr char kDropSource[]{"synthetic-source"};
+
+    SDL_Event droppedFile{};
+    droppedFile.drop.type = SDL_EVENT_DROP_FILE;
+    droppedFile.drop.windowID = firstBackendId;
+    droppedFile.drop.data = droppedPath.c_str();
+    droppedFile.drop.source = kDropSource;
+    droppedFile.drop.x = 12.5F;
+    droppedFile.drop.y = 24.25F;
+    ASSERT_TRUE(SDL_PushEvent(&droppedFile));
+
+    SDL_Event droppedTextEvent{};
+    droppedTextEvent.drop.type = SDL_EVENT_DROP_TEXT;
+    droppedTextEvent.drop.windowID = secondBackendId;
+    droppedTextEvent.drop.data = droppedText.c_str();
+    droppedTextEvent.drop.x = 4.5F;
+    droppedTextEvent.drop.y = 8.25F;
+    ASSERT_TRUE(SDL_PushEvent(&droppedTextEvent));
+
     SDL_Event quit{};
     quit.type = SDL_EVENT_QUIT;
     ASSERT_TRUE(SDL_PushEvent(&quit));
@@ -410,6 +527,32 @@ TEST_F(PlatformRuntimeIntegrationTests,
     EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*secondEvent)
                   .windowId,
               second.GetId());
+
+    auto dropFileEvent = runtime.PollEvent();
+    ASSERT_TRUE(dropFileEvent.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedFileEvent>(
+        *dropFileEvent));
+    const pond::platform::DroppedFileEvent& droppedFilePayload =
+        std::get<pond::platform::DroppedFileEvent>(*dropFileEvent);
+    EXPECT_EQ(droppedFilePayload.windowId, first.GetId());
+    EXPECT_EQ(droppedFilePayload.path,
+              std::filesystem::path{"C:/tmp/live-drop.sdf"});
+    EXPECT_EQ(droppedFilePayload.position,
+              (pond::platform::LogicalPoint{12.5F, 24.25F}));
+    ASSERT_TRUE(droppedFilePayload.sourceApplication.has_value());
+    EXPECT_EQ(*droppedFilePayload.sourceApplication, kDropSource);
+
+    auto dropTextEvent = runtime.PollEvent();
+    ASSERT_TRUE(dropTextEvent.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedTextEvent>(
+        *dropTextEvent));
+    const pond::platform::DroppedTextEvent& droppedTextPayload =
+        std::get<pond::platform::DroppedTextEvent>(*dropTextEvent);
+    EXPECT_EQ(droppedTextPayload.windowId, second.GetId());
+    EXPECT_EQ(droppedTextPayload.text, droppedText);
+    EXPECT_EQ(droppedTextPayload.position,
+              (pond::platform::LogicalPoint{4.5F, 8.25F}));
+    EXPECT_FALSE(droppedTextPayload.sourceApplication.has_value());
 
     auto quitEvent = runtime.PollEvent();
     ASSERT_TRUE(quitEvent.has_value());
@@ -623,4 +766,52 @@ TEST_F(PlatformRuntimeIntegrationTests,
     EXPECT_EQ(ownedSnapshots.front().name, firstDisplayName);
     EXPECT_TRUE(ownedSnapshots.front().id.IsValid());
 }
-} // namespace
+
+TEST_F(PlatformRuntimeIntegrationTests,
+       ReportsNativeHandleUnsupportedUnderDummyDriver)
+{
+    ASSERT_TRUE(
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ASSERT_STREQ(SDL_GetCurrentVideoDriver(), "dummy");
+
+    pond::platform::WindowDesc defaultDesc;
+    defaultDesc.title = "Native Handle Default Window";
+    defaultDesc.visible = false;
+    auto defaultWindowResult = runtime.CreateWindow(defaultDesc);
+    ASSERT_TRUE(defaultWindowResult.HasValue())
+        << defaultWindowResult.GetError().GetMessage();
+    pond::platform::Window defaultWindow =
+        std::move(defaultWindowResult).GetValue();
+
+    auto invalidResult = defaultWindow.GetNativeHandle();
+    ASSERT_FALSE(invalidResult.HasValue());
+    EXPECT_EQ(invalidResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::InvalidArgument));
+
+    pond::platform::WindowDesc vulkanDesc;
+    vulkanDesc.title = "Native Handle Vulkan Window";
+    vulkanDesc.visible = false;
+    vulkanDesc.graphicsCompatibility =
+        pond::platform::WindowGraphicsCompatibility::Vulkan;
+    auto vulkanWindowResult = runtime.CreateWindow(vulkanDesc);
+    if (!vulkanWindowResult.HasValue())
+    {
+        GTEST_SKIP() << "Dummy SDL driver cannot create a Vulkan-compatible "
+                        "window on this host: "
+                     << vulkanWindowResult.GetError().GetMessage();
+    }
+    pond::platform::Window vulkanWindow =
+        std::move(vulkanWindowResult).GetValue();
+
+    auto unsupportedResult = vulkanWindow.GetNativeHandle();
+    ASSERT_FALSE(unsupportedResult.HasValue());
+    EXPECT_EQ(unsupportedResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(
+                  pond::platform::PlatformErrorCode::Unsupported));
+}} // namespace

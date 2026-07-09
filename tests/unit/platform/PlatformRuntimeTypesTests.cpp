@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -17,6 +18,55 @@ static_assert(std::is_nothrow_destructible_v<pond::platform::PlatformRuntime>);
 static_assert(std::is_same_v<
               decltype(std::declval<pond::platform::PlatformRuntime&>().PollEvent()),
               std::optional<pond::platform::PlatformEvent>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>().SetMouseCapture(
+                  true)),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const pond::platform::PlatformRuntime&>()
+                           .GetGlobalMousePosition()),
+              pond::core::Result<pond::platform::LogicalPoint>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>().SetSystemCursor(
+                  pond::platform::SystemCursorShape::Default)),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>().ShowCursor()),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>().HideCursor()),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const pond::platform::PlatformRuntime&>()
+                           .IsCursorVisible()),
+              bool>);
+static_assert(std::is_same_v<
+              decltype(std::declval<const pond::platform::PlatformRuntime&>()
+                           .GetClipboardText()),
+              pond::core::Result<std::string>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>()
+                           .SetClipboardText(std::string_view{})),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>()
+                           .OpenExternalUri(std::string_view{})),
+              pond::core::VoidResult>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>()
+                           .ShowOpenFileDialog(
+                               std::declval<const pond::platform::OpenFileDialogDesc&>())),
+              pond::core::Result<pond::platform::DialogRequestId>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>()
+                           .ShowSaveFileDialog(
+                               std::declval<const pond::platform::SaveFileDialogDesc&>())),
+              pond::core::Result<pond::platform::DialogRequestId>>);
+static_assert(std::is_same_v<
+              decltype(std::declval<pond::platform::PlatformRuntime&>()
+                           .ShowOpenFolderDialog(
+                               std::declval<const pond::platform::OpenFolderDialogDesc&>())),
+              pond::core::Result<pond::platform::DialogRequestId>>);
 
 TEST(PlatformRuntimeDescTests, ProvidesStableApplicationMetadataDefaults)
 {

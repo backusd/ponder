@@ -4,6 +4,7 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -13,7 +14,7 @@ namespace
 {
 using namespace std::chrono_literals;
 
-static_assert(std::variant_size_v<pond::platform::PlatformEvent> == 24U);
+static_assert(std::variant_size_v<pond::platform::PlatformEvent> == 33U);
 
 TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
 {
@@ -21,7 +22,7 @@ TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
     const pond::platform::WindowId windowId{17};
     const pond::platform::DisplayId displayId{29};
 
-    const std::array<pond::platform::PlatformEvent, 24> events{
+    const std::array<pond::platform::PlatformEvent, 33> events{
         pond::platform::QuitRequestedEvent{timestamp},
         pond::platform::WindowCloseRequestedEvent{timestamp, windowId},
         pond::platform::WindowMovedEvent{timestamp, windowId, {-120, 45}},
@@ -67,9 +68,41 @@ TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
             timestamp,
             std::nullopt,
             std::string{"composition"},
-            pond::platform::TextCompositionRange{2, 4}}};
+            pond::platform::TextCompositionRange{2, 4}},
+        pond::platform::MouseMotionEvent{
+            timestamp, windowId, {42.5F, -3.25F}, {1.5F, -2.0F}},
+        pond::platform::MouseButtonEvent{
+            timestamp, std::nullopt, {12.25F, 24.5F},
+            pond::platform::MouseButton::X1, true},
+        pond::platform::MouseWheelEvent{
+            timestamp, windowId, {7.0F, 9.0F}, 1.25F, -0.5F},
+        pond::platform::DropBeginEvent{
+            timestamp, windowId, std::optional<std::string>{"source-app"}},
+        pond::platform::DroppedFileEvent{
+            timestamp,
+            windowId,
+            std::filesystem::path{"C:/tmp/molecule.sdf"},
+            {2.0F, 4.0F},
+            std::optional<std::string>{"source-app"}},
+        pond::platform::DroppedTextEvent{
+            timestamp,
+            std::nullopt,
+            std::string{"SMILES"},
+            {6.0F, 8.0F},
+            std::nullopt},
+        pond::platform::DropPositionEvent{
+            timestamp, windowId, {10.0F, 12.0F},
+            std::optional<std::string>{"source-app"}},
+        pond::platform::DropCompleteEvent{
+            timestamp, std::nullopt, {14.0F, 16.0F}, std::nullopt},
+        pond::platform::DialogCompletedEvent{
+            timestamp,
+            pond::platform::DialogRequestId{37},
+            pond::platform::DialogSelection{
+                .paths = {std::filesystem::path{"C:/tmp/selected.sdf"}},
+                .selectedFilterIndex = 0U}}};
 
-    std::array<bool, 24> visited{};
+    std::array<bool, 33> visited{};
     for (std::size_t eventIndex = 0; eventIndex < events.size(); ++eventIndex)
     {
         const pond::platform::PlatformEvent& event = events[eventIndex];
@@ -154,6 +187,82 @@ TEST(PlatformEventTests, PreservesTypedUnitsAndOptionalValues)
     ASSERT_TRUE(withInsertion.selection.has_value());
     EXPECT_EQ(*withInsertion.selection,
               (pond::platform::TextCompositionRange{0, 0}));
+
+    const pond::platform::MouseMotionEvent targetlessMotion{
+        timestamp, std::nullopt, {15.5F, 20.25F}, {-1.0F, 2.5F}};
+    EXPECT_FALSE(targetlessMotion.windowId.has_value());
+    EXPECT_EQ(targetlessMotion.position,
+              (pond::platform::LogicalPoint{15.5F, 20.25F}));
+    EXPECT_EQ(targetlessMotion.relativeMovement,
+              (pond::platform::LogicalPoint{-1.0F, 2.5F}));
+
+    const pond::platform::MouseButtonEvent button{
+        timestamp, windowId, {4.0F, 8.0F},
+        pond::platform::MouseButton::Right, true};
+    EXPECT_EQ(button.position, (pond::platform::LogicalPoint{4.0F, 8.0F}));
+    EXPECT_EQ(button.button, pond::platform::MouseButton::Right);
+    EXPECT_TRUE(button.pressed);
+
+    const pond::platform::MouseWheelEvent wheel{
+        timestamp, windowId, {3.5F, 6.5F}, 2.0F, -1.25F};
+    EXPECT_EQ(wheel.position, (pond::platform::LogicalPoint{3.5F, 6.5F}));
+    EXPECT_FLOAT_EQ(wheel.horizontal, 2.0F);
+    EXPECT_FLOAT_EQ(wheel.vertical, -1.25F);
+
+    const pond::platform::DropBeginEvent beginDrop{
+        timestamp, std::nullopt, std::nullopt};
+    EXPECT_FALSE(beginDrop.windowId.has_value());
+    EXPECT_FALSE(beginDrop.sourceApplication.has_value());
+
+    const pond::platform::DroppedFileEvent droppedFile{
+        timestamp,
+        windowId,
+        std::filesystem::path{"C:/tmp/molecule.sdf"},
+        {11.5F, 22.25F},
+        std::optional<std::string>{"source-app"}};
+    EXPECT_EQ(droppedFile.path, std::filesystem::path{"C:/tmp/molecule.sdf"});
+    EXPECT_EQ(droppedFile.position,
+              (pond::platform::LogicalPoint{11.5F, 22.25F}));
+    ASSERT_TRUE(droppedFile.sourceApplication.has_value());
+    EXPECT_EQ(*droppedFile.sourceApplication, "source-app");
+
+    const pond::platform::DroppedTextEvent droppedText{
+        timestamp, std::nullopt, std::string{"C=O"}, {1.0F, 2.0F},
+        std::nullopt};
+    EXPECT_FALSE(droppedText.windowId.has_value());
+    EXPECT_EQ(droppedText.text, "C=O");
+
+    const pond::platform::DropPositionEvent dropPosition{
+        timestamp, windowId, {3.0F, 4.0F}, std::nullopt};
+    EXPECT_EQ(dropPosition.position,
+              (pond::platform::LogicalPoint{3.0F, 4.0F}));
+
+    const pond::platform::DropCompleteEvent dropComplete{
+        timestamp, windowId, {5.0F, 6.0F},
+        std::optional<std::string>{"source-app"}};
+    ASSERT_TRUE(dropComplete.sourceApplication.has_value());
+    EXPECT_EQ(*dropComplete.sourceApplication, "source-app");
+
+    const pond::platform::DialogCompletedEvent selectedDialog{
+        timestamp,
+        pond::platform::DialogRequestId{3},
+        pond::platform::DialogSelection{
+            .paths = {std::filesystem::path{"C:/tmp/dialog.sdf"}},
+            .selectedFilterIndex = 1U}};
+    EXPECT_EQ(selectedDialog.requestId, pond::platform::DialogRequestId{3});
+    const auto& selection = std::get<pond::platform::DialogSelection>(
+        selectedDialog.outcome);
+    ASSERT_EQ(selection.paths.size(), 1U);
+    EXPECT_EQ(selection.paths.front(), std::filesystem::path{"C:/tmp/dialog.sdf"});
+    ASSERT_TRUE(selection.selectedFilterIndex.has_value());
+    EXPECT_EQ(*selection.selectedFilterIndex, 1U);
+
+    const pond::platform::DialogCompletedEvent cancelledDialog{
+        timestamp,
+        pond::platform::DialogRequestId{4},
+        pond::platform::DialogCancellation{}};
+    EXPECT_TRUE(std::holds_alternative<pond::platform::DialogCancellation>(
+        cancelledDialog.outcome));
 }
 
 TEST(PlatformEventTests, DefaultedEqualityIncludesPayloadFields)

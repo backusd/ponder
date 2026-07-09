@@ -3,6 +3,7 @@
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Identifiers.hpp>
+#include <ponder/platform/NativeWindow.hpp>
 #include <ponder/platform/TextInput.hpp>
 #include <ponder/platform/WindowGraphics.hpp>
 #include <ponder/platform/WindowState.hpp>
@@ -45,6 +46,7 @@ public:
 
     [[nodiscard]] WindowId GetId() const;
     [[nodiscard]] WindowGraphicsCompatibility GetGraphicsCompatibility() const;
+    [[nodiscard]] core::Result<NativeWindowHandle> GetNativeHandle() const;
 
     [[nodiscard]] std::string GetTitle() const;
     [[nodiscard]] core::VoidResult SetTitle(std::string_view title);
@@ -81,6 +83,11 @@ public:
     [[nodiscard]] core::VoidResult ClearTextComposition();
     [[nodiscard]] core::VoidResult SetTextInputArea(TextInputArea area);
     [[nodiscard]] core::VoidResult ClearTextInputArea();
+
+    [[nodiscard]] core::VoidResult SetMouseGrab(bool grabbed);
+    [[nodiscard]] bool IsMouseGrabbed() const;
+    [[nodiscard]] core::VoidResult SetRelativeMouseMode(bool enabled);
+    [[nodiscard]] bool IsRelativeMouseModeEnabled() const;
 
     [[nodiscard]] core::VoidResult Show();
     [[nodiscard]] core::VoidResult Hide();

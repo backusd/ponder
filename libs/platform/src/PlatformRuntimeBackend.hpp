@@ -1,8 +1,15 @@
 #pragma once
 
+#include <ponder/platform/Mouse.hpp>
+#include <ponder/platform/NativeWindow.hpp>
 #include <ponder/platform/WindowGraphics.hpp>
 
+#include <SDL3/SDL_dialog.h>
+
+#include <cstddef>
 #include <cstdint>
+#include <string>
+#include <string_view>
 #include <vector>
 
 union SDL_Event;
@@ -55,6 +62,55 @@ enum class BackendWindowOperationResult : std::uint8_t
     Failed
 };
 
+enum class BackendNativeWindowDriver : std::uint8_t
+{
+    Unsupported,
+    Win32,
+    X11,
+    Wayland,
+    Cocoa
+};
+
+enum class BackendNativeWindowHandleStatus : std::uint8_t
+{
+    Succeeded,
+    Unsupported,
+    Failed
+};
+
+struct BackendNativeWindowHandleResult final
+{
+    BackendNativeWindowHandleStatus status{BackendNativeWindowHandleStatus::Failed};
+    const char* operation{};
+    const char* message{};
+    bool captureSdlError{};
+};
+
+struct BackendClipboardTextResult final
+{
+    char* text{};
+    std::string errorText;
+};
+
+enum class BackendDialogKind : std::uint8_t
+{
+    OpenFile,
+    SaveFile,
+    OpenFolder
+};
+
+struct BackendDialogRequestDesc final
+{
+    BackendDialogKind kind{BackendDialogKind::OpenFile};
+    SDL_DialogFileCallback callback{};
+    void* userdata{};
+    void* parentWindow{};
+    const SDL_DialogFileFilter* filters{};
+    int filterCount{};
+    const char* defaultLocation{};
+    bool allowMultipleSelection{};
+};
+
 struct PlatformWindowBackend final
 {
     void* context{};
@@ -92,6 +148,14 @@ struct PlatformWindowBackend final
     bool (*clearTextComposition)(void* context, void* window){};
     bool (*setTextInputArea)(void* context, void* window,
                              const BackendTextInputArea* area){};
+    bool (*setMouseGrab)(void* context, void* window, bool grabbed){};
+    bool (*isMouseGrabbed)(void* context, void* window){};
+    bool (*setRelativeMouseMode)(void* context, void* window, bool enabled){};
+    bool (*isRelativeMouseModeEnabled)(void* context, void* window){};
+    BackendNativeWindowHandleResult (*getNativeHandle)(
+        void* context, void* window, void** cachedMetalView,
+        NativeWindowHandle* handle){};
+    void (*destroyMetalView)(void* context, void* metalView){};
 };
 
 enum class BackendDisplayOrientation : std::uint8_t
@@ -147,13 +211,32 @@ struct PlatformRuntimeBackend final
     void (*quit)(void* context){};
     std::uint64_t (*getTicksNanoseconds)(void* context){};
     bool (*pollEvent)(void* context, SDL_Event* event){};
+    bool (*supportsGlobalMouse)(void* context){};
+    void (*getGlobalMousePosition)(void* context, float* x, float* y){};
+    bool (*setMouseCapture)(void* context, bool enabled){};
+    void* (*createSystemCursor)(void* context, SystemCursorShape shape){};
+    bool (*setCursor)(void* context, void* cursor){};
+    void (*destroyCursor)(void* context, void* cursor){};
+    bool (*showCursor)(void* context){};
+    bool (*hideCursor)(void* context){};
+    bool (*isCursorVisible)(void* context){};
+    bool (*supportsClipboardText)(void* context){};
+    BackendClipboardTextResult (*getClipboardText)(void* context){};
+    void (*freeClipboardText)(void* context, char* text){};
+    bool (*setClipboardText)(void* context, const char* text){};
+    bool (*openExternalUri)(void* context, const char* uri){};
+    void (*showDialog)(void* context, const BackendDialogRequestDesc& desc){};
 };
+
+inline constexpr std::size_t kSystemCursorShapeCount{11};
 
 inline constexpr char kMouseFocusClickThroughHint[]{"SDL_MOUSE_FOCUS_CLICKTHROUGH"};
 inline constexpr char kMouseAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
 
 [[nodiscard]] bool IsWindowGraphicsCompatibilitySupported(
     WindowGraphicsCompatibility compatibility) noexcept;
+[[nodiscard]] BackendNativeWindowDriver GetNativeWindowDriver(
+    std::string_view driverName) noexcept;
 [[nodiscard]] std::uint64_t BuildSdlWindowFlags(
     const BackendWindowCreateDesc& desc) noexcept;
 [[nodiscard]] bool IsReservedSdlWindowPosition(std::int32_t value) noexcept;

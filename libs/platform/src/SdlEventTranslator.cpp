@@ -3,10 +3,12 @@
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_scancode.h>
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <optional>
 #include <string>
@@ -590,6 +592,25 @@ struct InputWindowResolution final
     return translated;
 }
 
+[[nodiscard]] MouseButton TranslateMouseButton(std::uint8_t button) noexcept
+{
+    switch (button)
+    {
+    case SDL_BUTTON_LEFT:
+        return MouseButton::Left;
+    case SDL_BUTTON_RIGHT:
+        return MouseButton::Right;
+    case SDL_BUTTON_MIDDLE:
+        return MouseButton::Middle;
+    case SDL_BUTTON_X1:
+        return MouseButton::X1;
+    case SDL_BUTTON_X2:
+        return MouseButton::X2;
+    default:
+        return MouseButton::Unknown;
+    }
+}
+
 [[nodiscard]] std::optional<std::string> CopyUtf8Text(const char* text)
 {
     if (text == nullptr)
@@ -604,6 +625,48 @@ struct InputWindowResolution final
     }
 
     return ownedText;
+}
+
+struct OptionalUtf8Text final
+{
+    bool valid{};
+    std::optional<std::string> text;
+};
+
+[[nodiscard]] OptionalUtf8Text CopyOptionalUtf8Text(const char* text)
+{
+    if (text == nullptr)
+    {
+        return OptionalUtf8Text{true, std::nullopt};
+    }
+
+    std::optional<std::string> ownedText = CopyUtf8Text(text);
+    if (!ownedText.has_value())
+    {
+        return {};
+    }
+
+    return OptionalUtf8Text{true, std::move(*ownedText)};
+}
+
+[[nodiscard]] std::filesystem::path MakePathFromUtf8(const std::string& utf8Path)
+{
+    std::u8string pathText;
+    pathText.reserve(utf8Path.size());
+    for (const char character : utf8Path)
+    {
+        pathText.push_back(static_cast<char8_t>(
+            static_cast<unsigned char>(character)));
+    }
+
+    return std::filesystem::path{pathText};
+}
+
+[[nodiscard]] std::optional<LogicalPoint> TranslateDropPosition(
+    float x, float y) noexcept
+{
+    const LogicalPoint position{x, y};
+    return IsValid(position) ? std::optional<LogicalPoint>{position} : std::nullopt;
 }
 
 [[nodiscard]] std::optional<TextCompositionRange> TranslateCompositionRange(
@@ -710,6 +773,89 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             event.key.repeat}};
     }
 
+    case SDL_EVENT_MOUSE_MOTION:
+    {
+        const LogicalPoint position{event.motion.x, event.motion.y};
+        const LogicalPoint relativeMovement{event.motion.xrel, event.motion.yrel};
+        if (!IsValid(position) || !IsValid(relativeMovement))
+        {
+            return std::nullopt;
+        }
+
+        const InputWindowResolution target = ResolveInputWindowId(
+            static_cast<std::uint32_t>(event.motion.windowID), context);
+        if (!target.valid)
+        {
+            return std::nullopt;
+        }
+
+        return PlatformEvent{MouseMotionEvent{
+            *timestamp, target.windowId, position, relativeMovement}};
+    }
+
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+    {
+        const bool pressed = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+        if (event.button.down != pressed)
+        {
+            return std::nullopt;
+        }
+
+        const LogicalPoint position{event.button.x, event.button.y};
+        if (!IsValid(position))
+        {
+            return std::nullopt;
+        }
+
+        const InputWindowResolution target = ResolveInputWindowId(
+            static_cast<std::uint32_t>(event.button.windowID), context);
+        if (!target.valid)
+        {
+            return std::nullopt;
+        }
+
+        return PlatformEvent{MouseButtonEvent{
+            *timestamp,
+            target.windowId,
+            position,
+            TranslateMouseButton(event.button.button),
+            pressed}};
+    }
+
+    case SDL_EVENT_MOUSE_WHEEL:
+    {
+        float horizontal = event.wheel.x;
+        float vertical = event.wheel.y;
+        switch (event.wheel.direction)
+        {
+        case SDL_MOUSEWHEEL_NORMAL:
+            break;
+        case SDL_MOUSEWHEEL_FLIPPED:
+            horizontal = -horizontal;
+            vertical = -vertical;
+            break;
+        default:
+            return std::nullopt;
+        }
+
+        const LogicalPoint position{event.wheel.mouse_x, event.wheel.mouse_y};
+        if (!IsValid(position) || !IsValid(LogicalPoint{horizontal, vertical}))
+        {
+            return std::nullopt;
+        }
+
+        const InputWindowResolution target = ResolveInputWindowId(
+            static_cast<std::uint32_t>(event.wheel.windowID), context);
+        if (!target.valid)
+        {
+            return std::nullopt;
+        }
+
+        return PlatformEvent{MouseWheelEvent{
+            *timestamp, target.windowId, position, horizontal, vertical}};
+    }
+
     case SDL_EVENT_TEXT_INPUT:
     {
         const InputWindowResolution target = ResolveInputWindowId(
@@ -749,6 +895,81 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             target.windowId,
             std::move(*text),
             TranslateCompositionRange(event.edit.start, event.edit.length)}};
+    }
+
+    case SDL_EVENT_DROP_BEGIN:
+    case SDL_EVENT_DROP_FILE:
+    case SDL_EVENT_DROP_TEXT:
+    case SDL_EVENT_DROP_POSITION:
+    case SDL_EVENT_DROP_COMPLETE:
+    {
+        OptionalUtf8Text sourceApplication =
+            CopyOptionalUtf8Text(event.drop.source);
+        if (!sourceApplication.valid)
+        {
+            return std::nullopt;
+        }
+
+        if (event.type == SDL_EVENT_DROP_BEGIN)
+        {
+            const InputWindowResolution target = ResolveInputWindowId(
+                static_cast<std::uint32_t>(event.drop.windowID), context);
+            if (!target.valid)
+            {
+                return std::nullopt;
+            }
+
+            return PlatformEvent{DropBeginEvent{
+                *timestamp, target.windowId,
+                std::move(sourceApplication.text)}};
+        }
+
+        const std::optional<LogicalPoint> position =
+            TranslateDropPosition(event.drop.x, event.drop.y);
+        if (!position.has_value())
+        {
+            return std::nullopt;
+        }
+
+        std::optional<std::string> payloadText;
+        if (event.type == SDL_EVENT_DROP_FILE ||
+            event.type == SDL_EVENT_DROP_TEXT)
+        {
+            payloadText = CopyUtf8Text(event.drop.data);
+            if (!payloadText.has_value())
+            {
+                return std::nullopt;
+            }
+        }
+
+        const InputWindowResolution target = ResolveInputWindowId(
+            static_cast<std::uint32_t>(event.drop.windowID), context);
+        if (!target.valid)
+        {
+            return std::nullopt;
+        }
+
+        switch (event.type)
+        {
+        case SDL_EVENT_DROP_FILE:
+            return PlatformEvent{DroppedFileEvent{
+                *timestamp, target.windowId, MakePathFromUtf8(*payloadText),
+                *position, std::move(sourceApplication.text)}};
+        case SDL_EVENT_DROP_TEXT:
+            return PlatformEvent{DroppedTextEvent{
+                *timestamp, target.windowId, std::move(*payloadText), *position,
+                std::move(sourceApplication.text)}};
+        case SDL_EVENT_DROP_POSITION:
+            return PlatformEvent{DropPositionEvent{
+                *timestamp, target.windowId, *position,
+                std::move(sourceApplication.text)}};
+        case SDL_EVENT_DROP_COMPLETE:
+            return PlatformEvent{DropCompleteEvent{
+                *timestamp, target.windowId, *position,
+                std::move(sourceApplication.text)}};
+        default:
+            return std::nullopt;
+        }
     }
 
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:

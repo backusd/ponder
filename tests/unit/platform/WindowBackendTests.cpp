@@ -60,4 +60,21 @@ TEST(WindowBackendFlagTests, IdentifiesBackendReservedPositionEncodings)
     EXPECT_FALSE(pond::platform::detail::IsReservedSdlWindowPosition(-250));
     EXPECT_FALSE(pond::platform::detail::IsReservedSdlWindowPosition(250));
 }
-} // namespace
+
+TEST(WindowBackendFlagTests, ClassifiesApprovedNativeWindowDrivers)
+{
+    using pond::platform::detail::BackendNativeWindowDriver;
+
+    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("windows"),
+              BackendNativeWindowDriver::Win32);
+    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("x11"),
+              BackendNativeWindowDriver::X11);
+    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("wayland"),
+              BackendNativeWindowDriver::Wayland);
+    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("cocoa"),
+              BackendNativeWindowDriver::Cocoa);
+    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("dummy"),
+              BackendNativeWindowDriver::Unsupported);
+    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver(""),
+              BackendNativeWindowDriver::Unsupported);
+}} // namespace

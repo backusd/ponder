@@ -1,22 +1,31 @@
 ponder_add_project_library(platform
     PUBLIC_HEADERS
+        include/ponder/platform/Dialog.hpp
         include/ponder/platform/Display.hpp
         include/ponder/platform/Geometry.hpp
         include/ponder/platform/Identifiers.hpp
         include/ponder/platform/Keyboard.hpp
+        include/ponder/platform/Mouse.hpp
+        include/ponder/platform/NativeWindow.hpp
         include/ponder/platform/PlatformError.hpp
         include/ponder/platform/PlatformEvent.hpp
         include/ponder/platform/PlatformRuntime.hpp
+        include/ponder/platform/Process.hpp
         include/ponder/platform/TextInput.hpp
         include/ponder/platform/Timing.hpp
         include/ponder/platform/Window.hpp
         include/ponder/platform/WindowGraphics.hpp
         include/ponder/platform/WindowState.hpp
     SOURCES
+        src/Dialog.cpp
         src/Display.cpp
         src/EventPolling.cpp
+        src/Mouse.cpp
+        src/NativeWindow.cpp
         src/PlatformRuntime.cpp
         src/PlatformRuntimeBackend.cpp
+        src/PlatformServices.cpp
+        src/Process.cpp
         src/RuntimeChildRegistry.cpp
         src/SdlEventTranslator.cpp
         src/SdlError.cpp
@@ -27,6 +36,7 @@ ponder_add_project_library(platform
     PRIVATE_HEADERS
         src/PlatformRuntimeBackend.hpp
         src/PlatformRuntimeState.hpp
+        src/ProcessBackend.hpp
         src/RuntimeChildRegistry.hpp
         src/SdlEventTranslator.hpp
         src/SdlError.hpp
