@@ -1,7 +1,30 @@
 ponder_add_project_library(platform
     PUBLIC_HEADERS
-        include/ponder/platform/Library.hpp
+        include/ponder/platform/Display.hpp
+        include/ponder/platform/Geometry.hpp
+        include/ponder/platform/Identifiers.hpp
+        include/ponder/platform/PlatformError.hpp
+        include/ponder/platform/PlatformRuntime.hpp
+        include/ponder/platform/Timing.hpp
+        include/ponder/platform/Window.hpp
+        include/ponder/platform/WindowGraphics.hpp
     SOURCES
-        src/Library.cpp
+        src/Display.cpp
+        src/PlatformRuntime.cpp
+        src/PlatformRuntimeBackend.cpp
+        src/RuntimeChildRegistry.cpp
+        src/SdlError.cpp
+        src/StringValidation.cpp
+        src/Window.cpp
     PRIVATE_HEADERS
-        src/Pch.hpp)
+        src/Pch.hpp
+        src/PlatformRuntimeBackend.hpp
+        src/PlatformRuntimeState.hpp
+        src/RuntimeChildRegistry.hpp
+        src/SdlError.hpp
+        src/StringValidation.hpp
+        src/WindowState.hpp
+    PUBLIC_DEPS
+        ponder::core
+    PRIVATE_DEPS
+        ponder::SDL3)

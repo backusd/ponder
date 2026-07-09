@@ -28,3 +28,5 @@ Each ADR should include:
 - [ADR 0004: Static Library First](0004-static-library-first.md)
 - [ADR 0005: Native Project Extension](0005-native-project-extension.md)
 - [ADR 0006: Core Foundation Contracts](0006-core-foundation-contracts.md)
+- [ADR 0007: SDL3 Platform Backend](0007-sdl3-platform-backend.md)
+- [ADR 0008: Vulkan Renderer Backend](0008-vulkan-renderer-backend.md)

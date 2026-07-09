@@ -8,7 +8,7 @@ The project uses GoogleTest through CTest. Tests are enabled by default with
 ## Layout
 
 - `tests/unit/` contains fast library-level tests.
-- `tests/integration/` will contain cross-library workflow tests.
+- `tests/integration/` contains cross-library workflows and live OS/backend behavior tests.
 - `tests/fixtures/` contains small test inputs.
 - `tests/golden/` contains intentionally versioned expected outputs.
 

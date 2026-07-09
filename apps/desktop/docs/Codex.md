@@ -14,6 +14,18 @@ stub until platform, windowing, renderer, and UI integration are ready.
 - Link only the minimal libraries needed for the current scaffold.
 - Do not add desktop-owned chemistry, project, compute, or IO logic.
 - Prefer `ponder_core` diagnostics and error conventions for scaffold code.
+- For the first durable desktop shell, the executable may orchestrate
+  `ponder_core`, `ponder_platform`, `ponder_render`, and `ponder_ui`.
+- Call `pond::render::GetRequiredWindowGraphicsCompatibility()` before creating
+  the main platform window; do not hardcode a renderer or SDL creation flag.
+- Keep SDL3 window/event ownership in `ponder_platform`, renderer backend/device
+  ownership in `ponder_render`, and ImGui context/backend/widget ownership in
+  `ponder_ui`.
+- Do not link `ponder_project`, `ponder_chemistry`, `ponder_io`,
+  `ponder_workflow`, `ponder_compute`, or `ponder_plugin_sdk` until those
+  libraries expose durable APIs needed by the app.
+- The desktop app should compose commands, panels, and high-level application
+  state; it should not become the owner of reusable subsystem behavior.
 
 ## Verification
 

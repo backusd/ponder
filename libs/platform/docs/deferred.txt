@@ -1,0 +1,160 @@
+# Deferred Platform Features
+
+Status: planning notes for features intentionally left out of the first
+`ponder_platform` implementation.
+
+The first platform implementation is allowed to use SDL3-backed lifecycle,
+windowing, events, display/DPI data, clipboard, file/folder dialogs, process
+launching, drag-and-drop, timing, and native window handle access. Features below
+are deferred because they either require non-SDL platform APIs, need a stronger
+upstream use case, or belong to a different library.
+
+## Non-SDL OS Integration
+
+Direct Win32, Cocoa, X11, Wayland, DBus, shell, registry, Launch Services, or
+other OS-specific APIs are deferred.
+
+How to add later:
+
+- Add only after SDL3 cannot provide a required capability.
+- Keep direct OS calls isolated behind private platform implementation files.
+- Record the decision in `Boundary.md` and an ADR if it affects portability.
+
+## Game Controllers, Haptics, Audio, And Networking
+
+SDL3 supports some of these domains, but they are not needed for the first
+desktop foundation.
+
+How to add later:
+
+- Add only when a real workflow needs them.
+- Keep them separate from window/event code.
+- Consider whether audio or networking deserves a dedicated library instead of
+  living in `ponder_platform`.
+
+## Advanced Clipboard Data
+
+The first clipboard task should prioritize text. Rich MIME payloads, images,
+large binary payloads, delayed rendering, and ownership-heavy clipboard data are
+deferred unless the first implementation stays small and robust.
+
+How to add later:
+
+- Add typed MIME/data APIs around SDL3 clipboard data callbacks.
+- Keep ownership and lifetime explicit.
+- Add tests for supported MIME types and fallback behavior.
+
+## Outbound Drag-And-Drop
+
+Receiving dropped files/text is in scope. Initiating drag operations from the
+application is deferred.
+
+How to add later:
+
+- Add when the desktop UI has a concrete workflow, such as dragging assets out
+  of the project browser.
+- Keep payload construction in the application/UI layer and transfer mechanics
+  in platform.
+
+## Advanced Process Management
+
+The first process API should stay small. Long-running process supervision,
+streaming stdio, cancellation trees, process groups, environment isolation,
+working-directory policy, artifact collection, and remote execution are deferred.
+
+How to add later:
+
+- Keep low-level SDL process ownership in platform.
+- Put compute jobs, progress, cancellation, logs, artifacts, and chemistry
+  engine orchestration in `ponder_compute`.
+- Add process APIs only when they can be tested deterministically.
+
+## Event Waiting And Idle Policy
+
+The first event API should use polling. Blocking wait APIs, app idle behavior,
+frame limiting, and power-saving policies are deferred.
+
+How to add later:
+
+- Add a narrow wait/wakeup primitive if the desktop shell needs lower idle CPU
+  usage.
+- Keep frame policy in the desktop app or a higher-level application layer.
+
+## Cross-Thread Event Posting
+
+Main-thread platform ownership is the initial rule. Cross-thread wakeups and
+background event posting are deferred.
+
+How to add later:
+
+- Add after the job system or desktop app has a real cross-thread messaging
+  need.
+- Preserve clear ownership, shutdown, and synchronization contracts.
+
+## Cursor And Pointer Polish
+
+Basic mouse motion, buttons, wheel, capture, and relative mouse mode are in
+scope. Custom cursor assets, cursor themes, tablet/stylus input, touch gestures,
+and high-level pointer gestures are deferred.
+
+How to add later:
+
+- Add standard cursor APIs first.
+- Add custom cursor ownership only when renderer/UI workflows need it.
+
+## Accessibility And Localization
+
+OS accessibility APIs, screen-reader integration, keyboard navigation policy,
+localized platform strings, and locale-specific input behavior are deferred.
+
+How to add later:
+
+- Treat accessibility as a product-level requirement, not a small platform
+  helper.
+- Keep OS-specific code private and document platform differences.
+
+## Advanced Display And Color Management
+
+The first display API should expose names, bounds, usable work areas, refresh
+rates, orientation, and scale where SDL3 provides them. HDR policy, ICC profile
+handling, color spaces, multi-GPU display selection, and display calibration are
+deferred.
+
+How to add later:
+
+- Coordinate with `ponder_render` because these choices affect swapchains,
+  framebuffers, screenshots, and color-correct rendering.
+
+## File Watching And Filesystem Utilities
+
+File dialogs are in scope. File watching, virtual filesystems, path policy,
+cache directories, user settings locations, and project filesystem semantics are
+deferred.
+
+How to add later:
+
+- Decide whether these belong in `ponder_platform`, `ponder_project`, or a
+  future filesystem utility boundary.
+- Keep project format and asset semantics out of platform.
+
+## Desktop Application Policy
+
+Menus, recent files, command routing, About dialogs, preferences, project open
+flows, unsaved-change prompts, and shutdown confirmation are deferred from
+platform because they belong to `ponder-desktop` or `ponder_ui`.
+
+How to add later:
+
+- Platform may expose primitives such as dialogs or clipboard.
+- Desktop/UI layers decide when and why those primitives are used.
+
+## Packaging And Release Integration
+
+Installers, code signing, notarization, file associations, URL handlers, system
+tray integration, application icons, crash upload, auto-update, and OS-specific
+release behavior are deferred.
+
+How to add later:
+
+- Coordinate with packaging/release docs.
+- Keep build and release policy separate from reusable platform runtime code.

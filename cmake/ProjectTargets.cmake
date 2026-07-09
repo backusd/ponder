@@ -112,7 +112,7 @@ function(ponder_add_project_executable target_name)
 endfunction()
 function(ponder_add_project_test target_name)
     set(options)
-    set(one_value_args)
+    set(one_value_args RESOURCE_LOCK)
     set(multi_value_args SOURCES PRIVATE_DEPS)
 
     cmake_parse_arguments(
@@ -138,6 +138,11 @@ function(ponder_add_project_test target_name)
     ponder_enable_warnings("${target_name}")
     ponder_enable_sanitizers("${target_name}")
 
-    gtest_discover_tests("${target_name}"
-        DISCOVERY_TIMEOUT 30)
+    set(discovery_arguments DISCOVERY_TIMEOUT 30)
+    if(PONDER_TEST_RESOURCE_LOCK)
+        list(APPEND discovery_arguments
+            PROPERTIES RESOURCE_LOCK "${PONDER_TEST_RESOURCE_LOCK}")
+    endif()
+
+    gtest_discover_tests("${target_name}" ${discovery_arguments})
 endfunction()

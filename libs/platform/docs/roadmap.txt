@@ -1,0 +1,972 @@
+# Platform Library Roadmap
+
+Status: implementation plan for the first real `ponder_platform` library.
+
+PLAT-000 was completed and the platform contracts were revised on 2026-07-08.
+The former open-question checklist has been removed. Durable decisions live in
+`Boundary.md`, `Codex.md`, and ADR 0007.
+
+This roadmap builds an SDL3-backed platform foundation without putting renderer,
+UI, project, chemistry, workflow, compute, or application policy into the
+library. Each task must leave the repository configured, buildable, and tested
+for the behavior introduced by that task.
+
+Every task that adds or changes a public header must add or update that header's
+dedicated SDL-free, PCH-disabled self-containment translation unit in the same
+task.
+
+## Guiding Decisions
+
+- SDL3 is the private backend. Public headers expose project-owned and
+  standard-library types only.
+- `ponder::core` is a public CMake dependency; `ponder::SDL3` is private.
+- Recoverable failures use `pond::core::Result<T>` or
+  `pond::core::VoidResult`.
+- One logical `PlatformRuntime` may be live per process.
+- Runtime and resource owners are move-only and use heap-stable private state.
+- SDL-backed APIs run on the runtime owner thread unless explicitly documented
+  otherwise.
+- The first implementation supports multiple windows and runtime-local,
+  monotonic, non-reused project IDs.
+- Public events are a `std::variant` of typed, owned event structs. There is no
+  redundant event-kind enum.
+- Event time is a strong chrono nanosecond value in SDL's monotonic tick domain.
+  The application owns frame-delta and pacing policy.
+- Display content scale, window pixel density, window display scale, logical
+  size, and pixel size are distinct concepts.
+- `ponder_ui` uses project-owned platform events and primitives for its Dear
+  ImGui platform adapter. No public raw-SDL bridge is added.
+- Vulkan native-window data is the closed Win32, X11, Wayland, and Cocoa
+  Metal-layer variant approved by ADR 0008. It remains narrow, tagged, borrowed,
+  and owner-thread-only.
+- Pure tests, SDL-private translation tests, and live SDL integration tests use
+  separate targets.
+- PLAT-013 is the renderer-ready foundation gate. Later platform services do not
+  block renderer implementation.
+- PLAT-015 is the complete Dear ImGui platform-adapter gate. UI context, widget,
+  and render-bridge scaffolding may begin earlier, but adapter completion waits
+  for clipboard and external-URI services.
+- PLAT-021 is the complete host-local service gate. Cross-platform verification
+  is tracked separately in PLAT-022.
+
+## Milestones
+
+| Milestone | Tasks | Result |
+| --- | --- | --- |
+| Contracts | PLAT-000 through PLAT-003 | Stable architecture, error, type, and test contracts |
+| Renderer-ready | PLAT-004 through PLAT-013 | Windows, input, events, and native interop |
+| Desktop services | PLAT-014 through PLAT-021 | Host services and local verification |
+| Portability matrix | PLAT-022 | Actual Windows, Linux, and macOS evidence |
+
+## Task List
+
+TASK PLAT-000: Record Platform Decisions
+----------------------------------------
+
+Status: completed on 2026-07-08.
+
+Record the durable contracts before implementation begins.
+
+Work:
+
+- Record SDL3 as the private backend in ADR 0007.
+- Record the single-runtime, owner-thread, move-only, and release-safe lifetime
+  model.
+- Record the typed-event, monotonic-time, renderer-interoperability, and
+  project-owned Dear ImGui adapter decisions.
+- Update `Boundary.md` and `Codex.md` to match the ADR.
+- Delete `libs/platform/docs/open-questions.txt` after folding its resolved
+  decisions into durable documentation.
+
+Done when:
+
+- ADR 0007, `Boundary.md`, `Codex.md`, and this roadmap agree on scope,
+  dependencies, ownership, threading, errors, events, integration, and testing.
+
+TASK PLAT-001: Establish Build, Error, And Test Foundations
+-----------------------------------------------------------
+
+Status: completed on 2026-07-08.
+
+Wire the final dependency direction and test seams before public API work.
+
+Work:
+
+- Add `ponder::core` to `PUBLIC_DEPS` and `ponder::SDL3` to `PRIVATE_DEPS` for
+  `ponder_platform`.
+- Keep using `ponder_add_project_library`; it already supplies static linkage,
+  C++23, PCH, warnings-as-errors, sanitizers, and install handling.
+- Do not add a platform CMake option unless an implemented capability requires
+  one.
+- Add one private SDL error adapter that accepts an already selected
+  `pond::core::ErrorCode`. It must copy `SDL_GetError()` immediately after a
+  documented failure, add operation/object context, and provide an explicit
+  fallback for an empty SDL error.
+- Record the mapping policy: descriptor validation uses `InvalidArgument`, known
+  unavailable capability uses `Unsupported`, stale resources use `NotFound`, and
+  other failures use a statically selected category. PLAT-003 defines the stable
+  public platform codes. Never parse SDL error text for control flow.
+- Establish the test directories, CMake entry points, and target plan for:
+  - SDL-free public-header self-containment/consumer compilation.
+  - GUI-free platform value tests in `ponder_platform_tests`.
+  - SDL-private tests in `ponder_platform_backend_tests`, beginning with the
+    error adapter and extended with the production event translator.
+  - Live behavior in `ponder_platform_integration_tests` under
+    `tests/integration/platform/`.
+- Add each target with its first real source: backend tests in PLAT-001, header
+  tests in PLAT-003, and live runtime tests in PLAT-004/005. Extend the backend
+  target with translation tests in PLAT-008. Do not add placeholder executables.
+- Add `tests/integration` to the test CMake tree without making live GUI tests a
+  dependency of pure unit tests.
+
+Done when:
+
+- A consumer links `ponder::platform` without declaring SDL or inheriting SDL
+  include paths or compile definitions.
+- The static target still supplies SDL as the required final link dependency.
+- Error context, copied text, and empty-error fallback behavior have direct tests
+  using caller-selected core codes.
+- The expanded test tree configures without placeholder targets, and the
+  existing scaffold test still passes.
+
+TASK PLAT-002: Freeze Renderer And UI Integration Requirements
+-------------------------------------------------------------
+
+Status: completed on 2026-07-08.
+
+Resolve downstream requirements before window vocabulary becomes public API.
+
+Work:
+
+- Record the first renderer backend's exact SDL window-creation requirements and
+  native window data required on each supported desktop host.
+- Record the selected backend and these platform requirements in the renderer
+  boundary/roadmap and in a renderer ADR when the backend choice is durable.
+- Define the exact `WindowGraphicsCompatibility` alternatives required by that
+  renderer. `Default` means no graphics-specific SDL creation flag and covers
+  renderers such as Direct3D. Do not add hypothetical alternatives or support
+  for wrapping externally owned native windows.
+- Define the minimal closed native payload alternatives needed by the selected
+  renderer.
+- Confirm the renderer can create and own its presentation surface without
+  platform creating a device, context, surface, or swapchain.
+- Confirm `ponder_ui` will translate `PlatformEvent` values and use project
+  cursor, clipboard, display, window, and text-input APIs rather than consume
+  `SDL_Window` or `SDL_Event`.
+- Record missing project-owned primitives in this roadmap. Do not add a raw-SDL
+  escape hatch as an implementation shortcut.
+- Update this roadmap with the approved compatibility enumerators and native
+  payload alternatives before completing this task.
+
+Approved contract:
+
+- Vulkan is the first renderer backend under ADR 0008.
+- `WindowGraphicsCompatibility` contains exactly `Default` and `Vulkan`.
+  `Default` adds no graphics flag. `Vulkan` maps to `SDL_WINDOW_VULKAN` on
+  Windows/Linux and `SDL_WINDOW_METAL` on macOS.
+- `NativeWindowHandle` contains exactly:
+  - `NativeWin32Window { void* instance; void* window; }`.
+  - `NativeX11Window { void* display; std::uintptr_t window; }`.
+  - `NativeWaylandWindow { void* display; void* surface; }`.
+  - `NativeCocoaWindow { void* metalLayer; }`.
+- Each macOS Vulkan-compatible window owns at most one cached `SDL_MetalView`.
+  Platform owns SDL/native windows; render owns `VkSurfaceKHR`, devices,
+  swapchains, synchronization, and presentation. The caller destroys renderer
+  presentation state before its platform window because platform cannot observe
+  renderer-owned surfaces.
+- Render exposes `GetRequiredWindowGraphicsCompatibility() noexcept` before
+  desktop creates the window; desktop does not hardcode Vulkan or SDL flags.
+- UI owns one Dear ImGui context and a custom platform adapter over
+  `PlatformEvent` plus project window, input, cursor, clipboard, display,
+  text-input/IME, and external-URI services. It has no direct SDL dependency or
+  compile usage and does not compile `imgui_impl_sdl3`.
+- The initial UI uses one OS window. Dear ImGui docking is enabled only after
+  pinning its docking branch; secondary platform viewports, mouse warping,
+  gamepad navigation, and touch/pen source discrimination are deferred.
+- Missing or underspecified project primitives are assigned to later tasks:
+  private mouse hints in PLAT-004, pointer enter/leave in PLAT-008, exact wheel
+  and cursor contracts in PLAT-011, and external-URI opening in PLAT-015.
+  No SDL public type is missing from the approved adapter contract.
+
+Done when:
+
+- The renderer's creation flags and exact cross-platform native payload are
+  documented before `WindowGraphicsCompatibility` or `WindowDesc` is defined.
+- The UI integration checklist contains no required SDL public type.
+- No dependency from platform to render or UI has been introduced.
+
+TASK PLAT-003: Define Foundational Types And Retire The Scaffold
+---------------------------------------------------------------
+
+Status: completed on 2026-07-08.
+
+Introduce only cross-cutting values needed by the renderer-ready foundation.
+
+Work:
+
+- Add strong `WindowId` and `DisplayId` types backed by 64-bit values. Zero is
+  invalid; valid IDs are monotonic and non-reused within a runtime; comparison,
+  ordering, and hashing are explicit and constexpr where supported.
+- Add the exact shared geometry vocabulary: signed `ScreenPosition`,
+  non-negative `ScreenExtent`, `ScreenRectangle`, floating `LogicalPoint` and
+  `LogicalExtent`, `LogicalRectangle`, and distinct non-negative `LogicalSize`
+  and `PixelSize`. `IsValid` rejects non-finite logical values and negative
+  logical extents. Zero extents/sizes remain valid foundational observations;
+  feature descriptors validate stronger positive-size requirements.
+- Add a strong `PlatformTimestamp` backed by `std::chrono::nanoseconds` in SDL's
+  monotonic tick domain with the same epoch as `SDL_GetTicksNS()`. Only
+  timestamp differences are semantically meaningful.
+- Add `WindowGraphicsCompatibility` with exactly `Default` and `Vulkan`.
+  Exactly one alternative is selected per window.
+- Reserve numeric block `0x0001'0000` through `0x0001'FFFF` for platform errors.
+  Add stable `PlatformErrorCode` values `InvalidArgument`,
+  `RuntimeAlreadyActive`, `BackendFailure`, `NotFound`, and `Unsupported`, plus
+  a constexpr conversion to `pond::core::ErrorCode`. Their categories are
+  respectively `InvalidArgument`, `General`, `General`, `NotFound`, and
+  `Unsupported`; an unknown forged value maps to `Internal` without losing its
+  numeric value.
+- Test every initial platform-code/category mapping defined by this task.
+- Keep feature descriptors with their feature. Do not define dialog or process
+  descriptors in this task.
+- Remove `include/ponder/platform/Library.hpp` and `src/Library.cpp` only after
+  the first real headers exist.
+- Replace `tests/unit/platform/SmokeTests.cpp` in the same change so the tree
+  never contains a test for a deleted header.
+- List every public/private header and source in `libs/platform/CMakeLists.txt`.
+- Add one SDL-free header-self-containment translation unit per public header.
+
+Done when:
+
+- No smoke-only platform API remains.
+- Every public header compiles by itself with PCH disabled and without SDL
+  include paths.
+- Foundational values have compile-time and runtime tests for defaults,
+  validation, comparison, hashing, and units.
+
+TASK PLAT-004: Implement `PlatformRuntime`
+------------------------------------------
+
+Status: completed on 2026-07-08.
+
+Add explicit ownership for process-global SDL video/event state.
+
+Work:
+
+- Define `PlatformRuntimeDesc` with UTF-8 application name (default `ponder`),
+  optional application version, and optional application identifier. Apply them
+  through checked SDL metadata-property calls before video initialization.
+  Reject empty names, present-but-empty optional values, invalid UTF-8, and
+  embedded nulls before touching SDL. Snapshot and restore the prior effective
+  nullable metadata values on failed creation and after runtime shutdown.
+- Add `PlatformRuntime::Create(const PlatformRuntimeDesc&)` returning
+  `pond::core::Result<PlatformRuntime>`.
+- Allow at most one live logical runtime. A second creation attempt returns a
+  stable `RuntimeAlreadyActive` error until the prior runtime state has fully
+  shut down. Keep the process slot in explicit creating, active, and destroying
+  states so reentrant creation cannot observe partial startup or teardown.
+- Require exclusive ownership of the SDL lifecycle. Reject creation when
+  `SDL_WasInit(0)` reports an already initialized subsystem, because the runtime
+  uses process-global `SDL_Quit()` for deterministic cleanup. Before shutdown,
+  verify that no subsystem outside the runtime-owned video/event set appeared.
+- Initialize only SDL video; use the events initialization implied by video.
+- Do not add typed SDL hints until a concrete platform behavior needs one, and
+  never expose an arbitrary string-hint map.
+- Apply the two typed mouse policies required by the UI adapter:
+  `SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH=1` and `SDL_HINT_MOUSE_AUTO_CAPTURE=0`.
+  Preserve and restore prior process values across runtime lifetime; do not
+  expose either setting as a generic public hint. SDL exposes neither hint
+  priority nor provenance, so restoration guarantees the prior effective
+  nullable string value, after `SDL_Quit()`, rather than its original priority.
+- Capture the startup thread during module initialization as a defense-in-depth
+  guard and require `Create` to run there before consulting SDL. Also verify
+  `SDL_IsMainThread()` and capture the creating thread as the runtime owner.
+  The executable remains responsible for calling `Create` from process entry,
+  because deferred initialization or dynamic loading cannot establish that
+  identity portably inside a library.
+- Implement a non-copyable, movable PIMPL over heap-stable runtime state.
+- Define moved-from runtime objects as destructible and assignable only.
+- Add a child/request registry. Before SDL shutdown, the `noexcept` destructor
+  uses `PONDER_VERIFY` to require an empty registry. A violation does not return
+  normally, so shutdown cannot invalidate a live child.
+- Make every public operation call `PONDER_VERIFY` for valid, non-moved-from
+  state and correct owner thread before touching SDL.
+- Add `Now()` using `SDL_GetTicksNS()` and returning the same monotonic domain as
+  event timestamps.
+- Route initialization errors through the common SDL error adapter.
+- Log lifecycle transitions with the `platform` category.
+
+Done when:
+
+- Success, SDL failure, duplicate runtime, move construction/assignment,
+  moved-from guards, owner-thread checks, transactional global-state rollback,
+  and deterministic shutdown are tested through the private backend seam.
+- A serialized live-SDL integration target verifies dummy-driver initialization,
+  timing, cleanup, state restoration, and an actual video-init failure.
+- SDL remains absent from every public header.
+
+TASK PLAT-005: Implement Basic Multi-Window RAII
+------------------------------------------------
+
+Status: completed on 2026-07-08.
+
+Create and own multiple windows through the runtime.
+
+Work:
+
+- Define `WindowDesc` in this task.
+- Add `PlatformRuntime::CreateWindow(const WindowDesc&)` returning
+  `pond::core::Result<Window>`.
+- Make `Window` non-copyable, movable, and PIMPL-backed. A moved-from window is
+  destructible and assignable only.
+- Use these `WindowDesc` defaults:
+  - UTF-8 title `ponder`.
+  - 1280 x 800 logical pixels.
+  - Visible and resizable.
+  - High-pixel-density support enabled.
+  - No minimum size.
+  - `WindowGraphicsCompatibility::Default`.
+- Support hidden windows for tests and an optional positive minimum logical
+  size.
+- Treat graphics API selection as immutable after creation.
+- Store the exact project `WindowGraphicsCompatibility` selected at creation;
+  never reconstruct it from host-dependent SDL window flags.
+- Map `WindowGraphicsCompatibility::Vulkan` to `SDL_WINDOW_VULKAN` on
+  Windows/Linux and `SDL_WINDOW_METAL` on macOS. `Default` adds neither flag.
+- Allocate monotonically increasing `WindowId` values and never reuse them
+  during a runtime lifetime.
+- Maintain a private SDL-window-ID to `WindowId` registry for routing.
+- Add `GetTitle`/`SetTitle`, `GetPosition`/`SetPosition`,
+  `GetLogicalSize`/`SetLogicalSize`, `GetPixelSize`, `Show`, and `Hide`.
+  Title snapshots are owned, pixel size is observation-only, and accepted move
+  or resize requests do not promise an immediate exact compositor result.
+- Stage every native window hidden until minimum-size, backend-ID, routing-map,
+  and child registration setup succeeds; show it before returning when the
+  descriptor requests visibility.
+- Register every window as a runtime child and remove its backend mapping before
+  native destruction.
+- Require window destruction on the owner thread before runtime destruction.
+  Use `PONDER_VERIFY` before SDL for wrong-thread, moved-from, and expired-runtime
+  use so violations cannot masquerade as recoverable SDL failures.
+
+Done when:
+
+- Multiple hidden windows coexist, have distinct IDs, survive moves, and destroy
+  deterministically in any child order before the runtime.
+- Initial and minimum descriptor sizes must be positive and fail before SDL is
+  called when invalid.
+- Every fallible SDL operation returns a contextual core result.
+- Deterministic seam tests cover validation, partial construction rollback,
+  backend-ID reuse, project-ID monotonicity, operations, moves, and thread
+  guards; a serialized live test covers multiple dummy-driver windows.
+
+TASK PLAT-006: Implement Displays And High-Density Data
+------------------------------------------------------
+
+Status: completed on 2026-07-08.
+
+Expose display snapshots and explicit window scale values.
+
+Work:
+
+- Add `DisplayOrientation` with `Unknown`, `Landscape`, `LandscapeFlipped`,
+  `Portrait`, and `PortraitFlipped` alternatives.
+- Define the owned `DisplayInfo` value with `DisplayId id`, `std::string name`,
+  `ScreenRectangle bounds`, `ScreenRectangle usableBounds`,
+  `std::optional<float> refreshRateHertz`, current orientation as
+  `DisplayOrientation orientation`, and scalar `float contentScale`.
+- Add `PlatformRuntime::EnumerateDisplays()` returning
+  `pond::core::Result<std::vector<DisplayInfo>>` and
+  `PlatformRuntime::GetDisplayInfo(DisplayId)` returning
+  `pond::core::Result<DisplayInfo>`. Enumeration preserves the backend's
+  current order, but callers rely only on IDs for identity.
+- Reconcile the connected backend display set before runtime display queries.
+  Keep runtime-local 64-bit project IDs stable while a display remains
+  connected, retain disconnected mappings as tombstones, and never reuse a
+  project ID during one runtime lifetime. Zero is invalid. An invalid-zero
+  query returns `InvalidArgument`; an unknown or disconnected nonzero ID
+  returns `NotFound`; a backend display observed again after an absence
+  receives a new monotonically increasing project ID.
+- Copy every backend-owned display name into the snapshot. Preserve signed
+  screen origins and non-negative bounds extents. Treat a successful current
+  mode with refresh rate zero as unavailable, positive finite refresh as a
+  value, and malformed negative or non-finite observations as
+  `BackendFailure`. Map unavailable or future orientation values to `Unknown`.
+- Add `Window::GetDisplayId()`, `Window::GetPixelDensity()`, and
+  `Window::GetDisplayScale()`. Resolve the current window display on demand and
+  return the same project ID used by runtime display snapshots.
+- Keep display content scale, window pixel density, window display scale,
+  logical size, and pixel size distinct. Every reported scalar scale is finite
+  and greater than zero; a zero, negative, infinite, or NaN backend result is a
+  contextual `BackendFailure`.
+- Preserve owner-thread, moved-from, and SDL-error-capture contracts for every
+  new operation. If a display disappears during `GetDisplayInfo`, refresh its
+  connectivity once and prefer `NotFound` over the captured property failure.
+
+Done when:
+
+- SDL-free public value and header tests cover defaults, all orientation
+  alternatives, owned snapshot values, optional refresh, and equality.
+- Deterministic backend-seam tests cover multiple displays, negative origins,
+  ordering-independent ID stability, removal and reconnection, malformed
+  observations, backend failures, window display mapping and scale values,
+  moved-from objects, and owner-thread guards.
+- A serialized live SDL test verifies current-host snapshot invariants and a
+  hidden window's display ID, pixel density, and display scale. The public
+  header target also builds with precompiled headers disabled.
+
+TASK PLAT-007: Implement Orthogonal Window State
+------------------------------------------------
+
+Model independent window properties independently.
+
+Work:
+
+- Add a presentation type for windowed and desktop-fullscreen behavior.
+- Defer exclusive fullscreen until a project-owned display-mode enumeration and
+  selection contract is designed from a real renderer/application requirement.
+- Keep system decoration versus borderless-window behavior separate from
+  presentation.
+- Keep normal, minimized, and maximized state separate from visibility,
+  resizability, focus, and always-on-top state.
+- Provide minimize, maximize, restore, presentation, decoration, resizable, and
+  always-on-top operations where SDL supports them.
+- Use `pond::core::VoidResult` for fallible mutators and
+  `pond::core::Result<T>` for fallible queries.
+- Document operations whose visible effect is asynchronous under the host window
+  manager; a successful result means SDL accepted the request, not that the OS
+  has already emitted the resulting event.
+- Preserve valid behavior for hidden integration-test windows.
+
+Done when:
+
+- No overloaded `WindowMode` can express contradictory state.
+- State transitions and unsupported-capability errors have pure and applicable
+  live tests.
+
+TASK PLAT-008: Define Core Typed Events And Translation
+------------------------------------------------------
+
+Define the event vocabulary needed before input and service extensions.
+
+Work:
+
+- Define `PlatformEvent` as a `std::variant` of small typed event structs. Do
+  not add a parallel event-kind enum.
+- Add alternatives for global quit; window close, move, logical resize, pixel
+  resize, focus, visibility, state, display, and scale changes.
+- Add window-scoped pointer-enter and pointer-leave alternatives so UI can clear
+  hover state without consuming SDL events.
+- Add display-added, removed, moved, desktop-mode-changed,
+  current-mode-changed, orientation-changed, content-scale-changed, and
+  usable-bounds-changed alternatives where SDL supplies them.
+- Store `PlatformTimestamp` on every event.
+- Require `WindowId` only for events that are necessarily window-scoped.
+- Own all strings and other callback/event payloads before SDL storage expires.
+- Define one private SDL-to-project production translator interface and exercise
+  it from the SDL-private translation-test target. PLAT-009 wires this exact
+  function into polling.
+- Translate unknown values to explicit `Unknown` alternatives when preserving
+  the event is useful; otherwise return no project event.
+- Keep SDL-free header tests separate from the translation target so SDL include
+  paths cannot mask a public leak.
+
+Done when:
+
+- Every core alternative can be constructed and visited without a live window.
+- Synthetic SDL events prove timestamp, ID, unit, optional-data, and unknown
+  mappings through the exact production translator.
+
+TASK PLAT-009: Implement Polling And Multi-Window Routing
+--------------------------------------------------------
+
+Connect SDL's process-global queue to project-owned events.
+
+Work:
+
+- Add `PlatformRuntime::PollEvent()` returning
+  `std::optional<PlatformEvent>`.
+- Wire the exact private translator defined and tested in PLAT-008 into this
+  production polling path.
+- Continue polling past unknown, unsupported, and stale SDL events until one
+  translated event is available or SDL's queue is genuinely empty.
+- Route window events through the private SDL-ID registry.
+- Ignore events for destroyed or unknown windows deterministically and log them
+  at trace level at most.
+- Preserve global quit separately from per-window close requests.
+- Never destroy a window automatically in response to a close request.
+- Update display/window snapshots or invalidate cached observations when the
+  translated event requires it.
+
+Done when:
+
+- Mixed synthetic queues prove that an ignored event cannot falsely report an
+  empty queue.
+- Events for multiple live windows route to the correct non-reused project IDs.
+- Stale events after window destruction are harmless and deterministic.
+- A desktop loop can process lifecycle/window/display events without SDL types.
+
+TASK PLAT-010: Implement Keyboard, Text, And IME Support
+-------------------------------------------------------
+
+Add keyboard and text behavior required by editable desktop UI.
+
+Work:
+
+- Add project-owned physical-key, logical-key, named-key, and modifier types.
+- Represent unmapped physical/logical keys explicitly as `Unknown`; do not
+  expose SDL enum values or platform-dependent raw scancodes.
+- Translate key press/release, repeat state, and current modifiers.
+- Add owned UTF-8 text-input and text-composition event alternatives.
+- Represent an unavailable composition selection separately from a valid
+  zero-length range, and document that SDL composition offsets are Unicode
+  character indexes rather than byte offsets.
+- Add start, stop, active-state, composition-clear, and text-input-area/cursor
+  operations on `Window`.
+- Return contextual results for SDL-backed text-input operations.
+
+Done when:
+
+- Unit tests cover known and unknown keys, modifier combinations, repeat state,
+  UTF-8 ownership, and composition range conversion.
+- An editable UI adapter can enable text input, position IME UI, receive text,
+  and stop input without direct SDL calls.
+
+TASK PLAT-011: Implement Mouse And Standard Cursor Services
+----------------------------------------------------------
+
+Add pointer primitives needed by desktop UI and later viewports.
+
+Work:
+
+- Add motion, button press/release, and horizontal/vertical wheel event
+  alternatives with logical floating-point positions and relative movement.
+- Support left, right, middle, X1, X2, and `Unknown` mouse buttons.
+- Normalize wheel direction so positive X means right and positive Y means up,
+  matching Dear ImGui's wheel input convention.
+- Add window mouse-grab, global capture, relative-mode, and state queries where
+  SDL supports them.
+- Put window grab and relative mode on `Window`. Put global capture, global
+  mouse-position, cursor selection, and cursor visibility on `PlatformRuntime`.
+- Add `SystemCursorShape` alternatives `Default`, `TextInput`, `Move`,
+  `ResizeNorthSouth`, `ResizeEastWest`, `ResizeNortheastSouthwest`,
+  `ResizeNorthwestSoutheast`, `Pointer`, `Wait`, `Progress`, and `NotAllowed`,
+  plus cursor show/hide and visibility queries. Dear ImGui's `None` request maps
+  to hiding the cursor.
+- Make `PlatformRuntime` lazily create and cache SDL system cursors. Selection
+  does not transfer ownership, and the cursor cache is destroyed before SDL
+  shutdown.
+- Keep pointer warping, gamepad navigation, custom cursor images, tablet/stylus
+  input, touch, and gesture policy deferred.
+
+Done when:
+
+- Pointer events and operations are unit-tested without SDL types in public
+  headers.
+- Applicable live tests cover capture/relative-mode state without leaving the
+  host cursor captured after a failure.
+- The planned Dear ImGui adapter has mouse and standard-cursor primitives without
+  the bundled SDL platform backend.
+
+TASK PLAT-012: Implement Native Window Interop
+----------------------------------------------
+
+Expose only the borrowed native data approved by PLAT-002.
+
+Work:
+
+- Add `NativeWindowHandle` as a closed tagged variant of `NativeWin32Window`,
+  `NativeX11Window`, `NativeWaylandWindow`, and `NativeCocoaWindow`.
+- Use the exact fields approved by PLAT-002: Win32 `instance`/`window` pointers,
+  X11 `display` pointer/`window` integer, Wayland `display`/`surface` pointers,
+  and Cocoa `metalLayer` pointer.
+- Represent OS handles with opaque pointer- or integer-sized fields without OS
+  headers or typedefs.
+- Make invalid tag/payload combinations unrepresentable.
+- Require `WindowGraphicsCompatibility::Vulkan`; querying a `Default` window
+  returns an invalid-argument result.
+- Query SDL properties internally for drivers `"windows"`, `"x11"`, and
+  `"wayland"`. For `"cocoa"`, each Vulkan-compatible window lazily creates and
+  owns at most one cached `SDL_MetalView`; repeated queries return the same
+  borrowed layer, and the view is destroyed before that SDL window.
+- Return `Unsupported` for every other SDL video driver instead of returning
+  partial or generic native data.
+- Document that the result is a borrowed snapshot valid only on the runtime
+  owner thread while the owning window and relevant native state remain valid.
+- Identify window state changes that require callers to re-query the snapshot.
+- Keep all native casts and renderer-surface creation in renderer-private code.
+- Never call `SDL_Vulkan_CreateSurface`; platform does not accept Vulkan handles
+  and does not create `VkSurfaceKHR`.
+- Document that callers must destroy renderer presentation state before its
+  window; platform's child registry cannot observe renderer-owned surfaces.
+- Add a compile consumer proving the approved renderer data can be read without
+  including SDL or OS headers.
+
+Done when:
+
+- The approved renderer contract can obtain every required host value through
+  project-owned types.
+- Unsupported hosts fail explicitly instead of returning a partially populated
+  handle.
+- Public-header and native-branch tests cover tag/payload invariants.
+
+TASK PLAT-013: Verify The Renderer-Ready Foundation
+--------------------------------------------------
+
+Treat this as the completion gate for renderer implementation.
+
+Work:
+
+- Configure and build a normal supported developer preset.
+- Configure and build with PCH disabled, using an analysis preset where the
+  repository provides one.
+- Build `ponder_platform` and all platform public-header, unit, translation, and
+  applicable hidden-window integration targets.
+- Run tests for runtime, multiple windows, display/scale data, window state,
+  events, input, cursor services, and native interop.
+- Run formatting and scoped clang-tidy checks for platform files.
+- Confirm platform public consumers inherit core but no SDL compile usage
+  requirements.
+- Record the host, compiler, SDL video driver, and any capability-based skips.
+- Confirm generated files, logs, build outputs, and local environment files are
+  not staged.
+
+Done when:
+
+- Runtime, window, input, event, and renderer-interoperability foundations are
+  host-locally verified.
+- Renderer work can begin without waiting for drag/drop, clipboard, dialogs, or
+  process services.
+- The result is described as host-local, not cross-platform certification.
+
+TASK PLAT-014: Implement Inbound Drag-And-Drop
+---------------------------------------------
+
+Expose SDL drop sequences through owned project events.
+
+Work:
+
+- Add drop-begin, dropped-file, dropped-text, drop-position, and drop-complete
+  event alternatives.
+- Extend the production SDL translator and `PlatformRuntime::PollEvent()` routing
+  for every drop alternative, including stale-window filtering.
+- Convert dropped file names to owned `std::filesystem::path` values and copy
+  dropped UTF-8 text before SDL event storage expires.
+- Preserve source application text when SDL provides it.
+- Use optional window and logical-position values only for SDL events where
+  those values may genuinely be absent.
+- Define behavior for malformed or incomplete begin/complete sequences without
+  retaining global mutable drop state unnecessarily.
+- Keep outbound drag-and-drop deferred.
+
+Done when:
+
+- Drop payloads remain valid after the source SDL event has been destroyed.
+- Unit tests cover files, UTF-8 text, missing optional data, and sequence edges.
+
+TASK PLAT-015: Implement Clipboard And External URI Services
+------------------------------------------------------------
+
+Provide the host services needed by desktop consumers and complete the
+project-owned UI adapter contract.
+
+Work:
+
+- Add owner-thread `PlatformRuntime` text get/set operations using `std::string`
+  and `std::string_view`.
+- Copy SDL-owned text immediately and hide SDL allocation/free behavior.
+- For `SDL_GetClipboardText()`, clear SDL error state immediately before the call
+  and snapshot/copy error state immediately after it, before `SDL_free()` or any
+  other SDL call. Treat a null pointer as failure. Then copy/free returned text.
+  Empty text with no captured SDL error is a successful empty clipboard; empty
+  text with a captured error is failure. This is a documented exception for an
+  SDL API whose failure representation is also valid data.
+- Return `Unsupported` only after positively identifying an unavailable
+  clipboard capability; otherwise return a contextual operational failure.
+- Keep MIME lists, binary data, images, delayed rendering, and rich clipboard
+  ownership deferred.
+- Add owner-thread
+  `PlatformRuntime::OpenExternalUri(std::string_view) -> pond::core::VoidResult`.
+  Reject an empty URI before SDL, copy the view to null-terminated UTF-8, call
+  `SDL_OpenURL` privately, and return a contextual failure without invoking a
+  shell or exposing scheme-specific policy.
+- Test external-URI validation, success, and backend failure through an injected
+  deterministic seam. Automated tests must not open a browser or other host app.
+- In integration tests, save the previous text, restore it through RAII, and
+  serialize access with a CTest resource lock or equivalent.
+
+Done when:
+
+- Clipboard text works through project types and failure paths are unit-tested.
+- Tests distinguish an empty clipboard from an SDL failure.
+- A capability-supported live test restores host clipboard state after a failed
+  expectation or early return.
+- UI can install clipboard and external-URI callbacks without direct SDL calls
+  or ImGui's default OS hooks.
+- Together with PLAT-010 and PLAT-011, this task establishes the complete
+  platform-service gate for the initial Dear ImGui adapter.
+
+TASK PLAT-016: Implement Asynchronous File And Folder Dialogs
+-------------------------------------------------------------
+
+Wrap SDL's callback API in an owner-thread event contract.
+
+Work:
+
+- Add feature-local descriptors for open-file, save-file, and open-folder
+  requests.
+- Put all dialog request operations on `PlatformRuntime`.
+- Use `std::filesystem::path` for default and returned locations, owned UTF-8
+  filter names/patterns, an optional parent `WindowId`, and explicit
+  multi-selection support where meaningful.
+- Add a strong, monotonic, runtime-local `DialogRequestId`.
+- Allocate the request ID and register fully owned request state before invoking
+  SDL because the callback may arrive promptly. The returned
+  `pond::core::Result<DialogRequestId>` reports only descriptor, parent,
+  allocation, or project-state failures that occur before SDL is invoked.
+- After SDL is invoked, backend launch failure, cancellation, and selection all
+  arrive through the completion event because SDL exposes no synchronous status
+  result.
+- Deep-copy every descriptor field. Track pending-request counts on the parent
+  window and runtime; do not silently extend the public window lifetime.
+- In the callback, immediately copy selected paths or SDL error text before SDL
+  releases them. The callback may run on a foreign thread and may only enqueue
+  synchronized private completion data.
+- Extend `PlatformEvent` with `DialogCompletedEvent` containing the request ID
+  and exactly one typed outcome:
+  - Selected paths and an optional selected-filter index.
+  - Cancellation.
+  - `pond::core::Error` failure.
+- Deliver completion exactly once from `PollEvent()` on the runtime owner thread.
+  Completion records are FIFO by callback enqueue order; callback/request order
+  and ordering relative to SDL events are unspecified, so consumers use IDs and
+  timestamps rather than ordering assumptions.
+- Treat cancellation as a normal outcome and a null SDL file list as failure.
+- Allow multiple outstanding request IDs while keeping each request's storage
+  independent.
+- Keep a request registered until its completion event is consumed.
+- Enforce that the parent window and public runtime owner outlive a pending
+  request. SDL exposes no general programmatic cancellation operation, so do not
+  promise cancellation during teardown.
+- Test the callback bridge, cross-thread enqueue, copying, FIFO enqueue order,
+  exactly-once behavior, and lifetime guards with an injected private callback
+  seam. Keep interactive presentation out of automated tests.
+
+Done when:
+
+- Pending-count verification prevents parent or runtime destruction before the
+  callback and completion consumption.
+- Selection, cancellation, and failure are distinguishable without parsing text.
+- The application consumes all completions through its normal owner-thread event
+  loop.
+
+TASK PLAT-017: Implement Shell-Free Process Launching
+----------------------------------------------------
+
+Add a deterministic low-level process primitive without compute-job policy.
+
+Work:
+
+- Add a feature-local `ProcessDesc` containing an executable
+  `std::filesystem::path` and an owned vector of UTF-8 arguments.
+- Define descriptor arguments as entries after `argv[0]`; platform inserts the
+  executable as `argv[0]` and passes every argument verbatim without invoking a
+  shell or applying shell quoting.
+- Initially inherit the parent environment, connect stdin to null, and inherit
+  stdout/stderr. Defer working-directory control, environment customization, and
+  all stdio piping.
+- Add `LaunchProcess(const ProcessDesc&)` returning
+  `pond::core::Result<Process>` without requiring a video runtime.
+- Make `Process` non-copyable and movable. It captures the launching thread;
+  moves do not change that affinity and concurrent calls are unsupported.
+- Document process operations as the explicit non-main-thread platform API: a
+  process may be launched and managed on a worker thread, but all operations and
+  destruction for that object occur on its launching thread.
+- Add `ProcessExitStatus` with distinct normal-exit-code, signal-termination,
+  and unknown-termination alternatives.
+- Add `Wait() -> pond::core::Result<ProcessExitStatus>` and explicit
+  `GracefulPreferred`/`Force` termination returning `pond::core::VoidResult`.
+  `GracefulPreferred` is best effort and may fall back to forced termination on
+  a host where SDL cannot deliver a graceful request. Return `Unsupported` when
+  a requested termination behavior is not available.
+- Defer non-blocking status polling because SDL's documented non-blocking wait
+  result cannot distinguish a running process from every failure.
+- Document that blocking `Wait()` must not run in the desktop event loop.
+- Make destruction release SDL tracking state without waiting for, killing, or
+  terminating a still-running child.
+- Build a small project-owned helper executable for deterministic argument,
+  exit-code, waiting, destruction-while-running, and termination tests. Prove
+  that destroying the tracking object does not terminate the child. Do not
+  depend on a shell or host utility.
+
+Done when:
+
+- Arguments containing spaces and non-ASCII text reach the helper unchanged.
+- `Wait()` reports normal, signaled, and unknown termination without exposing
+  SDL's numeric sentinel convention.
+- Destructor and explicit termination semantics are tested and documented.
+- No process policy, progress model, artifact handling, or chemistry-engine
+  knowledge appears in platform.
+
+TASK PLAT-018: Audit Unit And Public-Header Coverage
+---------------------------------------------------
+
+Audit tests added by earlier tasks rather than postponing testing until now.
+
+Work:
+
+- Confirm focused tests cover IDs, geometry, timestamps, descriptors, error
+  mapping, moved-from guards, event alternatives, SDL translation, input,
+  clipboard outcomes, external-URI outcomes, dialog outcomes, and process values.
+- Keep all live desktop-window behavior out of `tests/unit/platform`.
+- Confirm every public header has its own SDL-free self-containment translation
+  unit and is compiled with PCH disabled.
+- Keep the header target free of a direct SDL dependency. A separate translation
+  target may include SDL and private implementation headers.
+- Confirm translation tests exercise the exact helper called by production
+  `PollEvent()`.
+- Add compile-time assertions for constexpr behavior, comparison, hashing,
+  default invalid IDs, and copy/move/noexcept contracts where applicable.
+- Remove tests that duplicate implementation details without protecting public
+  behavior.
+
+Done when:
+
+- Pure tests always run without a GUI environment.
+- Public headers do not depend on PCH contents, transitive SDL includes, or
+  accidental include order.
+- Every implemented public contract has a focused deterministic test or an
+  explicit documented reason why only integration coverage is possible.
+
+TASK PLAT-019: Audit Live SDL Integration Coverage
+-------------------------------------------------
+
+Prove real SDL wiring independently of `ponder-desktop`.
+
+Work:
+
+- Use a separate `ponder_platform_integration_tests` target under
+  `tests/integration/platform/`.
+- Cover runtime creation/shutdown, multiple hidden windows, move/lifetime
+  behavior, ID routing, logical/pixel size, scalar scale data, window state,
+  event polling, and native interop on supported drivers.
+- Cover clipboard with save/restore RAII and the process API with the project
+  helper executable.
+- Keep external-URI coverage on its deterministic seam; automated tests do not
+  launch host applications.
+- Test dialog callback marshalling through its deterministic injected seam; keep
+  interactive system dialogs out of automated runs.
+- Serialize tests that touch process-global SDL state or the system clipboard
+  using CTest resource locking or an equivalent target-level rule.
+- Extend `ponder_add_project_test` to pass discovery properties, or register the
+  affected integration tests separately, so resource locks and labels apply to
+  the discovered GoogleTests. Do not assume an executable target property will
+  serialize discovered tests.
+- Treat SDL initialization or hidden-window creation failure as a failure on a
+  normal GUI host.
+- Skip only after positively detecting an unsupported driver/capability or an
+  explicitly selected documented no-display mode. Include the reason in the
+  skip message.
+- Label live GUI/service tests separately so local and future CI runs can select
+  them intentionally.
+
+Done when:
+
+- Real SDL behavior is covered without a dependency on the desktop executable.
+- No broad catch-and-skip path can hide an SDL regression.
+- Parallel tests within one CTest invocation are serialized where required, and
+  normal or GoogleTest-failure paths restore prior clipboard text. Abnormal
+  process termination and concurrent independent CTest invocations are outside
+  that guarantee.
+
+TASK PLAT-020: Document Headless And Host Verification
+-----------------------------------------------------
+
+Make environment-dependent behavior explicit.
+
+Work:
+
+- Add Markdown documentation for hidden-window and headless integration tests.
+- Document `SDL_VIDEO_DRIVER=dummy` for tests that support SDL's dummy driver.
+- State which runtime/window operations work under the dummy driver and which
+  native-handle, clipboard, or dialog capabilities do not.
+- Document every capability check that permits `GTEST_SKIP()` and the failures
+  that must remain test failures.
+- Document CTest labels/resource locks and how to run pure tests separately from
+  live tests.
+- Document an opt-in manual dialog smoke procedure that opens and cancels each
+  supported dialog kind with and without a parent window.
+- Record the normal and PCH-disabled verification commands for each supported
+  host as they become available.
+- Distinguish host-local completion from the unrun rows of the PLAT-022
+  portability matrix.
+
+Done when:
+
+- A contributor can determine whether a skip is expected for the selected driver
+  or represents an incorrectly hidden failure.
+- The documentation does not imply that one host verifies all platform branches.
+
+TASK PLAT-021: Verify Complete Host-Local Platform Services
+----------------------------------------------------------
+
+Treat this as the completion gate for all services in this roadmap.
+
+Work:
+
+- Configure and build the normal developer preset plus a PCH-disabled
+  configuration, using an analysis preset where available.
+- Build `ponder_platform`, SDL-free header tests, pure unit tests, private
+  translation tests, integration tests, and the process helper.
+- Run all applicable tests, recording capability-based skips.
+- Run formatting and scoped clang-tidy for platform sources and tests.
+- Confirm the production dependency set remains public core plus private SDL3
+  and that no SDL compile usage requirement leaks to consumers.
+- Confirm lifecycle, threading, dialog, process, native-handle,
+  external-URI, dialog-cancellation-as-outcome, and error semantics in the
+  generated public documentation or headers.
+- On a capable GUI host, perform and record the manual open/cancel smoke check
+  for each dialog kind. On an incapable host, record presentation as unverified
+  rather than treating the automated callback-bridge test as native coverage.
+- Confirm generated files, logs, build outputs, and local environment files are
+  not staged.
+- Record host OS, compiler, configuration, SDL video driver, commands, results,
+  and skips.
+
+Done when:
+
+- Every implemented platform service is locally built, tested, formatted, and
+  analyzed on the recorded host.
+- Renderer-ready status from PLAT-013 remains valid after service additions.
+- Completion is explicitly described as host-local pending PLAT-022.
+
+TASK PLAT-022: Run The Cross-Platform Portability Matrix
+-------------------------------------------------------
+
+Collect actual evidence for the supported desktop/compiler boundary. This task
+does not block host-local renderer or UI work and may wait for CI or suitable
+hosts, but unrun rows remain visibly unverified.
+
+Work:
+
+- Configure, build, and run pure tests on:
+  - Windows with MSVC and clang-cl where supported.
+  - Linux with Clang and GCC.
+  - macOS with AppleClang.
+- Run hidden-window, display/scale, input, native-handle, process, and clipboard
+  integration coverage wherever the host and driver support it.
+- Compile `NativeWin32Window` on Windows, `NativeX11Window` and
+  `NativeWaylandWindow` on Linux, and `NativeCocoaWindow` on macOS.
+- Record capability-based skips rather than treating them as passes.
+- Add CI jobs when CI is introduced; until then maintain a dated manual matrix
+  with exact compiler, OS, SDL driver, and result information.
+- File scoped follow-up tasks for real platform differences instead of adding
+  undocumented conditionals or weakening the project-owned API.
+
+Done when:
+
+- Windows, Linux, and macOS rows contain actual successful configure/build/unit
+  results.
+- Each supported native interop branch has compiled and its applicable live
+  behavior has been exercised.
+- Remaining skips and unsupported capabilities are explicit, justified, and
+  linked to follow-up work.

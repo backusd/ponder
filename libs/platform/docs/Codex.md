@@ -4,16 +4,118 @@ Read the root `AGENTS.md` before this file.
 
 ## Scope
 
-Work here on operating-system and desktop-platform integration.
+Work here on reusable operating-system and desktop-platform integration backed
+privately by SDL3.
 
 ## Local Rules
 
-- Keep public headers under `include/ponder/platform/`.
-- Use the `pond::platform` namespace.
-- Keep SDL and OS-specific types behind project-owned boundaries where possible.
-- Avoid pulling platform concerns into core domain libraries.
+- Keep public headers under `include/ponder/platform/` and use the
+  `pond::platform` namespace.
+- Public headers may use standard-library and `ponder_core` types. Never expose
+  SDL headers, SDL types, direct OS types, or OS headers.
+- Declare `ponder::core` as a public target dependency and `ponder::SDL3` as a
+  private target dependency. Do not add another production dependency without a
+  boundary decision.
+- Keep SDL and OS-specific helpers under `src/`. Use PIMPL or another
+  heap-stable private representation for native resource owners.
+- Permit only one logical `PlatformRuntime` per process. Create runtime and
+  windows through fallible factories returning `pond::core::Result<T>`.
+- Treat SDL lifecycle ownership as exclusive. Reject creation when an SDL
+  subsystem is already initialized; otherwise platform's `SDL_Quit()` could
+  invalidate another owner. Before teardown, verify that no subsystem outside
+  runtime-owned video/events appeared while the runtime was live.
+- Use checked `SDL_SetAppMetadataProperty` calls rather than the convenience
+  metadata function, apply metadata before video initialization, and restore
+  prior effective nullable metadata values on rollback and after shutdown.
+- Apply the two UI mouse hints at override priority and restore their prior
+  effective values after `SDL_Quit()`. Do not claim to preserve priority or
+  provenance because SDL cannot report either one.
+- Keep runtime and resource owners non-copyable and movable. Define moved-from
+  behavior and keep child lifetime safe in release builds.
+- Treat SDL-backed APIs as runtime-owner-thread APIs unless explicitly documented
+  otherwise. Call `PONDER_VERIFY` before SDL for wrong-thread, moved-from, and
+  teardown invariants that must remain active in release builds.
+- Require runtime creation on the startup thread captured during module
+  initialization and independently verify SDL's main-thread predicate. Treat
+  that check as defense in depth; executable entry remains responsible for the
+  portable process-entry-thread guarantee.
+- `SDL_IsMainThread()` cannot identify the process-entry thread before first SDL
+  initialization on non-Apple hosts. The desktop must create the first runtime
+  on its entry thread; platform captures and enforces that thread afterward.
+- Give runtime-owned objects strong, zero-invalid, monotonic IDs that are not
+  reused during the runtime lifetime. Ignore stale backend events
+  deterministically.
+- Use `pond::core::Result<T>` and `pond::core::VoidResult` for recoverable
+  failures. Capture SDL errors through one private helper immediately after a
+  documented SDL failure; never parse error text for control flow.
+- Use public `PlatformErrorCode` values for machine-actionable failures and keep
+  their numeric mappings stable once published.
+- Use project assertion and logging macros. Log lifecycle messages with the
+  `platform` category and keep ignored-event logging at trace level or silent.
+- Use a `std::variant` of typed, owned event payloads. Do not add a redundant
+  event-kind enum or raw SDL escape hatch.
+- Keep display content scale, window pixel density, window display scale,
+  logical size, and pixel size as distinct concepts.
+- Copy display names and all other snapshot data before backend-owned storage
+  expires. Current refresh rate zero means unavailable; present refresh rates
+  and all scale values must be finite and greater than zero. Reject negative
+  rectangle extents as malformed backend data while preserving signed origins
+  and valid zero-sized observations.
+- Reconcile connected backend displays before runtime display queries. Keep
+  project IDs stable across reordering, retain disconnected ID tombstones, and
+  allocate a new monotonic ID when a backend display is observed after an
+  absence. Invalid zero IDs are `InvalidArgument`; unknown and stale nonzero
+  IDs are `NotFound`.
+- Resolve a window's current display, pixel density, and display scale on
+  demand. Use the runtime display registry for identity, and never substitute a
+  display snapshot's base content scale for the window display-scale query.
+- Keep presentation, decoration, minimized/maximized state, visibility,
+  resizability, focus, and always-on-top as orthogonal window concepts.
+- Keep frame-delta calculation, fixed timestep, frame limiting, event-wait idle
+  policy, rendering, Dear ImGui behavior, project policy, chemistry, IO,
+  workflow, compute, plugins, and desktop application policy out of platform.
+- Provide project-owned primitives for `ponder_ui`; UI must not declare a direct
+  SDL dependency, inherit SDL compile usage, or compile the bundled SDL ImGui
+  backend.
+- `WindowGraphicsCompatibility` contains only `Default` and `Vulkan`. Map Vulkan
+  to SDL's Vulkan flag on Windows/Linux and Metal flag on macOS. Store the exact
+  project selection in each window; never reconstruct it from SDL flags.
+- Stage native windows hidden until minimum-size setup, backend-ID routing, and
+  runtime child registration have committed; show only at the end when the
+  descriptor requests visibility. Remove routing before native destruction and
+  unregister the child after native destruction completes.
+- Reject window dimensions that are zero or not representable by SDL's signed
+  integer API, and reject screen coordinates that collide with SDL's encoded
+  centered/undefined sentinels before calling SDL.
+- Keep native interop to the approved Win32, X11, Wayland, and Cocoa Metal-layer
+  payloads from ADR 0008. Values are tagged, borrowed, narrow, and OS-header-free.
+- On macOS, each Vulkan-compatible window owns at most one cached SDL Metal view;
+  repeated queries expose the same borrowed layer, and the view is destroyed
+  before that SDL window.
+- Never create a Vulkan surface in platform. Render owns every `VkSurfaceKHR` and
+  destroys presentation state before its platform window. This ordering is
+  caller-enforced because the platform registry cannot observe render resources.
+- Copy all asynchronous dialog inputs and callback outputs. Marshal completion
+  to the runtime owner thread and distinguish selection, cancellation, and
+  failure.
+- Keep process launch shell-free. Do not make process destruction implicitly
+  wait for or terminate a child.
+- Process creation does not require `PlatformRuntime`. Bind each `Process` to its
+  launching thread and require its operations and destruction on that thread
+  without concurrent access.
+- Add tests with every implementation task. Late roadmap test tasks are coverage
+  audits, not a substitute for incremental tests.
 
 ## Verification
 
-- Configure and build a supported CMake preset.
-- When tests exist for this library, run the matching platform test executable.
+- Configure and build a supported developer preset.
+- Run SDL-free header/self-containment tests and `ponder_platform_tests`.
+- Run applicable live tests through the separate
+  `ponder_platform_integration_tests` target.
+- Run a PCH-disabled configuration so transitive includes cannot hide missing
+  public-header dependencies.
+- Run formatting and scoped clang-tidy checks for platform files.
+- Serialize integration tests that touch process-global SDL state or the system
+  clipboard.
+- Treat local success as host-local verification. Track Windows, Linux, and
+  macOS portability separately until the matrix is actually run.
