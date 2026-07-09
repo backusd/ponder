@@ -163,6 +163,16 @@ void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
                   "Platform window backend is missing maximize");
     PONDER_VERIFY(backend.restore != nullptr,
                   "Platform window backend is missing restore");
+    PONDER_VERIFY(backend.startTextInput != nullptr,
+                  "Platform window backend is missing startTextInput");
+    PONDER_VERIFY(backend.stopTextInput != nullptr,
+                  "Platform window backend is missing stopTextInput");
+    PONDER_VERIFY(backend.isTextInputActive != nullptr,
+                  "Platform window backend is missing isTextInputActive");
+    PONDER_VERIFY(backend.clearTextComposition != nullptr,
+                  "Platform window backend is missing clearTextComposition");
+    PONDER_VERIFY(backend.setTextInputArea != nullptr,
+                  "Platform window backend is missing setTextInputArea");
 }
 
 void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)

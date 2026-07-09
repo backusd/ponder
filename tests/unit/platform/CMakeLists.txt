@@ -3,9 +3,11 @@ ponder_add_project_test(ponder_platform_tests
         DisplayTests.cpp
         GeometryTests.cpp
         IdentifierTests.cpp
+        KeyboardTests.cpp
         PlatformErrorTests.cpp
         PlatformEventTests.cpp
         PlatformRuntimeTypesTests.cpp
+        TextInputTests.cpp
         TimingTests.cpp
         WindowGraphicsTests.cpp
         WindowStateTests.cpp
@@ -17,10 +19,12 @@ add_library(ponder_platform_header_tests OBJECT
     HeaderSelfContainment/DisplayHeader.cpp
     HeaderSelfContainment/GeometryHeader.cpp
     HeaderSelfContainment/IdentifiersHeader.cpp
+    HeaderSelfContainment/KeyboardHeader.cpp
     HeaderSelfContainment/PlatformErrorHeader.cpp
     HeaderSelfContainment/PlatformEventHeader.cpp
     HeaderSelfContainment/PlatformRuntimeHeader.cpp
     HeaderSelfContainment/TimingHeader.cpp
+    HeaderSelfContainment/TextInputHeader.cpp
     HeaderSelfContainment/WindowGraphicsHeader.cpp
     HeaderSelfContainment/WindowHeader.cpp
     HeaderSelfContainment/WindowStateHeader.cpp)

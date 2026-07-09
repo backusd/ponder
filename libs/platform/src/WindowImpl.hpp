@@ -60,6 +60,12 @@ public:
     [[nodiscard]] core::VoidResult SetAlwaysOnTop(bool alwaysOnTop);
     [[nodiscard]] core::VoidResult Show();
     [[nodiscard]] core::VoidResult Hide();
+    [[nodiscard]] core::VoidResult StartTextInput();
+    [[nodiscard]] core::VoidResult StopTextInput();
+    [[nodiscard]] bool IsTextInputActive() const;
+    [[nodiscard]] core::VoidResult ClearTextComposition();
+    [[nodiscard]] core::VoidResult SetTextInputArea(TextInputArea area);
+    [[nodiscard]] core::VoidResult ClearTextInputArea();
 
 private:
     friend class PlatformRuntimeState;

@@ -33,6 +33,7 @@ namespace
 using pond::platform::detail::ApplicationMetadataProperty;
 using pond::platform::detail::BackendDisplayOrientation;
 using pond::platform::detail::BackendScreenRectangle;
+using pond::platform::detail::BackendTextInputArea;
 using pond::platform::detail::BackendWindowCreateDesc;
 using pond::platform::detail::BackendWindowOperationResult;
 using pond::platform::detail::BackendWindowProperties;
@@ -71,6 +72,9 @@ struct FakeWindow final
     bool inputFocus{};
     bool alwaysOnTop{};
     bool highPixelDensity{};
+    bool textInputActive{};
+    int clearedTextCompositions{};
+    std::optional<BackendTextInputArea> textInputArea;
     pond::platform::WindowGraphicsCompatibility graphicsCompatibility{
         pond::platform::WindowGraphicsCompatibility::Default};
 };
@@ -197,6 +201,51 @@ struct FakeRuntimeBackend final
     return event;
 }
 
+[[nodiscard]] SDL_Event MakeQueuedKeyboardEvent(
+    SDL_EventType type, std::uint32_t backendWindowId,
+    SDL_Scancode scancode, SDL_Keycode key,
+    SDL_Keymod modifiers = SDL_KMOD_NONE, bool repeat = false,
+    std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.key.type = type;
+    event.key.timestamp = timestamp;
+    event.key.windowID = backendWindowId;
+    event.key.scancode = scancode;
+    event.key.key = key;
+    event.key.mod = modifiers;
+    event.key.down = type == SDL_EVENT_KEY_DOWN;
+    event.key.repeat = repeat;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeQueuedTextInputEvent(
+    std::uint32_t backendWindowId, const char* text,
+    std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.text.type = SDL_EVENT_TEXT_INPUT;
+    event.text.timestamp = timestamp;
+    event.text.windowID = backendWindowId;
+    event.text.text = text;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeQueuedTextCompositionEvent(
+    std::uint32_t backendWindowId, const char* text,
+    std::int32_t start, std::int32_t length,
+    std::uint64_t timestamp = 1'000)
+{
+    SDL_Event event{};
+    event.edit.type = SDL_EVENT_TEXT_EDITING;
+    event.edit.timestamp = timestamp;
+    event.edit.windowID = backendWindowId;
+    event.edit.text = text;
+    event.edit.start = start;
+    event.edit.length = length;
+    return event;
+}
+
 template <typename Event>
 void ExpectPolledEvent(
     const std::optional<pond::platform::PlatformEvent>& event,
@@ -309,6 +358,37 @@ void ExpectPolledEvent(
     invoke([&window]() { static_cast<void>(window.IsFocused()); });
     invoke([&window]() { static_cast<void>(window.IsAlwaysOnTop()); });
     invoke([&window]() { static_cast<void>(window.SetAlwaysOnTop(true)); });
+    return rejectedCalls;
+}
+
+[[nodiscard]] int CountRejectedWindowTextInputCalls(
+    pond::platform::Window& window)
+{
+    int rejectedCalls{};
+    const auto invoke =
+        [&rejectedCalls](auto&& operation)
+        {
+            try
+            {
+                operation();
+            }
+            catch (const pond::core::PonderException&)
+            {
+                ++rejectedCalls;
+            }
+        };
+
+    invoke([&window]() { static_cast<void>(window.StartTextInput()); });
+    invoke([&window]() { static_cast<void>(window.StopTextInput()); });
+    invoke([&window]() { static_cast<void>(window.IsTextInputActive()); });
+    invoke([&window]() { static_cast<void>(window.ClearTextComposition()); });
+    invoke(
+        [&window]()
+        {
+            static_cast<void>(window.SetTextInputArea(
+                pond::platform::TextInputArea{}));
+        });
+    invoke([&window]() { static_cast<void>(window.ClearTextInputArea()); });
     return rejectedCalls;
 }
 
@@ -863,6 +943,66 @@ void FakeDestroyWindow(void* context, void* window)
     return result;
 }
 
+[[nodiscard]] bool FakeStartWindowTextInput(void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("start-text-input");
+    if (FailWindowOperation(fake, "start-text-input"))
+    {
+        return false;
+    }
+
+    GetFakeWindow(window).textInputActive = true;
+    return true;
+}
+
+[[nodiscard]] bool FakeStopWindowTextInput(void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("stop-text-input");
+    if (FailWindowOperation(fake, "stop-text-input"))
+    {
+        return false;
+    }
+
+    GetFakeWindow(window).textInputActive = false;
+    return true;
+}
+
+[[nodiscard]] bool FakeIsWindowTextInputActive(void* context, void* window)
+{
+    GetFake(context).calls.emplace_back("is-text-input-active");
+    return GetFakeWindow(window).textInputActive;
+}
+
+[[nodiscard]] bool FakeClearWindowTextComposition(void* context, void* window)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("clear-text-composition");
+    if (FailWindowOperation(fake, "clear-text-composition"))
+    {
+        return false;
+    }
+
+    ++GetFakeWindow(window).clearedTextCompositions;
+    return true;
+}
+
+[[nodiscard]] bool FakeSetWindowTextInputArea(
+    void* context, void* window, const BackendTextInputArea* area)
+{
+    FakeRuntimeBackend& fake = GetFake(context);
+    fake.calls.emplace_back("set-text-input-area");
+    if (FailWindowOperation(fake, "set-text-input-area"))
+    {
+        return false;
+    }
+
+    GetFakeWindow(window).textInputArea =
+        area != nullptr ? std::optional<BackendTextInputArea>{*area} : std::nullopt;
+    return true;
+}
+
 [[nodiscard]] bool FakeEnumerateDisplays(
     void* context, std::vector<std::uint32_t>& displayIds)
 {
@@ -1027,7 +1167,12 @@ void FakeDestroyWindow(void* context, void* window)
         FakeSetWindowAlwaysOnTop,
         FakeMinimizeWindow,
         FakeMaximizeWindow,
-        FakeRestoreWindow};
+        FakeRestoreWindow,
+        FakeStartWindowTextInput,
+        FakeStopWindowTextInput,
+        FakeIsWindowTextInputActive,
+        FakeClearWindowTextComposition,
+        FakeSetWindowTextInputArea};
 }
 
 [[nodiscard]] PlatformDisplayBackend MakeDisplayBackend(FakeRuntimeBackend& fake)
@@ -3576,6 +3721,262 @@ TEST_F(PlatformRuntimeBackendTests,
                 std::chrono::nanoseconds{300}},
             .windowId = window.GetId(),
             .displayId = std::nullopt});
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RoutesInterleavedKeyboardTextAndCompositionEvents)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto firstResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(firstResult.HasValue());
+    pond::platform::Window first = std::move(firstResult).GetValue();
+    const std::uint32_t firstBackendId = m_fake.windows.back().backendId;
+
+    auto secondResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(secondResult.HasValue());
+    pond::platform::Window second = std::move(secondResult).GetValue();
+    const std::uint32_t secondBackendId = m_fake.windows.back().backendId;
+
+    const std::string inputText{"\xF0\x9F\xA7\xAA", 4};
+    const std::string compositionText{"mol"};
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedKeyboardEvent(
+             SDL_EVENT_KEY_DOWN, 999, SDL_SCANCODE_Z, SDLK_Z)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedKeyboardEvent(
+             SDL_EVENT_KEY_DOWN, firstBackendId, SDL_SCANCODE_A, SDLK_A,
+             static_cast<SDL_Keymod>(SDL_KMOD_LCTRL | SDL_KMOD_CAPS), true,
+             100)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedTextInputEvent(secondBackendId,
+                                           inputText.c_str(), 200)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedTextCompositionEvent(
+             firstBackendId, compositionText.c_str(), 0, 0, 300)});
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedKeyboardEvent(
+             SDL_EVENT_KEY_UP, 0, SDL_SCANCODE_UNKNOWN, SDLK_UNKNOWN,
+             SDL_KMOD_NONE, false, 400)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::KeyboardKeyEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = first.GetId(),
+            .physicalKey = pond::platform::PhysicalKey::A,
+            .logicalKey = pond::platform::LogicalKey::FromCharacter(U'a'),
+            .modifiers = pond::platform::KeyModifiers::LeftControl |
+                         pond::platform::KeyModifiers::CapsLock,
+            .pressed = true,
+            .repeat = true});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::TextInputEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}},
+            .windowId = second.GetId(),
+            .text = inputText});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::TextCompositionEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}},
+            .windowId = first.GetId(),
+            .text = compositionText,
+            .selection = pond::platform::TextCompositionRange{0, 0}});
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::KeyboardKeyEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{400}},
+            .windowId = std::nullopt,
+            .physicalKey = pond::platform::PhysicalKey::Unknown,
+            .logicalKey = pond::platform::LogicalKey::Unknown(),
+            .modifiers = pond::platform::KeyModifiers::None,
+            .pressed = false,
+            .repeat = false});
+    EXPECT_EQ(m_fake.pollEventCalls, 5);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       ExposesIdempotentTextInputLifecycleAndImeArea)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    EXPECT_FALSE(window.IsTextInputActive());
+    ASSERT_TRUE(window.StartTextInput().HasValue());
+    EXPECT_TRUE(window.IsTextInputActive());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "start-text-input"), 1);
+
+    ASSERT_TRUE(window.StartTextInput().HasValue());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "start-text-input"), 1);
+
+    const pond::platform::TextInputArea area{
+        .rectangle = {{12.4F, -6.6F}, {100.5F, 20.4F}},
+        .cursorOffset = 3.5F};
+    ASSERT_TRUE(window.SetTextInputArea(area).HasValue());
+    ASSERT_TRUE(m_fake.windows.front().textInputArea.has_value());
+    const BackendTextInputArea& backendArea =
+        *m_fake.windows.front().textInputArea;
+    EXPECT_EQ(backendArea.x, 12);
+    EXPECT_EQ(backendArea.y, -7);
+    EXPECT_EQ(backendArea.width, 101);
+    EXPECT_EQ(backendArea.height, 20);
+    EXPECT_EQ(backendArea.cursorOffset, 4);
+
+    ASSERT_TRUE(window.ClearTextComposition().HasValue());
+    EXPECT_EQ(m_fake.windows.front().clearedTextCompositions, 1);
+
+    ASSERT_TRUE(window.ClearTextInputArea().HasValue());
+    EXPECT_FALSE(m_fake.windows.front().textInputArea.has_value());
+
+    ASSERT_TRUE(window.StopTextInput().HasValue());
+    EXPECT_FALSE(window.IsTextInputActive());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "stop-text-input"), 1);
+
+    ASSERT_TRUE(window.StopTextInput().HasValue());
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "stop-text-input"), 1);
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       RejectsInvalidTextInputAreasBeforeBackendCalls)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    constexpr float kMaximumFloat = std::numeric_limits<float>::max();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float infinity = std::numeric_limits<float>::infinity();
+    const std::array<pond::platform::TextInputArea, 4> invalidAreas{{
+        {.rectangle = {{nan, 0.0F}, {1.0F, 1.0F}}, .cursorOffset = 0.0F},
+        {.rectangle = {{0.0F, 0.0F}, {-1.0F, 1.0F}}, .cursorOffset = 0.0F},
+        {.rectangle = {{kMaximumFloat, 0.0F}, {1.0F, 1.0F}},
+         .cursorOffset = 0.0F},
+        {.rectangle = {{0.0F, 0.0F}, {1.0F, 1.0F}},
+         .cursorOffset = infinity},
+    }};
+
+    const auto callsBefore = m_fake.calls;
+    for (const pond::platform::TextInputArea area : invalidAreas)
+    {
+        const pond::core::VoidResult result = window.SetTextInputArea(area);
+        ASSERT_FALSE(result.HasValue());
+        EXPECT_EQ(result.GetError().GetCode(),
+                  pond::platform::ToErrorCode(
+                      pond::platform::PlatformErrorCode::InvalidArgument));
+    }
+    EXPECT_EQ(m_fake.calls, callsBefore);
+    EXPECT_FALSE(m_fake.windows.front().textInputArea.has_value());
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       ReportsContextualTextInputBackendFailures)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    const auto expectBackendFailure =
+        [](const pond::core::VoidResult& result, std::string_view operation)
+        {
+            ASSERT_FALSE(result.HasValue());
+            EXPECT_EQ(result.GetError().GetCode(),
+                      pond::platform::ToErrorCode(
+                          pond::platform::PlatformErrorCode::BackendFailure));
+            EXPECT_NE(result.GetError().GetMessage().find(operation),
+                      std::string_view::npos);
+            EXPECT_NE(result.GetError().GetMessage().find("window 1"),
+                      std::string_view::npos);
+        };
+
+    m_fake.failingWindowOperation = "start-text-input";
+    m_fake.windowFailuresRemaining = 1;
+    expectBackendFailure(window.StartTextInput(), "SDL_StartTextInput");
+    EXPECT_FALSE(window.IsTextInputActive());
+
+    m_fake.failingWindowOperation.clear();
+    ASSERT_TRUE(window.StartTextInput().HasValue());
+    m_fake.failingWindowOperation = "stop-text-input";
+    m_fake.windowFailuresRemaining = 1;
+    expectBackendFailure(window.StopTextInput(), "SDL_StopTextInput");
+    EXPECT_TRUE(window.IsTextInputActive());
+
+    m_fake.failingWindowOperation = "clear-text-composition";
+    m_fake.windowFailuresRemaining = 1;
+    expectBackendFailure(window.ClearTextComposition(), "SDL_ClearComposition");
+
+    const pond::platform::TextInputArea area{
+        .rectangle = {{1.0F, 2.0F}, {3.0F, 4.0F}},
+        .cursorOffset = 1.0F};
+    m_fake.failingWindowOperation = "set-text-input-area";
+    m_fake.windowFailuresRemaining = 1;
+    expectBackendFailure(window.SetTextInputArea(area), "SDL_SetTextInputArea");
+    EXPECT_FALSE(m_fake.windows.front().textInputArea.has_value());
+
+    m_fake.windowFailuresRemaining = 1;
+    expectBackendFailure(window.ClearTextInputArea(), "SDL_SetTextInputArea");
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       GuardsEveryTextInputApiAfterMoveAndAcrossThreads)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    pond::platform::Window movedWindow = std::move(window);
+
+    const auto callsBefore = m_fake.calls;
+    EXPECT_EQ(CountRejectedWindowTextInputCalls(window), 6);
+    EXPECT_EQ(m_fake.calls, callsBefore);
+
+    std::atomic_int rejectedCalls{};
+    std::thread worker{
+        [&movedWindow, &rejectedCalls]()
+        {
+            rejectedCalls.store(
+                CountRejectedWindowTextInputCalls(movedWindow));
+        }};
+    worker.join();
+    EXPECT_EQ(rejectedCalls.load(), 6);
+    EXPECT_EQ(m_fake.calls, callsBefore);
 }
 
 TEST_F(PlatformRuntimeBackendTests, GuardsPollEventAfterMoveAndAcrossThreads)

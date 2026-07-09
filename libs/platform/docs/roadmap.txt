@@ -585,6 +585,8 @@ Done when:
 TASK PLAT-010: Implement Keyboard, Text, And IME Support
 -------------------------------------------------------
 
+Status: completed on 2026-07-09.
+
 Add keyboard and text behavior required by editable desktop UI.
 
 Work:

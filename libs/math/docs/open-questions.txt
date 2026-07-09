@@ -1,0 +1,343 @@
+# Math Library Open Questions
+
+Status: awaiting product and API decisions before the implementation roadmap is written.
+
+These questions cover choices that would materially change the public contract, implementation
+strategy, or roadmap order for `ponder_math`. Add each response after `Answer:`. A response of
+"no preference" allows the roadmap to select a coherent default and record the rationale.
+
+Recommendations below are proposed defaults for review rather than settled decisions; each
+`Answer:` remains available for accepting or replacing the recommendation.
+
+## Already Decided
+
+- The initial purpose is fixed-size, general-purpose math for 3D rendering.
+- Arbitrarily sized vectors and matrices and chemistry-specific operations are out of scope.
+- Math owns reusable numeric and geometric values, not renderer resources, Vulkan types, UI,
+  project persistence, or application policy.
+- Public math types and documented semantics remain independent of CPU instruction sets and any
+  third-party implementation dependency. Private implementations must remain replaceable without
+  changing the public contract.
+- Public code uses `pond::math`, public headers live under `include/ponder/math/`, and the CMake
+  targets remain `ponder_math` and `ponder::math`.
+- The implementation uses C++23, lightweight self-contained public headers, GoogleTest, and the
+  repository's existing formatting, warnings, and verification conventions.
+- Vulkan is the first renderer backend, but that decision does not by itself select the math
+  coordinate, matrix, projection, NDC, or viewport conventions below.
+
+## Scope And Public Shape
+
+### MATH-Q001: Reference Compatibility And API Idiom
+
+How closely should the library resemble DirectXMath and DirectXCollision? Is the reference about
+capabilities and quality only, or are familiar names, function signatures, algebraic conventions,
+numerical behavior, data layout, or source-level portability required? List required and explicitly
+unwanted forms of compatibility.
+
+Within that target, which public vocabulary and API style are preferred: for example,
+`Vector3`/`Matrix4`, `Float3`/`Float4x4`, or another PascalCase scheme; arithmetic operators plus
+named free functions; member functions; or a DirectXMath-like free-function API? In particular,
+should vector-by-vector `operator*` be component-wise, or should component-wise, dot, and cross
+products all have explicit names?
+
+Recommendation: Treat DirectXMath and DirectXCollision as capability, correctness, and performance
+references only, with no source, naming, layout, or numerical-compatibility promise. Use
+`Vector2`/`Vector3`/`Vector4`, `Matrix3x3`/`Matrix4x4`, and `Quaternion`; favor named free functions
+plus unambiguous arithmetic operators. Keep vector-by-vector multiplication, dot product, and cross
+product explicit as `ComponentMultiply`, `Dot`, and `Cross`.
+
+Answer:
+
+### MATH-Q002: Renderer-Ready Milestone
+
+Which capabilities must be complete before renderer implementation should depend on
+`ponder::math`? Please mark each candidate as required for the renderer-ready gate or deferrable:
+
+- Scalar constants and common numeric helpers.
+- `Vector2`, `Vector3`, and `Vector4`-equivalent types and core operations.
+- `Matrix3x3` and `Matrix4x4`-equivalent types and core operations.
+- Quaternions and rotation conversions.
+- The semantic and transform representations selected in MATH-Q004.
+- View/look-at and perspective/orthographic projection construction.
+- Clip-space and NDC transformation helpers.
+- Viewport mapping and project/unproject helpers, as a separate capability from NDC transforms.
+- The workflow-driven collision subset selected in MATH-Q014.
+- The bulk workloads selected in MATH-Q013.
+
+Should renderer work begin as soon as linear algebra and view/projection prerequisites are ready,
+or only after the initial collision workflows are also complete?
+
+Recommendation: Require scalar helpers, `Vector2`/`Vector3`/`Vector4`, `Matrix3x3`/`Matrix4x4`,
+quaternions and rotation conversions, named point/vector/normal matrix transforms, view and
+projection construction, and clip/NDC helpers at the renderer-ready gate. Defer viewport mapping,
+project/unproject, collision, and public bulk APIs. Renderer work should begin after the
+linear-algebra and view/projection gate without waiting for collision.
+
+Answer:
+
+### MATH-Q003: Scalar And Concrete Type Policy
+
+Should the initial public API provide concrete `float` types only, separate named `float` and
+`double` families, or fixed-dimension templates parameterized by scalar type? Are fixed-size
+integer vector types or half-precision storage types needed in the initial roadmap? If multiple
+scalar families exist, should names use suffixes or should unsuffixed names denote `float`?
+
+Recommendation: Start with concrete, unsuffixed `float` types only. Defer `double`, integer,
+half-precision, and public scalar templates until a concrete consumer establishes their required
+semantics. If a double family is later needed, give it distinct names rather than changing existing
+types.
+
+Answer:
+
+### MATH-Q004: Semantic 3D And Transform Types
+
+Should positions, displacement vectors, directions, and normals all use a general `Vector3`, or
+should some be distinct strong types that prevent invalid operations? If strong types are wanted,
+which conversions and mixed operations should be explicit?
+
+Should math expose a dedicated transform type in addition to matrices? Candidate models include
+matrices only, a translation/rotation/scale value, a compact affine matrix, or both a high-level
+TRS value and an affine representation. Which of non-uniform scale, negative scale, shear,
+composition, decomposition, inversion, and interpolation must the first version support?
+
+Recommendation: Use general `Vector3` values for positions, displacements, directions, and normals,
+with named operations such as `TransformPoint`, `TransformVector`, and `TransformNormal` encoding
+their differing behavior. Start with matrices only, including translation, rotation, scale,
+composition, and checked inversion. Matrices naturally support non-uniform scale, negative scale,
+and shear; defer dedicated TRS/affine types, decomposition, and transform interpolation.
+
+Answer:
+
+## Coordinate, Transform, And Rotation Conventions
+
+### MATH-Q005: World Coordinate Convention
+
+What is the canonical world convention: right- or left-handed, which axis is up, and which
+direction is forward? Should the library expose only that convention or also provide explicitly
+named alternatives for consumers that import or export other conventions?
+
+Recommendation: Use a right-handed world with Y up and -Z forward. Make this the sole canonical
+convention; add explicitly named conversion helpers for other conventions only when an importer,
+exporter, or backend establishes a concrete need. Do not use a global convention switch.
+
+Answer:
+
+### MATH-Q006: Transform Action And Multiplication Convention
+
+Should vectors be column vectors multiplied as `matrix * vector`, or row vectors multiplied as
+`vector * matrix`? Do rotation matrices and quaternions actively transform geometric values, or
+passively change coordinate bases? If both interpretations are needed, how should APIs name or
+separate them?
+
+State multiplication order explicitly: for transforms A and B, which expression applies A first
+and B second? State the corresponding quaternion composition order and whether quaternion and
+matrix composition must read in the same order. Translation placement and all composition helpers
+will follow these choices.
+
+Recommendation: Use column vectors, active transforms, and `matrix * vector`. `B * A` applies A
+first and B second; quaternion multiplication must follow the same reading order. Translation
+therefore occupies the final matrix column. If passive basis changes are later needed, give them
+explicitly different names.
+
+Answer:
+
+### MATH-Q007: Storage, CPU Layout, And GPU Interchange
+
+Independently of the algebra convention, should matrices use row-major or column-major storage?
+Which CPU value-layout guarantees are required for vectors, matrices, and quaternions: contiguous
+components, standard layout, trivial copying, exact size, exact alignment, public component
+fields, indexed access, or row/column access?
+
+Specify GPU interchange requirements separately rather than treating ordinary C++ layout as a
+single "GPU-ready" guarantee. Are compact vertex-attribute arrays, storage-buffer elements, and
+uniform/constant-buffer blocks required to share the core math representation, or should explicit
+packing/conversion types outside math handle their different alignment and padding rules? Which
+exact layouts, if any, must core values satisfy, and must those guarantees be stable before the
+broader API-stability phase?
+
+Recommendation: Store matrices column-major. Vectors should be standard-layout, trivially copyable,
+naturally aligned, and compact at 8/12/16 bytes, with public named fields and indexed access.
+`Matrix3x3` and `Matrix4x4` should have contiguous scalars and exact 36/64-byte natural layouts.
+`Quaternion` should remain a 16-byte trivially copyable value with invariant-preserving accessors
+rather than mutable fields. Freeze these CPU guarantees before API stability, but use explicit
+renderer packing types for vertex, storage-buffer, and uniform-buffer layouts.
+
+Answer:
+
+### MATH-Q008: Projection, NDC, And Viewport Policy
+
+Please answer the two coordinate stages separately:
+
+1. For clip space and normalized device coordinates, what depth interval, vertical-axis direction,
+   and homogeneous projection convention should helpers produce? Should defaults be directly
+   Vulkan-oriented, backend-neutral, or selected explicitly per call? Should reverse-Z be the
+   default, a named option, or deferred? Are finite and infinite far planes and both perspective
+   and orthographic projections required initially?
+2. If viewport mapping or project/unproject helpers belong in math, what are the viewport origin,
+   screen-Y direction, pixel-center versus pixel-corner convention, and viewport-depth mapping?
+   Are these helpers part of the renderer-ready gate or deferred to the consuming renderer?
+
+Recommendation: Use right-handed -Z projection, NDC +Y up, and depth in [0, 1]. Require projection
+calls to select forward-Z or reverse-Z explicitly; initially support finite and infinite-far
+perspective plus orthographic projection. Prefer reverse-Z with an infinite far plane in the
+renderer. The renderer owns Vulkan viewport-Y adaptation. Clip/NDC helpers gate renderer work; defer
+viewport mapping and project/unproject.
+
+Answer:
+
+### MATH-Q009: Angles And Quaternion Policy
+
+Should angles be raw scalars documented as radians, strong `Radians` and `Degrees` values, or both
+with explicit conversion? Which quaternion component order should the public representation use?
+
+Is `Quaternion` a general four-component numeric value or a rotation type with a unit-length
+invariant? For rotation APIs, should non-unit input be rejected, normalized automatically, or
+accepted with documented behavior? Must composition periodically renormalize, and what unit and
+shortest-path policies should interpolation follow? If Euler construction or extraction is needed
+initially, which axis order and intrinsic/extrinsic convention are canonical?
+
+Recommendation: Provide strong `Radians` and `Degrees` values with explicit conversion, and require
+`Radians` in rotation APIs. Store quaternion components as (x, y, z, w) and treat `Quaternion` as a
+unit-rotation type. Checked factories normalize finite nonzero input and reject zero or non-finite
+input; composition and interpolation restore normalization. Use unit, shortest-path slerp and defer
+Euler construction/extraction until a required workflow can select an explicit order and
+intrinsic/extrinsic convention.
+
+Answer:
+
+## Public Semantics And Numerical Behavior
+
+### MATH-Q010: Default Values And Floating-Point Comparison
+
+What should default construction produce for matrices and quaternions: zero, identity, or no
+default construction? Should floating-point values provide component-wise exact `operator==`,
+named exact comparison only, and/or tolerance-based comparison helpers? Should near-equality
+always require caller-supplied tolerances, or may APIs provide documented defaults using absolute,
+relative, or combined tolerances?
+
+Recommendation: Default vectors and matrices to zero and `Quaternion` to identity, with explicit
+`Zero()` and `Identity()` factories as appropriate. Let `operator==` mean exact component or
+representation equality. Provide named near-equality helpers that require caller-supplied combined
+absolute and relative tolerances, with no universal default epsilon. Provide a separate
+same-rotation comparison because q and -q represent the same rotation.
+
+Answer:
+
+### MATH-Q011: Failure Categories And Reporting
+
+Choose policy separately for these categories rather than applying one rule to every unusual
+floating-point case:
+
+1. Invalid caller input or violated preconditions, such as malformed projection parameters,
+   invalid ranges, or non-finite geometry supplied to a checked query.
+2. Validly represented inputs whose requested result is mathematically degenerate or unavailable,
+   such as normalizing a zero-length vector, inverting a singular matrix, or constructing a
+   look-at transform with parallel axes.
+3. Ordinary scalar IEEE behavior, such as division by zero, overflow, NaN, and infinity in
+   unchecked arithmetic.
+
+For categories that report recoverable failure, should APIs use detailed `pond::core::Result<T>`,
+a lightweight named `Try...`/optional form, or paired checked and explicitly unchecked operations?
+Assertions remain for internal invariants rather than ordinary caller-reachable failures. Is a
+public `ponder::core` dependency acceptable if detailed `Result` errors are selected, or must math
+remain independently usable?
+
+Recommendation: Use detailed `pond::core::Result<T>` failures for both invalid input and
+mathematically unavailable results, with distinct stable math error codes; accepting a public
+`ponder::core` dependency is appropriate. Ordinary unchecked scalar arithmetic follows IEEE
+behavior. Assertions remain for internal invariants, and explicitly named unchecked variants should
+be added only where a measured hot path needs them.
+
+Answer:
+
+### MATH-Q012: Determinism And Floating-Point Contract
+
+Does deterministic behavior mean stable results within documented tolerances on supported hosts,
+or bit-identical results across compilers and CPU architectures? May default operations use fused
+multiply-add, reassociation, reciprocal/square-root estimates, or other fast approximations?
+Should precise operations be the default with explicitly named estimate variants?
+
+Recommendation: Promise stable results within documented tolerances on supported hosts, not
+bit-identical cross-compiler or cross-architecture output. Default operations should avoid
+fast-math, reassociation, reciprocal/square-root estimates, and other accuracy-reducing shortcuts.
+Intentional `std::fma` is allowed when it is part of a documented algorithm and remains within that
+tolerance. Accurate operations are the default; any estimate variants must be explicitly named and
+introduced only after measurement.
+
+Answer:
+
+### MATH-Q013: SIMD And Bulk-Workload Milestones
+
+At which milestone, if any, is SIMD optimization required: renderer-ready, collision-ready, or a
+later measured-performance gate? Which supported architectures need optimized implementations at
+that milestone, particularly x86-64 and ARM64?
+
+Identify the workloads that justify dedicated optimization, such as individual vector/matrix
+operations, batches of point or bounds transforms, frustum culling, ray queries, or span-based
+array processing. Which workloads need public bulk APIs, and what benchmark or profiling evidence
+should define completion? The implementation may choose instruction selection internally, but the
+public types and semantics remain ISA-independent as stated above.
+
+Recommendation: Place explicit SIMD at a later measured-performance gate, after renderer and
+collision correctness. Start with compiler optimization and autovectorization; provide x86-64 and
+ARM64 implementations when profiling justifies handwritten paths. Likely bulk candidates are point
+and bounds transforms and frustum culling, but public span APIs require representative workload
+evidence. Use frame-budget and regression thresholds rather than an arbitrary speedup target.
+
+Answer:
+
+## Geometry And Collision Scope
+
+### MATH-Q014: Collision Workflows And Required Query Matrix
+
+Which concrete consumer workflows gate the first collision milestone, for example renderer
+visibility culling, picking/selection, bounds overlap, or closest-distance queries? For each
+required workflow, list the needed query rows in this form:
+
+`workflow | operand A | operand B | query | required result detail | milestone`
+
+Candidate operands may include ray, segment, plane, triangle, sphere, axis-aligned box, oriented
+box, frustum, and capsule, but a primitive or pair should enter the roadmap only when a required
+workflow names it. Pairwise combinations and swept tests not present in the answered query matrix
+will be deferred rather than inferred from the mere presence of a primitive.
+
+Recommendation: Gate the first collision milestone on renderer visibility and picking: frustum/AABB
+classification; frustum/sphere classification; ray/AABB nearest entry/exit world-distance interval;
+and ray/triangle nearest world-distance hit with barycentrics. Defer OBBs, capsules, segments, swept
+tests, closest-distance queries, bounds-overlap pairs, and every other combination until a concrete
+consumer names it.
+
+Answer:
+
+### MATH-Q015: Collision Results And Edge Semantics
+
+For the query rows selected in MATH-Q014, should results be `bool`, a
+`Disjoint`/`Intersects`/`Contains` classification, or richer data such as distance, interval,
+point, and normal? Does boundary contact count as intersection, and when does it count as
+containment? Are zero-size or otherwise degenerate shapes valid values with documented behavior,
+recoverable input errors, or contract violations? May ray and plane inputs be non-normalized, and
+if so, must returned values preserve their scale?
+
+Should visibility-culling rows conservatively retain boundary and numerically uncertain objects,
+prioritizing avoidance of false rejections at the cost of false positives? If so, what tolerance
+or error-bound contract is required: a documented best-effort tolerance, or conservative bounds
+with a defined guarantee for valid finite inputs?
+
+Recommendation: Use `Disjoint`/`Intersects`/`Contains` for culling and rich optional hit values for
+rays. Boundary contact intersects and containment is inclusive. Zero-radius spheres and zero-extent
+boxes are valid; zero-area triangles produce no surface hit; malformed or non-finite shapes fail
+checked construction. Normalize finite nonzero ray directions on construction so `t` is world
+distance, and normalize plane normals. Culling should reject only beyond a documented conservative
+error bound and retain boundary or numerically uncertain objects.
+
+Answer:
+
+## Provisional Deferrals
+
+Unless an answer above explicitly includes them, the roadmap will defer serialization formats,
+long-term binary ABI promises beyond the interchange guarantees selected in MATH-Q007,
+renderer/GPU resource types, stateful application controllers, random/noise generation, curves,
+dual-quaternion skinning, animation-specific math, unrequested collision pairs, and specialized
+chemistry math. These can be added later when a concrete consumer establishes their requirements.
+
+

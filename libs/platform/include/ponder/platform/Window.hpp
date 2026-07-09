@@ -3,6 +3,7 @@
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Identifiers.hpp>
+#include <ponder/platform/TextInput.hpp>
 #include <ponder/platform/WindowGraphics.hpp>
 #include <ponder/platform/WindowState.hpp>
 
@@ -73,6 +74,13 @@ public:
     [[nodiscard]] core::Result<bool> IsFocused() const;
     [[nodiscard]] core::Result<bool> IsAlwaysOnTop() const;
     [[nodiscard]] core::VoidResult SetAlwaysOnTop(bool alwaysOnTop);
+
+    [[nodiscard]] core::VoidResult StartTextInput();
+    [[nodiscard]] core::VoidResult StopTextInput();
+    [[nodiscard]] bool IsTextInputActive() const;
+    [[nodiscard]] core::VoidResult ClearTextComposition();
+    [[nodiscard]] core::VoidResult SetTextInputArea(TextInputArea area);
+    [[nodiscard]] core::VoidResult ClearTextInputArea();
 
     [[nodiscard]] core::VoidResult Show();
     [[nodiscard]] core::VoidResult Hide();

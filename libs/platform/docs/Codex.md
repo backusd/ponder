@@ -59,6 +59,15 @@ privately by SDL3.
 - Use a `std::variant` of typed, owned event payloads. Do not add a redundant
   event-kind enum or raw SDL escape hatch. Give every event the original SDL
   monotonic nanosecond timestamp; never resample it with `Now()`.
+- Map keyboard input to project-owned physical keys, closed logical
+  Unknown/Unicode/named values, and side-specific modifier flags. Never expose
+  SDL keycodes, scancodes, raw platform scan values, or keyboard device IDs.
+- Keyboard, text-input, and composition events may have no `WindowId` when SDL
+  reports backend window ID zero. Drop a nonzero stale or unresolved target.
+  Copy and validate UTF-8 text before SDL event storage expires.
+- Composition selections are optional Unicode-character-index ranges, not UTF-8
+  byte ranges. Preserve a present zero-length range; any negative backend start
+  or length means the selection is unavailable.
 - Keep one private `TranslateSdlEvent` production function for PLAT-008 and
   polling. Resolve required backend IDs through injected private callbacks.
   Preserve an unresolved destination display only on
@@ -77,6 +86,10 @@ privately by SDL3.
   SDL's public event contract does not guarantee mode dimensions. Preserve
   zero window sizes, reject negative window sizes, and map unknown display
   orientations to `DisplayOrientation::Unknown`.
+- Keep window text-input activation live and idempotent rather than caching it.
+  Validate IME areas before SDL, round logical coordinates to the nearest
+  backend integer, and return contextual failures from fallible text-input
+  operations.
 - Keep display content scale, window pixel density, window display scale,
   logical size, and pixel size as distinct concepts.
 - Copy display names and all other snapshot data before backend-owned storage

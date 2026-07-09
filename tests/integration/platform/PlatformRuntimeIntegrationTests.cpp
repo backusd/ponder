@@ -4,6 +4,7 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 
@@ -25,28 +26,34 @@ namespace
 constexpr char kFocusClickThroughHint[]{"SDL_MOUSE_FOCUS_CLICKTHROUGH"};
 constexpr char kAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
 
-[[nodiscard]] std::uint32_t FindBackendWindowId(std::string_view title)
+[[nodiscard]] SDL_Window* FindBackendWindow(std::string_view title)
 {
     int windowCount{};
     SDL_Window** const windows = SDL_GetWindows(&windowCount);
     if (windows == nullptr)
     {
-        return 0;
+        return nullptr;
     }
 
-    std::uint32_t id{};
+    SDL_Window* result{};
     for (int index = 0; index < windowCount; ++index)
     {
         const char* const candidateTitle = SDL_GetWindowTitle(windows[index]);
         if (candidateTitle != nullptr && title == candidateTitle)
         {
-            id = SDL_GetWindowID(windows[index]);
+            result = windows[index];
             break;
         }
     }
 
     SDL_free(windows);
-    return id;
+    return result;
+}
+
+[[nodiscard]] std::uint32_t FindBackendWindowId(std::string_view title)
+{
+    SDL_Window* const window = FindBackendWindow(title);
+    return window == nullptr ? 0U : SDL_GetWindowID(window);
 }
 
 class PlatformRuntimeIntegrationTests : public testing::Test
@@ -205,6 +212,134 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsMultipleLiveHiddenWindows)
 
     second.reset();
     EXPECT_TRUE(moved.GetLogicalSize().HasValue());
+}
+
+TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
+{
+    ASSERT_TRUE(
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.title = "Live Text Input Window";
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    SDL_Window* const backendWindow = FindBackendWindow(desc.title);
+    ASSERT_NE(backendWindow, nullptr);
+    EXPECT_FALSE(window.IsTextInputActive());
+    EXPECT_FALSE(SDL_TextInputActive(backendWindow));
+
+    ASSERT_TRUE(window.StartTextInput().HasValue());
+    EXPECT_TRUE(window.IsTextInputActive());
+    EXPECT_TRUE(SDL_TextInputActive(backendWindow));
+    EXPECT_TRUE(window.StartTextInput().HasValue());
+
+    const pond::platform::TextInputArea area{
+        .rectangle = {.origin = {12.4F, -8.6F}, .extent = {140.2F, 22.8F}},
+        .cursorOffset = 19.6F};
+    ASSERT_TRUE(window.SetTextInputArea(area).HasValue());
+
+    SDL_Rect backendArea{};
+    int backendCursor{};
+    ASSERT_TRUE(SDL_GetTextInputArea(backendWindow, &backendArea, &backendCursor));
+    EXPECT_EQ(backendArea.x, 12);
+    EXPECT_EQ(backendArea.y, -9);
+    EXPECT_EQ(backendArea.w, 140);
+    EXPECT_EQ(backendArea.h, 23);
+    EXPECT_EQ(backendCursor, 20);
+
+    EXPECT_TRUE(window.ClearTextComposition().HasValue());
+    ASSERT_TRUE(window.ClearTextInputArea().HasValue());
+    ASSERT_TRUE(SDL_GetTextInputArea(backendWindow, &backendArea, &backendCursor));
+    EXPECT_EQ(backendArea.x, 0);
+    EXPECT_EQ(backendArea.y, 0);
+    EXPECT_EQ(backendArea.w, 0);
+    EXPECT_EQ(backendArea.h, 0);
+    EXPECT_EQ(backendCursor, 0);
+
+    SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+
+    SDL_Event key{};
+    key.key.type = SDL_EVENT_KEY_DOWN;
+    key.key.timestamp = 100;
+    key.key.windowID = SDL_GetWindowID(backendWindow);
+    key.key.scancode = SDL_SCANCODE_Q;
+    key.key.key = SDLK_A;
+    key.key.mod = static_cast<SDL_Keymod>(SDL_KMOD_LCTRL | SDL_KMOD_RSHIFT);
+    key.key.down = true;
+    key.key.repeat = true;
+    ASSERT_TRUE(SDL_PushEvent(&key));
+
+    SDL_Event text{};
+    text.text.type = SDL_EVENT_TEXT_INPUT;
+    text.text.timestamp = 200;
+    text.text.windowID = SDL_GetWindowID(backendWindow);
+    text.text.text = "typed";
+    ASSERT_TRUE(SDL_PushEvent(&text));
+
+    SDL_Event composition{};
+    composition.edit.type = SDL_EVENT_TEXT_EDITING;
+    composition.edit.timestamp = 300;
+    composition.edit.windowID = SDL_GetWindowID(backendWindow);
+    composition.edit.text = "pending";
+    composition.edit.start = 1;
+    composition.edit.length = 2;
+    ASSERT_TRUE(SDL_PushEvent(&composition));
+
+    auto keyEvent = runtime.PollEvent();
+    ASSERT_TRUE(keyEvent.has_value());
+    ASSERT_TRUE(
+        std::holds_alternative<pond::platform::KeyboardKeyEvent>(*keyEvent));
+    EXPECT_EQ(
+        std::get<pond::platform::KeyboardKeyEvent>(*keyEvent),
+        (pond::platform::KeyboardKeyEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{100}},
+            .windowId = window.GetId(),
+            .physicalKey = pond::platform::PhysicalKey::Q,
+            .logicalKey = pond::platform::LogicalKey::FromCharacter(U'a'),
+            .modifiers = pond::platform::KeyModifiers::LeftControl |
+                         pond::platform::KeyModifiers::RightShift,
+            .pressed = true,
+            .repeat = true}));
+
+    auto textEvent = runtime.PollEvent();
+    ASSERT_TRUE(textEvent.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::TextInputEvent>(
+        *textEvent));
+    EXPECT_EQ(
+        std::get<pond::platform::TextInputEvent>(*textEvent),
+        (pond::platform::TextInputEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{200}},
+            .windowId = window.GetId(),
+            .text = "typed"}));
+
+    auto compositionEvent = runtime.PollEvent();
+    ASSERT_TRUE(compositionEvent.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::TextCompositionEvent>(
+        *compositionEvent));
+    EXPECT_EQ(
+        std::get<pond::platform::TextCompositionEvent>(*compositionEvent),
+        (pond::platform::TextCompositionEvent{
+            .timestamp = pond::platform::PlatformTimestamp{
+                std::chrono::nanoseconds{300}},
+            .windowId = window.GetId(),
+            .text = "pending",
+            .selection = pond::platform::TextCompositionRange{1, 2}}));
+    EXPECT_FALSE(runtime.PollEvent().has_value());
+
+    ASSERT_TRUE(window.StopTextInput().HasValue());
+    EXPECT_FALSE(window.IsTextInputActive());
+    EXPECT_FALSE(SDL_TextInputActive(backendWindow));
+    EXPECT_TRUE(window.StopTextInput().HasValue());
 }
 
 TEST_F(PlatformRuntimeIntegrationTests,

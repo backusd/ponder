@@ -6,13 +6,14 @@
 #include <chrono>
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <variant>
 
 namespace
 {
 using namespace std::chrono_literals;
 
-static_assert(std::variant_size_v<pond::platform::PlatformEvent> == 21U);
+static_assert(std::variant_size_v<pond::platform::PlatformEvent> == 24U);
 
 TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
 {
@@ -20,7 +21,7 @@ TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
     const pond::platform::WindowId windowId{17};
     const pond::platform::DisplayId displayId{29};
 
-    const std::array<pond::platform::PlatformEvent, 21> events{
+    const std::array<pond::platform::PlatformEvent, 24> events{
         pond::platform::QuitRequestedEvent{timestamp},
         pond::platform::WindowCloseRequestedEvent{timestamp, windowId},
         pond::platform::WindowMovedEvent{timestamp, windowId, {-120, 45}},
@@ -51,9 +52,24 @@ TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
         pond::platform::DisplayOrientationChangedEvent{
             timestamp, displayId, pond::platform::DisplayOrientation::Unknown},
         pond::platform::DisplayContentScaleChangedEvent{timestamp, displayId},
-        pond::platform::DisplayUsableBoundsChangedEvent{timestamp, displayId}};
+        pond::platform::DisplayUsableBoundsChangedEvent{timestamp, displayId},
+        pond::platform::KeyboardKeyEvent{
+            timestamp,
+            windowId,
+            pond::platform::PhysicalKey::A,
+            pond::platform::LogicalKey::FromCharacter(U'a'),
+            pond::platform::KeyModifiers::LeftControl,
+            true,
+            false},
+        pond::platform::TextInputEvent{
+            timestamp, windowId, std::string{"molecule"}},
+        pond::platform::TextCompositionEvent{
+            timestamp,
+            std::nullopt,
+            std::string{"composition"},
+            pond::platform::TextCompositionRange{2, 4}}};
 
-    std::array<bool, 21> visited{};
+    std::array<bool, 24> visited{};
     for (std::size_t eventIndex = 0; eventIndex < events.size(); ++eventIndex)
     {
         const pond::platform::PlatformEvent& event = events[eventIndex];
@@ -117,6 +133,27 @@ TEST(PlatformEventTests, PreservesTypedUnitsAndOptionalValues)
         timestamp, displayId, pond::platform::DisplayOrientation::Unknown};
     EXPECT_EQ(unknownOrientation.orientation,
               pond::platform::DisplayOrientation::Unknown);
+
+    const pond::platform::KeyboardKeyEvent targetlessKey{
+        timestamp,
+        std::nullopt,
+        pond::platform::PhysicalKey::Unknown,
+        pond::platform::LogicalKey::Unknown(),
+        pond::platform::KeyModifiers::None,
+        false,
+        false};
+    EXPECT_FALSE(targetlessKey.windowId.has_value());
+
+    const pond::platform::TextCompositionEvent withoutSelection{
+        timestamp, windowId, std::string{}, std::nullopt};
+    EXPECT_FALSE(withoutSelection.selection.has_value());
+
+    const pond::platform::TextCompositionEvent withInsertion{
+        timestamp, windowId, std::string{},
+        pond::platform::TextCompositionRange{0, 0}};
+    ASSERT_TRUE(withInsertion.selection.has_value());
+    EXPECT_EQ(*withInsertion.selection,
+              (pond::platform::TextCompositionRange{0, 0}));
 }
 
 TEST(PlatformEventTests, DefaultedEqualityIncludesPayloadFields)

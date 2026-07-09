@@ -3,7 +3,9 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_platform_defines.h>
+#include <SDL3/SDL_rect.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 
@@ -348,6 +350,39 @@ void DestroyWindow(void*, void* window) noexcept
              : BackendWindowOperationResult::Unsupported;
 }
 
+[[nodiscard]] bool StartWindowTextInput(void*, void* window) noexcept
+{
+    return SDL_StartTextInput(static_cast<SDL_Window*>(window));
+}
+
+[[nodiscard]] bool StopWindowTextInput(void*, void* window) noexcept
+{
+    return SDL_StopTextInput(static_cast<SDL_Window*>(window));
+}
+
+[[nodiscard]] bool IsWindowTextInputActive(void*, void* window) noexcept
+{
+    return SDL_TextInputActive(static_cast<SDL_Window*>(window));
+}
+
+[[nodiscard]] bool ClearWindowTextComposition(void*, void* window) noexcept
+{
+    return SDL_ClearComposition(static_cast<SDL_Window*>(window));
+}
+
+[[nodiscard]] bool SetWindowTextInputArea(
+    void*, void* window, const BackendTextInputArea* area) noexcept
+{
+    SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
+    if (area == nullptr)
+    {
+        return SDL_SetTextInputArea(sdlWindow, nullptr, 0);
+    }
+
+    const SDL_Rect rectangle{area->x, area->y, area->width, area->height};
+    return SDL_SetTextInputArea(sdlWindow, &rectangle, area->cursorOffset);
+}
+
 [[nodiscard]] bool EnumerateDisplays(void*,
                                      std::vector<std::uint32_t>& displayIds)
 {
@@ -473,7 +508,12 @@ constexpr PlatformWindowBackend kSdlWindowBackend{
     SetWindowAlwaysOnTop,
     MinimizeWindow,
     MaximizeWindow,
-    RestoreWindow};
+    RestoreWindow,
+    StartWindowTextInput,
+    StopWindowTextInput,
+    IsWindowTextInputActive,
+    ClearWindowTextComposition,
+    SetWindowTextInputArea};
 
 constexpr PlatformDisplayBackend kSdlDisplayBackend{
     nullptr,

@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -90,6 +91,51 @@ struct ResolverState final
     event.display.type = type;
     event.display.timestamp = timestamp;
     event.display.displayID = backendDisplayId;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeKeyboardEvent(
+    SDL_EventType type, SDL_Scancode scancode, SDL_Keycode key,
+    SDL_Keymod modifiers = SDL_KMOD_NONE, bool repeat = false,
+    std::uint32_t backendWindowId = kBackendWindowId,
+    std::uint64_t timestamp = kTimestampNanoseconds)
+{
+    SDL_Event event{};
+    event.key.type = type;
+    event.key.timestamp = timestamp;
+    event.key.windowID = backendWindowId;
+    event.key.scancode = scancode;
+    event.key.key = key;
+    event.key.mod = modifiers;
+    event.key.down = type == SDL_EVENT_KEY_DOWN;
+    event.key.repeat = repeat;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeTextInputEvent(
+    const char* text, std::uint32_t backendWindowId = kBackendWindowId,
+    std::uint64_t timestamp = kTimestampNanoseconds)
+{
+    SDL_Event event{};
+    event.text.type = SDL_EVENT_TEXT_INPUT;
+    event.text.timestamp = timestamp;
+    event.text.windowID = backendWindowId;
+    event.text.text = text;
+    return event;
+}
+
+[[nodiscard]] SDL_Event MakeTextCompositionEvent(
+    const char* text, std::int32_t start, std::int32_t length,
+    std::uint32_t backendWindowId = kBackendWindowId,
+    std::uint64_t timestamp = kTimestampNanoseconds)
+{
+    SDL_Event event{};
+    event.edit.type = SDL_EVENT_TEXT_EDITING;
+    event.edit.timestamp = timestamp;
+    event.edit.windowID = backendWindowId;
+    event.edit.text = text;
+    event.edit.start = start;
+    event.edit.length = length;
     return event;
 }
 
@@ -197,6 +243,224 @@ TEST_F(SdlEventTranslatorTests, TranslatesQuitAndEveryWindowLifecycleSignal)
         Translate(MakeWindowEvent(SDL_EVENT_WINDOW_MOUSE_LEAVE)),
         pond::platform::WindowPointerLeftEvent{
             .timestamp = timestamp, .windowId = kWindowId});
+}
+
+TEST_F(SdlEventTranslatorTests,
+       TranslatesKnownPhysicalUnicodeAndEveryModifierBit)
+{
+    constexpr SDL_Keymod kAllModifiers = static_cast<SDL_Keymod>(
+        SDL_KMOD_LSHIFT | SDL_KMOD_RSHIFT | SDL_KMOD_LEVEL5 | SDL_KMOD_LCTRL |
+        SDL_KMOD_RCTRL | SDL_KMOD_LALT | SDL_KMOD_RALT | SDL_KMOD_LGUI |
+        SDL_KMOD_RGUI | SDL_KMOD_NUM | SDL_KMOD_CAPS | SDL_KMOD_MODE |
+        SDL_KMOD_SCROLL | 0x0008U);
+    constexpr pond::platform::KeyModifiers kExpectedModifiers =
+        pond::platform::KeyModifiers::LeftShift |
+        pond::platform::KeyModifiers::RightShift |
+        pond::platform::KeyModifiers::Level5Shift |
+        pond::platform::KeyModifiers::LeftControl |
+        pond::platform::KeyModifiers::RightControl |
+        pond::platform::KeyModifiers::LeftAlt |
+        pond::platform::KeyModifiers::RightAlt |
+        pond::platform::KeyModifiers::LeftSuper |
+        pond::platform::KeyModifiers::RightSuper |
+        pond::platform::KeyModifiers::NumLock |
+        pond::platform::KeyModifiers::CapsLock |
+        pond::platform::KeyModifiers::AltGraph |
+        pond::platform::KeyModifiers::ScrollLock;
+
+    SDL_Event event = MakeKeyboardEvent(
+        SDL_EVENT_KEY_DOWN, SDL_SCANCODE_Q,
+        static_cast<SDL_Keycode>(U'\u00E9'), kAllModifiers, true);
+    event.key.raw = 0xFFFFU;
+
+    ExpectTranslatedEvent(
+        Translate(event),
+        pond::platform::KeyboardKeyEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .physicalKey = pond::platform::PhysicalKey::Q,
+            .logicalKey =
+                pond::platform::LogicalKey::FromCharacter(U'\u00E9'),
+            .modifiers = kExpectedModifiers,
+            .pressed = true,
+            .repeat = true});
+}
+
+TEST_F(SdlEventTranslatorTests, TranslatesNamedAndUnknownKeyValues)
+{
+    ExpectTranslatedEvent(
+        Translate(MakeKeyboardEvent(
+            SDL_EVENT_KEY_DOWN, SDL_SCANCODE_KP_7, SDLK_7)),
+        pond::platform::KeyboardKeyEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .physicalKey = pond::platform::PhysicalKey::Keypad7,
+            .logicalKey = pond::platform::LogicalKey::FromNamed(
+                pond::platform::NamedKey::Keypad7),
+            .modifiers = pond::platform::KeyModifiers::None,
+            .pressed = true,
+            .repeat = false});
+
+    ExpectTranslatedEvent(
+        Translate(MakeKeyboardEvent(
+            SDL_EVENT_KEY_DOWN, static_cast<SDL_Scancode>(0x7FFF),
+            SDLK_UNKNOWN)),
+        pond::platform::KeyboardKeyEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .physicalKey = pond::platform::PhysicalKey::Unknown,
+            .logicalKey = pond::platform::LogicalKey::Unknown(),
+            .modifiers = pond::platform::KeyModifiers::None,
+            .pressed = true,
+            .repeat = false});
+
+    ExpectTranslatedEvent(
+        Translate(MakeKeyboardEvent(
+            SDL_EVENT_KEY_DOWN, SDL_SCANCODE_A,
+            static_cast<SDL_Keycode>(0x0011'0000U))),
+        pond::platform::KeyboardKeyEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .physicalKey = pond::platform::PhysicalKey::A,
+            .logicalKey = pond::platform::LogicalKey::Unknown(),
+            .modifiers = pond::platform::KeyModifiers::None,
+            .pressed = true,
+            .repeat = false});
+}
+
+TEST_F(SdlEventTranslatorTests, EnforcesKeyTypeAndDownStateConsistency)
+{
+    ExpectTranslatedEvent(
+        Translate(MakeKeyboardEvent(
+            SDL_EVENT_KEY_UP, SDL_SCANCODE_LEFT, SDLK_LEFT,
+            SDL_KMOD_LCTRL)),
+        pond::platform::KeyboardKeyEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .physicalKey = pond::platform::PhysicalKey::ArrowLeft,
+            .logicalKey = pond::platform::LogicalKey::FromNamed(
+                pond::platform::NamedKey::ArrowLeft),
+            .modifiers = pond::platform::KeyModifiers::LeftControl,
+            .pressed = false,
+            .repeat = false});
+
+    SDL_Event inconsistentDown =
+        MakeKeyboardEvent(SDL_EVENT_KEY_DOWN, SDL_SCANCODE_A, SDLK_A);
+    inconsistentDown.key.down = false;
+    EXPECT_FALSE(Translate(inconsistentDown).has_value());
+
+    SDL_Event inconsistentUp =
+        MakeKeyboardEvent(SDL_EVENT_KEY_UP, SDL_SCANCODE_A, SDLK_A);
+    inconsistentUp.key.down = true;
+    EXPECT_FALSE(Translate(inconsistentUp).has_value());
+}
+
+TEST_F(SdlEventTranslatorTests,
+       PreservesTargetlessInputAndDropsStaleNonzeroTargets)
+{
+    m_resolvers.windowRequests.clear();
+
+    auto key = Translate(MakeKeyboardEvent(
+        SDL_EVENT_KEY_DOWN, SDL_SCANCODE_A, SDLK_A, SDL_KMOD_NONE, false, 0));
+    ASSERT_TRUE(key.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::KeyboardKeyEvent>(*key));
+    EXPECT_FALSE(std::get<pond::platform::KeyboardKeyEvent>(*key)
+                     .windowId.has_value());
+
+    auto text = Translate(MakeTextInputEvent("targetless", 0));
+    ASSERT_TRUE(text.has_value());
+    ASSERT_TRUE(std::holds_alternative<pond::platform::TextInputEvent>(*text));
+    EXPECT_FALSE(
+        std::get<pond::platform::TextInputEvent>(*text).windowId.has_value());
+
+    auto composition =
+        Translate(MakeTextCompositionEvent("targetless", 0, 0, 0));
+    ASSERT_TRUE(composition.has_value());
+    ASSERT_TRUE(
+        std::holds_alternative<pond::platform::TextCompositionEvent>(
+            *composition));
+    EXPECT_FALSE(std::get<pond::platform::TextCompositionEvent>(*composition)
+                     .windowId.has_value());
+    EXPECT_TRUE(m_resolvers.windowRequests.empty());
+
+    EXPECT_FALSE(Translate(MakeKeyboardEvent(
+                     SDL_EVENT_KEY_DOWN, SDL_SCANCODE_A, SDLK_A,
+                     SDL_KMOD_NONE, false, 999))
+                     .has_value());
+    EXPECT_FALSE(Translate(MakeTextInputEvent("stale", 999)).has_value());
+    EXPECT_FALSE(
+        Translate(MakeTextCompositionEvent("stale", 0, 0, 999)).has_value());
+    EXPECT_EQ(m_resolvers.windowRequests,
+              (std::vector<std::uint32_t>{999, 999, 999}));
+}
+
+TEST_F(SdlEventTranslatorTests, OwnsAndValidatesUtf8TextInput)
+{
+    std::string source{"caf\xC3\xA9"};
+    auto translated = Translate(MakeTextInputEvent(source.c_str()));
+    ASSERT_TRUE(translated.has_value());
+    source.assign("overwritten");
+
+    ExpectTranslatedEvent(
+        translated,
+        pond::platform::TextInputEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .text = "caf\xC3\xA9"});
+    ExpectTranslatedEvent(
+        Translate(MakeTextInputEvent("")),
+        pond::platform::TextInputEvent{
+            .timestamp = MakeTimestamp(), .windowId = kWindowId, .text = ""});
+
+    EXPECT_FALSE(Translate(MakeTextInputEvent(nullptr)).has_value());
+    const char invalidUtf8[]{
+        static_cast<char>(0xC0), static_cast<char>(0xAF), '\0'};
+    EXPECT_FALSE(Translate(MakeTextInputEvent(invalidUtf8)).has_value());
+}
+
+TEST_F(SdlEventTranslatorTests,
+       OwnsCompositionTextAndDistinguishesSelectionAvailability)
+{
+    std::string source{"composition"};
+    auto translated =
+        Translate(MakeTextCompositionEvent(source.c_str(), 3, 2));
+    ASSERT_TRUE(translated.has_value());
+    source.assign("overwritten");
+    ExpectTranslatedEvent(
+        translated,
+        pond::platform::TextCompositionEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .text = "composition",
+            .selection = pond::platform::TextCompositionRange{3, 2}});
+
+    ExpectTranslatedEvent(
+        Translate(MakeTextCompositionEvent("", 0, 0)),
+        pond::platform::TextCompositionEvent{
+            .timestamp = MakeTimestamp(),
+            .windowId = kWindowId,
+            .text = "",
+            .selection = pond::platform::TextCompositionRange{0, 0}});
+
+    constexpr std::array<std::pair<std::int32_t, std::int32_t>, 4>
+        kUnavailableRanges{{{-1, -1}, {-1, 0}, {0, -1}, {-2, 4}}};
+    for (const auto [start, length] : kUnavailableRanges)
+    {
+        ExpectTranslatedEvent(
+            Translate(MakeTextCompositionEvent("pending", start, length)),
+            pond::platform::TextCompositionEvent{
+                .timestamp = MakeTimestamp(),
+                .windowId = kWindowId,
+                .text = "pending",
+                .selection = std::nullopt});
+    }
+
+    EXPECT_FALSE(
+        Translate(MakeTextCompositionEvent(nullptr, 0, 0)).has_value());
+    const char invalidUtf8[]{
+        static_cast<char>(0xC0), static_cast<char>(0xAF), '\0'};
+    EXPECT_FALSE(
+        Translate(MakeTextCompositionEvent(invalidUtf8, 0, 0)).has_value());
 }
 
 TEST_F(SdlEventTranslatorTests, PreservesSignedMovementAndDistinctSizeUnits)
@@ -538,7 +802,7 @@ TEST_F(SdlEventTranslatorTests,
         SDL_EVENT_WINDOW_METAL_VIEW_RESIZED,
         SDL_EVENT_WINDOW_HIT_TEST,
         SDL_EVENT_WINDOW_DESTROYED,
-        SDL_EVENT_KEY_DOWN,
+        SDL_EVENT_TEXT_EDITING_CANDIDATES,
         SDL_EVENT_MOUSE_MOTION,
         SDL_EVENT_DROP_FILE,
         SDL_EVENT_USER,

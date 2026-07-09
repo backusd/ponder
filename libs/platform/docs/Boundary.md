@@ -175,10 +175,15 @@ Status: platform contracts revised on 2026-07-08.
   and become disconnected tombstones afterward. A previously unseen
   non-removal display event reconciles the live topology before translation;
   it does not revive a disconnected tombstone.
-- Project-owned physical and logical key values, modifiers, repeat state, UTF-8
-  text, and IME composition ranges.
-- Text-input start/stop, active-state, composition clearing, and IME input-area
-  control.
+- Project-owned physical keys, closed logical Unknown/Unicode/named values,
+  side-specific modifiers, and repeat state. Unknown mappings remain explicit;
+  raw platform scan values are never exposed.
+- Owned UTF-8 input and composition text. Composition selections are optional
+  ranges measured in Unicode characters rather than UTF-8 bytes; a present
+  zero-length range remains distinct from an unavailable selection.
+- Window text-input start/stop, live active-state query, composition clearing,
+  and logical IME input-area/cursor control. Logical area values round to the
+  nearest backend integer after finite/range validation.
 - Mouse motion, buttons, and wheel events. Window grab/relative mode remain on
   `Window`; global capture, global position, cursor visibility, and standard
   system cursor selection live on `PlatformRuntime`. Custom cursor images are

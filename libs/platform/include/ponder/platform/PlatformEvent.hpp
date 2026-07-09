@@ -3,10 +3,13 @@
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Identifiers.hpp>
+#include <ponder/platform/Keyboard.hpp>
+#include <ponder/platform/TextInput.hpp>
 #include <ponder/platform/Timing.hpp>
 #include <ponder/platform/WindowState.hpp>
 
 #include <optional>
+#include <string>
 #include <variant>
 
 namespace pond::platform
@@ -219,6 +222,41 @@ struct DisplayUsableBoundsChangedEvent final
         const DisplayUsableBoundsChangedEvent& rhs) = default;
 };
 
+struct KeyboardKeyEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    PhysicalKey physicalKey{PhysicalKey::Unknown};
+    LogicalKey logicalKey;
+    KeyModifiers modifiers{KeyModifiers::None};
+    bool pressed{};
+    bool repeat{};
+
+    [[nodiscard]] friend bool operator==(const KeyboardKeyEvent& lhs,
+                                         const KeyboardKeyEvent& rhs) = default;
+};
+
+struct TextInputEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    std::string text;
+
+    [[nodiscard]] friend bool operator==(const TextInputEvent& lhs,
+                                         const TextInputEvent& rhs) = default;
+};
+
+struct TextCompositionEvent final
+{
+    PlatformTimestamp timestamp{};
+    std::optional<WindowId> windowId;
+    std::string text;
+    std::optional<TextCompositionRange> selection;
+
+    [[nodiscard]] friend bool operator==(const TextCompositionEvent& lhs,
+                                         const TextCompositionEvent& rhs) = default;
+};
+
 using PlatformEvent = std::variant<
     QuitRequestedEvent,
     WindowCloseRequestedEvent,
@@ -240,5 +278,8 @@ using PlatformEvent = std::variant<
     DisplayCurrentModeChangedEvent,
     DisplayOrientationChangedEvent,
     DisplayContentScaleChangedEvent,
-    DisplayUsableBoundsChangedEvent>;
+    DisplayUsableBoundsChangedEvent,
+    KeyboardKeyEvent,
+    TextInputEvent,
+    TextCompositionEvent>;
 } // namespace pond::platform

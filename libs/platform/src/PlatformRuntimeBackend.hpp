@@ -39,6 +39,15 @@ struct BackendWindowProperties final
     bool alwaysOnTop{};
 };
 
+struct BackendTextInputArea final
+{
+    int x{};
+    int y{};
+    int width{};
+    int height{};
+    int cursorOffset{};
+};
+
 enum class BackendWindowOperationResult : std::uint8_t
 {
     Succeeded,
@@ -77,6 +86,12 @@ struct PlatformWindowBackend final
     BackendWindowOperationResult (*minimize)(void* context, void* window){};
     BackendWindowOperationResult (*maximize)(void* context, void* window){};
     BackendWindowOperationResult (*restore)(void* context, void* window){};
+    bool (*startTextInput)(void* context, void* window){};
+    bool (*stopTextInput)(void* context, void* window){};
+    bool (*isTextInputActive)(void* context, void* window){};
+    bool (*clearTextComposition)(void* context, void* window){};
+    bool (*setTextInputArea)(void* context, void* window,
+                             const BackendTextInputArea* area){};
 };
 
 enum class BackendDisplayOrientation : std::uint8_t

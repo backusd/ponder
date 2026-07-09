@@ -3,9 +3,11 @@ ponder_add_project_library(platform
         include/ponder/platform/Display.hpp
         include/ponder/platform/Geometry.hpp
         include/ponder/platform/Identifiers.hpp
+        include/ponder/platform/Keyboard.hpp
         include/ponder/platform/PlatformError.hpp
         include/ponder/platform/PlatformEvent.hpp
         include/ponder/platform/PlatformRuntime.hpp
+        include/ponder/platform/TextInput.hpp
         include/ponder/platform/Timing.hpp
         include/ponder/platform/Window.hpp
         include/ponder/platform/WindowGraphics.hpp
@@ -21,6 +23,7 @@ ponder_add_project_library(platform
         src/StringValidation.cpp
         src/Window.cpp
         src/WindowProperties.cpp
+        src/WindowTextInput.cpp
     PRIVATE_HEADERS
         src/PlatformRuntimeBackend.hpp
         src/PlatformRuntimeState.hpp
