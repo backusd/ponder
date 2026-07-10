@@ -2,6 +2,7 @@
 
 `ponder_math` owns fixed-size, reusable numeric and geometric primitives for the initial
 3D-rendering foundation. ADR 0009 records the cross-library contract behind these rules.
+`Usage.md` is the contributor-facing guide for applying this boundary without reading tests.
 
 ## Public API
 
@@ -50,7 +51,7 @@ The initial public vocabulary is:
 - `Quaternion`.
 - `Radians` and `Degrees`.
 - Renderer-facing values such as `Viewport`, `Ray`, `Plane`, `Sphere`, `AxisAlignedBox`,
-  `Triangle`, and `Frustum` when their roadmap tasks introduce them.
+  `Triangle`, and `Frustum`.
 
 The initial API uses concrete, unsuffixed `float` types only. Future `double`, integer,
 half-precision, or templated families must use distinct public names and require a concrete
@@ -83,8 +84,9 @@ CPU layout is part of the public contract for the selected values:
 - `Quaternion` is a 16-byte trivially copyable unit-rotation value with invariant-preserving
   accessors rather than public mutable fields.
 
-These CPU guarantees do not imply vertex-attribute, storage-buffer, uniform-buffer, or push-constant
-packing compatibility. Renderer-owned packing values and conversions must handle GPU layout rules.
+These CPU guarantees do not imply vertex-attribute, storage-buffer, uniform-buffer, or
+push-constant packing compatibility. Renderer-owned packing values and conversions must handle
+GPU layout rules.
 
 ## Projection, NDC, And Viewport
 
@@ -114,8 +116,8 @@ Ordinary unchecked scalar arithmetic follows IEEE behavior.
 Default algorithms favor accuracy and documented tolerance stability on supported hosts. The
 contract does not promise bit-identical cross-compiler or cross-architecture results. Fast-math,
 reassociation, reciprocal and square-root estimates, and accuracy-reducing shortcuts are not
-default behavior. Intentional `std::fma` is allowed only when documented as part of an algorithm and
-kept within the tolerance contract.
+default behavior. Intentional `std::fma` is allowed only when documented as part of an
+algorithm and kept within the tolerance contract.
 
 ## Collision Scope
 
@@ -131,6 +133,6 @@ The first collision matrix contains exactly these query rows:
   coordinates.
 
 Boundary contact counts as intersection, and containment is inclusive. Valid finite nonzero ray
-directions and plane normals are normalized during checked construction. Returned ray parameters are
-world distances. Visibility culling must conservatively retain boundary or numerically uncertain
-objects rather than falsely reject them.
+directions and plane normals are normalized during checked construction. Returned ray
+parameters are world distances. Visibility culling must conservatively retain boundary or
+numerically uncertain objects rather than falsely reject them.

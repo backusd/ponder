@@ -74,7 +74,7 @@ explicitly built without a precompiled header.
 | Collision-ready | MATH-016 through MATH-020 | Required culling and picking queries |
 | Renderer-ready | MATH-021 through MATH-022 | Audited renderer-facing foundation |
 | Host-local completion | MATH-023 through MATH-024 | Documentation and local verification |
-| Portability matrix | MATH-025 | Actual supported-host evidence |
+| Deferred portability matrix | `deferred.md` | Actual supported-host evidence saved for later |
 
 ## Verification Cadence
 
@@ -110,7 +110,7 @@ Use the smallest validation set that proves the behavior introduced by the curre
 
 ### Final Validation Gates
 
-At MATH-024 and MATH-025, switch from fast feedback to full completed-library validation:
+At MATH-024, switch from fast feedback to full host-local completed-library validation:
 
 - Configure clean Debug and Release builds for the primary host.
 - Build `ponder_math`, PCH-free public-header tests, unit tests, documentation examples,
@@ -121,8 +121,8 @@ At MATH-024 and MATH-025, switch from fast feedback to full completed-library va
 - Run `git diff HEAD --check` and equivalent whitespace checks for intended untracked text files.
 - Audit public dependencies, public layout assertions, DirectX isolation, deferred feature absence,
   generated artifacts, logs, build output, and local environment files.
-- Run the cross-platform matrix from MATH-025 and record exact OS, compiler, architecture,
-  configuration, commands, results, and justified skips.
+- Keep the cross-platform portability matrix deferred in `deferred.md` until dedicated host,
+  compiler, and architecture evidence is available.
 
 ## Task List
 
@@ -156,8 +156,8 @@ Work:
 Done when:
 
 - `Boundary.md`, `Codex.md`, applicable ADRs, `deferred.md`, and this roadmap agree.
-- No implementation choice needed by MATH-001 through MATH-025 remains solely in the answered
-  question file.
+- No implementation choice needed by MATH-001 through MATH-024 remains solely in the answered
+  question file, and deferred portability work is tracked in `deferred.md`.
 - Renderer and import/export code can cite one unambiguous math convention without a global switch.
 
 TASK MATH-001: Establish Build, Error, And Test Foundations
@@ -807,37 +807,4 @@ Done when:
   configurations.
 - Renderer-ready status from MATH-022 remains valid after documentation and audit changes.
 - No generated or local-only artifact is part of the intended change.
-- Completion is explicitly described as host-local pending MATH-025.
-
-TASK MATH-025: Run The Cross-Platform Portability Matrix
--------------------------------------------------------
-
-Collect actual evidence for supported hosts, compilers, and architectures.
-
-Work:
-
-- Configure, build, and run public-header, documentation-example, unit, and renderer-shaped tests
-  on:
-  - Windows with MSVC Debug/Release and clang-cl Debug where supported.
-  - Linux with Clang Debug/Release, GCC Debug, and Clang ASAN/UBSAN.
-  - macOS with AppleClang Debug/Release.
-- Run Windows DirectXMath and DirectXCollision reference tests in their isolated target.
-- Exercise x86-64 and ARM64 on supported available hosts without changing public types or semantics
-  for either instruction set.
-- Use matching configure, build, and test presets where defined. When no test preset exists, build
-  first and run CTest directly against the configured build tree.
-- Record unrun host/compiler/architecture rows as unverified rather than passed.
-- Add CI jobs when CI exists; until then maintain dated manual evidence with exact OS, compiler,
-  architecture, configuration, commands, and results.
-- File scoped follow-up tasks for real numerical, compiler, or architecture differences rather than
-  weakening the documented contract or adding undocumented conditionals.
-- Reconfirm that DirectX headers never enter production or non-Windows test compilation.
-
-Done when:
-
-- Windows, Linux, and macOS rows contain actual successful configure, build, public-header, unit,
-  and renderer-shaped results for the required compiler configurations.
-- Applicable x86-64 and ARM64 rows contain actual evidence or remain explicitly unverified.
-- The Windows reference suite passes without changing the independent project test expectations.
-- Remaining skips, unavailable rows, and tolerated cross-host numerical differences are explicit,
-  justified, and linked to follow-up work.
+- Completion is explicitly described as host-local, with cross-platform portability deferred in `deferred.md`.

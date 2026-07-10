@@ -1,8 +1,7 @@
 #include <ponder/math/Angle.hpp>
 
-#include <gtest/gtest.h>
-
 #include <array>
+#include <gtest/gtest.h>
 #include <type_traits>
 
 namespace
@@ -43,9 +42,8 @@ TEST(AngleTests, ConvertsBetweenDegreesAndRadians)
 
     EXPECT_TRUE(pond::math::IsNear(pond::math::ToRadians(pond::math::Degrees{180.0F}).GetValue(),
                                    pond::math::kPi, tolerance));
-    EXPECT_TRUE(pond::math::IsNear(pond::math::ToDegrees(pond::math::Radians{pond::math::kPi})
-                                       .GetValue(),
-                                   180.0F, tolerance));
+    EXPECT_TRUE(pond::math::IsNear(
+        pond::math::ToDegrees(pond::math::Radians{pond::math::kPi}).GetValue(), 180.0F, tolerance));
 }
 
 TEST(AngleTests, RoundTripsRepresentativeAngles)
@@ -56,8 +54,8 @@ TEST(AngleTests, RoundTripsRepresentativeAngles)
     for (const float degreeValue : kDegreeValues)
     {
         const pond::math::Degrees degrees{degreeValue};
-        const pond::math::Degrees roundTripped = pond::math::ToDegrees(
-            pond::math::ToRadians(degrees));
+        const pond::math::Degrees roundTripped =
+            pond::math::ToDegrees(pond::math::ToRadians(degrees));
 
         EXPECT_TRUE(pond::math::IsNear(roundTripped.GetValue(), degreeValue, tolerance));
     }

@@ -1,8 +1,7 @@
 #include <ponder/math/Scalar.hpp>
 
-#include <gtest/gtest.h>
-
 #include <cmath>
+#include <gtest/gtest.h>
 #include <limits>
 
 namespace

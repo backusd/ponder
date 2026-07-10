@@ -45,7 +45,7 @@ matrix every time:
 
 ## Final Validation
 
-At MATH-024 and MATH-025, validate the completed library substantially more aggressively:
+At MATH-024, validate the completed library substantially more aggressively for the primary host:
 
 - Configure clean Debug and Release builds for the primary host.
 - Build the library, PCH-free public-header tests, unit tests, documentation examples,
@@ -56,5 +56,5 @@ At MATH-024 and MATH-025, validate the completed library substantially more aggr
   `git diff HEAD --check` plus equivalent whitespace checks for intended untracked text files.
 - Audit public dependencies, public layout assertions, DirectX isolation, deferred feature absence,
   generated artifacts, logs, and local environment files.
-- Run the cross-platform matrix from MATH-025 and record exact OS, compiler, architecture,
-  configuration, commands, results, and justified skips.
+- Keep the cross-platform portability matrix deferred in `deferred.md` until dedicated host,
+  compiler, and architecture evidence is available.

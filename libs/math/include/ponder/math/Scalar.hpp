@@ -22,18 +22,17 @@ public:
     [[nodiscard]] static core::Result<Tolerance> Create(float absoluteTolerance,
                                                         float relativeTolerance)
     {
-        if (!IsFinite(absoluteTolerance) || !IsFinite(relativeTolerance))
+        if (!IsFinite(absoluteTolerance) || !IsFinite(relativeTolerance)) [[unlikely]]
         {
             return core::Result<Tolerance>::FromError(core::Error{
-                ToErrorCode(MathErrorCode::NonFiniteInput),
-                "Tolerance values must be finite."});
+                ToErrorCode(MathErrorCode::NonFiniteInput), "Tolerance values must be finite."});
         }
 
-        if (absoluteTolerance < 0.0F || relativeTolerance < 0.0F)
+        if (absoluteTolerance < 0.0F || relativeTolerance < 0.0F) [[unlikely]]
         {
-            return core::Result<Tolerance>::FromError(core::Error{
-                ToErrorCode(MathErrorCode::InvalidArgument),
-                "Tolerance values must be non-negative."});
+            return core::Result<Tolerance>::FromError(
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
+                            "Tolerance values must be non-negative."});
         }
 
         return Tolerance{absoluteTolerance, relativeTolerance};

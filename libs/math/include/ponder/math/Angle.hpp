@@ -9,10 +9,7 @@ class Radians final
 public:
     constexpr Radians() noexcept = default;
 
-    explicit constexpr Radians(float value) noexcept
-        : m_value(value)
-    {
-    }
+    explicit constexpr Radians(float value) noexcept : m_value(value) {}
 
     [[nodiscard]] constexpr float GetValue() const noexcept
     {
@@ -31,10 +28,7 @@ class Degrees final
 public:
     constexpr Degrees() noexcept = default;
 
-    explicit constexpr Degrees(float value) noexcept
-        : m_value(value)
-    {
-    }
+    explicit constexpr Degrees(float value) noexcept : m_value(value) {}
 
     [[nodiscard]] constexpr float GetValue() const noexcept
     {
