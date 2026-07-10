@@ -1,9 +1,8 @@
-#include "SdlError.hpp"
-
 #include <SDL3/SDL_error.h>
-
 #include <gtest/gtest.h>
 #include <string_view>
+
+#include "SdlError.hpp"
 
 namespace
 {
@@ -28,8 +27,8 @@ TEST_F(PlatformSdlErrorTests, PreservesCallerSelectedCodeAndFormatsContext)
     constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Unsupported, 73};
     static_cast<void>(SDL_SetError("synthetic failure"));
 
-    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
-        kCode, "SDL_TestOperation", "window 7");
+    const pond::core::Error error =
+        pond::platform::detail::CaptureSdlFailure(kCode, "SDL_TestOperation", "window 7");
 
     EXPECT_TRUE(error.GetCode() == kCode);
     EXPECT_EQ(error.GetMessage(),
@@ -41,11 +40,10 @@ TEST_F(PlatformSdlErrorTests, OmitsEmptyObjectContext)
 {
     static_cast<void>(SDL_SetError("synthetic failure"));
 
-    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
-        pond::core::ErrorCode{}, "SDL_TestOperation");
+    const pond::core::Error error =
+        pond::platform::detail::CaptureSdlFailure(pond::core::ErrorCode{}, "SDL_TestOperation");
 
-    EXPECT_EQ(error.GetMessage(),
-              std::string_view{"SDL_TestOperation failed: synthetic failure"});
+    EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_TestOperation failed: synthetic failure"});
 }
 
 TEST_F(PlatformSdlErrorTests, OwnsErrorTextAfterSdlStateChanges)
@@ -65,9 +63,8 @@ TEST_F(PlatformSdlErrorTests, UsesFallbackForEmptySdlError)
     const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
         pond::core::ErrorCode{}, "SDL_TestOperation", "window 7");
 
-    EXPECT_EQ(error.GetMessage(), std::string_view{
-                                      "SDL_TestOperation failed (window 7): "
-                                      "SDL did not provide an error message"});
+    EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_TestOperation failed (window 7): "
+                                                   "SDL did not provide an error message"});
 }
 
 TEST_F(PlatformSdlErrorTests, UsesCallerSourceLocationByDefault)

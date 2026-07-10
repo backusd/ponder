@@ -1,8 +1,9 @@
 #pragma once
 
+#include <ponder/core/Numbers.hpp>
+
 #include <compare>
 #include <cstdint>
-#include <limits>
 
 namespace pond::platform
 {
@@ -78,25 +79,15 @@ struct PixelSize final
                                                     const PixelSize& rhs) noexcept = default;
 };
 
-namespace detail
-{
-[[nodiscard]] constexpr bool IsFinite(float value) noexcept
-{
-    constexpr float kLowest = std::numeric_limits<float>::lowest();
-    constexpr float kHighest = std::numeric_limits<float>::max();
-    return value >= kLowest && value <= kHighest;
-}
-} // namespace detail
-
 [[nodiscard]] constexpr bool IsValid(LogicalPoint point) noexcept
 {
-    return detail::IsFinite(point.x) && detail::IsFinite(point.y);
+    return core::IsFinite(point.x) && core::IsFinite(point.y);
 }
 
 [[nodiscard]] constexpr bool IsValid(LogicalExtent extent) noexcept
 {
-    return detail::IsFinite(extent.width) && detail::IsFinite(extent.height) &&
-           extent.width >= 0.0F && extent.height >= 0.0F;
+    return core::IsFinite(extent.width) && core::IsFinite(extent.height) && extent.width >= 0.0F &&
+           extent.height >= 0.0F;
 }
 
 [[nodiscard]] constexpr bool IsValid(LogicalRectangle rectangle) noexcept

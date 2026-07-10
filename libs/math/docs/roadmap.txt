@@ -6,13 +6,11 @@ This roadmap implements fixed-size, concrete `float` math and collision faciliti
 rendering. It does not add renderer resources, backend types, chemistry operations, arbitrary-size
 linear algebra, public bulk APIs, or instruction-set-specific public contracts.
 
-MATH-Q002 explicitly requires viewport mapping, project/unproject, and collision at the
-renderer-ready gate. That answer overrides the viewport deferral proposed and accepted by
-reference in MATH-Q008. The remaining MATH-Q008 projection and NDC decisions still apply. The
-viewport contract is therefore fixed here as continuous coordinates with a top-left origin and +Y
-down, NDC edges mapped to viewport edges, no half-pixel offset, and linear mapping from NDC depth
-`[0, 1]` to the viewport depth interval. The renderer remains responsible for configuring Vulkan
-viewport-Y adaptation.
+The resolved renderer-ready scope includes viewport mapping, project/unproject, and collision. The
+projection and NDC decisions still apply. The viewport contract is fixed as continuous coordinates
+with a top-left origin and +Y down, NDC edges mapped to viewport edges, no half-pixel offset, and
+linear mapping from NDC depth `[0, 1]` to the viewport depth interval. The renderer remains
+responsible for configuring Vulkan viewport-Y adaptation.
 
 Each implementation task must leave the repository configured, buildable, and tested for the
 behavior it introduces. Every task that adds or changes a public header must add or update that
@@ -92,20 +90,39 @@ Maintain these separate targets:
 - `ponder_math_examples` is established in MATH-023 as a PCH-free compile target for the public
   documentation examples and links only `ponder::math`.
 
-For every intermediate implementation task:
+### Fast Intermediate Validation
 
-- Reconfigure when CMake inputs or source lists change.
-- Build `ponder_math_header_tests` and `ponder_math_tests` after a public API change, then run the
-  complete math unit executable rather than only the new cases.
-- On Windows, also build and run `ponder_math_reference_tests` when the changed operation has a
-  meaningful DirectXMath or DirectXCollision comparison.
+Use the smallest validation set that proves the behavior introduced by the current task:
+
+- Documentation-only changes require no build unless examples, public headers, CMake, or generated
+  documentation inputs changed.
+- Reconfigure only when CMake inputs, presets, source lists, or target dependencies changed.
+- For public API or value-behavior changes, build `ponder_math_header_tests` and
+  `ponder_math_tests`, then run the complete `ponder_math_tests` executable.
+- On Windows, build and run `ponder_math_reference_tests` only when the task adds or changes
+  DirectXMath or DirectXCollision comparison coverage, or when a milestone task asks for it.
 - Use independent golden values, algebraic properties, and edge tests on every host. Do not treat
   DirectX behavior as the specification for project-specific failure or uncertainty semantics.
 - Keep differential inputs finite, valid, and away from documented collision uncertainty bounds
   unless the test specifically verifies an intentional semantic difference.
-- Do not run Release, sanitizers, repository-wide analysis, or the portability matrix after every
-  task. MATH-022 is the renderer-ready Debug gate, MATH-024 is the complete host-local gate, and
-  MATH-025 is the cross-platform gate.
+- Defer duplicate configurations, Release, sanitizers, clang-tidy, repository-wide formatting,
+  whitespace checks, and the portability matrix until the final validation gates.
+
+### Final Validation Gates
+
+At MATH-024 and MATH-025, switch from fast feedback to full completed-library validation:
+
+- Configure clean Debug and Release builds for the primary host.
+- Build `ponder_math`, PCH-free public-header tests, unit tests, documentation examples,
+  renderer-shaped tests, and Windows reference tests where applicable.
+- Run every applicable math test executable or CTest label in Debug and Release.
+- Run the supported sanitizer preset, currently Linux Clang ASAN/UBSAN, when that host is available.
+- Run clang-format in check mode and clang-tidy over math production and test translation units.
+- Run `git diff HEAD --check` and equivalent whitespace checks for intended untracked text files.
+- Audit public dependencies, public layout assertions, DirectX isolation, deferred feature absence,
+  generated artifacts, logs, build output, and local environment files.
+- Run the cross-platform matrix from MATH-025 and record exact OS, compiler, architecture,
+  configuration, commands, results, and justified skips.
 
 ## Task List
 
@@ -123,14 +140,15 @@ Work:
   source-compatibility commitment.
 - Record the exact projection contract: right-handed -Z, NDC +Y up, depth `[0, 1]`, and explicit
   forward- or reverse-Z selection.
-- Record that MATH-Q002 overrides only the viewport deferral in MATH-Q008. Fix viewport space as
+- Record that the renderer-ready scope includes viewport mapping and project/unproject. Fix
+  viewport space as
   top-left, +Y down, continuous edge coordinates, no half-pixel offset, and linear mapping into an
   explicit depth interval.
 - Record active column-vector transforms, `B * A` composition order, final-column translation, and
   matching quaternion composition order.
 - Record the exact four-row collision query matrix and its inclusive boundary, normalized input,
   rich result, and conservative culling semantics.
-- Update `deferred.md` with every explicit omission and remove `open-questions.txt` only after all
+- Update `deferred.md` with every explicit omission and retire the answered question file after all
   unique decisions have been preserved.
 - Add `docs/adr/0009-fixed-size-rendering-math.md` for the public algebra, coordinate, layout, and
   numerical contracts that affect multiple libraries, and add it to `docs/adr/README.md`.
@@ -511,7 +529,7 @@ Done when:
 TASK MATH-015: Implement Viewport Mapping And Project/Unproject
 --------------------------------------------------------------
 
-Implement the viewport capability explicitly added to the renderer-ready gate by MATH-Q002.
+Implement the viewport capability explicitly included in the renderer-ready gate.
 
 Work:
 

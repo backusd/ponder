@@ -1,14 +1,10 @@
+#include <ponder/core/Assert.hpp>
+#include <ponder/core/String.hpp>
+#include <ponder/io/Path.hpp>
+#include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Process.hpp>
 
-#include "ProcessBackend.hpp"
-#include "SdlError.hpp"
-#include "StringValidation.hpp"
-
-#include <ponder/core/Assert.hpp>
-#include <ponder/platform/PlatformError.hpp>
-
 #include <SDL3/SDL_process.h>
-
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -21,43 +17,28 @@
 #include <utility>
 #include <vector>
 
+#include "ProcessBackend.hpp"
+#include "SdlError.hpp"
+
 namespace pond::platform
 {
 namespace
 {
 constexpr int kSdlUnknownExitCode{-255};
-constexpr core::ErrorCode kInvalidArgumentCode =
-    ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode =
-    ToErrorCode(PlatformErrorCode::BackendFailure);
-constexpr core::ErrorCode kUnsupportedCode =
-    ToErrorCode(PlatformErrorCode::Unsupported);
-
-[[nodiscard]] std::string PathToUtf8(const std::filesystem::path& path)
-{
-    const std::u8string utf8Path = path.u8string();
-    std::string text;
-    text.reserve(utf8Path.size());
-    for (const char8_t character : utf8Path)
-    {
-        text.push_back(static_cast<char>(character));
-    }
-    return text;
-}
+constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
+constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
+constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
 
 [[nodiscard]] core::Error MakeInvalidArgumentError(
-    std::string message,
-    std::source_location location = std::source_location::current())
+    std::string message, std::source_location location = std::source_location::current())
 {
     return core::Error{kInvalidArgumentCode, std::move(message), location};
 }
 
 [[nodiscard]] core::Error MakeUnsupportedTerminationError(
-    ProcessTerminationMode mode,
-    std::source_location location = std::source_location::current())
+    ProcessTerminationMode mode, std::source_location location = std::source_location::current())
 {
-    const std::string_view modeName =
-        mode == ProcessTerminationMode::Force ? "forced" : "graceful";
+    const std::string_view modeName = mode == ProcessTerminationMode::Force ? "forced" : "graceful";
     std::string message;
     message.reserve(modeName.size() + 48);
     message.append("Process ");
@@ -84,9 +65,8 @@ constexpr core::ErrorCode kUnsupportedCode =
 [[nodiscard]] core::Result<std::string> ValidateExecutablePath(
     const std::filesystem::path& executable)
 {
-    std::string executableText = PathToUtf8(executable);
-    if (executableText.empty() ||
-        !detail::IsValidUtf8WithoutEmbeddedNull(executableText))
+    std::string executableText = io::PathToUtf8(executable);
+    if (executableText.empty() || !core::IsValidUtf8WithoutEmbeddedNull(executableText))
     {
         return core::Result<std::string>::FromError(MakeInvalidArgumentError(
             "Process executable must be non-empty UTF-8 without embedded nulls."));
@@ -95,27 +75,24 @@ constexpr core::ErrorCode kUnsupportedCode =
     return executableText;
 }
 
-[[nodiscard]] core::VoidResult ValidateArgument(std::string_view argument,
-                                                std::size_t index)
+[[nodiscard]] core::VoidResult ValidateArgument(std::string_view argument, std::size_t index)
 {
-    if (!detail::IsValidUtf8WithoutEmbeddedNull(argument))
+    if (!core::IsValidUtf8WithoutEmbeddedNull(argument))
     {
-        return core::VoidResult::FromError(MakeInvalidArgumentError(
-            "Process argument " + std::to_string(index) +
-            " must be UTF-8 without embedded nulls."));
+        return core::VoidResult::FromError(
+            MakeInvalidArgumentError("Process argument " + std::to_string(index) +
+                                     " must be UTF-8 without embedded nulls."));
     }
 
     return core::VoidResult::Success();
 }
 
-[[nodiscard]] core::Result<std::vector<std::string>> BuildArgumentStorage(
-    const ProcessDesc& desc)
+[[nodiscard]] core::Result<std::vector<std::string>> BuildArgumentStorage(const ProcessDesc& desc)
 {
     core::Result<std::string> executable = ValidateExecutablePath(desc.executable);
     if (!executable.HasValue())
     {
-        return core::Result<std::vector<std::string>>::FromError(
-            std::move(executable).GetError());
+        return core::Result<std::vector<std::string>>::FromError(std::move(executable).GetError());
     }
 
     std::vector<std::string> arguments;
@@ -151,12 +128,10 @@ constexpr core::ErrorCode kUnsupportedCode =
 
 void VerifyBackend(const detail::PlatformProcessBackend& backend)
 {
-    PONDER_VERIFY(backend.create != nullptr,
-                  "Platform process backend is missing create");
+    PONDER_VERIFY(backend.create != nullptr, "Platform process backend is missing create");
     PONDER_VERIFY(backend.wait != nullptr, "Platform process backend is missing wait");
     PONDER_VERIFY(backend.kill != nullptr, "Platform process backend is missing kill");
-    PONDER_VERIFY(backend.destroy != nullptr,
-                  "Platform process backend is missing destroy");
+    PONDER_VERIFY(backend.destroy != nullptr, "Platform process backend is missing destroy");
 }
 
 [[nodiscard]] void* SdlCreateProcess(void*, const char* const* arguments)
@@ -169,8 +144,7 @@ void VerifyBackend(const detail::PlatformProcessBackend& backend)
     return SDL_WaitProcess(static_cast<SDL_Process*>(process), block, exitCode);
 }
 
-[[nodiscard]] detail::BackendProcessKillResult SdlKillProcess(
-    void*, void* process, bool force)
+[[nodiscard]] detail::BackendProcessKillResult SdlKillProcess(void*, void* process, bool force)
 {
     return SDL_KillProcess(static_cast<SDL_Process*>(process), force)
                ? detail::BackendProcessKillResult::Succeeded
@@ -182,12 +156,11 @@ void SdlDestroyProcess(void*, void* process) noexcept
     SDL_DestroyProcess(static_cast<SDL_Process*>(process));
 }
 
-const detail::PlatformProcessBackend kSdlProcessBackend{
-    .context = nullptr,
-    .create = SdlCreateProcess,
-    .wait = SdlWaitProcess,
-    .kill = SdlKillProcess,
-    .destroy = SdlDestroyProcess};
+const detail::PlatformProcessBackend kSdlProcessBackend{.context = nullptr,
+                                                        .create = SdlCreateProcess,
+                                                        .wait = SdlWaitProcess,
+                                                        .kill = SdlKillProcess,
+                                                        .destroy = SdlDestroyProcess};
 } // namespace
 
 namespace detail
@@ -196,8 +169,7 @@ class ProcessState final
 {
 public:
     ProcessState(PlatformProcessBackend backend, void* process) noexcept
-        : m_backend(backend), m_process(process),
-          m_launchingThread(std::this_thread::get_id())
+        : m_backend(backend), m_process(process), m_launchingThread(std::this_thread::get_id())
     {
     }
 
@@ -221,8 +193,8 @@ public:
         int exitCode = kSdlUnknownExitCode;
         if (!m_backend.wait(m_backend.context, m_process, true, &exitCode))
         {
-            return core::Result<ProcessExitStatus>::FromError(CaptureSdlFailure(
-                kBackendFailureCode, "SDL_WaitProcess", "process"));
+            return core::Result<ProcessExitStatus>::FromError(
+                CaptureSdlFailure(kBackendFailureCode, "SDL_WaitProcess", "process"));
         }
 
         return MakeProcessExitStatus(exitCode);
@@ -232,8 +204,7 @@ public:
     {
         VerifyLaunchingThread("termination");
         const bool force = mode == ProcessTerminationMode::Force;
-        const BackendProcessKillResult result =
-            m_backend.kill(m_backend.context, m_process, force);
+        const BackendProcessKillResult result = m_backend.kill(m_backend.context, m_process, force);
         if (result == BackendProcessKillResult::Succeeded)
         {
             return core::VoidResult::Success();
@@ -244,12 +215,11 @@ public:
             {
                 return Terminate(ProcessTerminationMode::Force);
             }
-            return core::VoidResult::FromError(
-                MakeUnsupportedTerminationError(mode));
+            return core::VoidResult::FromError(MakeUnsupportedTerminationError(mode));
         }
 
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_KillProcess", "process"));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_KillProcess", "process"));
     }
 
 private:
@@ -277,34 +247,28 @@ PlatformProcessBackend GetPlatformProcessBackend() noexcept
     return kSdlProcessBackend;
 }
 
-core::Result<Process> LaunchProcess(const ProcessDesc& desc,
-                                    PlatformProcessBackend backend)
+core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBackend backend)
 {
     VerifyBackend(backend);
-    core::Result<std::vector<std::string>> argumentStorage =
-        BuildArgumentStorage(desc);
+    core::Result<std::vector<std::string>> argumentStorage = BuildArgumentStorage(desc);
     if (!argumentStorage.HasValue())
     {
-        return core::Result<Process>::FromError(
-            std::move(argumentStorage).GetError());
+        return core::Result<Process>::FromError(std::move(argumentStorage).GetError());
     }
 
-    const std::vector<const char*> arguments =
-        MakeArgumentPointers(argumentStorage.GetValue());
+    const std::vector<const char*> arguments = MakeArgumentPointers(argumentStorage.GetValue());
     void* const process = backend.create(backend.context, arguments.data());
     if (process == nullptr)
     {
-        return core::Result<Process>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_CreateProcess", "process"));
+        return core::Result<Process>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_CreateProcess", "process"));
     }
 
-    return ProcessFactory::Create(
-        std::make_unique<ProcessState>(backend, process));
+    return ProcessFactory::Create(std::make_unique<ProcessState>(backend, process));
 }
 } // namespace detail
 
-Process::Process(std::unique_ptr<detail::ProcessState> state) noexcept
-    : m_state(std::move(state))
+Process::Process(std::unique_ptr<detail::ProcessState> state) noexcept : m_state(std::move(state))
 {
 }
 

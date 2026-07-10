@@ -1,24 +1,20 @@
-#include "PlatformRuntimeBackend.hpp"
-
 #include <ponder/platform/WindowGraphics.hpp>
 
 #include <SDL3/SDL_platform_defines.h>
 #include <SDL3/SDL_video.h>
-
+#include <cstdint>
 #include <gtest/gtest.h>
 
-#include <cstdint>
+#include "PlatformRuntimeBackend.hpp"
 
 namespace
 {
 TEST(WindowBackendFlagTests, StagesEveryWindowHiddenAndKeepsPropertiesOrthogonal)
 {
     const pond::platform::detail::BackendWindowCreateDesc defaultDesc{
-        "ponder", 1280, 800, true, true,
-        pond::platform::WindowGraphicsCompatibility::Default};
+        "ponder", 1280, 800, true, true, pond::platform::WindowGraphicsCompatibility::Default};
 
-    const std::uint64_t defaultFlags =
-        pond::platform::detail::BuildSdlWindowFlags(defaultDesc);
+    const std::uint64_t defaultFlags = pond::platform::detail::BuildSdlWindowFlags(defaultDesc);
     EXPECT_NE(defaultFlags & SDL_WINDOW_HIDDEN, 0U);
     EXPECT_NE(defaultFlags & SDL_WINDOW_RESIZABLE, 0U);
     EXPECT_NE(defaultFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY, 0U);
@@ -28,8 +24,7 @@ TEST(WindowBackendFlagTests, StagesEveryWindowHiddenAndKeepsPropertiesOrthogonal
     pond::platform::detail::BackendWindowCreateDesc minimalDesc = defaultDesc;
     minimalDesc.resizable = false;
     minimalDesc.highPixelDensity = false;
-    const std::uint64_t minimalFlags =
-        pond::platform::detail::BuildSdlWindowFlags(minimalDesc);
+    const std::uint64_t minimalFlags = pond::platform::detail::BuildSdlWindowFlags(minimalDesc);
     EXPECT_NE(minimalFlags & SDL_WINDOW_HIDDEN, 0U);
     EXPECT_EQ(minimalFlags & SDL_WINDOW_RESIZABLE, 0U);
     EXPECT_EQ(minimalFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY, 0U);
@@ -38,8 +33,7 @@ TEST(WindowBackendFlagTests, StagesEveryWindowHiddenAndKeepsPropertiesOrthogonal
 TEST(WindowBackendFlagTests, MapsVulkanCompatibilityForTheCurrentHost)
 {
     const pond::platform::detail::BackendWindowCreateDesc desc{
-        "ponder", 1280, 800, true, true,
-        pond::platform::WindowGraphicsCompatibility::Vulkan};
+        "ponder", 1280, 800, true, true, pond::platform::WindowGraphicsCompatibility::Vulkan};
 
     const std::uint64_t flags = pond::platform::detail::BuildSdlWindowFlags(desc);
 #if defined(SDL_PLATFORM_MACOS)
@@ -67,8 +61,7 @@ TEST(WindowBackendFlagTests, ClassifiesApprovedNativeWindowDrivers)
 
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("windows"),
               BackendNativeWindowDriver::Win32);
-    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("x11"),
-              BackendNativeWindowDriver::X11);
+    EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("x11"), BackendNativeWindowDriver::X11);
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("wayland"),
               BackendNativeWindowDriver::Wayland);
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("cocoa"),
@@ -77,4 +70,5 @@ TEST(WindowBackendFlagTests, ClassifiesApprovedNativeWindowDrivers)
               BackendNativeWindowDriver::Unsupported);
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver(""),
               BackendNativeWindowDriver::Unsupported);
-}} // namespace
+}
+} // namespace

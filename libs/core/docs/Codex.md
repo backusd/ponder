@@ -28,6 +28,9 @@ configuration, environment, job-system, or application dependencies.
 - Use `Result<T>` for recoverable errors.
 - `Error` carries category/code, message, source location, and a best-effort
   stacktrace.
+- `Result` success paths may be constexpr, but `Error` construction is
+  runtime-only. Keep evaluated constexpr failure paths ill-formed with an
+  explicit diagnostic rather than weakening `Error` diagnostics.
 - Use `PonderException` only for truly exceptional failures. It must be a
   standalone project type and must not derive from `std::exception` or any other
   type.
@@ -75,12 +78,15 @@ configuration, environment, job-system, or application dependencies.
 - `Uuid` is the generic stable identifier primitive. Keep domain-specific IDs
   such as `AssetId`, `NodeId`, and `MoleculeId` in the owning domain library.
   Keep UUID parse/format behavior canonical and deterministic.
-- Core owns build/version information, UUID/stable identifiers, `ScopeExit`, and
-  minimal string conversion helpers.
+- Core owns build/version information, UUID/stable identifiers, `ScopeExit`,
+  minimal identifier hashing helpers, minimal string conversion/validation
+  helpers, and minimal number helpers.
 - Use `ScopeExit` for tiny local cleanup and restoration paths. Cleanup
   callbacks must be `noexcept`; create durable RAII types for reusable resource
   concepts.
-- Narrow project strings are UTF-8. Use `Utf8ToWideString` and
+- Narrow project strings are UTF-8. Use `IsValidUtf8` or
+  `IsValidUtf8WithoutEmbeddedNull` for allocation-free validation, and use
+  `Utf8ToWideString` and
   `WideStringToUtf8` for core-owned conversion between UTF-8 `std::string` and
   platform-width `std::wstring`.
 - String conversion failures are recoverable parse errors. Do not silently

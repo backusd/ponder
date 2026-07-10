@@ -1,31 +1,26 @@
-#include <ponder/platform/PlatformRuntime.hpp>
-#include <ponder/platform/Window.hpp>
-
-#include "PlatformRuntimeState.hpp"
-#include "SdlError.hpp"
-#include "WindowImpl.hpp"
-
 #include <ponder/core/Assert.hpp>
 #include <ponder/platform/PlatformError.hpp>
+#include <ponder/platform/PlatformRuntime.hpp>
+#include <ponder/platform/Window.hpp>
 
 #include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
 
+#include "PlatformRuntimeState.hpp"
+#include "SdlError.hpp"
+#include "WindowImpl.hpp"
+
 namespace pond::platform
 {
 namespace
 {
-constexpr core::ErrorCode kInvalidArgumentCode =
-    ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode =
-    ToErrorCode(PlatformErrorCode::BackendFailure);
-constexpr core::ErrorCode kUnsupportedCode =
-    ToErrorCode(PlatformErrorCode::Unsupported);
+constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
+constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
+constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
 
-[[nodiscard]] std::optional<std::size_t> GetCursorIndex(
-    SystemCursorShape shape) noexcept
+[[nodiscard]] std::optional<std::size_t> GetCursorIndex(SystemCursorShape shape) noexcept
 {
     switch (shape)
     {
@@ -87,12 +82,12 @@ constexpr core::ErrorCode kUnsupportedCode =
     return "invalid";
 }
 
-[[nodiscard]] core::VoidResult MakeUnsupportedWindowMouseResult(
-    std::string_view operation, std::string_view context)
+[[nodiscard]] core::VoidResult MakeUnsupportedWindowMouseResult(std::string_view operation,
+                                                                std::string_view context)
 {
-    return core::VoidResult::FromError(core::Error{
-        kUnsupportedCode,
-        std::string{operation} + " is unsupported for " + std::string{context} + "."});
+    return core::VoidResult::FromError(
+        core::Error{kUnsupportedCode,
+                    std::string{operation} + " is unsupported for " + std::string{context} + "."});
 }
 } // namespace
 
@@ -109,15 +104,13 @@ core::VoidResult PlatformRuntimeState::SetMouseCapture(bool enabled)
         }
 
         return core::VoidResult::FromError(core::Error{
-            kUnsupportedCode,
-            "Global mouse capture is unsupported by the active video driver."});
+            kUnsupportedCode, "Global mouse capture is unsupported by the active video driver."});
     }
 
     if (!m_backend.setMouseCapture(m_backend.context, enabled))
     {
         return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_CaptureMouse",
-            enabled ? "enable" : "disable"));
+            kBackendFailureCode, "SDL_CaptureMouse", enabled ? "enable" : "disable"));
     }
 
     return core::VoidResult::Success();
@@ -129,18 +122,15 @@ core::Result<LogicalPoint> PlatformRuntimeState::GetGlobalMousePosition() const
     if (!m_backend.supportsGlobalMouse(m_backend.context))
     {
         return core::Result<LogicalPoint>::FromError(core::Error{
-            kUnsupportedCode,
-            "Global mouse position is unsupported by the active video driver."});
+            kUnsupportedCode, "Global mouse position is unsupported by the active video driver."});
     }
 
     LogicalPoint position;
-    m_backend.getGlobalMousePosition(
-        m_backend.context, &position.x, &position.y);
+    m_backend.getGlobalMousePosition(m_backend.context, &position.x, &position.y);
     if (!IsValid(position))
     {
         return core::Result<LogicalPoint>::FromError(core::Error{
-            kBackendFailureCode,
-            "SDL_GetGlobalMouseState returned non-finite coordinates."});
+            kBackendFailureCode, "SDL_GetGlobalMouseState returned non-finite coordinates."});
     }
 
     return position;
@@ -152,8 +142,8 @@ core::VoidResult PlatformRuntimeState::SetSystemCursor(SystemCursorShape shape)
     const std::optional<std::size_t> cursorIndex = GetCursorIndex(shape);
     if (!cursorIndex.has_value())
     {
-        return core::VoidResult::FromError(core::Error{
-            kInvalidArgumentCode, "System cursor shape is invalid."});
+        return core::VoidResult::FromError(
+            core::Error{kInvalidArgumentCode, "System cursor shape is invalid."});
     }
 
     void*& cursor = m_systemCursors[*cursorIndex];
@@ -163,15 +153,14 @@ core::VoidResult PlatformRuntimeState::SetSystemCursor(SystemCursorShape shape)
         if (cursor == nullptr)
         {
             return core::VoidResult::FromError(CaptureSdlFailure(
-                kBackendFailureCode, "SDL_CreateSystemCursor",
-                GetCursorName(shape)));
+                kBackendFailureCode, "SDL_CreateSystemCursor", GetCursorName(shape)));
         }
     }
 
     if (!m_backend.setCursor(m_backend.context, cursor))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetCursor", GetCursorName(shape)));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_SetCursor", GetCursorName(shape)));
     }
 
     return core::VoidResult::Success();
@@ -187,8 +176,8 @@ core::VoidResult PlatformRuntimeState::ShowCursor()
 
     if (!m_backend.showCursor(m_backend.context))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_ShowCursor"));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_ShowCursor"));
     }
 
     return core::VoidResult::Success();
@@ -204,8 +193,8 @@ core::VoidResult PlatformRuntimeState::HideCursor()
 
     if (!m_backend.hideCursor(m_backend.context))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_HideCursor"));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_HideCursor"));
     }
 
     return core::VoidResult::Success();
@@ -235,8 +224,8 @@ core::VoidResult WindowImpl::SetMouseGrab(bool grabbed)
     const std::string context = GetErrorContext();
     if (!m_backend.setMouseGrab(m_backend.context, m_nativeWindow, grabbed))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetWindowMouseGrab", context));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_SetWindowMouseGrab", context));
     }
 
     return core::VoidResult::Success();
@@ -251,25 +240,21 @@ bool WindowImpl::IsMouseGrabbed() const
 core::VoidResult WindowImpl::SetRelativeMouseMode(bool enabled)
 {
     VerifyUsable("relative mouse-mode update");
-    if (m_backend.isRelativeMouseModeEnabled(
-            m_backend.context, m_nativeWindow) == enabled)
+    if (m_backend.isRelativeMouseModeEnabled(m_backend.context, m_nativeWindow) == enabled)
     {
         return core::VoidResult::Success();
     }
 
     const std::string context = GetErrorContext();
-    if (!m_backend.setRelativeMouseMode(
-            m_backend.context, m_nativeWindow, enabled))
+    if (!m_backend.setRelativeMouseMode(m_backend.context, m_nativeWindow, enabled))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetWindowRelativeMouseMode", context));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_SetWindowRelativeMouseMode", context));
     }
 
-    if (m_backend.isRelativeMouseModeEnabled(
-            m_backend.context, m_nativeWindow) != enabled)
+    if (m_backend.isRelativeMouseModeEnabled(m_backend.context, m_nativeWindow) != enabled)
     {
-        return MakeUnsupportedWindowMouseResult(
-            "SDL_SetWindowRelativeMouseMode", context);
+        return MakeUnsupportedWindowMouseResult("SDL_SetWindowRelativeMouseMode", context);
     }
 
     return core::VoidResult::Success();
@@ -278,8 +263,7 @@ core::VoidResult WindowImpl::SetRelativeMouseMode(bool enabled)
 bool WindowImpl::IsRelativeMouseModeEnabled() const
 {
     VerifyUsable("relative mouse-mode query");
-    return m_backend.isRelativeMouseModeEnabled(
-        m_backend.context, m_nativeWindow);
+    return m_backend.isRelativeMouseModeEnabled(m_backend.context, m_nativeWindow);
 }
 } // namespace detail
 

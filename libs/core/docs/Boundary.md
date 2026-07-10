@@ -28,8 +28,11 @@ revisiting basic error, diagnostic, and utility conventions.
   handling, debug break, assertion metadata, and scoped handler overrides.
 - `BuildInfo.hpp`: generated configure-time project, build, compiler, platform,
   and CMake metadata.
+- `Hash.hpp`: deterministic constexpr helpers for hashing narrow project-owned
+  identifier values.
 - `Log.hpp`: logging levels, log entries, category-aware logging functions,
   macros, async flush/shutdown controls, and scoped test overrides.
+- `Numbers.hpp`: constrained constexpr numeric helpers.
 - `PonderException.hpp`: standalone exceptional-failure type and source-location
   preserving throw helpers.
 - `Result.hpp`: recoverable error model, `Result<T>`, `VoidResult`, and
@@ -37,7 +40,7 @@ revisiting basic error, diagnostic, and utility conventions.
 - `ScopeExit.hpp`: tiny no-throw local cleanup guard.
 - `StackTrace.hpp`: source-location formatting and best-effort stacktrace
   capture.
-- `String.hpp`: dependency-free UTF-8 and platform-wide string conversion.
+- `String.hpp`: dependency-free UTF-8 validation and platform-wide string conversion.
 - `Uuid.hpp`: generic stable UUID value type, parse/format, hashing, and v4
   generation helpers. Pure value operations are constexpr-friendly where the
   standard library supports them.
@@ -49,6 +52,10 @@ revisiting basic error, diagnostic, and utility conventions.
   best-effort stacktrace. `Result<T>` is a thin `[[nodiscard]]` project-owned
   wrapper around `std::expected<T, Error>` and includes the `Result<void>`
   specialization aliased as `VoidResult`.
+- `Result` success paths and observers remain constexpr-friendly. `Error`
+  construction is runtime-only; evaluated constexpr failure paths deliberately
+  produce a compile-time diagnostic instead of pretending to build a runtime
+  diagnostic object.
 - Exceptional failures use `PonderException`. It is a standalone project type and
   must not derive from `std::exception` or any other type. It carries a
   human-readable message, source location, and best-effort stacktrace, but does
@@ -70,7 +77,8 @@ revisiting basic error, diagnostic, and utility conventions.
 - Generic stable identifiers use `Uuid`. Domain-specific IDs should wrap or
   otherwise use stable representations in their owning libraries.
 - Small dependency-free helpers may live in core when they are broadly useful and
-  have clear tests. Current examples are `ScopeExit` and string conversion.
+  have clear tests. Current examples are `ScopeExit`, identifier hashing, string
+  conversion, UTF-8 validation, and finite-number checks.
 - Low-level value types and observers should stay constexpr/noexcept where doing so
   does not hide runtime diagnostics, allocation, stacktrace capture, entropy, or
   other inherently runtime behavior.
@@ -114,10 +122,27 @@ invocable, no-throw move constructible, and no-throw destructible. Use a normal
 named RAII type or explicit cleanup path when cleanup can fail and needs a
 recoverable error path.
 
+### Hashing
+
+`Hash.hpp` provides constexpr, no-throw hashing helpers for small project-owned
+identifier wrappers. `HashIdentifierValue` hashes a `std::uint64_t` value with a
+deterministic byte-order policy so domain libraries can share a stable hashing
+primitive without centralizing the domain-specific identifier types themselves.
+
+### Numbers
+
+`Numbers.hpp` provides constrained, constexpr, no-throw helpers for simple numeric
+observations. `IsFinite` accepts integral and floating-point values except `bool`.
+Integral values are always finite; floating-point infinities and NaNs are rejected
+without requiring platform math APIs.
+
 ### String Conversion
 
-`String.hpp` treats narrow project strings as UTF-8. `Utf8ToWideString` converts
-UTF-8 `std::string_view` input to `std::wstring`, and `WideStringToUtf8`
+`String.hpp` treats narrow project strings as UTF-8. `IsValidUtf8` checks UTF-8
+well-formedness without allocating a result string, and
+`IsValidUtf8WithoutEmbeddedNull` additionally rejects U+0000 for callers that need
+safe null-terminated interop. `Utf8ToWideString` converts UTF-8
+`std::string_view` input to `std::wstring`, and `WideStringToUtf8`
 converts `std::wstring_view` input back to UTF-8. Invalid UTF-8, invalid UTF-16
 surrogate sequences, invalid UTF-32 surrogate values, and out-of-range Unicode
 code points are recoverable parse errors returned through `Result`.

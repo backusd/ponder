@@ -1,13 +1,9 @@
-#include <ponder/platform/PlatformRuntime.hpp>
-
-#include "PlatformRuntimeState.hpp"
-#include "SdlError.hpp"
-#include "StringValidation.hpp"
-
 #include <ponder/core/Assert.hpp>
 #include <ponder/core/Log.hpp>
 #include <ponder/core/ScopeExit.hpp>
+#include <ponder/core/String.hpp>
 #include <ponder/platform/PlatformError.hpp>
+#include <ponder/platform/PlatformRuntime.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -21,17 +17,18 @@
 #include <thread>
 #include <utility>
 
+#include "PlatformRuntimeState.hpp"
+#include "SdlError.hpp"
+
 namespace pond::platform
 {
 namespace
 {
 constexpr std::string_view kLogCategory{"platform"};
-constexpr core::ErrorCode kInvalidArgumentCode =
-    ToErrorCode(PlatformErrorCode::InvalidArgument);
+constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
 constexpr core::ErrorCode kRuntimeAlreadyActiveCode =
     ToErrorCode(PlatformErrorCode::RuntimeAlreadyActive);
-constexpr core::ErrorCode kBackendFailureCode =
-    ToErrorCode(PlatformErrorCode::BackendFailure);
+constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 
 enum class RuntimeSlotState : std::uint8_t
 {
@@ -50,8 +47,7 @@ using MetadataSnapshots = detail::RuntimeMetadataSnapshots;
 
 [[nodiscard]] core::VoidResult Validate(const PlatformRuntimeDesc& desc)
 {
-    if (desc.applicationName.empty() ||
-        !detail::IsValidUtf8WithoutEmbeddedNull(desc.applicationName))
+    if (desc.applicationName.empty() || !core::IsValidUtf8WithoutEmbeddedNull(desc.applicationName))
     {
         return core::VoidResult::FromError(core::Error{
             kInvalidArgumentCode,
@@ -59,7 +55,7 @@ using MetadataSnapshots = detail::RuntimeMetadataSnapshots;
     }
 
     if (desc.applicationVersion.has_value() &&
-        !detail::IsValidUtf8WithoutEmbeddedNull(*desc.applicationVersion))
+        !core::IsValidUtf8WithoutEmbeddedNull(*desc.applicationVersion))
     {
         return core::VoidResult::FromError(core::Error{
             kInvalidArgumentCode,
@@ -68,13 +64,13 @@ using MetadataSnapshots = detail::RuntimeMetadataSnapshots;
 
     if (desc.applicationVersion.has_value() && desc.applicationVersion->empty())
     {
-        return core::VoidResult::FromError(core::Error{
-            kInvalidArgumentCode,
-            "Platform runtime application version must be absent or non-empty."});
+        return core::VoidResult::FromError(
+            core::Error{kInvalidArgumentCode,
+                        "Platform runtime application version must be absent or non-empty."});
     }
 
     if (desc.applicationIdentifier.has_value() &&
-        !detail::IsValidUtf8WithoutEmbeddedNull(*desc.applicationIdentifier))
+        !core::IsValidUtf8WithoutEmbeddedNull(*desc.applicationIdentifier))
     {
         return core::VoidResult::FromError(core::Error{
             kInvalidArgumentCode,
@@ -83,9 +79,9 @@ using MetadataSnapshots = detail::RuntimeMetadataSnapshots;
 
     if (desc.applicationIdentifier.has_value() && desc.applicationIdentifier->empty())
     {
-        return core::VoidResult::FromError(core::Error{
-            kInvalidArgumentCode,
-            "Platform runtime application identifier must be absent or non-empty."});
+        return core::VoidResult::FromError(
+            core::Error{kInvalidArgumentCode,
+                        "Platform runtime application identifier must be absent or non-empty."});
     }
 
     return core::VoidResult::Success();
@@ -106,15 +102,13 @@ void VerifyBackend(const detail::PlatformRuntimeBackend& backend)
     PONDER_VERIFY(backend.getHint != nullptr, "Platform runtime backend is missing getHint");
     PONDER_VERIFY(backend.setHintOverride != nullptr,
                   "Platform runtime backend is missing setHintOverride");
-    PONDER_VERIFY(backend.resetHint != nullptr,
-                  "Platform runtime backend is missing resetHint");
+    PONDER_VERIFY(backend.resetHint != nullptr, "Platform runtime backend is missing resetHint");
     PONDER_VERIFY(backend.initializeVideo != nullptr,
                   "Platform runtime backend is missing initializeVideo");
     PONDER_VERIFY(backend.quit != nullptr, "Platform runtime backend is missing quit");
     PONDER_VERIFY(backend.getTicksNanoseconds != nullptr,
                   "Platform runtime backend is missing getTicksNanoseconds");
-    PONDER_VERIFY(backend.pollEvent != nullptr,
-                  "Platform runtime backend is missing pollEvent");
+    PONDER_VERIFY(backend.pollEvent != nullptr, "Platform runtime backend is missing pollEvent");
     PONDER_VERIFY(backend.supportsGlobalMouse != nullptr,
                   "Platform runtime backend is missing supportsGlobalMouse");
     PONDER_VERIFY(backend.getGlobalMousePosition != nullptr,
@@ -123,14 +117,11 @@ void VerifyBackend(const detail::PlatformRuntimeBackend& backend)
                   "Platform runtime backend is missing setMouseCapture");
     PONDER_VERIFY(backend.createSystemCursor != nullptr,
                   "Platform runtime backend is missing createSystemCursor");
-    PONDER_VERIFY(backend.setCursor != nullptr,
-                  "Platform runtime backend is missing setCursor");
+    PONDER_VERIFY(backend.setCursor != nullptr, "Platform runtime backend is missing setCursor");
     PONDER_VERIFY(backend.destroyCursor != nullptr,
                   "Platform runtime backend is missing destroyCursor");
-    PONDER_VERIFY(backend.showCursor != nullptr,
-                  "Platform runtime backend is missing showCursor");
-    PONDER_VERIFY(backend.hideCursor != nullptr,
-                  "Platform runtime backend is missing hideCursor");
+    PONDER_VERIFY(backend.showCursor != nullptr, "Platform runtime backend is missing showCursor");
+    PONDER_VERIFY(backend.hideCursor != nullptr, "Platform runtime backend is missing hideCursor");
     PONDER_VERIFY(backend.isCursorVisible != nullptr,
                   "Platform runtime backend is missing isCursorVisible");
     PONDER_VERIFY(backend.supportsClipboardText != nullptr,
@@ -143,56 +134,40 @@ void VerifyBackend(const detail::PlatformRuntimeBackend& backend)
                   "Platform runtime backend is missing setClipboardText");
     PONDER_VERIFY(backend.openExternalUri != nullptr,
                   "Platform runtime backend is missing openExternalUri");
-    PONDER_VERIFY(backend.showDialog != nullptr,
-                  "Platform runtime backend is missing showDialog");
+    PONDER_VERIFY(backend.showDialog != nullptr, "Platform runtime backend is missing showDialog");
 }
 
 void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
 {
-    PONDER_VERIFY(backend.create != nullptr,
-                  "Platform window backend is missing create");
-    PONDER_VERIFY(backend.destroy != nullptr,
-                  "Platform window backend is missing destroy");
-    PONDER_VERIFY(backend.getId != nullptr,
-                  "Platform window backend is missing getId");
-    PONDER_VERIFY(backend.getTitle != nullptr,
-                  "Platform window backend is missing getTitle");
-    PONDER_VERIFY(backend.setTitle != nullptr,
-                  "Platform window backend is missing setTitle");
-    PONDER_VERIFY(backend.getPosition != nullptr,
-                  "Platform window backend is missing getPosition");
-    PONDER_VERIFY(backend.setPosition != nullptr,
-                  "Platform window backend is missing setPosition");
-    PONDER_VERIFY(backend.getSize != nullptr,
-                  "Platform window backend is missing getSize");
+    PONDER_VERIFY(backend.create != nullptr, "Platform window backend is missing create");
+    PONDER_VERIFY(backend.destroy != nullptr, "Platform window backend is missing destroy");
+    PONDER_VERIFY(backend.getId != nullptr, "Platform window backend is missing getId");
+    PONDER_VERIFY(backend.getTitle != nullptr, "Platform window backend is missing getTitle");
+    PONDER_VERIFY(backend.setTitle != nullptr, "Platform window backend is missing setTitle");
+    PONDER_VERIFY(backend.getPosition != nullptr, "Platform window backend is missing getPosition");
+    PONDER_VERIFY(backend.setPosition != nullptr, "Platform window backend is missing setPosition");
+    PONDER_VERIFY(backend.getSize != nullptr, "Platform window backend is missing getSize");
     PONDER_VERIFY(backend.getSizeInPixels != nullptr,
                   "Platform window backend is missing getSizeInPixels");
-    PONDER_VERIFY(backend.setSize != nullptr,
-                  "Platform window backend is missing setSize");
+    PONDER_VERIFY(backend.setSize != nullptr, "Platform window backend is missing setSize");
     PONDER_VERIFY(backend.setMinimumSize != nullptr,
                   "Platform window backend is missing setMinimumSize");
-    PONDER_VERIFY(backend.show != nullptr,
-                  "Platform window backend is missing show");
-    PONDER_VERIFY(backend.hide != nullptr,
-                  "Platform window backend is missing hide");
+    PONDER_VERIFY(backend.show != nullptr, "Platform window backend is missing show");
+    PONDER_VERIFY(backend.hide != nullptr, "Platform window backend is missing hide");
     PONDER_VERIFY(backend.getProperties != nullptr,
                   "Platform window backend is missing getProperties");
     PONDER_VERIFY(backend.setFullscreenModeToDesktop != nullptr,
                   "Platform window backend is missing setFullscreenModeToDesktop");
     PONDER_VERIFY(backend.setFullscreen != nullptr,
                   "Platform window backend is missing setFullscreen");
-    PONDER_VERIFY(backend.setBordered != nullptr,
-                  "Platform window backend is missing setBordered");
+    PONDER_VERIFY(backend.setBordered != nullptr, "Platform window backend is missing setBordered");
     PONDER_VERIFY(backend.setResizable != nullptr,
                   "Platform window backend is missing setResizable");
     PONDER_VERIFY(backend.setAlwaysOnTop != nullptr,
                   "Platform window backend is missing setAlwaysOnTop");
-    PONDER_VERIFY(backend.minimize != nullptr,
-                  "Platform window backend is missing minimize");
-    PONDER_VERIFY(backend.maximize != nullptr,
-                  "Platform window backend is missing maximize");
-    PONDER_VERIFY(backend.restore != nullptr,
-                  "Platform window backend is missing restore");
+    PONDER_VERIFY(backend.minimize != nullptr, "Platform window backend is missing minimize");
+    PONDER_VERIFY(backend.maximize != nullptr, "Platform window backend is missing maximize");
+    PONDER_VERIFY(backend.restore != nullptr, "Platform window backend is missing restore");
     PONDER_VERIFY(backend.startTextInput != nullptr,
                   "Platform window backend is missing startTextInput");
     PONDER_VERIFY(backend.stopTextInput != nullptr,
@@ -219,12 +194,9 @@ void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
 
 void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)
 {
-    PONDER_VERIFY(backend.enumerate != nullptr,
-                  "Platform display backend is missing enumerate");
-    PONDER_VERIFY(backend.getName != nullptr,
-                  "Platform display backend is missing getName");
-    PONDER_VERIFY(backend.getBounds != nullptr,
-                  "Platform display backend is missing getBounds");
+    PONDER_VERIFY(backend.enumerate != nullptr, "Platform display backend is missing enumerate");
+    PONDER_VERIFY(backend.getName != nullptr, "Platform display backend is missing getName");
+    PONDER_VERIFY(backend.getBounds != nullptr, "Platform display backend is missing getBounds");
     PONDER_VERIFY(backend.getUsableBounds != nullptr,
                   "Platform display backend is missing getUsableBounds");
     PONDER_VERIFY(backend.getCurrentRefreshRate != nullptr,
@@ -245,9 +217,8 @@ void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)
                                        const char* name)
 {
     const char* const currentValue = backend.getHint(backend.context, name);
-    return HintSnapshot{name, currentValue != nullptr
-                                  ? std::optional<std::string>{currentValue}
-                                  : std::nullopt};
+    return HintSnapshot{name, currentValue != nullptr ? std::optional<std::string>{currentValue}
+                                                      : std::nullopt};
 }
 
 [[nodiscard]] bool HintMatchesSnapshot(const detail::PlatformRuntimeBackend& backend,
@@ -267,10 +238,10 @@ void RestoreHint(const detail::PlatformRuntimeBackend& backend,
 {
     try
     {
-        const bool restored = snapshot.value.has_value()
-                                  ? backend.setHintOverride(backend.context, snapshot.name,
-                                                            snapshot.value->c_str())
-                                  : backend.resetHint(backend.context, snapshot.name);
+        const bool restored =
+            snapshot.value.has_value()
+                ? backend.setHintOverride(backend.context, snapshot.name, snapshot.value->c_str())
+                : backend.resetHint(backend.context, snapshot.name);
         if (!restored)
         {
             const core::Error error = detail::CaptureSdlFailure(
@@ -283,13 +254,12 @@ void RestoreHint(const detail::PlatformRuntimeBackend& backend,
     }
     catch (const std::exception& exception)
     {
-        LOG_ERROR_CATEGORY(kLogCategory, "SDL hint restoration failed for {}: {}",
-                           snapshot.name, exception.what());
+        LOG_ERROR_CATEGORY(kLogCategory, "SDL hint restoration failed for {}: {}", snapshot.name,
+                           exception.what());
     }
     catch (...)
     {
-        LOG_ERROR_CATEGORY(kLogCategory, "SDL hint restoration failed for {}",
-                           snapshot.name);
+        LOG_ERROR_CATEGORY(kLogCategory, "SDL hint restoration failed for {}", snapshot.name);
     }
 }
 
@@ -302,8 +272,7 @@ void RestoreRuntimeHints(const detail::PlatformRuntimeBackend& backend,
 }
 
 [[nodiscard]] std::optional<std::string> CaptureMetadataValue(
-    const detail::PlatformRuntimeBackend& backend,
-    detail::ApplicationMetadataProperty property)
+    const detail::PlatformRuntimeBackend& backend, detail::ApplicationMetadataProperty property)
 {
     const char* const value = backend.getAppMetadataProperty(backend.context, property);
     return value != nullptr ? std::optional<std::string>{value} : std::nullopt;
@@ -314,20 +283,18 @@ void RestoreRuntimeHints(const detail::PlatformRuntimeBackend& backend,
 {
     return MetadataSnapshots{{
         MetadataSnapshot{detail::ApplicationMetadataProperty::Name,
-                         CaptureMetadataValue(
-                             backend, detail::ApplicationMetadataProperty::Name)},
-        MetadataSnapshot{detail::ApplicationMetadataProperty::Version,
-                         CaptureMetadataValue(
-                             backend, detail::ApplicationMetadataProperty::Version)},
-        MetadataSnapshot{detail::ApplicationMetadataProperty::Identifier,
-                         CaptureMetadataValue(
-                             backend, detail::ApplicationMetadataProperty::Identifier)},
+                         CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Name)},
+        MetadataSnapshot{
+            detail::ApplicationMetadataProperty::Version,
+            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Version)},
+        MetadataSnapshot{
+            detail::ApplicationMetadataProperty::Identifier,
+            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Identifier)},
     }};
 }
 
-[[nodiscard]] bool MetadataMatchesSnapshot(
-    const detail::PlatformRuntimeBackend& backend,
-    const MetadataSnapshot& snapshot)
+[[nodiscard]] bool MetadataMatchesSnapshot(const detail::PlatformRuntimeBackend& backend,
+                                           const MetadataSnapshot& snapshot)
 {
     const char* const currentValue =
         backend.getAppMetadataProperty(backend.context, snapshot.property);
@@ -359,8 +326,7 @@ void RestoreMetadataProperty(const detail::PlatformRuntimeBackend& backend,
     }
     catch (const std::exception& exception)
     {
-        LOG_ERROR_CATEGORY(kLogCategory, "SDL metadata restoration failed: {}",
-                           exception.what());
+        LOG_ERROR_CATEGORY(kLogCategory, "SDL metadata restoration failed: {}", exception.what());
     }
     catch (...)
     {
@@ -385,16 +351,16 @@ void ReleaseRuntimeReservation() noexcept
 void MarkRuntimeActive()
 {
     RuntimeSlotState expected = RuntimeSlotState::Creating;
-    PONDER_VERIFY(runtimeSlot.compare_exchange_strong(
-                      expected, RuntimeSlotState::Active, std::memory_order_acq_rel),
+    PONDER_VERIFY(runtimeSlot.compare_exchange_strong(expected, RuntimeSlotState::Active,
+                                                      std::memory_order_acq_rel),
                   "Platform runtime slot was not creating");
 }
 
 void BeginRuntimeDestruction()
 {
     RuntimeSlotState expected = RuntimeSlotState::Active;
-    PONDER_VERIFY(runtimeSlot.compare_exchange_strong(
-                      expected, RuntimeSlotState::Destroying, std::memory_order_acq_rel),
+    PONDER_VERIFY(runtimeSlot.compare_exchange_strong(expected, RuntimeSlotState::Destroying,
+                                                      std::memory_order_acq_rel),
                   "Platform runtime slot was not active");
 }
 } // namespace
@@ -407,11 +373,9 @@ PlatformRuntimeState::PlatformRuntimeState(PlatformRuntimeBackend backend,
                                            RuntimeHintSnapshot focusClickThrough,
                                            RuntimeHintSnapshot autoCapture,
                                            RuntimeMetadataSnapshots metadata) noexcept
-    : m_backend(backend), m_windowBackend(windowBackend),
-      m_displayBackend(displayBackend),
-      m_focusClickThrough(std::move(focusClickThrough)),
-      m_autoCapture(std::move(autoCapture)), m_metadata(std::move(metadata)),
-      m_ownerThread(std::this_thread::get_id())
+    : m_backend(backend), m_windowBackend(windowBackend), m_displayBackend(displayBackend),
+      m_focusClickThrough(std::move(focusClickThrough)), m_autoCapture(std::move(autoCapture)),
+      m_metadata(std::move(metadata)), m_ownerThread(std::this_thread::get_id())
 {
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime initialized");
 }
@@ -468,22 +432,18 @@ void PlatformRuntimeState::UnregisterRequest(const void* request)
     m_registry.UnregisterRequest(request);
 }
 
-WindowId PlatformRuntimeState::RegisterWindow(WindowImpl* window,
-                                              std::uint32_t backendWindowId)
+WindowId PlatformRuntimeState::RegisterWindow(WindowImpl* window, std::uint32_t backendWindowId)
 {
     VerifyOwnerThread("window registration");
     PONDER_VERIFY(window != nullptr, "Cannot register a null platform window");
-    PONDER_VERIFY(backendWindowId != 0,
-                  "Cannot register a zero backend window ID");
+    PONDER_VERIFY(backendWindowId != 0, "Cannot register a zero backend window ID");
     PONDER_VERIFY(m_nextWindowId != 0, "Platform window ID space is exhausted");
 
     const WindowId id{m_nextWindowId};
     const auto [iterator, inserted] =
-        m_windowsByBackendId.emplace(backendWindowId,
-                                     RuntimeWindowRecord{id, window});
+        m_windowsByBackendId.emplace(backendWindowId, RuntimeWindowRecord{id, window});
     static_cast<void>(iterator);
-    PONDER_VERIFY(inserted, "Backend window ID {} is already registered",
-                  backendWindowId);
+    PONDER_VERIFY(inserted, "Backend window ID {} is already registered", backendWindowId);
 
     try
     {
@@ -499,22 +459,20 @@ WindowId PlatformRuntimeState::RegisterWindow(WindowImpl* window,
     return id;
 }
 
-void PlatformRuntimeState::BeginWindowDestruction(WindowImpl* window,
-                                                  std::uint32_t backendWindowId,
+void PlatformRuntimeState::BeginWindowDestruction(WindowImpl* window, std::uint32_t backendWindowId,
                                                   WindowId id)
 {
     VerifyOwnerThread("window destruction");
     PONDER_VERIFY(window != nullptr, "Cannot destroy a null platform window");
 
     const auto iterator = m_windowsByBackendId.find(backendWindowId);
-    PONDER_VERIFY(iterator != m_windowsByBackendId.end(),
-                  "Backend window ID {} is not registered", backendWindowId);
-    PONDER_VERIFY(iterator->second.id == id,
-                  "Backend window ID {} does not match project window ID {}",
-                  backendWindowId, id.GetValue());
-    PONDER_VERIFY(iterator->second.window == window,
-                  "Backend window ID {} does not match its registered window",
+    PONDER_VERIFY(iterator != m_windowsByBackendId.end(), "Backend window ID {} is not registered",
                   backendWindowId);
+    PONDER_VERIFY(iterator->second.id == id,
+                  "Backend window ID {} does not match project window ID {}", backendWindowId,
+                  id.GetValue());
+    PONDER_VERIFY(iterator->second.window == window,
+                  "Backend window ID {} does not match its registered window", backendWindowId);
     m_windowsByBackendId.erase(iterator);
 }
 
@@ -524,14 +482,12 @@ void PlatformRuntimeState::FinishWindowDestruction(WindowImpl* window)
     m_registry.UnregisterChild(window);
 }
 
-std::optional<WindowId> PlatformRuntimeState::FindWindowId(
-    std::uint32_t backendWindowId) const
+std::optional<WindowId> PlatformRuntimeState::FindWindowId(std::uint32_t backendWindowId) const
 {
     VerifyOwnerThread("window lookup");
     const auto iterator = m_windowsByBackendId.find(backendWindowId);
-    return iterator != m_windowsByBackendId.end()
-             ? std::optional<WindowId>{iterator->second.id}
-             : std::nullopt;
+    return iterator != m_windowsByBackendId.end() ? std::optional<WindowId>{iterator->second.id}
+                                                  : std::nullopt;
 }
 
 PlatformTimestamp PlatformRuntimeState::Now() const
@@ -542,8 +498,7 @@ PlatformTimestamp PlatformRuntimeState::Now() const
         static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
     PONDER_VERIFY(ticks <= kMaximumTicks,
                   "SDL monotonic timestamp exceeds PlatformTimestamp range");
-    return PlatformTimestamp{
-        std::chrono::nanoseconds{static_cast<std::int64_t>(ticks)}};
+    return PlatformTimestamp{std::chrono::nanoseconds{static_cast<std::int64_t>(ticks)}};
 }
 } // namespace detail
 
@@ -553,8 +508,8 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     if (!runtimeSlot.compare_exchange_strong(expectedSlot, RuntimeSlotState::Creating,
                                              std::memory_order_acq_rel))
     {
-        return core::Result<PlatformRuntime>::FromError(core::Error{
-            kRuntimeAlreadyActiveCode, "A platform runtime is already active."});
+        return core::Result<PlatformRuntime>::FromError(
+            core::Error{kRuntimeAlreadyActiveCode, "A platform runtime is already active."});
     }
 
     auto releaseReservation = core::MakeScopeExit(
@@ -566,8 +521,7 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     core::VoidResult validation = Validate(desc);
     if (!validation.HasValue())
     {
-        return core::Result<PlatformRuntime>::FromError(
-            std::move(validation).GetError());
+        return core::Result<PlatformRuntime>::FromError(std::move(validation).GetError());
     }
 
     PONDER_VERIFY(std::this_thread::get_id() == processEntryThread,
@@ -575,11 +529,9 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
 
     const detail::PlatformRuntimeBackend backend = detail::GetPlatformRuntimeBackend();
     VerifyBackend(backend);
-    const detail::PlatformWindowBackend windowBackend =
-        detail::GetPlatformWindowBackend();
+    const detail::PlatformWindowBackend windowBackend = detail::GetPlatformWindowBackend();
     VerifyWindowBackend(windowBackend);
-    const detail::PlatformDisplayBackend displayBackend =
-        detail::GetPlatformDisplayBackend();
+    const detail::PlatformDisplayBackend displayBackend = detail::GetPlatformDisplayBackend();
     VerifyDisplayBackend(displayBackend);
     PONDER_VERIFY(backend.isMainThread(backend.context),
                   "PlatformRuntime must be created on SDL's main thread");
@@ -590,8 +542,7 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
             "Cannot create PlatformRuntime while SDL subsystems are already initialized."});
     }
 
-    HintSnapshot focusClickThrough =
-        CaptureHint(backend, detail::kMouseFocusClickThroughHint);
+    HintSnapshot focusClickThrough = CaptureHint(backend, detail::kMouseFocusClickThroughHint);
     HintSnapshot autoCapture = CaptureHint(backend, detail::kMouseAutoCaptureHint);
     auto restoreHints = core::MakeScopeExit(
         [&backend, &focusClickThrough, &autoCapture]() noexcept
@@ -602,8 +553,7 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     if (!backend.setHintOverride(backend.context, detail::kMouseFocusClickThroughHint, "1"))
     {
         return core::Result<PlatformRuntime>::FromError(detail::CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetHintWithPriority",
-            detail::kMouseFocusClickThroughHint));
+            kBackendFailureCode, "SDL_SetHintWithPriority", detail::kMouseFocusClickThroughHint));
     }
 
     if (!backend.setHintOverride(backend.context, detail::kMouseAutoCaptureHint, "0"))
@@ -652,8 +602,8 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
 
     if (!backend.initializeVideo(backend.context))
     {
-        return core::Result<PlatformRuntime>::FromError(detail::CaptureSdlFailure(
-            kBackendFailureCode, "SDL_Init", "SDL_INIT_VIDEO"));
+        return core::Result<PlatformRuntime>::FromError(
+            detail::CaptureSdlFailure(kBackendFailureCode, "SDL_Init", "SDL_INIT_VIDEO"));
     }
 
     auto state = std::make_unique<detail::PlatformRuntimeState>(
@@ -668,8 +618,7 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     return PlatformRuntime{std::move(state)};
 }
 
-PlatformRuntime::PlatformRuntime(
-    std::unique_ptr<detail::PlatformRuntimeState> state) noexcept
+PlatformRuntime::PlatformRuntime(std::unique_ptr<detail::PlatformRuntimeState> state) noexcept
     : m_state(std::move(state))
 {
 }

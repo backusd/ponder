@@ -1,7 +1,6 @@
 #include "SdlError.hpp"
 
 #include <SDL3/SDL_error.h>
-
 #include <string>
 #include <string_view>
 

@@ -1,11 +1,6 @@
-#include <ponder/platform/Display.hpp>
-
-#include "PlatformRuntimeState.hpp"
-#include "SdlError.hpp"
-#include "WindowImpl.hpp"
-
 #include <ponder/core/Assert.hpp>
 #include <ponder/core/Log.hpp>
+#include <ponder/platform/Display.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
 #include <ponder/platform/Window.hpp>
@@ -20,16 +15,17 @@
 #include <utility>
 #include <vector>
 
+#include "PlatformRuntimeState.hpp"
+#include "SdlError.hpp"
+#include "WindowImpl.hpp"
+
 namespace pond::platform
 {
 namespace
 {
-constexpr core::ErrorCode kInvalidArgumentCode =
-    ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode =
-    ToErrorCode(PlatformErrorCode::BackendFailure);
-constexpr core::ErrorCode kNotFoundCode =
-    ToErrorCode(PlatformErrorCode::NotFound);
+constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
+constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
+constexpr core::ErrorCode kNotFoundCode = ToErrorCode(PlatformErrorCode::NotFound);
 
 [[nodiscard]] core::Error MakeBackendDataError(std::string message)
 {
@@ -38,9 +34,8 @@ constexpr core::ErrorCode kNotFoundCode =
 
 [[nodiscard]] core::Error MakeDisplayNotFoundError(DisplayId id)
 {
-    return core::Error{
-        kNotFoundCode,
-        "Display " + std::to_string(id.GetValue()) + " is not connected."};
+    return core::Error{kNotFoundCode,
+                       "Display " + std::to_string(id.GetValue()) + " is not connected."};
 }
 
 [[nodiscard]] std::string MakeDisplayContext(DisplayId id)
@@ -59,15 +54,13 @@ constexpr core::ErrorCode kNotFoundCode =
 {
     if (rectangle.width < 0 || rectangle.height < 0)
     {
-        return core::Result<ScreenRectangle>::FromError(MakeBackendDataError(
-            std::string{operation} + " returned a negative extent for " +
-            std::string{context} + "."));
+        return core::Result<ScreenRectangle>::FromError(
+            MakeBackendDataError(std::string{operation} + " returned a negative extent for " +
+                                 std::string{context} + "."));
     }
 
-    constexpr int kMinimumPosition =
-        static_cast<int>(std::numeric_limits<std::int32_t>::min());
-    constexpr int kMaximumPosition =
-        static_cast<int>(std::numeric_limits<std::int32_t>::max());
+    constexpr int kMinimumPosition = static_cast<int>(std::numeric_limits<std::int32_t>::min());
+    constexpr int kMaximumPosition = static_cast<int>(std::numeric_limits<std::int32_t>::max());
     if (rectangle.x < kMinimumPosition || rectangle.x > kMaximumPosition ||
         rectangle.y < kMinimumPosition || rectangle.y > kMaximumPosition)
     {
@@ -76,11 +69,10 @@ constexpr core::ErrorCode kNotFoundCode =
             std::string{context} + "."));
     }
 
-    return ScreenRectangle{
-        ScreenPosition{static_cast<std::int32_t>(rectangle.x),
-                       static_cast<std::int32_t>(rectangle.y)},
-        ScreenExtent{static_cast<std::uint32_t>(rectangle.width),
-                     static_cast<std::uint32_t>(rectangle.height)}};
+    return ScreenRectangle{ScreenPosition{static_cast<std::int32_t>(rectangle.x),
+                                          static_cast<std::int32_t>(rectangle.y)},
+                           ScreenExtent{static_cast<std::uint32_t>(rectangle.width),
+                                        static_cast<std::uint32_t>(rectangle.height)}};
 }
 
 [[nodiscard]] DisplayOrientation ConvertOrientation(
@@ -103,15 +95,14 @@ constexpr core::ErrorCode kNotFoundCode =
     return DisplayOrientation::Unknown;
 }
 
-[[nodiscard]] core::Result<float> ValidateScale(float scale,
-                                                std::string_view operation,
+[[nodiscard]] core::Result<float> ValidateScale(float scale, std::string_view operation,
                                                 std::string_view context)
 {
     if (!std::isfinite(scale) || scale <= 0.0F)
     {
-        return core::Result<float>::FromError(MakeBackendDataError(
-            std::string{operation} + " returned an invalid scale for " +
-            std::string{context} + "."));
+        return core::Result<float>::FromError(
+            MakeBackendDataError(std::string{operation} + " returned an invalid scale for " +
+                                 std::string{context} + "."));
     }
 
     return scale;
@@ -163,8 +154,7 @@ std::optional<DisplayId> PlatformRuntimeState::FindDisplayIdForRemoval(
     const auto projectMapping = m_displaysById.find(mapping->second.id);
     PONDER_VERIFY(projectMapping != m_displaysById.end() &&
                       projectMapping->second.backendId == backendDisplayId,
-                  "Backend display {} has an inconsistent removal mapping",
-                  backendDisplayId);
+                  "Backend display {} has an inconsistent removal mapping", backendDisplayId);
     return mapping->second.id;
 }
 
@@ -186,8 +176,7 @@ std::optional<DisplayId> PlatformRuntimeState::FindKnownDisplayId(
     const auto projectMapping = m_displaysById.find(mapping->second.id);
     PONDER_VERIFY(projectMapping != m_displaysById.end() &&
                       projectMapping->second.backendId == backendDisplayId,
-                  "Backend display {} has an inconsistent project mapping",
-                  backendDisplayId);
+                  "Backend display {} has an inconsistent project mapping", backendDisplayId);
     return mapping->second.id;
 }
 
@@ -212,11 +201,10 @@ std::optional<DisplayId> PlatformRuntimeState::ConnectDisplayFromEvent(
     auto nextByProject = m_displaysById;
 
     nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
-    const auto [iterator, inserted] = nextByProject.emplace(
-        id, RuntimeBackendDisplayRecord{backendDisplayId, true});
+    const auto [iterator, inserted] =
+        nextByProject.emplace(id, RuntimeBackendDisplayRecord{backendDisplayId, true});
     static_cast<void>(iterator);
-    PONDER_VERIFY(inserted, "Platform display ID {} is already registered",
-                  id.GetValue());
+    PONDER_VERIFY(inserted, "Platform display ID {} is already registered", id.GetValue());
 
     m_displaysByBackendId.swap(nextByBackend);
     m_displaysById.swap(nextByProject);
@@ -224,8 +212,7 @@ std::optional<DisplayId> PlatformRuntimeState::ConnectDisplayFromEvent(
     return id;
 }
 
-void PlatformRuntimeState::DisconnectDisplayFromEvent(
-    std::uint32_t backendDisplayId)
+void PlatformRuntimeState::DisconnectDisplayFromEvent(std::uint32_t backendDisplayId)
 {
     VerifyOwnerThread("display disconnection event");
     const auto mapping = m_displaysByBackendId.find(backendDisplayId);
@@ -237,18 +224,15 @@ void PlatformRuntimeState::DisconnectDisplayFromEvent(
     const auto projectMapping = m_displaysById.find(mapping->second.id);
     PONDER_VERIFY(projectMapping != m_displaysById.end() &&
                       projectMapping->second.backendId == backendDisplayId,
-                  "Backend display {} has an inconsistent disconnection mapping",
-                  backendDisplayId);
+                  "Backend display {} has an inconsistent disconnection mapping", backendDisplayId);
     mapping->second.connected = false;
     mapping->second.removalEventPending = false;
     projectMapping->second.connected = false;
 }
 
-void PlatformRuntimeState::ReconcileDisplayFromEvent(
-    std::uint32_t backendDisplayId)
+void PlatformRuntimeState::ReconcileDisplayFromEvent(std::uint32_t backendDisplayId)
 {
-    if (backendDisplayId == 0 ||
-        FindConnectedDisplayId(backendDisplayId).has_value() ||
+    if (backendDisplayId == 0 || FindConnectedDisplayId(backendDisplayId).has_value() ||
         FindKnownDisplayId(backendDisplayId).has_value())
     {
         return;
@@ -257,10 +241,9 @@ void PlatformRuntimeState::ReconcileDisplayFromEvent(
     auto refresh = RefreshDisplays();
     if (!refresh.HasValue())
     {
-        LOG_ERROR_CATEGORY(
-            "platform",
-            "Failed to reconcile display identity while polling an event: {}",
-            refresh.GetError().GetMessage());
+        LOG_ERROR_CATEGORY("platform",
+                           "Failed to reconcile display identity while polling an event: {}",
+                           refresh.GetError().GetMessage());
     }
 }
 
@@ -282,8 +265,7 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
         if (backendDisplayId == 0 || !uniqueIds.insert(backendDisplayId).second)
         {
             return core::Result<std::vector<std::uint32_t>>::FromError(
-                MakeBackendDataError(
-                    "SDL_GetDisplays returned a zero or duplicate display ID."));
+                MakeBackendDataError("SDL_GetDisplays returned a zero or duplicate display ID."));
         }
     }
 
@@ -313,12 +295,10 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
         if (wasConnected)
         {
             const DisplayId id = current->second.id;
-            nextByBackend[backendDisplayId] =
-                RuntimeDisplayRecord{id, true, false};
+            nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
             const auto project = nextByProject.find(id);
             PONDER_VERIFY(project != nextByProject.end(),
-                          "Connected display {} has no project mapping",
-                          id.GetValue());
+                          "Connected display {} has no project mapping", id.GetValue());
             project->second.connected = true;
             continue;
         }
@@ -327,18 +307,16 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
         const DisplayId id{nextDisplayId};
         ++nextDisplayId;
         nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
-        const auto [iterator, inserted] = nextByProject.emplace(
-            id, RuntimeBackendDisplayRecord{backendDisplayId, true});
+        const auto [iterator, inserted] =
+            nextByProject.emplace(id, RuntimeBackendDisplayRecord{backendDisplayId, true});
         static_cast<void>(iterator);
-        PONDER_VERIFY(inserted, "Platform display ID {} is already registered",
-                      id.GetValue());
+        PONDER_VERIFY(inserted, "Platform display ID {} is already registered", id.GetValue());
     }
 
     m_displaysByBackendId.swap(nextByBackend);
     m_displaysById.swap(nextByProject);
     m_nextDisplayId = nextDisplayId;
-    return core::Result<std::vector<std::uint32_t>>::FromValue(
-        std::move(backendDisplayIds));
+    return core::Result<std::vector<std::uint32_t>>::FromValue(std::move(backendDisplayIds));
 }
 
 core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
@@ -350,84 +328,71 @@ core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
         m_displayBackend.getName(m_displayBackend.context, backendDisplayId);
     if (backendName == nullptr)
     {
-        return core::Result<DisplayInfo>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetDisplayName", context));
+        return core::Result<DisplayInfo>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayName", context));
     }
     const std::string name{backendName};
 
     BackendScreenRectangle backendBounds;
-    if (!m_displayBackend.getBounds(m_displayBackend.context, backendDisplayId,
-                                    &backendBounds))
+    if (!m_displayBackend.getBounds(m_displayBackend.context, backendDisplayId, &backendBounds))
     {
-        return core::Result<DisplayInfo>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetDisplayBounds", context));
+        return core::Result<DisplayInfo>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayBounds", context));
     }
     auto bounds = ConvertRectangle(backendBounds, "SDL_GetDisplayBounds", context);
     if (!bounds.HasValue())
     {
-        return core::Result<DisplayInfo>::FromError(
-            std::move(bounds).GetError());
+        return core::Result<DisplayInfo>::FromError(std::move(bounds).GetError());
     }
 
     BackendScreenRectangle backendUsableBounds;
-    if (!m_displayBackend.getUsableBounds(
-            m_displayBackend.context, backendDisplayId, &backendUsableBounds))
-    {
-        return core::Result<DisplayInfo>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetDisplayUsableBounds", context));
-    }
-    auto usableBounds = ConvertRectangle(
-        backendUsableBounds, "SDL_GetDisplayUsableBounds", context);
-    if (!usableBounds.HasValue())
+    if (!m_displayBackend.getUsableBounds(m_displayBackend.context, backendDisplayId,
+                                          &backendUsableBounds))
     {
         return core::Result<DisplayInfo>::FromError(
-            std::move(usableBounds).GetError());
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayUsableBounds", context));
+    }
+    auto usableBounds =
+        ConvertRectangle(backendUsableBounds, "SDL_GetDisplayUsableBounds", context);
+    if (!usableBounds.HasValue())
+    {
+        return core::Result<DisplayInfo>::FromError(std::move(usableBounds).GetError());
     }
 
     float refreshRateHertz{};
-    if (!m_displayBackend.getCurrentRefreshRate(
-            m_displayBackend.context, backendDisplayId, &refreshRateHertz))
+    if (!m_displayBackend.getCurrentRefreshRate(m_displayBackend.context, backendDisplayId,
+                                                &refreshRateHertz))
     {
-        return core::Result<DisplayInfo>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetCurrentDisplayMode", context));
+        return core::Result<DisplayInfo>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetCurrentDisplayMode", context));
     }
     if (!std::isfinite(refreshRateHertz) || refreshRateHertz < 0.0F)
     {
         return core::Result<DisplayInfo>::FromError(MakeBackendDataError(
-            "SDL_GetCurrentDisplayMode returned an invalid refresh rate for " +
-            context + "."));
+            "SDL_GetCurrentDisplayMode returned an invalid refresh rate for " + context + "."));
     }
-    const std::optional<float> refreshRate = refreshRateHertz > 0.0F
-                                                 ? std::optional<float>{refreshRateHertz}
-                                                 : std::nullopt;
+    const std::optional<float> refreshRate =
+        refreshRateHertz > 0.0F ? std::optional<float>{refreshRateHertz} : std::nullopt;
 
     const DisplayOrientation orientation = ConvertOrientation(
-        m_displayBackend.getCurrentOrientation(m_displayBackend.context,
-                                               backendDisplayId));
+        m_displayBackend.getCurrentOrientation(m_displayBackend.context, backendDisplayId));
 
     const float contentScale =
         m_displayBackend.getContentScale(m_displayBackend.context, backendDisplayId);
     if (contentScale == 0.0F)
     {
-        return core::Result<DisplayInfo>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetDisplayContentScale", context));
+        return core::Result<DisplayInfo>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayContentScale", context));
     }
-    auto validContentScale = ValidateScale(
-        contentScale, "SDL_GetDisplayContentScale", context);
+    auto validContentScale = ValidateScale(contentScale, "SDL_GetDisplayContentScale", context);
     if (!validContentScale.HasValue())
     {
-        return core::Result<DisplayInfo>::FromError(
-            std::move(validContentScale).GetError());
+        return core::Result<DisplayInfo>::FromError(std::move(validContentScale).GetError());
     }
 
     return DisplayInfo{
-        id,
-        name,
-        std::move(bounds).GetValue(),
-        std::move(usableBounds).GetValue(),
-        refreshRate,
-        orientation,
-        validContentScale.GetValue()};
+        id,          name,        std::move(bounds).GetValue(), std::move(usableBounds).GetValue(),
+        refreshRate, orientation, validContentScale.GetValue()};
 }
 
 core::Result<std::vector<DisplayInfo>> PlatformRuntimeState::EnumerateDisplays()
@@ -435,8 +400,7 @@ core::Result<std::vector<DisplayInfo>> PlatformRuntimeState::EnumerateDisplays()
     auto refresh = RefreshDisplays();
     if (!refresh.HasValue())
     {
-        return core::Result<std::vector<DisplayInfo>>::FromError(
-            std::move(refresh).GetError());
+        return core::Result<std::vector<DisplayInfo>>::FromError(std::move(refresh).GetError());
     }
 
     std::vector<DisplayInfo> displays;
@@ -444,15 +408,12 @@ core::Result<std::vector<DisplayInfo>> PlatformRuntimeState::EnumerateDisplays()
     for (const std::uint32_t backendDisplayId : refresh.GetValue())
     {
         const auto mapping = m_displaysByBackendId.find(backendDisplayId);
-        PONDER_VERIFY(mapping != m_displaysByBackendId.end() &&
-                          mapping->second.connected,
-                      "Connected backend display {} has no project mapping",
-                      backendDisplayId);
+        PONDER_VERIFY(mapping != m_displaysByBackendId.end() && mapping->second.connected,
+                      "Connected backend display {} has no project mapping", backendDisplayId);
         auto info = QueryDisplayInfo(mapping->second.id, backendDisplayId);
         if (!info.HasValue())
         {
-            return core::Result<std::vector<DisplayInfo>>::FromError(
-                std::move(info).GetError());
+            return core::Result<std::vector<DisplayInfo>>::FromError(std::move(info).GetError());
         }
         displays.emplace_back(std::move(info).GetValue());
     }
@@ -465,15 +426,14 @@ core::Result<DisplayInfo> PlatformRuntimeState::GetDisplayInfo(DisplayId id)
     VerifyOwnerThread("display query");
     if (!id.IsValid())
     {
-        return core::Result<DisplayInfo>::FromError(core::Error{
-            kInvalidArgumentCode, "Display ID must be valid."});
+        return core::Result<DisplayInfo>::FromError(
+            core::Error{kInvalidArgumentCode, "Display ID must be valid."});
     }
 
     auto refresh = RefreshDisplays();
     if (!refresh.HasValue())
     {
-        return core::Result<DisplayInfo>::FromError(
-            std::move(refresh).GetError());
+        return core::Result<DisplayInfo>::FromError(std::move(refresh).GetError());
     }
 
     const auto mapping = m_displaysById.find(id);
@@ -493,18 +453,16 @@ core::Result<DisplayInfo> PlatformRuntimeState::GetDisplayInfo(DisplayId id)
     if (confirmation.HasValue())
     {
         const auto confirmedMapping = m_displaysById.find(id);
-        if (confirmedMapping == m_displaysById.end() ||
-            !confirmedMapping->second.connected)
+        if (confirmedMapping == m_displaysById.end() || !confirmedMapping->second.connected)
         {
-            return core::Result<DisplayInfo>::FromError(
-                MakeDisplayNotFoundError(id));
+            return core::Result<DisplayInfo>::FromError(MakeDisplayNotFoundError(id));
         }
     }
     return core::Result<DisplayInfo>::FromError(std::move(primaryError));
 }
 
-core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(
-    void* nativeWindow, WindowId windowId)
+core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(void* nativeWindow,
+                                                                    WindowId windowId)
 {
     VerifyOwnerThread("window display query");
     const std::string context = MakeWindowContext(windowId);
@@ -512,52 +470,51 @@ core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(
         m_displayBackend.getForWindow(m_displayBackend.context, nativeWindow);
     if (backendDisplayId == 0)
     {
-        return core::Result<DisplayId>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetDisplayForWindow", context));
+        return core::Result<DisplayId>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayForWindow", context));
     }
 
     auto refresh = RefreshDisplays();
     if (!refresh.HasValue())
     {
-        return core::Result<DisplayId>::FromError(
-            std::move(refresh).GetError());
+        return core::Result<DisplayId>::FromError(std::move(refresh).GetError());
     }
 
     const auto mapping = m_displaysByBackendId.find(backendDisplayId);
     if (mapping == m_displaysByBackendId.end() || !mapping->second.connected)
     {
-        return core::Result<DisplayId>::FromError(core::Error{
-            kNotFoundCode, "The window's display is not connected."});
+        return core::Result<DisplayId>::FromError(
+            core::Error{kNotFoundCode, "The window's display is not connected."});
     }
     return mapping->second.id;
 }
 
-core::Result<float> PlatformRuntimeState::GetPixelDensityForWindow(
-    void* nativeWindow, WindowId windowId) const
+core::Result<float> PlatformRuntimeState::GetPixelDensityForWindow(void* nativeWindow,
+                                                                   WindowId windowId) const
 {
     VerifyOwnerThread("window pixel density query");
     const std::string context = MakeWindowContext(windowId);
-    const float density = m_displayBackend.getWindowPixelDensity(
-        m_displayBackend.context, nativeWindow);
+    const float density =
+        m_displayBackend.getWindowPixelDensity(m_displayBackend.context, nativeWindow);
     if (density == 0.0F)
     {
-        return core::Result<float>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetWindowPixelDensity", context));
+        return core::Result<float>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowPixelDensity", context));
     }
     return ValidateScale(density, "SDL_GetWindowPixelDensity", context);
 }
 
-core::Result<float> PlatformRuntimeState::GetDisplayScaleForWindow(
-    void* nativeWindow, WindowId windowId) const
+core::Result<float> PlatformRuntimeState::GetDisplayScaleForWindow(void* nativeWindow,
+                                                                   WindowId windowId) const
 {
     VerifyOwnerThread("window display scale query");
     const std::string context = MakeWindowContext(windowId);
-    const float scale = m_displayBackend.getWindowDisplayScale(
-        m_displayBackend.context, nativeWindow);
+    const float scale =
+        m_displayBackend.getWindowDisplayScale(m_displayBackend.context, nativeWindow);
     if (scale == 0.0F)
     {
-        return core::Result<float>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetWindowDisplayScale", context));
+        return core::Result<float>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowDisplayScale", context));
     }
     return ValidateScale(scale, "SDL_GetWindowDisplayScale", context);
 }

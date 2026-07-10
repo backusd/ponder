@@ -21,9 +21,8 @@ public:
         return m_timeSinceEpoch;
     }
 
-    [[nodiscard]] friend constexpr auto operator<=>(const PlatformTimestamp& lhs,
-                                                    const PlatformTimestamp& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr auto operator<=>(
+        const PlatformTimestamp& lhs, const PlatformTimestamp& rhs) noexcept = default;
 
     [[nodiscard]] friend constexpr Duration operator-(PlatformTimestamp lhs,
                                                       PlatformTimestamp rhs) noexcept

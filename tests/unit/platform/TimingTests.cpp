@@ -1,8 +1,7 @@
 #include <ponder/platform/Timing.hpp>
 
-#include <gtest/gtest.h>
-
 #include <chrono>
+#include <gtest/gtest.h>
 #include <type_traits>
 
 namespace
@@ -20,8 +19,8 @@ constexpr bool TimestampSemanticsAreConstexpr()
 }
 
 static_assert(TimestampSemanticsAreConstexpr());
-static_assert(std::is_nothrow_constructible_v<pond::platform::PlatformTimestamp,
-                                              std::chrono::nanoseconds>);
+static_assert(
+    std::is_nothrow_constructible_v<pond::platform::PlatformTimestamp, std::chrono::nanoseconds>);
 static_assert(std::is_trivially_copyable_v<pond::platform::PlatformTimestamp>);
 
 TEST(PlatformTimingTests, DefaultsToTheMonotonicTickEpoch)

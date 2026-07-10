@@ -37,9 +37,19 @@ constexpr bool VoidResultObserversAreConstexpr()
     return result.HasValue() && static_cast<bool>(result);
 }
 
+constexpr pond::core::Result<int> ResultWithDormantRuntimeFailurePath(bool succeed)
+{
+    if (succeed)
+    {
+        return 7;
+    }
+
+    return pond::core::MakeUnexpected("runtime-only failure");
+}
 static_assert(ResultValueObserversAreConstexpr());
 static_assert(ResultFactoryAndArrowAreConstexpr());
 static_assert(VoidResultObserversAreConstexpr());
+static_assert(ResultWithDormantRuntimeFailurePath(true).GetValue() == 7);
 static_assert(noexcept(std::declval<const pond::core::Result<int>&>().HasValue()));
 static_assert(noexcept(static_cast<bool>(std::declval<const pond::core::Result<int>&>())));
 TEST(ResultTests, StoresValue)

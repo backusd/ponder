@@ -1,10 +1,6 @@
-#include <ponder/platform/Window.hpp>
-
-#include "SdlError.hpp"
-#include "WindowImpl.hpp"
-
 #include <ponder/core/Assert.hpp>
 #include <ponder/platform/PlatformError.hpp>
+#include <ponder/platform/Window.hpp>
 
 #include <cmath>
 #include <limits>
@@ -12,14 +8,15 @@
 #include <string>
 #include <utility>
 
+#include "SdlError.hpp"
+#include "WindowImpl.hpp"
+
 namespace pond::platform
 {
 namespace
 {
-constexpr core::ErrorCode kInvalidArgumentCode =
-    ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode =
-    ToErrorCode(PlatformErrorCode::BackendFailure);
+constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
+constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 
 [[nodiscard]] std::optional<int> RoundToBackendInteger(float value) noexcept
 {
@@ -39,36 +36,29 @@ constexpr core::ErrorCode kBackendFailureCode =
     return static_cast<int>(rounded);
 }
 
-[[nodiscard]] core::Result<detail::BackendTextInputArea> ToBackendTextInputArea(
-    TextInputArea area)
+[[nodiscard]] core::Result<detail::BackendTextInputArea> ToBackendTextInputArea(TextInputArea area)
 {
     if (!IsValid(area.rectangle))
     {
         return core::Result<detail::BackendTextInputArea>::FromError(core::Error{
-            kInvalidArgumentCode,
-            "Text input area must have finite coordinates and finite, "
-            "nonnegative extents."});
+            kInvalidArgumentCode, "Text input area must have finite coordinates and finite, "
+                                  "nonnegative extents."});
     }
 
     const std::optional<int> x = RoundToBackendInteger(area.rectangle.origin.x);
     const std::optional<int> y = RoundToBackendInteger(area.rectangle.origin.y);
-    const std::optional<int> width =
-        RoundToBackendInteger(area.rectangle.extent.width);
-    const std::optional<int> height =
-        RoundToBackendInteger(area.rectangle.extent.height);
-    const std::optional<int> cursorOffset =
-        RoundToBackendInteger(area.cursorOffset);
-    if (!x.has_value() || !y.has_value() || !width.has_value() ||
-        !height.has_value() || !cursorOffset.has_value())
+    const std::optional<int> width = RoundToBackendInteger(area.rectangle.extent.width);
+    const std::optional<int> height = RoundToBackendInteger(area.rectangle.extent.height);
+    const std::optional<int> cursorOffset = RoundToBackendInteger(area.cursorOffset);
+    if (!x.has_value() || !y.has_value() || !width.has_value() || !height.has_value() ||
+        !cursorOffset.has_value())
     {
         return core::Result<detail::BackendTextInputArea>::FromError(core::Error{
-            kInvalidArgumentCode,
-            "Text input area and cursor offset must round to values "
-            "representable by the backend."});
+            kInvalidArgumentCode, "Text input area and cursor offset must round to values "
+                                  "representable by the backend."});
     }
 
-    return detail::BackendTextInputArea{
-        *x, *y, *width, *height, *cursorOffset};
+    return detail::BackendTextInputArea{*x, *y, *width, *height, *cursorOffset};
 }
 } // namespace
 
@@ -85,8 +75,8 @@ core::VoidResult WindowImpl::StartTextInput()
     const std::string context = GetErrorContext();
     if (!m_backend.startTextInput(m_backend.context, m_nativeWindow))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_StartTextInput", context));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_StartTextInput", context));
     }
 
     return core::VoidResult::Success();
@@ -103,8 +93,8 @@ core::VoidResult WindowImpl::StopTextInput()
     const std::string context = GetErrorContext();
     if (!m_backend.stopTextInput(m_backend.context, m_nativeWindow))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_StopTextInput", context));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_StopTextInput", context));
     }
 
     return core::VoidResult::Success();
@@ -122,8 +112,8 @@ core::VoidResult WindowImpl::ClearTextComposition()
     const std::string context = GetErrorContext();
     if (!m_backend.clearTextComposition(m_backend.context, m_nativeWindow))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_ClearComposition", context));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_ClearComposition", context));
     }
 
     return core::VoidResult::Success();
@@ -135,18 +125,15 @@ core::VoidResult WindowImpl::SetTextInputArea(TextInputArea area)
     auto backendAreaResult = ToBackendTextInputArea(area);
     if (!backendAreaResult.HasValue())
     {
-        return core::VoidResult::FromError(
-            std::move(backendAreaResult).GetError());
+        return core::VoidResult::FromError(std::move(backendAreaResult).GetError());
     }
 
-    const BackendTextInputArea backendArea =
-        std::move(backendAreaResult).GetValue();
+    const BackendTextInputArea backendArea = std::move(backendAreaResult).GetValue();
     const std::string context = GetErrorContext();
-    if (!m_backend.setTextInputArea(m_backend.context, m_nativeWindow,
-                                    &backendArea))
+    if (!m_backend.setTextInputArea(m_backend.context, m_nativeWindow, &backendArea))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetTextInputArea", context));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_SetTextInputArea", context));
     }
 
     return core::VoidResult::Success();
@@ -158,8 +145,8 @@ core::VoidResult WindowImpl::ClearTextInputArea()
     const std::string context = GetErrorContext();
     if (!m_backend.setTextInputArea(m_backend.context, m_nativeWindow, nullptr))
     {
-        return core::VoidResult::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetTextInputArea", context));
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_SetTextInputArea", context));
     }
 
     return core::VoidResult::Success();

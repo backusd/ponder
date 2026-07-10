@@ -1,8 +1,5 @@
 #pragma once
 
-#include "PlatformRuntimeBackend.hpp"
-#include "RuntimeChildRegistry.hpp"
-
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
@@ -23,6 +20,9 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
+#include "PlatformRuntimeBackend.hpp"
+#include "RuntimeChildRegistry.hpp"
 
 namespace pond::platform::detail
 {
@@ -71,11 +71,9 @@ struct RuntimeWindowRecord final
 class PlatformRuntimeState final
 {
 public:
-    PlatformRuntimeState(PlatformRuntimeBackend backend,
-                         PlatformWindowBackend windowBackend,
+    PlatformRuntimeState(PlatformRuntimeBackend backend, PlatformWindowBackend windowBackend,
                          PlatformDisplayBackend displayBackend,
-                         RuntimeHintSnapshot focusClickThrough,
-                         RuntimeHintSnapshot autoCapture,
+                         RuntimeHintSnapshot focusClickThrough, RuntimeHintSnapshot autoCapture,
                          RuntimeMetadataSnapshots metadata) noexcept;
     ~PlatformRuntimeState() noexcept;
 
@@ -91,13 +89,10 @@ public:
     void RegisterRequest(const void* request);
     void UnregisterRequest(const void* request);
 
-    [[nodiscard]] WindowId RegisterWindow(WindowImpl* window,
-                                          std::uint32_t backendWindowId);
-    void BeginWindowDestruction(WindowImpl* window, std::uint32_t backendWindowId,
-                                WindowId id);
+    [[nodiscard]] WindowId RegisterWindow(WindowImpl* window, std::uint32_t backendWindowId);
+    void BeginWindowDestruction(WindowImpl* window, std::uint32_t backendWindowId, WindowId id);
     void FinishWindowDestruction(WindowImpl* window);
-    [[nodiscard]] std::optional<WindowId> FindWindowId(
-        std::uint32_t backendWindowId) const;
+    [[nodiscard]] std::optional<WindowId> FindWindowId(std::uint32_t backendWindowId) const;
     [[nodiscard]] std::optional<DisplayId> FindConnectedDisplayId(
         std::uint32_t backendDisplayId) const;
     [[nodiscard]] std::optional<DisplayId> FindDisplayIdForRemoval(
@@ -107,12 +102,12 @@ public:
     [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
     [[nodiscard]] core::Result<DisplayInfo> GetDisplayInfo(DisplayId id);
-    [[nodiscard]] core::Result<DisplayId> GetDisplayIdForWindow(
-        void* nativeWindow, WindowId windowId);
-    [[nodiscard]] core::Result<float> GetPixelDensityForWindow(
-        void* nativeWindow, WindowId windowId) const;
-    [[nodiscard]] core::Result<float> GetDisplayScaleForWindow(
-        void* nativeWindow, WindowId windowId) const;
+    [[nodiscard]] core::Result<DisplayId> GetDisplayIdForWindow(void* nativeWindow,
+                                                                WindowId windowId);
+    [[nodiscard]] core::Result<float> GetPixelDensityForWindow(void* nativeWindow,
+                                                               WindowId windowId) const;
+    [[nodiscard]] core::Result<float> GetDisplayScaleForWindow(void* nativeWindow,
+                                                               WindowId windowId) const;
     [[nodiscard]] core::VoidResult SetMouseCapture(bool enabled);
     [[nodiscard]] core::Result<LogicalPoint> GetGlobalMousePosition() const;
     [[nodiscard]] core::VoidResult SetSystemCursor(SystemCursorShape shape);
@@ -122,10 +117,8 @@ public:
     [[nodiscard]] core::Result<std::string> GetClipboardText() const;
     [[nodiscard]] core::VoidResult SetClipboardText(std::string_view text);
     [[nodiscard]] core::VoidResult OpenExternalUri(std::string_view uri);
-    [[nodiscard]] core::Result<DialogRequestId> ShowOpenFileDialog(
-        const OpenFileDialogDesc& desc);
-    [[nodiscard]] core::Result<DialogRequestId> ShowSaveFileDialog(
-        const SaveFileDialogDesc& desc);
+    [[nodiscard]] core::Result<DialogRequestId> ShowOpenFileDialog(const OpenFileDialogDesc& desc);
+    [[nodiscard]] core::Result<DialogRequestId> ShowSaveFileDialog(const SaveFileDialogDesc& desc);
     [[nodiscard]] core::Result<DialogRequestId> ShowOpenFolderDialog(
         const OpenFolderDialogDesc& desc);
     [[nodiscard]] std::shared_ptr<DialogRequestState> AcquireDialogRequest(
@@ -136,16 +129,14 @@ private:
     friend class WindowImpl;
 
     [[nodiscard]] core::Result<std::vector<std::uint32_t>> RefreshDisplays();
-    [[nodiscard]] core::Result<DisplayInfo> QueryDisplayInfo(
-        DisplayId id, std::uint32_t backendDisplayId) const;
+    [[nodiscard]] core::Result<DisplayInfo> QueryDisplayInfo(DisplayId id,
+                                                             std::uint32_t backendDisplayId) const;
     [[nodiscard]] core::Result<DialogRequestId> ShowDialog(
         BackendDialogKind kind, std::optional<WindowId> parentWindowId,
         const std::optional<std::filesystem::path>& defaultLocation,
         std::span<const DialogFileFilter> filters, bool allowMultipleSelection);
-    [[nodiscard]] std::optional<DisplayId> FindKnownDisplayId(
-        std::uint32_t backendDisplayId) const;
-    [[nodiscard]] std::optional<DisplayId> ConnectDisplayFromEvent(
-        std::uint32_t backendDisplayId);
+    [[nodiscard]] std::optional<DisplayId> FindKnownDisplayId(std::uint32_t backendDisplayId) const;
+    [[nodiscard]] std::optional<DisplayId> ConnectDisplayFromEvent(std::uint32_t backendDisplayId);
     void DisconnectDisplayFromEvent(std::uint32_t backendDisplayId);
     void ReconcileDisplayFromEvent(std::uint32_t backendDisplayId);
     void ObserveWindowShownEvent(std::uint32_t backendWindowId);

@@ -102,6 +102,14 @@ private:
 [[nodiscard]] std::string FormatErrorCode(ErrorCode code);
 [[nodiscard]] std::string FormatError(const Error& error);
 
+namespace detail
+{
+[[noreturn]] consteval void RejectConstexprErrorConstruction()
+{
+    throw "pond::core::Error is runtime-only and cannot be constructed during constant evaluation.";
+}
+} // namespace detail
+
 template <typename Value>
 class [[nodiscard]] Result final
 {
@@ -147,6 +155,10 @@ public:
     [[nodiscard]] static constexpr Result FromError(ErrorType error) noexcept(
         std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
     {
+        if consteval
+        {
+            detail::RejectConstexprErrorConstruction();
+        }
         return Result{std::unexpected<ErrorType>{std::move(error)}};
     }
 
@@ -273,6 +285,10 @@ public:
     [[nodiscard]] static constexpr Result FromError(ErrorType error) noexcept(
         std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
     {
+        if consteval
+        {
+            detail::RejectConstexprErrorConstruction();
+        }
         return Result{std::unexpected<ErrorType>{std::move(error)}};
     }
 
@@ -320,6 +336,10 @@ using VoidResult = Result<void>;
 template <typename... Args>
 [[nodiscard]] constexpr std::unexpected<Error> MakeUnexpected(Args&&... args)
 {
+    if consteval
+    {
+        detail::RejectConstexprErrorConstruction();
+    }
     return std::unexpected<Error>(Error(std::forward<Args>(args)...));
 }
 } // namespace pond::core

@@ -29,7 +29,6 @@ ponder_add_project_library(platform
         src/RuntimeChildRegistry.cpp
         src/SdlEventTranslator.cpp
         src/SdlError.cpp
-        src/StringValidation.cpp
         src/Window.cpp
         src/WindowProperties.cpp
         src/WindowTextInput.cpp
@@ -40,11 +39,11 @@ ponder_add_project_library(platform
         src/RuntimeChildRegistry.hpp
         src/SdlEventTranslator.hpp
         src/SdlError.hpp
-        src/StringValidation.hpp
         src/WindowImpl.hpp
     PUBLIC_DEPS
         ponder::core
     PRIVATE_DEPS
+        ponder::io
         ponder::SDL3)
 
 # Keep platform PCH-free until platform-only measurements justify opting in.

@@ -32,8 +32,7 @@ class PlatformRuntimeState;
 class PlatformRuntime final
 {
 public:
-    [[nodiscard]] static core::Result<PlatformRuntime> Create(
-        const PlatformRuntimeDesc& desc);
+    [[nodiscard]] static core::Result<PlatformRuntime> Create(const PlatformRuntimeDesc& desc);
 
     ~PlatformRuntime() noexcept;
 
@@ -59,10 +58,8 @@ public:
     [[nodiscard]] core::VoidResult SetClipboardText(std::string_view text);
     [[nodiscard]] core::VoidResult OpenExternalUri(std::string_view uri);
 
-    [[nodiscard]] core::Result<DialogRequestId> ShowOpenFileDialog(
-        const OpenFileDialogDesc& desc);
-    [[nodiscard]] core::Result<DialogRequestId> ShowSaveFileDialog(
-        const SaveFileDialogDesc& desc);
+    [[nodiscard]] core::Result<DialogRequestId> ShowOpenFileDialog(const OpenFileDialogDesc& desc);
+    [[nodiscard]] core::Result<DialogRequestId> ShowSaveFileDialog(const SaveFileDialogDesc& desc);
     [[nodiscard]] core::Result<DialogRequestId> ShowOpenFolderDialog(
         const OpenFolderDialogDesc& desc);
 

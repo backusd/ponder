@@ -20,8 +20,8 @@ class ProcessState;
 struct PlatformProcessBackend;
 struct ProcessFactory;
 
-[[nodiscard]] core::Result<Process> LaunchProcess(
-    const ProcessDesc& desc, PlatformProcessBackend backend);
+[[nodiscard]] core::Result<Process> LaunchProcess(const ProcessDesc& desc,
+                                                  PlatformProcessBackend backend);
 } // namespace detail
 
 struct ProcessDesc final
@@ -29,8 +29,7 @@ struct ProcessDesc final
     std::filesystem::path executable;
     std::vector<std::string> arguments;
 
-    [[nodiscard]] friend bool operator==(const ProcessDesc& lhs,
-                                         const ProcessDesc& rhs) = default;
+    [[nodiscard]] friend bool operator==(const ProcessDesc& lhs, const ProcessDesc& rhs) = default;
 };
 
 struct ProcessNormalExit final
@@ -38,7 +37,7 @@ struct ProcessNormalExit final
     int exitCode{};
 
     [[nodiscard]] friend constexpr bool operator==(ProcessNormalExit,
-                                                  ProcessNormalExit) noexcept = default;
+                                                   ProcessNormalExit) noexcept = default;
 };
 
 struct ProcessSignalTermination final
@@ -46,13 +45,13 @@ struct ProcessSignalTermination final
     int signal{};
 
     [[nodiscard]] friend constexpr bool operator==(ProcessSignalTermination,
-                                                  ProcessSignalTermination) noexcept = default;
+                                                   ProcessSignalTermination) noexcept = default;
 };
 
 struct ProcessUnknownTermination final
 {
     [[nodiscard]] friend constexpr bool operator==(ProcessUnknownTermination,
-                                                  ProcessUnknownTermination) noexcept = default;
+                                                   ProcessUnknownTermination) noexcept = default;
 };
 
 using ProcessExitStatus =

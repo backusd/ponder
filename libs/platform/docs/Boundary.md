@@ -18,8 +18,9 @@ Status: platform contracts revised on 2026-07-09.
 - Public APIs expose project-owned and standard-library types only.
 - Public text is UTF-8. Borrowed text uses `std::string_view`; owned text uses
   `std::string`.
-- Filesystem locations use `std::filesystem::path`. Platform owns conversion
-  between paths and SDL's UTF-8 representation.
+- Filesystem locations use `std::filesystem::path`. Platform uses `ponder_io`
+  path encoding helpers when converting between paths and SDL's UTF-8
+  representation.
 - Native resource owners use PIMPL or an equivalent private representation. SDL
   and OS declarations do not appear in public headers.
 
@@ -347,12 +348,13 @@ Status: platform contracts revised on 2026-07-09.
 ## Dependencies
 
 `ponder_platform` has `ponder::core` as a public CMake dependency and
-`ponder::SDL3` as a private dependency. Because platform is a static library,
-SDL may still appear as a link-only dependency of final executables; consumers
-must not inherit SDL compile definitions, include paths, or public types.
+`ponder::io` plus `ponder::SDL3` as private dependencies. Because platform is a
+static library, private dependencies may still appear as link-only dependencies
+of final executables; consumers must not inherit SDL compile definitions,
+include paths, or public types.
 
 Platform must not depend on `ponder_render`, `ponder_ui`, `ponder_project`,
-`ponder_chemistry`, `ponder_scientific_data`, `ponder_io`, `ponder_workflow`,
+`ponder_chemistry`, `ponder_scientific_data`, `ponder_workflow`,
 `ponder_compute`, `ponder_plugin_sdk`, or `ponder-desktop`.
 
 ## Testing Boundary
@@ -368,3 +370,6 @@ Platform must not depend on `ponder_render`, `ponder_ui`, `ponder_project`,
 - A GUI-related test skips only after positively identifying an unsupported
   driver or capability. An unexpected initialization or window failure on a
   normal GUI host is a failure.
+- Headless, hidden-window, CTest label, resource-lock, host-local command,
+  portability, and manual dialog-smoke details live in
+  `HeadlessAndHostVerification.md`.

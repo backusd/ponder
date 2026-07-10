@@ -13,9 +13,9 @@ privately by SDL3.
   `pond::platform` namespace.
 - Public headers may use standard-library and `ponder_core` types. Never expose
   SDL headers, SDL types, direct OS types, or OS headers.
-- Declare `ponder::core` as a public target dependency and `ponder::SDL3` as a
-  private target dependency. Do not add another production dependency without a
-  boundary decision.
+- Declare `ponder::core` as a public target dependency and `ponder::io` plus
+  `ponder::SDL3` as private target dependencies. Do not add another production
+  dependency without a boundary decision.
 - `ponder_platform` intentionally uses no precompiled header. Every header and
   source includes its direct dependencies. Do not enable a platform PCH unless
   platform-only measurements demonstrate a material benefit and this policy is
@@ -208,6 +208,9 @@ privately by SDL3.
 
 ## Verification
 
+Keep `HeadlessAndHostVerification.md` current when CTest labels, live SDL skip
+rules, host-local commands, or manual dialog verification steps change.
+
 For intermediate implementation tasks:
 
 - Reuse one configured supported Debug developer preset. Reconfigure only when
@@ -233,7 +236,7 @@ At the renderer and completion gates:
   a configuration that provides `compile_commands.json`: the Windows Ninja
   analysis preset or a normal supported single-configuration Linux/macOS
   preset.
-- PLAT-022 records the Windows, Linux, and macOS compiler/sanitizer matrix.
+- `future.txt` records the Windows, Linux, and macOS compiler/sanitizer matrix.
 - Serialize integration tests that touch process-global SDL state or the system
   clipboard, record capability-based skips, and describe local success as
   host-local until the portability matrix is actually run.

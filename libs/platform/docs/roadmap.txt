@@ -49,7 +49,7 @@ self-containment target is explicitly never assigned a PCH.
   and render-bridge scaffolding may begin earlier, but adapter completion waits
   for clipboard and external-URI services.
 - PLAT-021 is the complete host-local service gate. Cross-platform verification
-  is tracked separately in PLAT-022.
+  is tracked separately in `future.txt`.
 
 ## Milestones
 
@@ -58,7 +58,7 @@ self-containment target is explicitly never assigned a PCH.
 | Contracts | PLAT-000 through PLAT-003 | Stable architecture, error, type, and test contracts |
 | Renderer-ready | PLAT-004 through PLAT-013 | Windows, input, events, and native interop |
 | Desktop services | PLAT-014 through PLAT-021 | Host services and local verification |
-| Portability matrix | PLAT-022 | Actual Windows, Linux, and macOS evidence |
+| Future portability matrix | `future.txt` | Actual Windows, Linux, and macOS evidence |
 
 ## Verification Cadence
 
@@ -85,8 +85,8 @@ tooling.
 
 PLAT-013 is the broader renderer-ready Debug gate. PLAT-021 defines the complete
 host-local Debug, Release, analysis, test, formatting, clang-tidy, whitespace,
-dependency, and manual verification gate. PLAT-022 records the cross-platform
-compiler and sanitizer matrix.
+dependency, and manual verification gate. `future.txt` records the
+cross-platform compiler and sanitizer matrix.
 
 ## Task List
 
@@ -923,6 +923,8 @@ Done when:
 TASK PLAT-018: Audit Unit And Public-Header Coverage
 ---------------------------------------------------
 
+Status: completed on 2026-07-09.
+
 Audit tests added by earlier tasks rather than postponing testing until now.
 
 Work:
@@ -952,6 +954,8 @@ Done when:
 
 TASK PLAT-019: Audit Live SDL Integration Coverage
 -------------------------------------------------
+
+Status: completed on 2026-07-09.
 
 Prove real SDL wiring independently of `ponder-desktop`.
 
@@ -993,6 +997,8 @@ Done when:
 TASK PLAT-020: Document Headless And Host Verification
 -----------------------------------------------------
 
+Status: completed on 2026-07-09.
+
 Make environment-dependent behavior explicit.
 
 Work:
@@ -1009,7 +1015,7 @@ Work:
   supported dialog kind with and without a parent window.
 - Record intermediate, renderer-gate, host-local completion, analysis, and
   portability commands for each supported host as they become available.
-- Distinguish host-local completion from the unrun rows of the PLAT-022
+- Distinguish host-local completion from the unrun rows of the `future.txt`
   portability matrix.
 
 Done when:
@@ -1020,6 +1026,8 @@ Done when:
 
 TASK PLAT-021: Verify Complete Host-Local Platform Services
 ----------------------------------------------------------
+
+Status: completed on 2026-07-09 for the local Windows host.
 
 Treat this as the completion gate for all services in this roadmap.
 
@@ -1065,39 +1073,222 @@ Done when:
 - Every implemented platform service is locally built, tested, formatted, and
   analyzed on the recorded host.
 - Renderer-ready status from PLAT-013 remains valid after service additions.
-- Completion is explicitly described as host-local pending PLAT-022.
+- Completion is explicitly described as host-local pending `future.txt`.
 
-TASK PLAT-022: Run The Cross-Platform Portability Matrix
--------------------------------------------------------
+Host-local verification record, 2026-07-09:
 
-Collect actual evidence for the supported desktop/compiler boundary. This task
-does not block host-local renderer or UI work and may wait for CI or suitable
-hosts, but unrun rows remain visibly unverified.
+- Host: Windows 10.0.26200 from the Visual Studio 2026 Developer Command Prompt
+  18.7.3.
+- Tool check: `scripts\check-tools.ps1` passed required tools with CMake/CTest
+  4.2.3, Ninja 1.13.2, MSBuild 18.7.8, clang-format/clang-tidy 22.1.3, and
+  Visual Studio LLVM available. The script still reported recommended-tool
+  probes for `cl`, `link`, and WindowsApps `bash` as broken, but the MSVC
+  compiler/linker were exercised successfully by the configured builds.
+- SDL: revision `SDL-3.5.0-release-3.4.0-1106-ge0b323890`, compiled static
+  with Windows, dummy, and offscreen video drivers enabled.
+- Clean primary-host configure/build:
+  - `cmake --preset windows-msvc-debug`
+  - `cmake --preset windows-msvc-release`
+  - Build targets in both presets: `ponder_platform`,
+    `ponder_platform_header_tests`, `ponder_platform_tests`,
+    `ponder_platform_backend_tests`, `ponder_platform_integration_tests`, and
+    `ponder_platform_process_helper`.
+- Analysis configure/build:
+  - `scripts\build.ps1 -Preset windows-ninja-analysis -ConfigureOnly`
+  - `build\windows-ninja-analysis\compile_commands.json` was generated.
+  - The same platform targets were built once in the analysis tree so
+    clang-tidy could read generated C++ module dependency response files.
+- Tests:
+  - `ctest --preset windows-msvc-debug -L platform --output-on-failure` passed
+    176 of 176 platform-labelled tests.
+  - `ctest --preset windows-msvc-release -L platform --output-on-failure`
+    passed 176 of 176 platform-labelled tests.
+  - Each configuration reported the expected dummy-driver skip for
+    `PlatformRuntimeIntegrationTests.ReportsNativeHandleUnsupportedUnderDummyDriver`.
+    The integration tests select SDL's dummy driver for hidden-window coverage,
+    so native-handle presentation remains intentionally unsupported there.
+- Analysis and formatting:
+  - Scoped clang-format was applied to and then checked across platform public
+    headers, private sources, unit tests, integration tests, header
+    self-containment TUs, and the process helper.
+  - Scoped clang-tidy completed over 57 platform translation units using
+    `windows-ninja-analysis`; it reported warnings but no clang-tidy errors.
+    The warnings are currently style/advisory diagnostics such as enum backing
+    size, designated-initializer suggestions, redundant explicit default member
+    initializers, and a few test-helper naming/C-array suggestions.
+  - `git diff HEAD --check` completed without whitespace errors. Git emitted
+    Windows LF/CRLF normalization warnings for formatted C++ files only.
+- Dependency and public-header audit:
+  - `ponder_platform` remains `PUBLIC` on `ponder::core` and `PRIVATE` on
+    `ponder::SDL3`.
+  - SDL usage does not leak to consumers through the public headers; the
+    SDL-free public-header target builds in Debug, Release, and the analysis
+    tree.
+- Contract audit:
+  - Lifecycle, owner-thread rules, callback-thread marshalling, process-thread
+    exception, dialog cancellation-as-outcome, native-handle borrowing,
+    external-URI policy, clipboard error handling, and platform error semantics
+    are documented in `Boundary.md`, `Codex.md`,
+    `HeadlessAndHostVerification.md`, and the public headers.
+  - PLAT-013 renderer-ready status remains valid after the host-local services:
+    platform still owns SDL windows/lifecycle and exposes only the approved
+    borrowed native payloads required for renderer surface creation.
+- Skipped or not applicable on this host-local pass:
+  - Linux Clang ASAN/UBSAN was not run because the current host is Windows.
+  - Manual native file/folder dialog presentation was not performed from this
+    non-interactive automation session; dialog presentation remains unverified
+    until a capable GUI host performs the documented manual open/cancel smoke.
 
-Work:
+Completion is host-local only. Cross-platform compiler, sanitizer, and native
+interop rows are tracked in `future.txt`.
 
-- Configure, build, and run public-header, pure, and backend tests on:
-  - Windows with MSVC Debug/Release and clang-cl Debug where supported.
-  - Linux with Clang Debug/Release, GCC Debug, and Clang ASAN/UBSAN.
-  - macOS with AppleClang Debug/Release.
-- Use a matching CTest preset where defined. For configurations without one,
-  build first and run `ctest --test-dir build/<preset> --output-on-failure`
-  directly; add `-C` for a multi-configuration generator.
-- Run hidden-window, display/scale, input, native-handle, process, and clipboard
-  integration coverage wherever the host and driver support it.
-- Compile `NativeWin32Window` on Windows, `NativeX11Window` and
-  `NativeWaylandWindow` on Linux, and `NativeCocoaWindow` on macOS.
-- Record capability-based skips rather than treating them as passes.
-- Add CI jobs when CI is introduced; until then maintain a dated manual matrix
-  with exact compiler, OS, SDL driver, and result information.
-- File scoped follow-up tasks for real platform differences instead of adding
-  undocumented conditionals or weakening the project-owned API.
+## Final Audit
 
-Done when:
+Audit scope: production headers, private headers, sources, and build wiring were
+reviewed against PLAT-000 through PLAT-021. Unit, backend, header, and integration
+test implementations were deliberately not reviewed in this pass. Consequently,
+the PLAT-018 and PLAT-019 coverage conclusions remain outside this audit and must
+be reassessed in the planned test-only review.
 
-- Windows, Linux, and macOS rows contain actual successful configure, build,
-  public-header, pure, and backend results.
-- Each supported native interop branch has compiled and its applicable live
-  behavior has been exercised.
-- Remaining skips and unsupported capabilities are explicit, justified, and
-  linked to follow-up work.
+### Overall Result
+
+No production service described by the roadmap is wholly absent. The runtime,
+multi-window ownership, displays, window state, typed events, input, native
+interop, drag-and-drop, clipboard, URI, dialog, and process surfaces all exist and
+mostly follow the intended SDL-private boundary. The first pass is substantial,
+but the following correctness and contract gaps mean the roadmap should not yet
+be treated as fully closed.
+
+### Roadmap Completeness And Correctness
+
+1. **High: abandoning a running process can leave a POSIX zombie.**
+   `ProcessState::~ProcessState()` immediately calls the backend destroy function
+   (`src/Process.cpp:176`). The SDL backend calls `SDL_DestroyProcess`, which makes
+   one non-blocking wait and then discards its PID storage even when the child is
+   still alive. On POSIX, a child that exits later can no longer be reaped. This
+   does not provide a robust implementation of PLAT-017's non-waiting,
+   non-terminating destruction contract. Transfer abandoned live handles to an
+   asynchronous reaper, or revise the public contract to require an explicit wait
+   or detach operation before destruction.
+
+2. **High: process exit translation is not cross-platform correct and has a
+   reachable signed-overflow case.** `MakeProcessExitStatus()` treats every
+   negative `int` except `-255` as a POSIX signal and negates it
+   (`src/Process.cpp:50`). SDL converts the Windows `DWORD` exit status directly
+   to `int`; legitimate high-bit Windows statuses are therefore mislabeled as
+   signals, and `0x80000000` becomes `INT_MIN`, whose negation is undefined
+   behavior. Make the private backend return a structured, host-aware status and
+   use an unsigned normal-exit representation capable of preserving the full
+   Windows status. Do not infer termination kind from one overloaded signed
+   integer in platform-independent code.
+
+3. **High: generic window-state failures are overclassified as unsupported.**
+   The production wrappers for minimize, maximize, and restore translate every
+   false SDL return to `BackendWindowOperationResult::Unsupported`
+   (`src/PlatformRuntimeBackend.cpp:502`). PLAT-007 requires only positively known
+   unavailable transitions to use `Unsupported`; other failures must use
+   `BackendFailure`. Return `Failed` for an unclassified false SDL result and keep
+   explicit cases such as maximizing a non-resizable window as `Unsupported`.
+
+4. **Medium: dialog completion timestamps describe consumption, not
+   completion.** `DialogCompletionRecord` stores only an ID and outcome
+   (`src/PlatformRuntimeState.hpp:32`), while `PollDialogCompletion()` samples
+   `Now()` when the owner thread eventually consumes the record
+   (`src/Dialog.cpp:463`). This weakens PLAT-016's timestamp correlation contract
+   and can misorder a completion relative to SDL events that accumulated before
+   polling. Capture the SDL tick-domain timestamp when the callback enqueues the
+   completion, store it in the record, and preserve it during delivery. If
+   delivery-time stamping is intentional instead, state that weaker contract
+   explicitly and stop describing the timestamp as completion correlation.
+
+5. **Medium: the dialog callback is not fully exception-safe at the C ABI
+   boundary.** `OnDialogCompleted()` performs request acquisition and constructs
+   its fallback `core::Error` before entering its `try` block
+   (`src/Dialog.cpp:278`), and `EnqueueDialogCompletion()` is `noexcept` even
+   though `std::deque::push_back` can allocate (`src/Dialog.cpp:448`). An exception
+   can therefore escape into SDL or terminate implicitly. Make the callback
+   explicitly `noexcept`, cover its entire body, and define an explicit fatal or
+   preallocated fallback for failures that cannot themselves be enqueued.
+
+6. **PLAT-017's blocking-wait warning is not durably documented.** `Wait()` passes
+   `block=true` to SDL (`src/Process.cpp:190`), but the roadmap's requirement that
+   it must not run in the desktop event loop appears in neither `Boundary.md`,
+   `Codex.md`, nor `Process.hpp`. Add the warning to the public API documentation
+   and the durable boundary document.
+
+7. **PLAT-021 still has one explicit manual verification gap.** Its own record
+   says native file/folder dialog presentation was not exercised. Keep the gate
+   labeled as automated host-local completion with manual dialog presentation
+   pending, or perform and record the documented open/cancel matrix before
+   calling the host-local gate fully complete.
+
+### Library Boundary Findings
+
+- `WindowId`, `DisplayId`, and `DialogRequestId` repeat the same zero-invalid
+  64-bit strong-ID implementation and hash plumbing in `Identifiers.hpp`. Move
+  the reusable mechanics to a tag-based `ponder/core/Identifier.hpp`, while
+  retaining platform-owned tags or aliases and all allocation/routing policy in
+  platform.
+- `RoundToBackendInteger()` in `src/WindowTextInput.cpp:21` is a pure finite,
+  range-checked floating-to-integral conversion. A constrained reusable helper
+  belongs in `ponder/core/Numbers.hpp`. The other integral range checks in the
+  library should use standard checked-range facilities such as `std::in_range`
+  where they fit rather than growing more platform-local conversion helpers.
+- The installed `Process.hpp` exposes the injected
+  `detail::LaunchProcess(..., PlatformProcessBackend)` seam even though the
+  backend definition is private. Move that overload declaration to
+  `src/ProcessBackend.hpp`; it belongs in platform, but not in platform's public
+  API.
+- No additional IO extraction is indicated. Dialog, process, and dropped-file
+  paths now correctly use `ponder::io` for UTF-8/path conversion. Geometry,
+  platform timestamps, input values, dialog/process services, and runtime child
+  tracking carry platform-specific semantics and should remain here.
+
+### Implementation Quality And Performance
+
+- **Display refresh cost grows with historical topology churn.**
+  `ConnectDisplayFromEvent()` and `RefreshDisplays()` copy both complete identity
+  maps before every commit (`src/Display.cpp:183` and `src/Display.cpp:250`).
+  Because disconnected project-ID tombstones intentionally remain forever,
+  ordinary enumeration, `GetDisplayInfo()`, and window-display queries perform
+  allocations and copies proportional to every display identity ever observed.
+  Preserve transactional behavior with targeted staged insertions/updates or a
+  stable indexed record store rather than cloning both maps.
+- Dialog filter validation uses locale-sensitive `std::isalnum`
+  (`src/Dialog.cpp:34`) even though the accepted grammar is explicitly ASCII.
+  Use direct ASCII range checks so a changed C locale cannot make platform
+  accept a pattern that SDL rejects.
+- `PrepareDialogRequest()` allocates and fills an SDL filter vector that is never
+  consumed; `ShowDialog()` rebuilds the vector in request-owned storage
+  (`src/Dialog.cpp:110` and `src/Dialog.cpp:360`). Remove the first vector and its
+  pointer construction. Also remove the unused stored `parentWindowId` and dead
+  `requestRegistered` bookkeeping in the same path.
+- Many successful window queries eagerly allocate error-context strings. For
+  example, `WindowImpl::GetProperties()` constructs `"window <id>"` before it
+  knows whether SDL failed (`src/WindowProperties.cpp:85`), and `GetState()` can
+  construct the same context again. Cache the immutable per-window context after
+  ID assignment or build diagnostic strings only on failure, especially for
+  state queries that UI code may call every frame.
+- The SDL backend tables are initialized positionally with long lists of raw
+  function pointers (`src/PlatformRuntimeBackend.cpp:809`). Several entries have
+  identical signatures, so a field reorder or accidental swap can compile and
+  silently wire the wrong operation. Use C++23 designated initializers and keep
+  each entry visibly paired with its field name.
+- `ProcessState::Terminate()` treats every forged `ProcessTerminationMode` other
+  than `Force` as `GracefulPreferred` (`src/Process.cpp:203`). Validate the closed
+  enum and return `InvalidArgument`, matching the other public enum-taking APIs.
+- Clipboard's captured-error formatter duplicates the private SDL failure
+  message builder. Extend the SDL error adapter with an overload accepting an
+  already captured error string so the exceptional clipboard snapshot ordering
+  stays intact without maintaining two message formats.
+
+### Roadmap And Verification Cleanup
+
+- The guiding dependency statement and PLAT-021 verification record still say
+  production depends on public core plus private SDL only. The current and
+  intended target is public `ponder::core` plus private `ponder::io` and
+  `ponder::SDL3`; update those two stale roadmap statements.
+- After the production corrections above and the separate test audit, rerun the
+  full PLAT-021 host-local gate. Keep cross-platform compiler, sanitizer, POSIX
+  process-lifetime, and native-interoperability evidence pending in `future.txt`
+  until those hosts are actually exercised.

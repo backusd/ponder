@@ -1,0 +1,39 @@
+# Future Platform Work
+
+This document collects platform tasks that are important but do not block the
+host-local platform implementation.
+
+TASK PLAT-022: Run The Cross-Platform Portability Matrix
+-------------------------------------------------------
+
+Collect actual evidence for the supported desktop/compiler boundary. This task
+does not block host-local renderer or UI work and may wait for CI or suitable
+hosts, but unrun rows remain visibly unverified.
+
+Work:
+
+- Configure, build, and run public-header, pure, and backend tests on:
+  - Windows with MSVC Debug/Release and clang-cl Debug where supported.
+  - Linux with Clang Debug/Release, GCC Debug, and Clang ASAN/UBSAN.
+  - macOS with AppleClang Debug/Release.
+- Use a matching CTest preset where defined. For configurations without one,
+  build first and run `ctest --test-dir build/<preset> --output-on-failure`
+  directly; add `-C` for a multi-configuration generator.
+- Run hidden-window, display/scale, input, native-handle, process, and clipboard
+  integration coverage wherever the host and driver support it.
+- Compile `NativeWin32Window` on Windows, `NativeX11Window` and
+  `NativeWaylandWindow` on Linux, and `NativeCocoaWindow` on macOS.
+- Record capability-based skips rather than treating them as passes.
+- Add CI jobs when CI is introduced; until then maintain a dated manual matrix
+  with exact compiler, OS, SDL driver, and result information.
+- File scoped follow-up tasks for real platform differences instead of adding
+  undocumented conditionals or weakening the project-owned API.
+
+Done when:
+
+- Windows, Linux, and macOS rows contain actual successful configure, build,
+  public-header, pure, and backend results.
+- Each supported native interop branch has compiled and its applicable live
+  behavior has been exercised.
+- Remaining skips and unsupported capabilities are explicit, justified, and
+  linked to follow-up work.

@@ -1,6 +1,7 @@
 #include <ponder/core/ScopeExit.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
+#include <ponder/platform/Process.hpp>
 
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_events.h>
@@ -9,16 +10,16 @@
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
-
-#include <gtest/gtest.h>
-
-#include <cmath>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <gtest/gtest.h>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -59,6 +60,34 @@ constexpr char kAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
     return window == nullptr ? 0U : SDL_GetWindowID(window);
 }
 
+#ifndef PONDER_PLATFORM_PROCESS_HELPER_PATH
+#error "PONDER_PLATFORM_PROCESS_HELPER_PATH is required for integration tests."
+#endif
+
+[[nodiscard]] std::filesystem::path GetProcessHelperPath()
+{
+    return std::filesystem::path{PONDER_PLATFORM_PROCESS_HELPER_PATH};
+}
+
+[[nodiscard]] std::filesystem::path MakeTemporaryPath(std::string_view suffix)
+{
+    const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() /
+           (std::string{"ponder-platform-integration-"} + std::to_string(nonce) + "-" +
+            std::string{suffix} + ".txt");
+}
+
+[[nodiscard]] std::vector<std::string> ReadLines(const std::filesystem::path& path)
+{
+    std::ifstream file{path, std::ios::binary};
+    std::vector<std::string> lines;
+    for (std::string line; std::getline(file, line);)
+    {
+        lines.push_back(line);
+    }
+    return lines;
+}
+
 class PlatformRuntimeIntegrationTests : public testing::Test
 {
 protected:
@@ -80,31 +109,28 @@ private:
         static_cast<void>(SDL_ResetHint(SDL_HINT_VIDEO_DRIVER));
         static_cast<void>(SDL_ResetHint(kFocusClickThroughHint));
         static_cast<void>(SDL_ResetHint(kAutoCaptureHint));
-        static_cast<void>(
-            SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, nullptr));
+        static_cast<void>(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, nullptr));
         static_cast<void>(
             SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING, nullptr));
-        static_cast<void>(SDL_SetAppMetadataProperty(
-            SDL_PROP_APP_METADATA_IDENTIFIER_STRING, nullptr));
+        static_cast<void>(
+            SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, nullptr));
         static_cast<void>(SDL_ClearError());
     }
 };
 
 TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresEffectiveGlobalState)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(kFocusClickThroughHint, "prior-focus", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(kFocusClickThroughHint, "prior-focus", SDL_HINT_OVERRIDE));
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, "Prior App"));
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING, "1.0"));
-    ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING,
-                                           "org.ponder.prior"));
+    ASSERT_TRUE(
+        SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, "org.ponder.prior"));
 
-    const pond::platform::PlatformRuntimeDesc desc{
-        .applicationName = "Ponder Integration Test",
-        .applicationVersion = std::string{"2.0"},
-        .applicationIdentifier = std::string{"org.ponder.integration"}};
+    const pond::platform::PlatformRuntimeDesc desc{.applicationName = "Ponder Integration Test",
+                                                   .applicationVersion = std::string{"2.0"},
+                                                   .applicationIdentifier =
+                                                       std::string{"org.ponder.integration"}};
 
     const std::uint64_t ticksBefore = SDL_GetTicksNS();
     {
@@ -119,8 +145,7 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresEffectiveGlobalSta
         EXPECT_STREQ(SDL_GetHint(kAutoCaptureHint), "0");
         EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING),
                      "Ponder Integration Test");
-        EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING),
-                     "2.0");
+        EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING), "2.0");
         EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING),
                      "org.ponder.integration");
 
@@ -133,8 +158,7 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresEffectiveGlobalSta
     EXPECT_EQ(SDL_WasInit(0), 0U);
     EXPECT_STREQ(SDL_GetHint(kFocusClickThroughHint), "prior-focus");
     EXPECT_EQ(SDL_GetHint(kAutoCaptureHint), nullptr);
-    EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING),
-                 "Prior App");
+    EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING), "Prior App");
     EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING), "1.0");
     EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING),
                  "org.ponder.prior");
@@ -142,8 +166,7 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresEffectiveGlobalSta
 
 TEST_F(PlatformRuntimeIntegrationTests, ReportsLiveSdlVideoInitializationFailure)
 {
-    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER,
-                                        "ponder-driver-that-does-not-exist",
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "ponder-driver-that-does-not-exist",
                                         SDL_HINT_OVERRIDE));
 
     const auto result =
@@ -151,31 +174,28 @@ TEST_F(PlatformRuntimeIntegrationTests, ReportsLiveSdlVideoInitializationFailure
 
     ASSERT_FALSE(result.HasValue());
     EXPECT_EQ(result.GetError().GetCode(),
-              pond::platform::ToErrorCode(
-                  pond::platform::PlatformErrorCode::BackendFailure));
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
     EXPECT_NE(result.GetError().GetMessage().find("SDL_Init"), std::string_view::npos);
     EXPECT_EQ(SDL_WasInit(0), 0U);
 }
 
 TEST_F(PlatformRuntimeIntegrationTests, OwnsMultipleLiveHiddenWindows)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
     ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
     pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
 
-    const pond::platform::WindowDesc desc{
-        .title = "Live Hidden Window",
-        .logicalSize = {320, 240},
-        .visible = false,
-        .resizable = true,
-        .highPixelDensity = true,
-        .minimumLogicalSize = pond::platform::LogicalSize{64, 48},
-        .graphicsCompatibility =
-            pond::platform::WindowGraphicsCompatibility::Default};
+    const pond::platform::WindowDesc desc{.title = "Live Hidden Window",
+                                          .logicalSize = {320, 240},
+                                          .visible = false,
+                                          .resizable = true,
+                                          .highPixelDensity = true,
+                                          .minimumLogicalSize = pond::platform::LogicalSize{64, 48},
+                                          .graphicsCompatibility =
+                                              pond::platform::WindowGraphicsCompatibility::Default};
 
     auto firstResult = runtime.CreateWindow(desc);
     ASSERT_TRUE(firstResult.HasValue()) << firstResult.GetError().GetMessage();
@@ -219,8 +239,7 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsMultipleLiveHiddenWindows)
 
 TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -245,8 +264,7 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     EXPECT_TRUE(window.StartTextInput().HasValue());
 
     const pond::platform::TextInputArea area{
-        .rectangle = {.origin = {12.4F, -8.6F}, .extent = {140.2F, 22.8F}},
-        .cursorOffset = 19.6F};
+        .rectangle = {.origin = {12.4F, -8.6F}, .extent = {140.2F, 22.8F}}, .cursorOffset = 19.6F};
     ASSERT_TRUE(window.SetTextInputArea(area).HasValue());
 
     SDL_Rect backendArea{};
@@ -298,45 +316,36 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
 
     auto keyEvent = runtime.PollEvent();
     ASSERT_TRUE(keyEvent.has_value());
-    ASSERT_TRUE(
-        std::holds_alternative<pond::platform::KeyboardKeyEvent>(*keyEvent));
-    EXPECT_EQ(
-        std::get<pond::platform::KeyboardKeyEvent>(*keyEvent),
-        (pond::platform::KeyboardKeyEvent{
-            .timestamp = pond::platform::PlatformTimestamp{
-                std::chrono::nanoseconds{100}},
-            .windowId = window.GetId(),
-            .physicalKey = pond::platform::PhysicalKey::Q,
-            .logicalKey = pond::platform::LogicalKey::FromCharacter(U'a'),
-            .modifiers = pond::platform::KeyModifiers::LeftControl |
-                         pond::platform::KeyModifiers::RightShift,
-            .pressed = true,
-            .repeat = true}));
+    ASSERT_TRUE(std::holds_alternative<pond::platform::KeyboardKeyEvent>(*keyEvent));
+    EXPECT_EQ(std::get<pond::platform::KeyboardKeyEvent>(*keyEvent),
+              (pond::platform::KeyboardKeyEvent{
+                  .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+                  .windowId = window.GetId(),
+                  .physicalKey = pond::platform::PhysicalKey::Q,
+                  .logicalKey = pond::platform::LogicalKey::FromCharacter(U'a'),
+                  .modifiers = pond::platform::KeyModifiers::LeftControl |
+                               pond::platform::KeyModifiers::RightShift,
+                  .pressed = true,
+                  .repeat = true}));
 
     auto textEvent = runtime.PollEvent();
     ASSERT_TRUE(textEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::TextInputEvent>(
-        *textEvent));
-    EXPECT_EQ(
-        std::get<pond::platform::TextInputEvent>(*textEvent),
-        (pond::platform::TextInputEvent{
-            .timestamp = pond::platform::PlatformTimestamp{
-                std::chrono::nanoseconds{200}},
-            .windowId = window.GetId(),
-            .text = "typed"}));
+    ASSERT_TRUE(std::holds_alternative<pond::platform::TextInputEvent>(*textEvent));
+    EXPECT_EQ(std::get<pond::platform::TextInputEvent>(*textEvent),
+              (pond::platform::TextInputEvent{
+                  .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+                  .windowId = window.GetId(),
+                  .text = "typed"}));
 
     auto compositionEvent = runtime.PollEvent();
     ASSERT_TRUE(compositionEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::TextCompositionEvent>(
-        *compositionEvent));
-    EXPECT_EQ(
-        std::get<pond::platform::TextCompositionEvent>(*compositionEvent),
-        (pond::platform::TextCompositionEvent{
-            .timestamp = pond::platform::PlatformTimestamp{
-                std::chrono::nanoseconds{300}},
-            .windowId = window.GetId(),
-            .text = "pending",
-            .selection = pond::platform::TextCompositionRange{1, 2}}));
+    ASSERT_TRUE(std::holds_alternative<pond::platform::TextCompositionEvent>(*compositionEvent));
+    EXPECT_EQ(std::get<pond::platform::TextCompositionEvent>(*compositionEvent),
+              (pond::platform::TextCompositionEvent{
+                  .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+                  .windowId = window.GetId(),
+                  .text = "pending",
+                  .selection = pond::platform::TextCompositionRange{1, 2}}));
     EXPECT_FALSE(runtime.PollEvent().has_value());
 
     ASSERT_TRUE(window.StopTextInput().HasValue());
@@ -345,11 +354,9 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     EXPECT_TRUE(window.StopTextInput().HasValue());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests,
-       SupportsLiveMouseStateWithoutRetainingCapture)
+TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveMouseStateWithoutRetainingCapture)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -383,19 +390,16 @@ TEST_F(PlatformRuntimeIntegrationTests,
     ASSERT_TRUE(window.SetRelativeMouseMode(false).HasValue());
     EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
 
-    const pond::core::VoidResult captureResult =
-        runtime.SetMouseCapture(true);
+    const pond::core::VoidResult captureResult = runtime.SetMouseCapture(true);
     ASSERT_FALSE(captureResult.HasValue());
     EXPECT_EQ(captureResult.GetError().GetCode(),
-              pond::platform::ToErrorCode(
-                  pond::platform::PlatformErrorCode::Unsupported));
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
     EXPECT_TRUE(runtime.SetMouseCapture(false).HasValue());
 
     const auto globalPosition = runtime.GetGlobalMousePosition();
     ASSERT_FALSE(globalPosition.HasValue());
     EXPECT_EQ(globalPosition.GetError().GetCode(),
-              pond::platform::ToErrorCode(
-                  pond::platform::PlatformErrorCode::Unsupported));
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
 
     ASSERT_TRUE(runtime.HideCursor().HasValue());
     EXPECT_FALSE(runtime.IsCursorVisible());
@@ -403,22 +407,44 @@ TEST_F(PlatformRuntimeIntegrationTests,
     EXPECT_TRUE(runtime.IsCursorVisible());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests,
-       SupportsLiveClipboardTextAndRestoresPreviousText)
+TEST_F(PlatformRuntimeIntegrationTests, LaunchesHelperProcessWithoutShell)
+{
+    const std::filesystem::path argumentsPath = MakeTemporaryPath("process-arguments");
+    auto removeArgumentsFile = pond::core::MakeScopeExit(
+        [&argumentsPath]() noexcept
+        {
+            std::error_code ignored;
+            static_cast<void>(std::filesystem::remove(argumentsPath, ignored));
+        });
+
+    const std::string nonAsciiArgument{"angstrom-\xC3\x85"};
+    auto processResult = pond::platform::LaunchProcess(pond::platform::ProcessDesc{
+        .executable = GetProcessHelperPath(),
+        .arguments = {"--write-args", argumentsPath.string(), "--exit-code", "23", "--",
+                      "alpha beta", nonAsciiArgument}});
+    ASSERT_TRUE(processResult.HasValue()) << processResult.GetError().GetMessage();
+    pond::platform::Process process = std::move(processResult).GetValue();
+
+    auto waitResult = process.Wait();
+    ASSERT_TRUE(waitResult.HasValue()) << waitResult.GetError().GetMessage();
+    ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(*waitResult));
+    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*waitResult).exitCode, 23);
+    EXPECT_EQ(ReadLines(argumentsPath), (std::vector<std::string>{"alpha beta", nonAsciiArgument}));
+}
+
+TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveClipboardTextAndRestoresPreviousText)
 {
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
     if (!runtimeResult.HasValue())
     {
-        GTEST_SKIP()
-            << "Live clipboard requires an available SDL video driver: "
-            << runtimeResult.GetError().GetMessage();
+        GTEST_SKIP() << "Live clipboard requires an available SDL video driver: "
+                     << runtimeResult.GetError().GetMessage();
     }
 
     pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
     auto previousTextResult = runtime.GetClipboardText();
-    ASSERT_TRUE(previousTextResult.HasValue())
-        << previousTextResult.GetError().GetMessage();
+    ASSERT_TRUE(previousTextResult.HasValue()) << previousTextResult.GetError().GetMessage();
     const std::string previousText = previousTextResult.GetValue();
     auto restoreClipboard = pond::core::MakeScopeExit(
         [&runtime, &previousText]() noexcept
@@ -426,10 +452,8 @@ TEST_F(PlatformRuntimeIntegrationTests,
             static_cast<void>(runtime.SetClipboardText(previousText));
         });
 
-    constexpr std::string_view kClipboardText{
-        "ponder platform clipboard round trip"};
-    const pond::core::VoidResult setResult =
-        runtime.SetClipboardText(kClipboardText);
+    constexpr std::string_view kClipboardText{"ponder platform clipboard round trip"};
+    const pond::core::VoidResult setResult = runtime.SetClipboardText(kClipboardText);
     ASSERT_TRUE(setResult.HasValue()) << setResult.GetError().GetMessage();
     EXPECT_TRUE(SDL_HasClipboardText());
 
@@ -438,11 +462,9 @@ TEST_F(PlatformRuntimeIntegrationTests,
     EXPECT_EQ(textResult.GetValue(), kClipboardText);
 }
 
-TEST_F(PlatformRuntimeIntegrationTests,
-       PollsAndRoutesSyntheticEventsForMultipleLiveWindows)
+TEST_F(PlatformRuntimeIntegrationTests, PollsAndRoutesSyntheticEventsForMultipleLiveWindows)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -463,10 +485,8 @@ TEST_F(PlatformRuntimeIntegrationTests,
     ASSERT_TRUE(secondResult.HasValue()) << secondResult.GetError().GetMessage();
     pond::platform::Window second = std::move(secondResult).GetValue();
 
-    const std::uint32_t firstBackendId =
-        FindBackendWindowId(firstDesc.title);
-    const std::uint32_t secondBackendId =
-        FindBackendWindowId(secondDesc.title);
+    const std::uint32_t firstBackendId = FindBackendWindowId(firstDesc.title);
+    const std::uint32_t secondBackendId = FindBackendWindowId(secondDesc.title);
     ASSERT_NE(firstBackendId, 0U);
     ASSERT_NE(secondBackendId, 0U);
     ASSERT_NE(firstBackendId, secondBackendId);
@@ -514,61 +534,49 @@ TEST_F(PlatformRuntimeIntegrationTests,
 
     auto firstEvent = runtime.PollEvent();
     ASSERT_TRUE(firstEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<
-                pond::platform::WindowCloseRequestedEvent>(*firstEvent));
-    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*firstEvent)
-                  .windowId,
+    ASSERT_TRUE(std::holds_alternative<pond::platform::WindowCloseRequestedEvent>(*firstEvent));
+    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*firstEvent).windowId,
               first.GetId());
 
     auto secondEvent = runtime.PollEvent();
     ASSERT_TRUE(secondEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<
-                pond::platform::WindowCloseRequestedEvent>(*secondEvent));
-    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*secondEvent)
-                  .windowId,
+    ASSERT_TRUE(std::holds_alternative<pond::platform::WindowCloseRequestedEvent>(*secondEvent));
+    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*secondEvent).windowId,
               second.GetId());
 
     auto dropFileEvent = runtime.PollEvent();
     ASSERT_TRUE(dropFileEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedFileEvent>(
-        *dropFileEvent));
+    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedFileEvent>(*dropFileEvent));
     const pond::platform::DroppedFileEvent& droppedFilePayload =
         std::get<pond::platform::DroppedFileEvent>(*dropFileEvent);
     EXPECT_EQ(droppedFilePayload.windowId, first.GetId());
-    EXPECT_EQ(droppedFilePayload.path,
-              std::filesystem::path{"C:/tmp/live-drop.sdf"});
-    EXPECT_EQ(droppedFilePayload.position,
-              (pond::platform::LogicalPoint{12.5F, 24.25F}));
+    EXPECT_EQ(droppedFilePayload.path, std::filesystem::path{"C:/tmp/live-drop.sdf"});
+    EXPECT_EQ(droppedFilePayload.position, (pond::platform::LogicalPoint{12.5F, 24.25F}));
     ASSERT_TRUE(droppedFilePayload.sourceApplication.has_value());
     EXPECT_EQ(*droppedFilePayload.sourceApplication, kDropSource);
 
     auto dropTextEvent = runtime.PollEvent();
     ASSERT_TRUE(dropTextEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedTextEvent>(
-        *dropTextEvent));
+    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedTextEvent>(*dropTextEvent));
     const pond::platform::DroppedTextEvent& droppedTextPayload =
         std::get<pond::platform::DroppedTextEvent>(*dropTextEvent);
     EXPECT_EQ(droppedTextPayload.windowId, second.GetId());
     EXPECT_EQ(droppedTextPayload.text, droppedText);
-    EXPECT_EQ(droppedTextPayload.position,
-              (pond::platform::LogicalPoint{4.5F, 8.25F}));
+    EXPECT_EQ(droppedTextPayload.position, (pond::platform::LogicalPoint{4.5F, 8.25F}));
     EXPECT_FALSE(droppedTextPayload.sourceApplication.has_value());
 
     auto quitEvent = runtime.PollEvent();
     ASSERT_TRUE(quitEvent.has_value());
-    EXPECT_TRUE(
-        std::holds_alternative<pond::platform::QuitRequestedEvent>(*quitEvent));
+    EXPECT_TRUE(std::holds_alternative<pond::platform::QuitRequestedEvent>(*quitEvent));
     EXPECT_FALSE(runtime.PollEvent().has_value());
 
     EXPECT_EQ(first.GetTitle(), firstDesc.title);
     EXPECT_EQ(second.GetTitle(), secondDesc.title);
 }
 
-TEST_F(PlatformRuntimeIntegrationTests,
-       SupportsOrthogonalStateForALiveHiddenWindow)
+TEST_F(PlatformRuntimeIntegrationTests, SupportsOrthogonalStateForALiveHiddenWindow)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -585,8 +593,7 @@ TEST_F(PlatformRuntimeIntegrationTests,
 
     auto presentation = window.GetPresentation();
     ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
-    EXPECT_EQ(presentation.GetValue(),
-              pond::platform::WindowPresentation::Windowed);
+    EXPECT_EQ(presentation.GetValue(), pond::platform::WindowPresentation::Windowed);
     auto decoration = window.GetDecoration();
     ASSERT_TRUE(decoration.HasValue()) << decoration.GetError().GetMessage();
     EXPECT_EQ(decoration.GetValue(), pond::platform::WindowDecoration::System);
@@ -606,19 +613,15 @@ TEST_F(PlatformRuntimeIntegrationTests,
     ASSERT_TRUE(alwaysOnTop.HasValue()) << alwaysOnTop.GetError().GetMessage();
     EXPECT_FALSE(alwaysOnTop.GetValue());
 
-    ASSERT_TRUE(window.SetPresentation(
-                           pond::platform::WindowPresentation::DesktopFullscreen)
-                    .HasValue());
+    ASSERT_TRUE(
+        window.SetPresentation(pond::platform::WindowPresentation::DesktopFullscreen).HasValue());
     presentation = window.GetPresentation();
     ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
-    EXPECT_EQ(presentation.GetValue(),
-              pond::platform::WindowPresentation::DesktopFullscreen);
-    ASSERT_TRUE(window.SetPresentation(pond::platform::WindowPresentation::Windowed)
-                    .HasValue());
+    EXPECT_EQ(presentation.GetValue(), pond::platform::WindowPresentation::DesktopFullscreen);
+    ASSERT_TRUE(window.SetPresentation(pond::platform::WindowPresentation::Windowed).HasValue());
     presentation = window.GetPresentation();
     ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
-    EXPECT_EQ(presentation.GetValue(),
-              pond::platform::WindowPresentation::Windowed);
+    EXPECT_EQ(presentation.GetValue(), pond::platform::WindowPresentation::Windowed);
 
     ASSERT_TRUE(window.Show().HasValue());
     visible = window.IsVisible();
@@ -630,22 +633,19 @@ TEST_F(PlatformRuntimeIntegrationTests,
     EXPECT_FALSE(visible.GetValue());
 
     ASSERT_TRUE(window.Restore().HasValue());
-    const auto expectUnsupported =
-        [](const pond::core::VoidResult& result)
-        {
-            ASSERT_FALSE(result.HasValue());
-            EXPECT_EQ(result.GetError().GetCode(),
-                      pond::platform::ToErrorCode(
-                          pond::platform::PlatformErrorCode::Unsupported));
-        };
+    const auto expectUnsupported = [](const pond::core::VoidResult& result)
+    {
+        ASSERT_FALSE(result.HasValue());
+        EXPECT_EQ(result.GetError().GetCode(),
+                  pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+    };
     expectUnsupported(window.Minimize());
     expectUnsupported(window.Maximize());
     state = window.GetState();
     ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
     EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
 
-    expectUnsupported(
-        window.SetDecoration(pond::platform::WindowDecoration::Borderless));
+    expectUnsupported(window.SetDecoration(pond::platform::WindowDecoration::Borderless));
     expectUnsupported(window.SetResizable(false));
     expectUnsupported(window.SetAlwaysOnTop(true));
 
@@ -660,21 +660,18 @@ TEST_F(PlatformRuntimeIntegrationTests,
     EXPECT_FALSE(alwaysOnTop.GetValue());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests,
-       ExposesLiveDisplaySnapshotsAndWindowDensity)
+TEST_F(PlatformRuntimeIntegrationTests, ExposesLiveDisplaySnapshotsAndWindowDensity)
 {
-    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy,offscreen",
-                                        SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(
+        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy,offscreen", SDL_HINT_OVERRIDE));
 
     std::vector<pond::platform::DisplayInfo> ownedSnapshots;
     std::string firstDisplayName;
     {
-        auto runtimeResult = pond::platform::PlatformRuntime::Create(
-            pond::platform::PlatformRuntimeDesc{});
-        ASSERT_TRUE(runtimeResult.HasValue())
-            << runtimeResult.GetError().GetMessage();
-        pond::platform::PlatformRuntime runtime =
-            std::move(runtimeResult).GetValue();
+        auto runtimeResult =
+            pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+        ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+        pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
 
         const char* const videoDriver = SDL_GetCurrentVideoDriver();
         ASSERT_NE(videoDriver, nullptr);
@@ -682,8 +679,7 @@ TEST_F(PlatformRuntimeIntegrationTests,
                     std::string_view{videoDriver} == "offscreen");
 
         auto displaysResult = runtime.EnumerateDisplays();
-        ASSERT_TRUE(displaysResult.HasValue())
-            << displaysResult.GetError().GetMessage();
+        ASSERT_TRUE(displaysResult.HasValue()) << displaysResult.GetError().GetMessage();
         ownedSnapshots = std::move(displaysResult).GetValue();
         ASSERT_FALSE(ownedSnapshots.empty());
 
@@ -704,8 +700,7 @@ TEST_F(PlatformRuntimeIntegrationTests,
             }
 
             auto infoResult = runtime.GetDisplayInfo(display.id);
-            ASSERT_TRUE(infoResult.HasValue())
-                << infoResult.GetError().GetMessage();
+            ASSERT_TRUE(infoResult.HasValue()) << infoResult.GetError().GetMessage();
             EXPECT_EQ(infoResult.GetValue(), display);
         }
 
@@ -718,48 +713,39 @@ TEST_F(PlatformRuntimeIntegrationTests,
             .resizable = true,
             .highPixelDensity = true,
             .minimumLogicalSize = std::nullopt,
-            .graphicsCompatibility =
-                pond::platform::WindowGraphicsCompatibility::Default};
+            .graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Default};
 
         auto windowResult = runtime.CreateWindow(desc);
-        ASSERT_TRUE(windowResult.HasValue())
-            << windowResult.GetError().GetMessage();
+        ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
         pond::platform::Window window = std::move(windowResult).GetValue();
 
         auto logicalSizeResult = window.GetLogicalSize();
-        ASSERT_TRUE(logicalSizeResult.HasValue())
-            << logicalSizeResult.GetError().GetMessage();
+        ASSERT_TRUE(logicalSizeResult.HasValue()) << logicalSizeResult.GetError().GetMessage();
         auto pixelSizeResult = window.GetPixelSize();
-        ASSERT_TRUE(pixelSizeResult.HasValue())
-            << pixelSizeResult.GetError().GetMessage();
+        ASSERT_TRUE(pixelSizeResult.HasValue()) << pixelSizeResult.GetError().GetMessage();
         EXPECT_GT(logicalSizeResult.GetValue().width, 0U);
         EXPECT_GT(logicalSizeResult.GetValue().height, 0U);
         EXPECT_GT(pixelSizeResult.GetValue().width, 0U);
         EXPECT_GT(pixelSizeResult.GetValue().height, 0U);
 
         auto pixelDensityResult = window.GetPixelDensity();
-        ASSERT_TRUE(pixelDensityResult.HasValue())
-            << pixelDensityResult.GetError().GetMessage();
+        ASSERT_TRUE(pixelDensityResult.HasValue()) << pixelDensityResult.GetError().GetMessage();
         EXPECT_TRUE(std::isfinite(pixelDensityResult.GetValue()));
         EXPECT_GT(pixelDensityResult.GetValue(), 0.0F);
 
         auto displayScaleResult = window.GetDisplayScale();
-        ASSERT_TRUE(displayScaleResult.HasValue())
-            << displayScaleResult.GetError().GetMessage();
+        ASSERT_TRUE(displayScaleResult.HasValue()) << displayScaleResult.GetError().GetMessage();
         EXPECT_TRUE(std::isfinite(displayScaleResult.GetValue()));
         EXPECT_GT(displayScaleResult.GetValue(), 0.0F);
 
         auto windowDisplayResult = window.GetDisplayId();
-        ASSERT_TRUE(windowDisplayResult.HasValue())
-            << windowDisplayResult.GetError().GetMessage();
+        ASSERT_TRUE(windowDisplayResult.HasValue()) << windowDisplayResult.GetError().GetMessage();
         EXPECT_TRUE(displayIds.contains(windowDisplayResult.GetValue()));
 
-        auto windowDisplayInfoResult =
-            runtime.GetDisplayInfo(windowDisplayResult.GetValue());
+        auto windowDisplayInfoResult = runtime.GetDisplayInfo(windowDisplayResult.GetValue());
         ASSERT_TRUE(windowDisplayInfoResult.HasValue())
             << windowDisplayInfoResult.GetError().GetMessage();
-        EXPECT_EQ(windowDisplayInfoResult.GetValue().id,
-                  windowDisplayResult.GetValue());
+        EXPECT_EQ(windowDisplayInfoResult.GetValue().id, windowDisplayResult.GetValue());
     }
 
     ASSERT_FALSE(ownedSnapshots.empty());
@@ -767,11 +753,9 @@ TEST_F(PlatformRuntimeIntegrationTests,
     EXPECT_TRUE(ownedSnapshots.front().id.IsValid());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests,
-       ReportsNativeHandleUnsupportedUnderDummyDriver)
+TEST_F(PlatformRuntimeIntegrationTests, ReportsNativeHandleUnsupportedUnderDummyDriver)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -783,22 +767,18 @@ TEST_F(PlatformRuntimeIntegrationTests,
     defaultDesc.title = "Native Handle Default Window";
     defaultDesc.visible = false;
     auto defaultWindowResult = runtime.CreateWindow(defaultDesc);
-    ASSERT_TRUE(defaultWindowResult.HasValue())
-        << defaultWindowResult.GetError().GetMessage();
-    pond::platform::Window defaultWindow =
-        std::move(defaultWindowResult).GetValue();
+    ASSERT_TRUE(defaultWindowResult.HasValue()) << defaultWindowResult.GetError().GetMessage();
+    pond::platform::Window defaultWindow = std::move(defaultWindowResult).GetValue();
 
     auto invalidResult = defaultWindow.GetNativeHandle();
     ASSERT_FALSE(invalidResult.HasValue());
     EXPECT_EQ(invalidResult.GetError().GetCode(),
-              pond::platform::ToErrorCode(
-                  pond::platform::PlatformErrorCode::InvalidArgument));
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::InvalidArgument));
 
     pond::platform::WindowDesc vulkanDesc;
     vulkanDesc.title = "Native Handle Vulkan Window";
     vulkanDesc.visible = false;
-    vulkanDesc.graphicsCompatibility =
-        pond::platform::WindowGraphicsCompatibility::Vulkan;
+    vulkanDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
     auto vulkanWindowResult = runtime.CreateWindow(vulkanDesc);
     if (!vulkanWindowResult.HasValue())
     {
@@ -806,12 +786,11 @@ TEST_F(PlatformRuntimeIntegrationTests,
                         "window on this host: "
                      << vulkanWindowResult.GetError().GetMessage();
     }
-    pond::platform::Window vulkanWindow =
-        std::move(vulkanWindowResult).GetValue();
+    pond::platform::Window vulkanWindow = std::move(vulkanWindowResult).GetValue();
 
     auto unsupportedResult = vulkanWindow.GetNativeHandle();
     ASSERT_FALSE(unsupportedResult.HasValue());
     EXPECT_EQ(unsupportedResult.GetError().GetCode(),
-              pond::platform::ToErrorCode(
-                  pond::platform::PlatformErrorCode::Unsupported));
-}} // namespace
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+}
+} // namespace

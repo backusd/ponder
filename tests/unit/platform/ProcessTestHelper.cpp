@@ -24,18 +24,18 @@ namespace
         return {};
     }
 
-    const int requiredBytes = WideCharToMultiByte(
-        CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()),
-        nullptr, 0, nullptr, nullptr);
+    const int requiredBytes =
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(),
+                            static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
     if (requiredBytes <= 0)
     {
         return {};
     }
 
     std::string result(static_cast<std::size_t>(requiredBytes), '\0');
-    const int writtenBytes = WideCharToMultiByte(
-        CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()),
-        result.data(), requiredBytes, nullptr, nullptr);
+    const int writtenBytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(),
+                                                 static_cast<int>(text.size()), result.data(),
+                                                 requiredBytes, nullptr, nullptr);
     if (writtenBytes != requiredBytes)
     {
         return {};
@@ -76,8 +76,7 @@ namespace
 }
 
 [[nodiscard]] bool WriteArguments(const std::filesystem::path& path,
-                                  const std::vector<std::string>& arguments,
-                                  int firstArgument)
+                                  const std::vector<std::string>& arguments, int firstArgument)
 {
     if (path.has_parent_path())
     {

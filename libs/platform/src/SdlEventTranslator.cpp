@@ -1,11 +1,12 @@
 #include "SdlEventTranslator.hpp"
-#include "StringValidation.hpp"
+
+#include <ponder/core/String.hpp>
+#include <ponder/io/Path.hpp>
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_scancode.h>
-
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -18,8 +19,7 @@ namespace pond::platform::detail
 {
 namespace
 {
-[[nodiscard]] std::optional<PlatformTimestamp> TranslateTimestamp(
-    std::uint64_t timestamp) noexcept
+[[nodiscard]] std::optional<PlatformTimestamp> TranslateTimestamp(std::uint64_t timestamp) noexcept
 {
     constexpr auto kMaximumTimestamp =
         static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
@@ -28,20 +28,19 @@ namespace
         return std::nullopt;
     }
 
-    return PlatformTimestamp{
-        std::chrono::nanoseconds{static_cast<std::int64_t>(timestamp)}};
+    return PlatformTimestamp{std::chrono::nanoseconds{static_cast<std::int64_t>(timestamp)}};
 }
 
-[[nodiscard]] std::optional<WindowId> ResolveWindowId(
-    const SDL_WindowEvent& event, const EventTranslationContext& context)
+[[nodiscard]] std::optional<WindowId> ResolveWindowId(const SDL_WindowEvent& event,
+                                                      const EventTranslationContext& context)
 {
     if (event.windowID == 0 || context.resolveWindowId == nullptr)
     {
         return std::nullopt;
     }
 
-    std::optional<WindowId> id = context.resolveWindowId(
-        context.context, static_cast<std::uint32_t>(event.windowID));
+    std::optional<WindowId> id =
+        context.resolveWindowId(context.context, static_cast<std::uint32_t>(event.windowID));
     return id.has_value() && id->IsValid() ? id : std::nullopt;
 }
 
@@ -51,8 +50,8 @@ struct InputWindowResolution final
     std::optional<WindowId> windowId;
 };
 
-[[nodiscard]] InputWindowResolution ResolveInputWindowId(
-    std::uint32_t backendWindowId, const EventTranslationContext& context)
+[[nodiscard]] InputWindowResolution ResolveInputWindowId(std::uint32_t backendWindowId,
+                                                         const EventTranslationContext& context)
 {
     if (backendWindowId == 0)
     {
@@ -63,8 +62,7 @@ struct InputWindowResolution final
         return {};
     }
 
-    const std::optional<WindowId> id =
-        context.resolveWindowId(context.context, backendWindowId);
+    const std::optional<WindowId> id = context.resolveWindowId(context.context, backendWindowId);
     if (!id.has_value() || !id->IsValid())
     {
         return {};
@@ -324,8 +322,8 @@ struct InputWindowResolution final
     }
 }
 
-[[nodiscard]] std::optional<NamedKey> TranslateNamedKey(
-    SDL_Keycode keycode, SDL_Scancode scancode) noexcept
+[[nodiscard]] std::optional<NamedKey> TranslateNamedKey(SDL_Keycode keycode,
+                                                        SDL_Scancode scancode) noexcept
 {
     switch (scancode)
     {
@@ -521,11 +519,9 @@ struct InputWindowResolution final
     }
 }
 
-[[nodiscard]] LogicalKey TranslateLogicalKey(
-    SDL_Keycode keycode, SDL_Scancode scancode) noexcept
+[[nodiscard]] LogicalKey TranslateLogicalKey(SDL_Keycode keycode, SDL_Scancode scancode) noexcept
 {
-    const std::optional<NamedKey> namedKey =
-        TranslateNamedKey(keycode, scancode);
+    const std::optional<NamedKey> namedKey = TranslateNamedKey(keycode, scancode);
     if (namedKey.has_value())
     {
         return LogicalKey::FromNamed(*namedKey);
@@ -619,7 +615,7 @@ struct InputWindowResolution final
     }
 
     std::string ownedText{text};
-    if (!IsValidUtf8WithoutEmbeddedNull(ownedText))
+    if (!core::IsValidUtf8WithoutEmbeddedNull(ownedText))
     {
         return std::nullopt;
     }
@@ -649,21 +645,7 @@ struct OptionalUtf8Text final
     return OptionalUtf8Text{true, std::move(*ownedText)};
 }
 
-[[nodiscard]] std::filesystem::path MakePathFromUtf8(const std::string& utf8Path)
-{
-    std::u8string pathText;
-    pathText.reserve(utf8Path.size());
-    for (const char character : utf8Path)
-    {
-        pathText.push_back(static_cast<char8_t>(
-            static_cast<unsigned char>(character)));
-    }
-
-    return std::filesystem::path{pathText};
-}
-
-[[nodiscard]] std::optional<LogicalPoint> TranslateDropPosition(
-    float x, float y) noexcept
+[[nodiscard]] std::optional<LogicalPoint> TranslateDropPosition(float x, float y) noexcept
 {
     const LogicalPoint position{x, y};
     return IsValid(position) ? std::optional<LogicalPoint>{position} : std::nullopt;
@@ -689,8 +671,7 @@ struct OptionalUtf8Text final
         return std::nullopt;
     }
 
-    std::optional<DisplayId> id =
-        context.resolveDisplayId(context.context, backendDisplayId);
+    std::optional<DisplayId> id = context.resolveDisplayId(context.context, backendDisplayId);
     return id.has_value() && id->IsValid() ? id : std::nullopt;
 }
 
@@ -700,16 +681,15 @@ struct OptionalUtf8Text final
     return ResolveRequiredDisplayId(backendDisplayId, context);
 }
 
-[[nodiscard]] std::optional<ScreenExtent> TranslateModeExtent(
-    std::int32_t width, std::int32_t height) noexcept
+[[nodiscard]] std::optional<ScreenExtent> TranslateModeExtent(std::int32_t width,
+                                                              std::int32_t height) noexcept
 {
     if (width <= 0 || height <= 0)
     {
         return std::nullopt;
     }
 
-    return ScreenExtent{static_cast<std::uint32_t>(width),
-                        static_cast<std::uint32_t>(height)};
+    return ScreenExtent{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
 }
 
 [[nodiscard]] DisplayOrientation TranslateOrientation(std::int32_t orientation) noexcept
@@ -732,11 +712,10 @@ struct OptionalUtf8Text final
 }
 } // namespace
 
-std::optional<PlatformEvent> TranslateSdlEvent(
-    const SDL_Event& event, const EventTranslationContext& context)
+std::optional<PlatformEvent> TranslateSdlEvent(const SDL_Event& event,
+                                               const EventTranslationContext& context)
 {
-    const std::optional<PlatformTimestamp> timestamp =
-        TranslateTimestamp(event.common.timestamp);
+    const std::optional<PlatformTimestamp> timestamp = TranslateTimestamp(event.common.timestamp);
     if (!timestamp.has_value())
     {
         return std::nullopt;
@@ -756,21 +735,17 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return std::nullopt;
         }
 
-        const InputWindowResolution target = ResolveInputWindowId(
-            static_cast<std::uint32_t>(event.key.windowID), context);
+        const InputWindowResolution target =
+            ResolveInputWindowId(static_cast<std::uint32_t>(event.key.windowID), context);
         if (!target.valid)
         {
             return std::nullopt;
         }
 
-        return PlatformEvent{KeyboardKeyEvent{
-            *timestamp,
-            target.windowId,
-            TranslatePhysicalKey(event.key.scancode),
-            TranslateLogicalKey(event.key.key, event.key.scancode),
-            TranslateKeyModifiers(event.key.mod),
-            pressed,
-            event.key.repeat}};
+        return PlatformEvent{
+            KeyboardKeyEvent{*timestamp, target.windowId, TranslatePhysicalKey(event.key.scancode),
+                             TranslateLogicalKey(event.key.key, event.key.scancode),
+                             TranslateKeyModifiers(event.key.mod), pressed, event.key.repeat}};
     }
 
     case SDL_EVENT_MOUSE_MOTION:
@@ -782,15 +757,15 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return std::nullopt;
         }
 
-        const InputWindowResolution target = ResolveInputWindowId(
-            static_cast<std::uint32_t>(event.motion.windowID), context);
+        const InputWindowResolution target =
+            ResolveInputWindowId(static_cast<std::uint32_t>(event.motion.windowID), context);
         if (!target.valid)
         {
             return std::nullopt;
         }
 
-        return PlatformEvent{MouseMotionEvent{
-            *timestamp, target.windowId, position, relativeMovement}};
+        return PlatformEvent{
+            MouseMotionEvent{*timestamp, target.windowId, position, relativeMovement}};
     }
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -808,19 +783,15 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return std::nullopt;
         }
 
-        const InputWindowResolution target = ResolveInputWindowId(
-            static_cast<std::uint32_t>(event.button.windowID), context);
+        const InputWindowResolution target =
+            ResolveInputWindowId(static_cast<std::uint32_t>(event.button.windowID), context);
         if (!target.valid)
         {
             return std::nullopt;
         }
 
-        return PlatformEvent{MouseButtonEvent{
-            *timestamp,
-            target.windowId,
-            position,
-            TranslateMouseButton(event.button.button),
-            pressed}};
+        return PlatformEvent{MouseButtonEvent{*timestamp, target.windowId, position,
+                                              TranslateMouseButton(event.button.button), pressed}};
     }
 
     case SDL_EVENT_MOUSE_WHEEL:
@@ -845,21 +816,21 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return std::nullopt;
         }
 
-        const InputWindowResolution target = ResolveInputWindowId(
-            static_cast<std::uint32_t>(event.wheel.windowID), context);
+        const InputWindowResolution target =
+            ResolveInputWindowId(static_cast<std::uint32_t>(event.wheel.windowID), context);
         if (!target.valid)
         {
             return std::nullopt;
         }
 
-        return PlatformEvent{MouseWheelEvent{
-            *timestamp, target.windowId, position, horizontal, vertical}};
+        return PlatformEvent{
+            MouseWheelEvent{*timestamp, target.windowId, position, horizontal, vertical}};
     }
 
     case SDL_EVENT_TEXT_INPUT:
     {
-        const InputWindowResolution target = ResolveInputWindowId(
-            static_cast<std::uint32_t>(event.text.windowID), context);
+        const InputWindowResolution target =
+            ResolveInputWindowId(static_cast<std::uint32_t>(event.text.windowID), context);
         if (!target.valid)
         {
             return std::nullopt;
@@ -871,14 +842,13 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return std::nullopt;
         }
 
-        return PlatformEvent{
-            TextInputEvent{*timestamp, target.windowId, std::move(*text)}};
+        return PlatformEvent{TextInputEvent{*timestamp, target.windowId, std::move(*text)}};
     }
 
     case SDL_EVENT_TEXT_EDITING:
     {
-        const InputWindowResolution target = ResolveInputWindowId(
-            static_cast<std::uint32_t>(event.edit.windowID), context);
+        const InputWindowResolution target =
+            ResolveInputWindowId(static_cast<std::uint32_t>(event.edit.windowID), context);
         if (!target.valid)
         {
             return std::nullopt;
@@ -890,11 +860,9 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return std::nullopt;
         }
 
-        return PlatformEvent{TextCompositionEvent{
-            *timestamp,
-            target.windowId,
-            std::move(*text),
-            TranslateCompositionRange(event.edit.start, event.edit.length)}};
+        return PlatformEvent{
+            TextCompositionEvent{*timestamp, target.windowId, std::move(*text),
+                                 TranslateCompositionRange(event.edit.start, event.edit.length)}};
     }
 
     case SDL_EVENT_DROP_BEGIN:
@@ -903,8 +871,7 @@ std::optional<PlatformEvent> TranslateSdlEvent(
     case SDL_EVENT_DROP_POSITION:
     case SDL_EVENT_DROP_COMPLETE:
     {
-        OptionalUtf8Text sourceApplication =
-            CopyOptionalUtf8Text(event.drop.source);
+        OptionalUtf8Text sourceApplication = CopyOptionalUtf8Text(event.drop.source);
         if (!sourceApplication.valid)
         {
             return std::nullopt;
@@ -912,16 +879,15 @@ std::optional<PlatformEvent> TranslateSdlEvent(
 
         if (event.type == SDL_EVENT_DROP_BEGIN)
         {
-            const InputWindowResolution target = ResolveInputWindowId(
-                static_cast<std::uint32_t>(event.drop.windowID), context);
+            const InputWindowResolution target =
+                ResolveInputWindowId(static_cast<std::uint32_t>(event.drop.windowID), context);
             if (!target.valid)
             {
                 return std::nullopt;
             }
 
-            return PlatformEvent{DropBeginEvent{
-                *timestamp, target.windowId,
-                std::move(sourceApplication.text)}};
+            return PlatformEvent{
+                DropBeginEvent{*timestamp, target.windowId, std::move(sourceApplication.text)}};
         }
 
         const std::optional<LogicalPoint> position =
@@ -932,8 +898,7 @@ std::optional<PlatformEvent> TranslateSdlEvent(
         }
 
         std::optional<std::string> payloadText;
-        if (event.type == SDL_EVENT_DROP_FILE ||
-            event.type == SDL_EVENT_DROP_TEXT)
+        if (event.type == SDL_EVENT_DROP_FILE || event.type == SDL_EVENT_DROP_TEXT)
         {
             payloadText = CopyUtf8Text(event.drop.data);
             if (!payloadText.has_value())
@@ -942,8 +907,8 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             }
         }
 
-        const InputWindowResolution target = ResolveInputWindowId(
-            static_cast<std::uint32_t>(event.drop.windowID), context);
+        const InputWindowResolution target =
+            ResolveInputWindowId(static_cast<std::uint32_t>(event.drop.windowID), context);
         if (!target.valid)
         {
             return std::nullopt;
@@ -952,21 +917,19 @@ std::optional<PlatformEvent> TranslateSdlEvent(
         switch (event.type)
         {
         case SDL_EVENT_DROP_FILE:
-            return PlatformEvent{DroppedFileEvent{
-                *timestamp, target.windowId, MakePathFromUtf8(*payloadText),
-                *position, std::move(sourceApplication.text)}};
+            return PlatformEvent{DroppedFileEvent{*timestamp, target.windowId,
+                                                  io::PathFromUtf8(*payloadText), *position,
+                                                  std::move(sourceApplication.text)}};
         case SDL_EVENT_DROP_TEXT:
-            return PlatformEvent{DroppedTextEvent{
-                *timestamp, target.windowId, std::move(*payloadText), *position,
-                std::move(sourceApplication.text)}};
+            return PlatformEvent{DroppedTextEvent{*timestamp, target.windowId,
+                                                  std::move(*payloadText), *position,
+                                                  std::move(sourceApplication.text)}};
         case SDL_EVENT_DROP_POSITION:
-            return PlatformEvent{DropPositionEvent{
-                *timestamp, target.windowId, *position,
-                std::move(sourceApplication.text)}};
+            return PlatformEvent{DropPositionEvent{*timestamp, target.windowId, *position,
+                                                   std::move(sourceApplication.text)}};
         case SDL_EVENT_DROP_COMPLETE:
-            return PlatformEvent{DropCompleteEvent{
-                *timestamp, target.windowId, *position,
-                std::move(sourceApplication.text)}};
+            return PlatformEvent{DropCompleteEvent{*timestamp, target.windowId, *position,
+                                                   std::move(sourceApplication.text)}};
         default:
             return std::nullopt;
         }
@@ -1009,8 +972,7 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return PlatformEvent{WindowCloseRequestedEvent{*timestamp, *windowId}};
         case SDL_EVENT_WINDOW_MOVED:
             return PlatformEvent{WindowMovedEvent{
-                *timestamp, *windowId,
-                ScreenPosition{event.window.data1, event.window.data2}}};
+                *timestamp, *windowId, ScreenPosition{event.window.data1, event.window.data2}}};
         case SDL_EVENT_WINDOW_RESIZED:
             return PlatformEvent{WindowLogicalSizeChangedEvent{
                 *timestamp, *windowId,
@@ -1026,17 +988,15 @@ std::optional<PlatformEvent> TranslateSdlEvent(
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             return PlatformEvent{WindowFocusChangedEvent{*timestamp, *windowId, false}};
         case SDL_EVENT_WINDOW_SHOWN:
-            return PlatformEvent{
-                WindowVisibilityChangedEvent{*timestamp, *windowId, true}};
+            return PlatformEvent{WindowVisibilityChangedEvent{*timestamp, *windowId, true}};
         case SDL_EVENT_WINDOW_HIDDEN:
-            return PlatformEvent{
-                WindowVisibilityChangedEvent{*timestamp, *windowId, false}};
+            return PlatformEvent{WindowVisibilityChangedEvent{*timestamp, *windowId, false}};
         case SDL_EVENT_WINDOW_MINIMIZED:
-            return PlatformEvent{WindowStateChangedEvent{
-                *timestamp, *windowId, WindowState::Minimized}};
+            return PlatformEvent{
+                WindowStateChangedEvent{*timestamp, *windowId, WindowState::Minimized}};
         case SDL_EVENT_WINDOW_MAXIMIZED:
-            return PlatformEvent{WindowStateChangedEvent{
-                *timestamp, *windowId, WindowState::Maximized}};
+            return PlatformEvent{
+                WindowStateChangedEvent{*timestamp, *windowId, WindowState::Maximized}};
         case SDL_EVENT_WINDOW_RESTORED:
             return PlatformEvent{
                 WindowStateChangedEvent{*timestamp, *windowId, WindowState::Normal}};
@@ -1044,13 +1004,12 @@ std::optional<PlatformEvent> TranslateSdlEvent(
             return PlatformEvent{WindowPresentationChangedEvent{
                 *timestamp, *windowId, WindowPresentation::DesktopFullscreen}};
         case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
-            return PlatformEvent{WindowPresentationChangedEvent{
-                *timestamp, *windowId, WindowPresentation::Windowed}};
+            return PlatformEvent{WindowPresentationChangedEvent{*timestamp, *windowId,
+                                                                WindowPresentation::Windowed}};
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             return PlatformEvent{WindowDisplayChangedEvent{
                 *timestamp, *windowId,
-                ResolveOptionalDisplayId(
-                    static_cast<std::uint32_t>(event.window.data1), context)}};
+                ResolveOptionalDisplayId(static_cast<std::uint32_t>(event.window.data1), context)}};
         case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             return PlatformEvent{WindowDisplayScaleChangedEvent{*timestamp, *windowId}};
         case SDL_EVENT_WINDOW_MOUSE_ENTER:
@@ -1071,8 +1030,8 @@ std::optional<PlatformEvent> TranslateSdlEvent(
     case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
     case SDL_EVENT_DISPLAY_USABLE_BOUNDS_CHANGED:
     {
-        const std::optional<DisplayId> displayId = ResolveRequiredDisplayId(
-            static_cast<std::uint32_t>(event.display.displayID), context);
+        const std::optional<DisplayId> displayId =
+            ResolveRequiredDisplayId(static_cast<std::uint32_t>(event.display.displayID), context);
         if (!displayId.has_value())
         {
             return std::nullopt;
@@ -1096,8 +1055,7 @@ std::optional<PlatformEvent> TranslateSdlEvent(
                 TranslateModeExtent(event.display.data1, event.display.data2)}};
         case SDL_EVENT_DISPLAY_ORIENTATION:
             return PlatformEvent{DisplayOrientationChangedEvent{
-                *timestamp, *displayId,
-                TranslateOrientation(event.display.data1)}};
+                *timestamp, *displayId, TranslateOrientation(event.display.data1)}};
         case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
             return PlatformEvent{DisplayContentScaleChangedEvent{*timestamp, *displayId}};
         case SDL_EVENT_DISPLAY_USABLE_BOUNDS_CHANGED:

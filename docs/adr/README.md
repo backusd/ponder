@@ -30,3 +30,4 @@ Each ADR should include:
 - [ADR 0006: Core Foundation Contracts](0006-core-foundation-contracts.md)
 - [ADR 0007: SDL3 Platform Backend](0007-sdl3-platform-backend.md)
 - [ADR 0008: Vulkan Renderer Backend](0008-vulkan-renderer-backend.md)
+- [ADR 0009: Fixed-Size Rendering Math](0009-fixed-size-rendering-math.md)

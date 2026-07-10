@@ -1,7 +1,5 @@
 #pragma once
 
-#include "PlatformRuntimeBackend.hpp"
-
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Window.hpp>
 
@@ -11,6 +9,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+
+#include "PlatformRuntimeBackend.hpp"
 
 namespace pond::platform::detail
 {
@@ -29,8 +29,8 @@ public:
     WindowImpl(WindowImpl&&) = delete;
     WindowImpl& operator=(WindowImpl&&) = delete;
 
-    WindowImpl(PlatformRuntimeState& runtime, PlatformWindowBackend backend,
-               void* nativeWindow, std::uint32_t backendWindowId,
+    WindowImpl(PlatformRuntimeState& runtime, PlatformWindowBackend backend, void* nativeWindow,
+               std::uint32_t backendWindowId,
                WindowGraphicsCompatibility graphicsCompatibility) noexcept;
 
     [[nodiscard]] WindowId GetId() const;
@@ -90,8 +90,7 @@ private:
     void* m_nativeWindow{};
     std::uint32_t m_backendWindowId{};
     WindowId m_id;
-    WindowGraphicsCompatibility m_graphicsCompatibility{
-        WindowGraphicsCompatibility::Default};
+    WindowGraphicsCompatibility m_graphicsCompatibility{WindowGraphicsCompatibility::Default};
     mutable void* m_cocoaMetalView{};
     std::optional<::pond::platform::WindowState> m_hiddenStateRequest;
     std::size_t m_pendingDialogRequestCount{};

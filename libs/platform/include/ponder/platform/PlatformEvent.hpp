@@ -50,9 +50,8 @@ struct WindowLogicalSizeChangedEvent final
     WindowId windowId;
     LogicalSize logicalSize;
 
-    [[nodiscard]] friend bool operator==(
-        const WindowLogicalSizeChangedEvent& lhs,
-        const WindowLogicalSizeChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const WindowLogicalSizeChangedEvent& lhs,
+                                         const WindowLogicalSizeChangedEvent& rhs) = default;
 };
 
 struct WindowPixelSizeChangedEvent final
@@ -81,9 +80,8 @@ struct WindowVisibilityChangedEvent final
     WindowId windowId;
     bool visible{};
 
-    [[nodiscard]] friend bool operator==(
-        const WindowVisibilityChangedEvent& lhs,
-        const WindowVisibilityChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const WindowVisibilityChangedEvent& lhs,
+                                         const WindowVisibilityChangedEvent& rhs) = default;
 };
 
 struct WindowStateChangedEvent final
@@ -102,9 +100,8 @@ struct WindowPresentationChangedEvent final
     WindowId windowId;
     WindowPresentation presentation{WindowPresentation::Windowed};
 
-    [[nodiscard]] friend bool operator==(
-        const WindowPresentationChangedEvent& lhs,
-        const WindowPresentationChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const WindowPresentationChangedEvent& lhs,
+                                         const WindowPresentationChangedEvent& rhs) = default;
 };
 
 struct WindowDisplayChangedEvent final
@@ -122,9 +119,8 @@ struct WindowDisplayScaleChangedEvent final
     PlatformTimestamp timestamp{};
     WindowId windowId;
 
-    [[nodiscard]] friend bool operator==(
-        const WindowDisplayScaleChangedEvent& lhs,
-        const WindowDisplayScaleChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const WindowDisplayScaleChangedEvent& lhs,
+                                         const WindowDisplayScaleChangedEvent& rhs) = default;
 };
 
 struct WindowPointerEnteredEvent final
@@ -178,9 +174,8 @@ struct DisplayDesktopModeChangedEvent final
     DisplayId displayId;
     std::optional<ScreenExtent> extent;
 
-    [[nodiscard]] friend bool operator==(
-        const DisplayDesktopModeChangedEvent& lhs,
-        const DisplayDesktopModeChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const DisplayDesktopModeChangedEvent& lhs,
+                                         const DisplayDesktopModeChangedEvent& rhs) = default;
 };
 
 struct DisplayCurrentModeChangedEvent final
@@ -189,9 +184,8 @@ struct DisplayCurrentModeChangedEvent final
     DisplayId displayId;
     std::optional<ScreenExtent> extent;
 
-    [[nodiscard]] friend bool operator==(
-        const DisplayCurrentModeChangedEvent& lhs,
-        const DisplayCurrentModeChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const DisplayCurrentModeChangedEvent& lhs,
+                                         const DisplayCurrentModeChangedEvent& rhs) = default;
 };
 
 struct DisplayOrientationChangedEvent final
@@ -200,9 +194,8 @@ struct DisplayOrientationChangedEvent final
     DisplayId displayId;
     DisplayOrientation orientation{DisplayOrientation::Unknown};
 
-    [[nodiscard]] friend bool operator==(
-        const DisplayOrientationChangedEvent& lhs,
-        const DisplayOrientationChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const DisplayOrientationChangedEvent& lhs,
+                                         const DisplayOrientationChangedEvent& rhs) = default;
 };
 
 struct DisplayContentScaleChangedEvent final
@@ -210,9 +203,8 @@ struct DisplayContentScaleChangedEvent final
     PlatformTimestamp timestamp{};
     DisplayId displayId;
 
-    [[nodiscard]] friend bool operator==(
-        const DisplayContentScaleChangedEvent& lhs,
-        const DisplayContentScaleChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const DisplayContentScaleChangedEvent& lhs,
+                                         const DisplayContentScaleChangedEvent& rhs) = default;
 };
 
 struct DisplayUsableBoundsChangedEvent final
@@ -220,9 +212,8 @@ struct DisplayUsableBoundsChangedEvent final
     PlatformTimestamp timestamp{};
     DisplayId displayId;
 
-    [[nodiscard]] friend bool operator==(
-        const DisplayUsableBoundsChangedEvent& lhs,
-        const DisplayUsableBoundsChangedEvent& rhs) = default;
+    [[nodiscard]] friend bool operator==(const DisplayUsableBoundsChangedEvent& lhs,
+                                         const DisplayUsableBoundsChangedEvent& rhs) = default;
 };
 
 struct KeyboardKeyEvent final
@@ -362,37 +353,13 @@ struct DialogCompletedEvent final
 };
 
 using PlatformEvent = std::variant<
-    QuitRequestedEvent,
-    WindowCloseRequestedEvent,
-    WindowMovedEvent,
-    WindowLogicalSizeChangedEvent,
-    WindowPixelSizeChangedEvent,
-    WindowFocusChangedEvent,
-    WindowVisibilityChangedEvent,
-    WindowStateChangedEvent,
-    WindowPresentationChangedEvent,
-    WindowDisplayChangedEvent,
-    WindowDisplayScaleChangedEvent,
-    WindowPointerEnteredEvent,
-    WindowPointerLeftEvent,
-    DisplayAddedEvent,
-    DisplayRemovedEvent,
-    DisplayMovedEvent,
-    DisplayDesktopModeChangedEvent,
-    DisplayCurrentModeChangedEvent,
-    DisplayOrientationChangedEvent,
-    DisplayContentScaleChangedEvent,
-    DisplayUsableBoundsChangedEvent,
-    KeyboardKeyEvent,
-    TextInputEvent,
-    TextCompositionEvent,
-    MouseMotionEvent,
-    MouseButtonEvent,
-    MouseWheelEvent,
-    DropBeginEvent,
-    DroppedFileEvent,
-    DroppedTextEvent,
-    DropPositionEvent,
-    DropCompleteEvent,
-    DialogCompletedEvent>;
+    QuitRequestedEvent, WindowCloseRequestedEvent, WindowMovedEvent, WindowLogicalSizeChangedEvent,
+    WindowPixelSizeChangedEvent, WindowFocusChangedEvent, WindowVisibilityChangedEvent,
+    WindowStateChangedEvent, WindowPresentationChangedEvent, WindowDisplayChangedEvent,
+    WindowDisplayScaleChangedEvent, WindowPointerEnteredEvent, WindowPointerLeftEvent,
+    DisplayAddedEvent, DisplayRemovedEvent, DisplayMovedEvent, DisplayDesktopModeChangedEvent,
+    DisplayCurrentModeChangedEvent, DisplayOrientationChangedEvent, DisplayContentScaleChangedEvent,
+    DisplayUsableBoundsChangedEvent, KeyboardKeyEvent, TextInputEvent, TextCompositionEvent,
+    MouseMotionEvent, MouseButtonEvent, MouseWheelEvent, DropBeginEvent, DroppedFileEvent,
+    DroppedTextEvent, DropPositionEvent, DropCompleteEvent, DialogCompletedEvent>;
 } // namespace pond::platform

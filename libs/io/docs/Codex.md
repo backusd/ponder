@@ -12,6 +12,7 @@ Work here on file-format import/export and conversion boundaries.
 - Use the `pond::io` namespace.
 - Do not make IO own the native project model.
 - Keep external parser details out of broad public APIs.
+- Keep shared filesystem path encoding helpers here rather than in core.
 
 ## Verification
 

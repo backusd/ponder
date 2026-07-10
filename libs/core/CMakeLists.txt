@@ -11,7 +11,9 @@ ponder_add_project_library(core
     PUBLIC_HEADERS
         include/ponder/core/Assert.hpp
         include/ponder/core/BuildInfo.hpp
+        include/ponder/core/Hash.hpp
         include/ponder/core/Log.hpp
+        include/ponder/core/Numbers.hpp
         include/ponder/core/PonderException.hpp
         include/ponder/core/Result.hpp
         include/ponder/core/ScopeExit.hpp

@@ -1,9 +1,8 @@
 #include <ponder/platform/Geometry.hpp>
 
-#include <gtest/gtest.h>
-
 #include <concepts>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <limits>
 #include <type_traits>
 
@@ -21,9 +20,8 @@ constexpr bool GeometryValueSemanticsAreConstexpr()
     constexpr pond::platform::PixelSize kPixelSize{2560, 1600};
 
     return kScreenRectangle.position.x == -1920 && kScreenRectangle.extent.height == 1080 &&
-           kLogicalRectangle.origin == kOrigin &&
-           kLogicalRectangle.extent == kLogicalExtent && kLogicalSize.width == 1280 &&
-           kPixelSize.height == 1600;
+           kLogicalRectangle.origin == kOrigin && kLogicalRectangle.extent == kLogicalExtent &&
+           kLogicalSize.width == 1280 && kPixelSize.height == 1600;
 }
 
 static_assert(GeometryValueSemanticsAreConstexpr());
@@ -87,11 +85,9 @@ TEST(PlatformGeometryTests, ValidatesFloatingPointGeometry)
     EXPECT_FALSE(pond::platform::IsValid(pond::platform::LogicalExtent{1.0F, nan}));
 
     EXPECT_TRUE(pond::platform::IsValid(pond::platform::LogicalRectangle{
-        pond::platform::LogicalPoint{-1.0F, -2.0F},
-        pond::platform::LogicalExtent{3.0F, 4.0F}}));
+        pond::platform::LogicalPoint{-1.0F, -2.0F}, pond::platform::LogicalExtent{3.0F, 4.0F}}));
     EXPECT_FALSE(pond::platform::IsValid(pond::platform::LogicalRectangle{
-        pond::platform::LogicalPoint{nan, 0.0F},
-        pond::platform::LogicalExtent{3.0F, 4.0F}}));
+        pond::platform::LogicalPoint{nan, 0.0F}, pond::platform::LogicalExtent{3.0F, 4.0F}}));
 }
 
 TEST(PlatformGeometryTests, KeepsLogicalAndPixelSizesDistinct)

@@ -1,8 +1,7 @@
 #include <ponder/platform/PlatformError.hpp>
 
-#include <gtest/gtest.h>
-
 #include <array>
+#include <gtest/gtest.h>
 
 namespace
 {
@@ -20,8 +19,8 @@ constexpr std::array kErrorMappings{
                  pond::core::ErrorCategory::General, 0x0001'0002},
     ErrorMapping{pond::platform::PlatformErrorCode::BackendFailure,
                  pond::core::ErrorCategory::General, 0x0001'0003},
-    ErrorMapping{pond::platform::PlatformErrorCode::NotFound,
-                 pond::core::ErrorCategory::NotFound, 0x0001'0004},
+    ErrorMapping{pond::platform::PlatformErrorCode::NotFound, pond::core::ErrorCategory::NotFound,
+                 0x0001'0004},
     ErrorMapping{pond::platform::PlatformErrorCode::Unsupported,
                  pond::core::ErrorCategory::Unsupported, 0x0001'0005},
 };
@@ -56,8 +55,7 @@ TEST(PlatformErrorTests, MapsEveryPublishedCodeToItsStableCoreCode)
 TEST(PlatformErrorTests, MapsUnknownValuesToInternalWithoutChangingTheValue)
 {
     constexpr pond::core::ErrorCodeValue kUnknownValue{0x0001'00FF};
-    constexpr auto kUnknownCode =
-        static_cast<pond::platform::PlatformErrorCode>(kUnknownValue);
+    constexpr auto kUnknownCode = static_cast<pond::platform::PlatformErrorCode>(kUnknownValue);
     constexpr pond::core::ErrorCode kCoreCode = pond::platform::ToErrorCode(kUnknownCode);
 
     EXPECT_EQ(kCoreCode.GetCategory(), pond::core::ErrorCategory::Internal);

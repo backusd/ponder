@@ -13,10 +13,8 @@ namespace pond::platform::detail
 struct EventTranslationContext final
 {
     void* context{};
-    std::optional<WindowId> (*resolveWindowId)(void* context,
-                                                std::uint32_t backendWindowId){};
-    std::optional<DisplayId> (*resolveDisplayId)(void* context,
-                                                 std::uint32_t backendDisplayId){};
+    std::optional<WindowId> (*resolveWindowId)(void* context, std::uint32_t backendWindowId){};
+    std::optional<DisplayId> (*resolveDisplayId)(void* context, std::uint32_t backendDisplayId){};
 };
 
 [[nodiscard]] std::optional<PlatformEvent> TranslateSdlEvent(

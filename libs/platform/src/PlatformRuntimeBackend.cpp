@@ -14,7 +14,6 @@
 #include <SDL3/SDL_rect.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
-
 #include <atomic>
 #include <limits>
 #include <memory>
@@ -25,16 +24,14 @@
 
 namespace pond::platform::detail
 {
-bool IsWindowGraphicsCompatibilitySupported(
-    WindowGraphicsCompatibility compatibility) noexcept
+bool IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility compatibility) noexcept
 {
     switch (compatibility)
     {
     case WindowGraphicsCompatibility::Default:
         return true;
     case WindowGraphicsCompatibility::Vulkan:
-#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX) || \
-    defined(SDL_PLATFORM_MACOS)
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_MACOS)
         return true;
 #else
         return false;
@@ -44,8 +41,7 @@ bool IsWindowGraphicsCompatibilitySupported(
     return false;
 }
 
-BackendNativeWindowDriver GetNativeWindowDriver(
-    std::string_view driverName) noexcept
+BackendNativeWindowDriver GetNativeWindowDriver(std::string_view driverName) noexcept
 {
     if (driverName == "windows")
     {
@@ -94,8 +90,7 @@ std::uint64_t BuildSdlWindowFlags(const BackendWindowCreateDesc& desc) noexcept
 bool IsReservedSdlWindowPosition(std::int32_t value) noexcept
 {
     const int backendValue = static_cast<int>(value);
-    return SDL_WINDOWPOS_ISUNDEFINED(backendValue) ||
-           SDL_WINDOWPOS_ISCENTERED(backendValue);
+    return SDL_WINDOWPOS_ISUNDEFINED(backendValue) || SDL_WINDOWPOS_ISCENTERED(backendValue);
 }
 
 namespace
@@ -108,35 +103,31 @@ struct SdlDisplayListDeleter final
     }
 };
 
-[[nodiscard]] constexpr BackendNativeWindowHandleResult
-NativeHandleSucceeded() noexcept
+[[nodiscard]] constexpr BackendNativeWindowHandleResult NativeHandleSucceeded() noexcept
 {
-    return BackendNativeWindowHandleResult{
-        .status = BackendNativeWindowHandleStatus::Succeeded};
+    return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Succeeded};
 }
 
-[[nodiscard]] constexpr BackendNativeWindowHandleResult
-NativeHandleUnsupported(const char* message) noexcept
+[[nodiscard]] constexpr BackendNativeWindowHandleResult NativeHandleUnsupported(
+    const char* message) noexcept
 {
-    return BackendNativeWindowHandleResult{
-        .status = BackendNativeWindowHandleStatus::Unsupported,
-        .message = message};
+    return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Unsupported,
+                                           .message = message};
 }
 
-[[nodiscard]] constexpr BackendNativeWindowHandleResult
-NativeHandleFailure(const char* message) noexcept
+[[nodiscard]] constexpr BackendNativeWindowHandleResult NativeHandleFailure(
+    const char* message) noexcept
 {
-    return BackendNativeWindowHandleResult{
-        .status = BackendNativeWindowHandleStatus::Failed, .message = message};
+    return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Failed,
+                                           .message = message};
 }
 
-[[nodiscard]] constexpr BackendNativeWindowHandleResult
-NativeHandleSdlFailure(const char* operation) noexcept
+[[nodiscard]] constexpr BackendNativeWindowHandleResult NativeHandleSdlFailure(
+    const char* operation) noexcept
 {
-    return BackendNativeWindowHandleResult{
-        .status = BackendNativeWindowHandleStatus::Failed,
-        .operation = operation,
-        .captureSdlError = true};
+    return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Failed,
+                                           .operation = operation,
+                                           .captureSdlError = true};
 }
 
 [[nodiscard]] bool IsMainThread(void*) noexcept
@@ -157,8 +148,7 @@ NativeHandleSdlFailure(const char* operation) noexcept
            (initializedSubsystems & ~kRuntimeSubsystems) == 0;
 }
 
-[[nodiscard]] const char* GetMetadataPropertyName(
-    ApplicationMetadataProperty property) noexcept
+[[nodiscard]] const char* GetMetadataPropertyName(ApplicationMetadataProperty property) noexcept
 {
     switch (property)
     {
@@ -173,8 +163,8 @@ NativeHandleSdlFailure(const char* operation) noexcept
     return nullptr;
 }
 
-[[nodiscard]] const char* GetAppMetadataProperty(
-    void*, ApplicationMetadataProperty property) noexcept
+[[nodiscard]] const char* GetAppMetadataProperty(void*,
+                                                 ApplicationMetadataProperty property) noexcept
 {
     const char* const propertyName = GetMetadataPropertyName(property);
     return propertyName != nullptr ? SDL_GetAppMetadataProperty(propertyName) : nullptr;
@@ -244,8 +234,7 @@ void GetGlobalMousePosition(void*, float* x, float* y) noexcept
     return SDL_CaptureMouse(enabled);
 }
 
-[[nodiscard]] std::optional<SDL_SystemCursor> ToSdlSystemCursor(
-    SystemCursorShape shape) noexcept
+[[nodiscard]] std::optional<SDL_SystemCursor> ToSdlSystemCursor(SystemCursorShape shape) noexcept
 {
     switch (shape)
     {
@@ -318,8 +307,7 @@ void DestroyCursor(void*, void* cursor) noexcept
     char* const text = SDL_GetClipboardText();
     const char* const rawError = SDL_GetError();
     return BackendClipboardTextResult{
-        .text = text,
-        .errorText = rawError != nullptr ? std::string{rawError} : std::string{}};
+        .text = text, .errorText = rawError != nullptr ? std::string{rawError} : std::string{}};
 }
 
 void FreeClipboardText(void*, char* text) noexcept
@@ -343,19 +331,15 @@ void ShowDialog(void*, const BackendDialogRequestDesc& desc) noexcept
     switch (desc.kind)
     {
     case BackendDialogKind::OpenFile:
-        SDL_ShowOpenFileDialog(desc.callback, desc.userdata, parentWindow,
-                               desc.filters, desc.filterCount,
-                               desc.defaultLocation,
-                               desc.allowMultipleSelection);
+        SDL_ShowOpenFileDialog(desc.callback, desc.userdata, parentWindow, desc.filters,
+                               desc.filterCount, desc.defaultLocation, desc.allowMultipleSelection);
         break;
     case BackendDialogKind::SaveFile:
-        SDL_ShowSaveFileDialog(desc.callback, desc.userdata, parentWindow,
-                               desc.filters, desc.filterCount,
-                               desc.defaultLocation);
+        SDL_ShowSaveFileDialog(desc.callback, desc.userdata, parentWindow, desc.filters,
+                               desc.filterCount, desc.defaultLocation);
         break;
     case BackendDialogKind::OpenFolder:
-        SDL_ShowOpenFolderDialog(desc.callback, desc.userdata, parentWindow,
-                                 desc.defaultLocation,
+        SDL_ShowOpenFolderDialog(desc.callback, desc.userdata, parentWindow, desc.defaultLocation,
                                  desc.allowMultipleSelection);
         break;
     }
@@ -402,8 +386,7 @@ void DestroyWindow(void*, void* window) noexcept
     return SDL_GetWindowSize(static_cast<SDL_Window*>(window), width, height);
 }
 
-[[nodiscard]] bool GetWindowSizeInPixels(void*, void* window, int* width,
-                                         int* height) noexcept
+[[nodiscard]] bool GetWindowSizeInPixels(void*, void* window, int* width, int* height) noexcept
 {
     return SDL_GetWindowSizeInPixels(static_cast<SDL_Window*>(window), width, height);
 }
@@ -413,8 +396,7 @@ void DestroyWindow(void*, void* window) noexcept
     return SDL_SetWindowSize(static_cast<SDL_Window*>(window), width, height);
 }
 
-[[nodiscard]] bool SetWindowMinimumSize(void*, void* window, int width,
-                                        int height) noexcept
+[[nodiscard]] bool SetWindowMinimumSize(void*, void* window, int width, int height) noexcept
 {
     return SDL_SetWindowMinimumSize(static_cast<SDL_Window*>(window), width, height);
 }
@@ -429,45 +411,38 @@ void DestroyWindow(void*, void* window) noexcept
     return SDL_HideWindow(static_cast<SDL_Window*>(window));
 }
 
-[[nodiscard]] bool GetWindowProperties(
-    void*, void* window, BackendWindowProperties* properties) noexcept
+[[nodiscard]] bool GetWindowProperties(void*, void* window,
+                                       BackendWindowProperties* properties) noexcept
 {
-    const SDL_WindowFlags flags =
-        SDL_GetWindowFlags(static_cast<SDL_Window*>(window));
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(static_cast<SDL_Window*>(window));
     *properties = BackendWindowProperties{
-        (flags & SDL_WINDOW_FULLSCREEN) != 0,
-        (flags & SDL_WINDOW_HIDDEN) != 0,
-        (flags & SDL_WINDOW_BORDERLESS) != 0,
-        (flags & SDL_WINDOW_RESIZABLE) != 0,
-        (flags & SDL_WINDOW_MINIMIZED) != 0,
-        (flags & SDL_WINDOW_MAXIMIZED) != 0,
-        (flags & SDL_WINDOW_INPUT_FOCUS) != 0,
-        (flags & SDL_WINDOW_ALWAYS_ON_TOP) != 0};
+        (flags & SDL_WINDOW_FULLSCREEN) != 0,  (flags & SDL_WINDOW_HIDDEN) != 0,
+        (flags & SDL_WINDOW_BORDERLESS) != 0,  (flags & SDL_WINDOW_RESIZABLE) != 0,
+        (flags & SDL_WINDOW_MINIMIZED) != 0,   (flags & SDL_WINDOW_MAXIMIZED) != 0,
+        (flags & SDL_WINDOW_INPUT_FOCUS) != 0, (flags & SDL_WINDOW_ALWAYS_ON_TOP) != 0};
     return true;
 }
 
-[[nodiscard]] BackendWindowOperationResult SetFullscreenModeToDesktop(
-    void*, void* window) noexcept
+[[nodiscard]] BackendWindowOperationResult SetFullscreenModeToDesktop(void*, void* window) noexcept
 {
     return SDL_SetWindowFullscreenMode(static_cast<SDL_Window*>(window), nullptr)
-             ? BackendWindowOperationResult::Succeeded
-             : BackendWindowOperationResult::Failed;
+               ? BackendWindowOperationResult::Succeeded
+               : BackendWindowOperationResult::Failed;
 }
 
-[[nodiscard]] BackendWindowOperationResult SetWindowFullscreen(
-    void*, void* window, bool fullscreen) noexcept
+[[nodiscard]] BackendWindowOperationResult SetWindowFullscreen(void*, void* window,
+                                                               bool fullscreen) noexcept
 {
     return SDL_SetWindowFullscreen(static_cast<SDL_Window*>(window), fullscreen)
-             ? BackendWindowOperationResult::Succeeded
-             : BackendWindowOperationResult::Failed;
+               ? BackendWindowOperationResult::Succeeded
+               : BackendWindowOperationResult::Failed;
 }
 
-[[nodiscard]] BackendWindowOperationResult SetWindowBordered(
-    void*, void* window, bool bordered) noexcept
+[[nodiscard]] BackendWindowOperationResult SetWindowBordered(void*, void* window,
+                                                             bool bordered) noexcept
 {
     SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
-    const bool currentlyBordered =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
+    const bool currentlyBordered = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
     if (currentlyBordered == bordered)
     {
         return BackendWindowOperationResult::Succeeded;
@@ -478,18 +453,16 @@ void DestroyWindow(void*, void* window) noexcept
         return BackendWindowOperationResult::Failed;
     }
 
-    const bool nowBordered =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
+    const bool nowBordered = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
     return nowBordered == bordered ? BackendWindowOperationResult::Succeeded
                                    : BackendWindowOperationResult::Unsupported;
 }
 
-[[nodiscard]] BackendWindowOperationResult SetWindowResizable(
-    void*, void* window, bool resizable) noexcept
+[[nodiscard]] BackendWindowOperationResult SetWindowResizable(void*, void* window,
+                                                              bool resizable) noexcept
 {
     SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
-    const bool currentlyResizable =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
+    const bool currentlyResizable = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
     if (currentlyResizable == resizable)
     {
         return BackendWindowOperationResult::Succeeded;
@@ -500,14 +473,13 @@ void DestroyWindow(void*, void* window) noexcept
         return BackendWindowOperationResult::Failed;
     }
 
-    const bool nowResizable =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
+    const bool nowResizable = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
     return nowResizable == resizable ? BackendWindowOperationResult::Succeeded
                                      : BackendWindowOperationResult::Unsupported;
 }
 
-[[nodiscard]] BackendWindowOperationResult SetWindowAlwaysOnTop(
-    void*, void* window, bool alwaysOnTop) noexcept
+[[nodiscard]] BackendWindowOperationResult SetWindowAlwaysOnTop(void*, void* window,
+                                                                bool alwaysOnTop) noexcept
 {
     SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
     const bool currentlyAlwaysOnTop =
@@ -522,35 +494,30 @@ void DestroyWindow(void*, void* window) noexcept
         return BackendWindowOperationResult::Failed;
     }
 
-    const bool nowAlwaysOnTop =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
-    return nowAlwaysOnTop == alwaysOnTop
-             ? BackendWindowOperationResult::Succeeded
-             : BackendWindowOperationResult::Unsupported;
+    const bool nowAlwaysOnTop = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+    return nowAlwaysOnTop == alwaysOnTop ? BackendWindowOperationResult::Succeeded
+                                         : BackendWindowOperationResult::Unsupported;
 }
 
-[[nodiscard]] BackendWindowOperationResult MinimizeWindow(
-    void*, void* window) noexcept
+[[nodiscard]] BackendWindowOperationResult MinimizeWindow(void*, void* window) noexcept
 {
     return SDL_MinimizeWindow(static_cast<SDL_Window*>(window))
-             ? BackendWindowOperationResult::Succeeded
-             : BackendWindowOperationResult::Unsupported;
+               ? BackendWindowOperationResult::Succeeded
+               : BackendWindowOperationResult::Unsupported;
 }
 
-[[nodiscard]] BackendWindowOperationResult MaximizeWindow(
-    void*, void* window) noexcept
+[[nodiscard]] BackendWindowOperationResult MaximizeWindow(void*, void* window) noexcept
 {
     return SDL_MaximizeWindow(static_cast<SDL_Window*>(window))
-             ? BackendWindowOperationResult::Succeeded
-             : BackendWindowOperationResult::Unsupported;
+               ? BackendWindowOperationResult::Succeeded
+               : BackendWindowOperationResult::Unsupported;
 }
 
-[[nodiscard]] BackendWindowOperationResult RestoreWindow(
-    void*, void* window) noexcept
+[[nodiscard]] BackendWindowOperationResult RestoreWindow(void*, void* window) noexcept
 {
     return SDL_RestoreWindow(static_cast<SDL_Window*>(window))
-             ? BackendWindowOperationResult::Succeeded
-             : BackendWindowOperationResult::Unsupported;
+               ? BackendWindowOperationResult::Succeeded
+               : BackendWindowOperationResult::Unsupported;
 }
 
 [[nodiscard]] bool StartWindowTextInput(void*, void* window) noexcept
@@ -573,8 +540,8 @@ void DestroyWindow(void*, void* window) noexcept
     return SDL_ClearComposition(static_cast<SDL_Window*>(window));
 }
 
-[[nodiscard]] bool SetWindowTextInputArea(
-    void*, void* window, const BackendTextInputArea* area) noexcept
+[[nodiscard]] bool SetWindowTextInputArea(void*, void* window,
+                                          const BackendTextInputArea* area) noexcept
 {
     SDL_Window* const sdlWindow = static_cast<SDL_Window*>(window);
     if (area == nullptr)
@@ -586,8 +553,7 @@ void DestroyWindow(void*, void* window) noexcept
     return SDL_SetTextInputArea(sdlWindow, &rectangle, area->cursorOffset);
 }
 
-[[nodiscard]] bool SetWindowMouseGrab(
-    void*, void* window, bool grabbed) noexcept
+[[nodiscard]] bool SetWindowMouseGrab(void*, void* window, bool grabbed) noexcept
 {
     return SDL_SetWindowMouseGrab(static_cast<SDL_Window*>(window), grabbed);
 }
@@ -597,15 +563,12 @@ void DestroyWindow(void*, void* window) noexcept
     return SDL_GetWindowMouseGrab(static_cast<SDL_Window*>(window));
 }
 
-[[nodiscard]] bool SetWindowRelativeMouseMode(
-    void*, void* window, bool enabled) noexcept
+[[nodiscard]] bool SetWindowRelativeMouseMode(void*, void* window, bool enabled) noexcept
 {
-    return SDL_SetWindowRelativeMouseMode(
-        static_cast<SDL_Window*>(window), enabled);
+    return SDL_SetWindowRelativeMouseMode(static_cast<SDL_Window*>(window), enabled);
 }
 
-[[nodiscard]] bool IsWindowRelativeMouseModeEnabled(
-    void*, void* window) noexcept
+[[nodiscard]] bool IsWindowRelativeMouseModeEnabled(void*, void* window) noexcept
 {
     return SDL_GetWindowRelativeMouseMode(static_cast<SDL_Window*>(window));
 }
@@ -613,14 +576,13 @@ void DestroyWindow(void*, void* window) noexcept
 [[nodiscard]] BackendNativeWindowHandleResult GetWin32NativeWindowHandle(
     SDL_PropertiesID properties, NativeWindowHandle* handle) noexcept
 {
-    void* const instance = SDL_GetPointerProperty(
-        properties, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);
-    void* const window = SDL_GetPointerProperty(
-        properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+    void* const instance =
+        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);
+    void* const window =
+        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
     if (instance == nullptr || window == nullptr)
     {
-        return NativeHandleFailure(
-            "SDL window is missing Win32 native properties.");
+        return NativeHandleFailure("SDL window is missing Win32 native properties.");
     }
 
     *handle = NativeWin32Window{.instance = instance, .window = window};
@@ -630,41 +592,35 @@ void DestroyWindow(void*, void* window) noexcept
 [[nodiscard]] BackendNativeWindowHandleResult GetX11NativeWindowHandle(
     SDL_PropertiesID properties, NativeWindowHandle* handle) noexcept
 {
-    void* const display = SDL_GetPointerProperty(
-        properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-    const Sint64 window = SDL_GetNumberProperty(
-        properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    void* const display =
+        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+    const Sint64 window = SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
     if (display == nullptr || window <= 0)
     {
-        return NativeHandleFailure(
-            "SDL window is missing X11 native properties.");
+        return NativeHandleFailure("SDL window is missing X11 native properties.");
     }
     if constexpr (sizeof(std::uintptr_t) < sizeof(Sint64))
     {
-        if (window > static_cast<Sint64>(
-                         std::numeric_limits<std::uintptr_t>::max()))
+        if (window > static_cast<Sint64>(std::numeric_limits<std::uintptr_t>::max()))
         {
-            return NativeHandleFailure(
-                "SDL X11 window property is too large for uintptr_t.");
+            return NativeHandleFailure("SDL X11 window property is too large for uintptr_t.");
         }
     }
 
-    *handle = NativeX11Window{.display = display,
-                              .window = static_cast<std::uintptr_t>(window)};
+    *handle = NativeX11Window{.display = display, .window = static_cast<std::uintptr_t>(window)};
     return NativeHandleSucceeded();
 }
 
 [[nodiscard]] BackendNativeWindowHandleResult GetWaylandNativeWindowHandle(
     SDL_PropertiesID properties, NativeWindowHandle* handle) noexcept
 {
-    void* const display = SDL_GetPointerProperty(
-        properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
-    void* const surface = SDL_GetPointerProperty(
-        properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+    void* const display =
+        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+    void* const surface =
+        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
     if (display == nullptr || surface == nullptr)
     {
-        return NativeHandleFailure(
-            "SDL window is missing Wayland native properties.");
+        return NativeHandleFailure("SDL window is missing Wayland native properties.");
     }
 
     *handle = NativeWaylandWindow{.display = display, .surface = surface};
@@ -676,8 +632,7 @@ void DestroyWindow(void*, void* window) noexcept
 {
     if (cachedMetalView == nullptr)
     {
-        return NativeHandleFailure(
-            "Cocoa Metal view storage is unavailable.");
+        return NativeHandleFailure("Cocoa Metal view storage is unavailable.");
     }
 
     SDL_MetalView view = static_cast<SDL_MetalView>(*cachedMetalView);
@@ -702,24 +657,20 @@ void DestroyWindow(void*, void* window) noexcept
 }
 
 [[nodiscard]] BackendNativeWindowHandleResult GetNativeWindowHandle(
-    void*, void* window, void** cachedMetalView,
-    NativeWindowHandle* handle) noexcept
+    void*, void* window, void** cachedMetalView, NativeWindowHandle* handle) noexcept
 {
     if (handle == nullptr)
     {
-        return NativeHandleFailure(
-            "Native window handle output storage is unavailable.");
+        return NativeHandleFailure("Native window handle output storage is unavailable.");
     }
 
     const char* const currentDriver = SDL_GetCurrentVideoDriver();
     if (currentDriver == nullptr)
     {
-        return NativeHandleFailure(
-            "SDL current video driver is unavailable.");
+        return NativeHandleFailure("SDL current video driver is unavailable.");
     }
 
-    const BackendNativeWindowDriver driver =
-        GetNativeWindowDriver(currentDriver);
+    const BackendNativeWindowDriver driver = GetNativeWindowDriver(currentDriver);
     if (driver == BackendNativeWindowDriver::Cocoa)
     {
         return GetCocoaNativeWindowHandle(window, cachedMetalView, handle);
@@ -730,8 +681,7 @@ void DestroyWindow(void*, void* window) noexcept
             "Native window handles are unsupported by this SDL video driver.");
     }
 
-    const SDL_PropertiesID properties =
-        SDL_GetWindowProperties(static_cast<SDL_Window*>(window));
+    const SDL_PropertiesID properties = SDL_GetWindowProperties(static_cast<SDL_Window*>(window));
     if (properties == 0)
     {
         return NativeHandleSdlFailure("SDL_GetWindowProperties");
@@ -759,12 +709,10 @@ void DestroyMetalView(void*, void* metalView) noexcept
     SDL_Metal_DestroyView(static_cast<SDL_MetalView>(metalView));
 }
 
-[[nodiscard]] bool EnumerateDisplays(void*,
-                                     std::vector<std::uint32_t>& displayIds)
+[[nodiscard]] bool EnumerateDisplays(void*, std::vector<std::uint32_t>& displayIds)
 {
     int count{};
-    std::unique_ptr<SDL_DisplayID, SdlDisplayListDeleter> displays{
-        SDL_GetDisplays(&count)};
+    std::unique_ptr<SDL_DisplayID, SdlDisplayListDeleter> displays{SDL_GetDisplays(&count)};
     if (displays == nullptr)
     {
         return false;
@@ -788,13 +736,12 @@ void DestroyMetalView(void*, void* metalView) noexcept
         return false;
     }
 
-    *bounds = BackendScreenRectangle{
-        rectangle.x, rectangle.y, rectangle.w, rectangle.h};
+    *bounds = BackendScreenRectangle{rectangle.x, rectangle.y, rectangle.w, rectangle.h};
     return true;
 }
 
-[[nodiscard]] bool GetDisplayUsableBounds(
-    void*, std::uint32_t displayId, BackendScreenRectangle* bounds) noexcept
+[[nodiscard]] bool GetDisplayUsableBounds(void*, std::uint32_t displayId,
+                                          BackendScreenRectangle* bounds) noexcept
 {
     SDL_Rect rectangle{};
     if (!SDL_GetDisplayUsableBounds(displayId, &rectangle))
@@ -802,13 +749,12 @@ void DestroyMetalView(void*, void* metalView) noexcept
         return false;
     }
 
-    *bounds = BackendScreenRectangle{
-        rectangle.x, rectangle.y, rectangle.w, rectangle.h};
+    *bounds = BackendScreenRectangle{rectangle.x, rectangle.y, rectangle.w, rectangle.h};
     return true;
 }
 
-[[nodiscard]] bool GetCurrentDisplayRefreshRate(
-    void*, std::uint32_t displayId, float* refreshRateHertz) noexcept
+[[nodiscard]] bool GetCurrentDisplayRefreshRate(void*, std::uint32_t displayId,
+                                                float* refreshRateHertz) noexcept
 {
     const SDL_DisplayMode* const mode = SDL_GetCurrentDisplayMode(displayId);
     if (mode == nullptr)
@@ -840,8 +786,7 @@ void DestroyMetalView(void*, void* metalView) noexcept
     return BackendDisplayOrientation::Unknown;
 }
 
-[[nodiscard]] float GetDisplayContentScale(void*,
-                                           std::uint32_t displayId) noexcept
+[[nodiscard]] float GetDisplayContentScale(void*, std::uint32_t displayId) noexcept
 {
     return SDL_GetDisplayContentScale(displayId);
 }
@@ -861,84 +806,81 @@ void DestroyMetalView(void*, void* metalView) noexcept
     return SDL_GetWindowDisplayScale(static_cast<SDL_Window*>(window));
 }
 
-constexpr PlatformWindowBackend kSdlWindowBackend{
-    nullptr,
-    CreateWindow,
-    DestroyWindow,
-    GetWindowId,
-    GetWindowTitle,
-    SetWindowTitle,
-    GetWindowPosition,
-    SetWindowPosition,
-    GetWindowSize,
-    GetWindowSizeInPixels,
-    SetWindowSize,
-    SetWindowMinimumSize,
-    ShowWindow,
-    HideWindow,
-    GetWindowProperties,
-    SetFullscreenModeToDesktop,
-    SetWindowFullscreen,
-    SetWindowBordered,
-    SetWindowResizable,
-    SetWindowAlwaysOnTop,
-    MinimizeWindow,
-    MaximizeWindow,
-    RestoreWindow,
-    StartWindowTextInput,
-    StopWindowTextInput,
-    IsWindowTextInputActive,
-    ClearWindowTextComposition,
-    SetWindowTextInputArea,
-    SetWindowMouseGrab,
-    IsWindowMouseGrabbed,
-    SetWindowRelativeMouseMode,
-    IsWindowRelativeMouseModeEnabled,
-    GetNativeWindowHandle,
-    DestroyMetalView};
+constexpr PlatformWindowBackend kSdlWindowBackend{nullptr,
+                                                  CreateWindow,
+                                                  DestroyWindow,
+                                                  GetWindowId,
+                                                  GetWindowTitle,
+                                                  SetWindowTitle,
+                                                  GetWindowPosition,
+                                                  SetWindowPosition,
+                                                  GetWindowSize,
+                                                  GetWindowSizeInPixels,
+                                                  SetWindowSize,
+                                                  SetWindowMinimumSize,
+                                                  ShowWindow,
+                                                  HideWindow,
+                                                  GetWindowProperties,
+                                                  SetFullscreenModeToDesktop,
+                                                  SetWindowFullscreen,
+                                                  SetWindowBordered,
+                                                  SetWindowResizable,
+                                                  SetWindowAlwaysOnTop,
+                                                  MinimizeWindow,
+                                                  MaximizeWindow,
+                                                  RestoreWindow,
+                                                  StartWindowTextInput,
+                                                  StopWindowTextInput,
+                                                  IsWindowTextInputActive,
+                                                  ClearWindowTextComposition,
+                                                  SetWindowTextInputArea,
+                                                  SetWindowMouseGrab,
+                                                  IsWindowMouseGrabbed,
+                                                  SetWindowRelativeMouseMode,
+                                                  IsWindowRelativeMouseModeEnabled,
+                                                  GetNativeWindowHandle,
+                                                  DestroyMetalView};
 
-constexpr PlatformDisplayBackend kSdlDisplayBackend{
-    nullptr,
-    EnumerateDisplays,
-    GetDisplayName,
-    GetDisplayBounds,
-    GetDisplayUsableBounds,
-    GetCurrentDisplayRefreshRate,
-    GetCurrentDisplayOrientation,
-    GetDisplayContentScale,
-    GetDisplayForWindow,
-    GetWindowPixelDensity,
-    GetWindowDisplayScale};
+constexpr PlatformDisplayBackend kSdlDisplayBackend{nullptr,
+                                                    EnumerateDisplays,
+                                                    GetDisplayName,
+                                                    GetDisplayBounds,
+                                                    GetDisplayUsableBounds,
+                                                    GetCurrentDisplayRefreshRate,
+                                                    GetCurrentDisplayOrientation,
+                                                    GetDisplayContentScale,
+                                                    GetDisplayForWindow,
+                                                    GetWindowPixelDensity,
+                                                    GetWindowDisplayScale};
 
-constexpr PlatformRuntimeBackend kSdlBackend{
-    nullptr,
-    IsMainThread,
-    HasInitializedSubsystems,
-    HasExpectedRuntimeSubsystems,
-    GetAppMetadataProperty,
-    SetAppMetadataProperty,
-    GetHint,
-    SetHintOverride,
-    ResetHint,
-    InitializeVideo,
-    Quit,
-    GetTicksNanoseconds,
-    PollEvent,
-    SupportsGlobalMouse,
-    GetGlobalMousePosition,
-    SetMouseCapture,
-    CreateSystemCursor,
-    SetCursor,
-    DestroyCursor,
-    ShowCursor,
-    HideCursor,
-    IsCursorVisible,
-    SupportsClipboardText,
-    GetClipboardText,
-    FreeClipboardText,
-    SetClipboardText,
-    OpenExternalUri,
-    ShowDialog};
+constexpr PlatformRuntimeBackend kSdlBackend{nullptr,
+                                             IsMainThread,
+                                             HasInitializedSubsystems,
+                                             HasExpectedRuntimeSubsystems,
+                                             GetAppMetadataProperty,
+                                             SetAppMetadataProperty,
+                                             GetHint,
+                                             SetHintOverride,
+                                             ResetHint,
+                                             InitializeVideo,
+                                             Quit,
+                                             GetTicksNanoseconds,
+                                             PollEvent,
+                                             SupportsGlobalMouse,
+                                             GetGlobalMousePosition,
+                                             SetMouseCapture,
+                                             CreateSystemCursor,
+                                             SetCursor,
+                                             DestroyCursor,
+                                             ShowCursor,
+                                             HideCursor,
+                                             IsCursorVisible,
+                                             SupportsClipboardText,
+                                             GetClipboardText,
+                                             FreeClipboardText,
+                                             SetClipboardText,
+                                             OpenExternalUri,
+                                             ShowDialog};
 
 std::atomic<const PlatformRuntimeBackend*> backendOverride{nullptr};
 std::atomic<const PlatformWindowBackend*> windowBackendOverride{nullptr};

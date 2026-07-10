@@ -56,7 +56,7 @@ struct DialogSelection final
 struct DialogCancellation final
 {
     [[nodiscard]] friend constexpr bool operator==(DialogCancellation,
-                                                  DialogCancellation) noexcept = default;
+                                                   DialogCancellation) noexcept = default;
 };
 
 struct DialogFailure final

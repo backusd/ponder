@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/core/Numbers.hpp>
 #include <ponder/platform/Geometry.hpp>
 
 #include <compare>
@@ -14,8 +15,7 @@ struct TextCompositionRange final
     std::uint32_t length{};
 
     [[nodiscard]] friend constexpr auto operator<=>(
-        const TextCompositionRange& lhs,
-        const TextCompositionRange& rhs) noexcept = default;
+        const TextCompositionRange& lhs, const TextCompositionRange& rhs) noexcept = default;
 };
 
 struct TextInputArea final
@@ -30,6 +30,6 @@ struct TextInputArea final
 
 [[nodiscard]] constexpr bool IsValid(TextInputArea area) noexcept
 {
-    return IsValid(area.rectangle) && detail::IsFinite(area.cursorOffset);
+    return IsValid(area.rectangle) && core::IsFinite(area.cursorOffset);
 }
 } // namespace pond::platform

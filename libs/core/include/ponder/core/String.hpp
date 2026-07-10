@@ -256,6 +256,36 @@ constexpr void AppendUtf8CodePoint(std::string& output, std::uint32_t codePoint)
 }
 } // namespace detail
 
+[[nodiscard]] constexpr bool IsValidUtf8(std::string_view text) noexcept
+{
+    std::size_t index{};
+    while (index < text.size())
+    {
+        std::uint32_t codePoint{};
+        if (!detail::TryDecodeUtf8CodePoint(text, index, codePoint))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+[[nodiscard]] constexpr bool IsValidUtf8WithoutEmbeddedNull(std::string_view text) noexcept
+{
+    std::size_t index{};
+    while (index < text.size())
+    {
+        std::uint32_t codePoint{};
+        if (!detail::TryDecodeUtf8CodePoint(text, index, codePoint) || codePoint == 0U)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 [[nodiscard]] constexpr Result<std::wstring> Utf8ToWideString(std::string_view text)
 {
     std::wstring output;

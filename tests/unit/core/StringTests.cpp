@@ -69,6 +69,16 @@ static_assert(Utf8ToWideStringAsciiIsConstexpr());
 static_assert(Utf8ToWideStringRocketIsConstexpr());
 static_assert(WideStringToUtf8AsciiIsConstexpr());
 static_assert(WideStringToUtf8RocketIsConstexpr());
+constexpr bool Utf8ValidationIsConstexpr()
+{
+    return pond::core::IsValidUtf8("Ponder") && pond::core::IsValidUtf8(kRocketUtf8) &&
+           !pond::core::IsValidUtf8("\xF0\x9F") &&
+           pond::core::IsValidUtf8WithoutEmbeddedNull("Ponder") &&
+           !pond::core::IsValidUtf8WithoutEmbeddedNull(std::string_view{"P\0nder", 6}) &&
+           !pond::core::IsValidUtf8WithoutEmbeddedNull("\xF0\x9F");
+}
+
+static_assert(Utf8ValidationIsConstexpr());
 [[nodiscard]] std::string MakeBytes(std::initializer_list<unsigned int> bytes)
 {
     std::string text;
@@ -111,6 +121,27 @@ void ExpectParseFailure(const pond::core::Result<std::string>& result)
     EXPECT_EQ(result.GetError().GetCode().GetCategory(), pond::core::ErrorCategory::Parse);
 }
 
+TEST(Utf8ValidationTests, ValidatesUtf8WithoutAllocatingAResult)
+{
+    EXPECT_TRUE(pond::core::IsValidUtf8(""));
+    EXPECT_TRUE(pond::core::IsValidUtf8("Ponder"));
+    EXPECT_TRUE(pond::core::IsValidUtf8(kRocketUtf8));
+
+    EXPECT_FALSE(pond::core::IsValidUtf8(MakeBytes({0xC0U, 0xAFU})));
+    EXPECT_FALSE(pond::core::IsValidUtf8(MakeBytes({0xF0U, 0x9FU})));
+    EXPECT_FALSE(pond::core::IsValidUtf8(MakeBytes({0xEDU, 0xA0U, 0x80U})));
+}
+
+TEST(Utf8ValidationTests, RejectsEmbeddedNulls)
+{
+    EXPECT_TRUE(pond::core::IsValidUtf8WithoutEmbeddedNull(""));
+    EXPECT_TRUE(pond::core::IsValidUtf8WithoutEmbeddedNull("Ponder"));
+    EXPECT_TRUE(pond::core::IsValidUtf8WithoutEmbeddedNull(kRocketUtf8));
+
+    EXPECT_FALSE(pond::core::IsValidUtf8WithoutEmbeddedNull(std::string_view{"\0", 1}));
+    EXPECT_FALSE(pond::core::IsValidUtf8WithoutEmbeddedNull(std::string_view{"P\0nder", 6}));
+    EXPECT_FALSE(pond::core::IsValidUtf8WithoutEmbeddedNull(MakeBytes({0xF0U, 0x9FU})));
+}
 TEST(StringConversionTests, ConvertsEmptyStrings)
 {
     pond::core::Result<std::wstring> wideResult = pond::core::Utf8ToWideString("");

@@ -23,8 +23,7 @@ struct WindowDesc final
     bool resizable{true};
     bool highPixelDensity{true};
     std::optional<LogicalSize> minimumLogicalSize;
-    WindowGraphicsCompatibility graphicsCompatibility{
-        WindowGraphicsCompatibility::Default};
+    WindowGraphicsCompatibility graphicsCompatibility{WindowGraphicsCompatibility::Default};
 };
 
 namespace detail

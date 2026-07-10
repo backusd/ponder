@@ -28,7 +28,6 @@ struct DisplayInfo final
     DisplayOrientation orientation{DisplayOrientation::Unknown};
     float contentScale{};
 
-    [[nodiscard]] friend bool operator==(const DisplayInfo& lhs,
-                                         const DisplayInfo& rhs) = default;
+    [[nodiscard]] friend bool operator==(const DisplayInfo& lhs, const DisplayInfo& rhs) = default;
 };
 } // namespace pond::platform

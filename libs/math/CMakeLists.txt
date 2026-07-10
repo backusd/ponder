@@ -1,5 +1,9 @@
 ponder_add_project_library(math
     PUBLIC_HEADERS
-        include/ponder/math/Library.hpp
+        include/ponder/math/Angle.hpp
+        include/ponder/math/MathError.hpp
+        include/ponder/math/Scalar.hpp
     SOURCES
-        src/Library.cpp)
+        src/MathError.cpp
+    PUBLIC_DEPS
+        ponder::core)

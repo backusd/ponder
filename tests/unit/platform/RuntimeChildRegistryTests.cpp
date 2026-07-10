@@ -1,8 +1,8 @@
-#include "RuntimeChildRegistry.hpp"
-
 #include <ponder/core/PonderException.hpp>
 
 #include <gtest/gtest.h>
+
+#include "RuntimeChildRegistry.hpp"
 
 namespace
 {

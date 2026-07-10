@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ponder/core/Hash.hpp>
+
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -97,35 +99,6 @@ private:
     ValueType m_value{};
 };
 
-namespace detail
-{
-[[nodiscard]] constexpr std::size_t HashIdentifierValue(std::uint64_t value) noexcept
-{
-    std::size_t hashValue{};
-    std::size_t prime{};
-
-    if constexpr (sizeof(std::size_t) == 8)
-    {
-        hashValue = 1469598103934665603ULL;
-        prime = 1099511628211ULL;
-    }
-    else
-    {
-        hashValue = 2166136261U;
-        prime = 16777619U;
-    }
-
-    for (std::size_t byteIndex = 0; byteIndex < sizeof(value); ++byteIndex)
-    {
-        const auto shift = static_cast<unsigned int>(byteIndex * 8U);
-        const auto byte = static_cast<std::uint8_t>(value >> shift);
-        hashValue ^= static_cast<std::size_t>(byte);
-        hashValue *= prime;
-    }
-
-    return hashValue;
-}
-} // namespace detail
 } // namespace pond::platform
 
 namespace std
@@ -133,20 +106,18 @@ namespace std
 template <>
 struct hash<pond::platform::WindowId>
 {
-    [[nodiscard]] constexpr std::size_t operator()(
-        pond::platform::WindowId id) const noexcept
+    [[nodiscard]] constexpr std::size_t operator()(pond::platform::WindowId id) const noexcept
     {
-        return pond::platform::detail::HashIdentifierValue(id.GetValue());
+        return pond::core::HashIdentifierValue(id.GetValue());
     }
 };
 
 template <>
 struct hash<pond::platform::DisplayId>
 {
-    [[nodiscard]] constexpr std::size_t operator()(
-        pond::platform::DisplayId id) const noexcept
+    [[nodiscard]] constexpr std::size_t operator()(pond::platform::DisplayId id) const noexcept
     {
-        return pond::platform::detail::HashIdentifierValue(id.GetValue());
+        return pond::core::HashIdentifierValue(id.GetValue());
     }
 };
 
@@ -156,7 +127,7 @@ struct hash<pond::platform::DialogRequestId>
     [[nodiscard]] constexpr std::size_t operator()(
         pond::platform::DialogRequestId id) const noexcept
     {
-        return pond::platform::detail::HashIdentifierValue(id.GetValue());
+        return pond::core::HashIdentifierValue(id.GetValue());
     }
 };
 } // namespace std

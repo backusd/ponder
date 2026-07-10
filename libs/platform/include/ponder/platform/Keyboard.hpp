@@ -226,8 +226,7 @@ public:
     [[nodiscard]] static constexpr LogicalKey FromCharacter(char32_t character) noexcept
     {
         const auto value = static_cast<std::uint32_t>(character);
-        if (value == 0U || value > 0x10FFFFU ||
-            (value >= 0xD800U && value <= 0xDFFFU))
+        if (value == 0U || value > 0x10FFFFU || (value >= 0xD800U && value <= 0xDFFFU))
         {
             return Unknown();
         }
@@ -238,8 +237,7 @@ public:
     [[nodiscard]] static constexpr LogicalKey FromNamed(NamedKey namedKey) noexcept
     {
         const auto value = static_cast<std::uint16_t>(namedKey);
-        if (value == 0U ||
-            value > static_cast<std::uint16_t>(NamedKey::BrowserForward))
+        if (value == 0U || value > static_cast<std::uint16_t>(NamedKey::BrowserForward))
         {
             return Unknown();
         }
@@ -330,14 +328,12 @@ constexpr KeyModifiers& operator&=(KeyModifiers& lhs, KeyModifiers rhs) noexcept
     return lhs;
 }
 
-[[nodiscard]] constexpr bool HasAnyKeyModifier(KeyModifiers modifiers,
-                                               KeyModifiers mask) noexcept
+[[nodiscard]] constexpr bool HasAnyKeyModifier(KeyModifiers modifiers, KeyModifiers mask) noexcept
 {
     return (modifiers & mask) != KeyModifiers::None;
 }
 
-[[nodiscard]] constexpr bool HasAllKeyModifiers(KeyModifiers modifiers,
-                                                KeyModifiers mask) noexcept
+[[nodiscard]] constexpr bool HasAllKeyModifiers(KeyModifiers modifiers, KeyModifiers mask) noexcept
 {
     return (modifiers & mask) == mask;
 }

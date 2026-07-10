@@ -8,6 +8,7 @@ ponder_add_project_test(ponder_platform_tests
         MouseTests.cpp
         NativeWindowTests.cpp
         PlatformErrorTests.cpp
+        PlatformCoverageAuditTests.cpp
         PlatformEventTests.cpp
         PlatformRuntimeTypesTests.cpp
         ProcessTests.cpp
@@ -17,7 +18,14 @@ ponder_add_project_test(ponder_platform_tests
         WindowStateTests.cpp
         WindowTypesTests.cpp
     PRIVATE_DEPS
-        ponder::platform)
+        ponder::platform
+    LABELS
+        platform
+        unit)
+
+target_compile_definitions(ponder_platform_tests PRIVATE
+    PONDER_PLATFORM_PUBLIC_INCLUDE_DIR="${PROJECT_SOURCE_DIR}/libs/platform/include/ponder/platform"
+    PONDER_PLATFORM_HEADER_SELF_CONTAINMENT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/HeaderSelfContainment")
 
 add_library(ponder_platform_header_tests OBJECT
     HeaderSelfContainment/DialogHeader.cpp
@@ -66,7 +74,10 @@ ponder_add_project_test(ponder_platform_backend_tests
         WindowBackendTests.cpp
     PRIVATE_DEPS
         ponder::platform
-        ponder::SDL3)
+        ponder::SDL3
+    LABELS
+        platform
+        backend)
 
 target_include_directories(ponder_platform_backend_tests PRIVATE
     "${PROJECT_SOURCE_DIR}/libs/platform/src")

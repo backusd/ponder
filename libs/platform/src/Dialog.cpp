@@ -1,14 +1,10 @@
+#include <ponder/core/Assert.hpp>
+#include <ponder/core/String.hpp>
+#include <ponder/io/Path.hpp>
+#include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
 
-#include "PlatformRuntimeState.hpp"
-#include "StringValidation.hpp"
-#include "WindowImpl.hpp"
-
-#include <ponder/core/Assert.hpp>
-#include <ponder/platform/PlatformError.hpp>
-
 #include <SDL3/SDL_error.h>
-
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -24,22 +20,21 @@
 #include <utility>
 #include <vector>
 
+#include "PlatformRuntimeState.hpp"
+#include "WindowImpl.hpp"
+
 namespace pond::platform
 {
 namespace
 {
-constexpr core::ErrorCode kInvalidArgumentCode =
-    ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode =
-    ToErrorCode(PlatformErrorCode::BackendFailure);
-constexpr core::ErrorCode kNotFoundCode =
-    ToErrorCode(PlatformErrorCode::NotFound);
+constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
+constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
+constexpr core::ErrorCode kNotFoundCode = ToErrorCode(PlatformErrorCode::NotFound);
 
 [[nodiscard]] bool IsValidFilterPatternCharacter(char character) noexcept
 {
     const auto value = static_cast<unsigned char>(character);
-    return std::isalnum(value) != 0 || character == '-' || character == '_' ||
-           character == '.';
+    return std::isalnum(value) != 0 || character == '-' || character == '_' || character == '.';
 }
 
 [[nodiscard]] bool IsValidFilterPattern(std::string_view pattern) noexcept
@@ -72,30 +67,6 @@ constexpr core::ErrorCode kNotFoundCode =
     return segmentHasCharacters;
 }
 
-[[nodiscard]] std::string PathToUtf8(const std::filesystem::path& path)
-{
-    const std::u8string utf8Path = path.u8string();
-    std::string text;
-    text.reserve(utf8Path.size());
-    for (const char8_t character : utf8Path)
-    {
-        text.push_back(static_cast<char>(character));
-    }
-    return text;
-}
-
-[[nodiscard]] std::filesystem::path PathFromUtf8(std::string_view utf8Path)
-{
-    std::u8string pathText;
-    pathText.reserve(utf8Path.size());
-    for (const char character : utf8Path)
-    {
-        pathText.push_back(
-            static_cast<char8_t>(static_cast<unsigned char>(character)));
-    }
-    return std::filesystem::path{pathText};
-}
-
 [[nodiscard]] core::Result<std::optional<std::string>> ValidateDefaultLocation(
     const std::optional<std::filesystem::path>& location)
 {
@@ -104,8 +75,8 @@ constexpr core::ErrorCode kNotFoundCode =
         return std::optional<std::string>{};
     }
 
-    std::string text = PathToUtf8(*location);
-    if (text.empty() || !detail::IsValidUtf8WithoutEmbeddedNull(text))
+    std::string text = io::PathToUtf8(*location);
+    if (text.empty() || !core::IsValidUtf8WithoutEmbeddedNull(text))
     {
         return core::Result<std::optional<std::string>>::FromError(core::Error{
             kInvalidArgumentCode,
@@ -115,20 +86,16 @@ constexpr core::ErrorCode kNotFoundCode =
     return std::optional<std::string>{std::move(text)};
 }
 
-[[nodiscard]] core::VoidResult ValidateFilter(
-    const DialogFileFilter& filter, std::size_t index)
+[[nodiscard]] core::VoidResult ValidateFilter(const DialogFileFilter& filter, std::size_t index)
 {
-    if (filter.name.empty() ||
-        !detail::IsValidUtf8WithoutEmbeddedNull(filter.name))
+    if (filter.name.empty() || !core::IsValidUtf8WithoutEmbeddedNull(filter.name))
     {
         return core::VoidResult::FromError(core::Error{
-            kInvalidArgumentCode,
-            "Dialog filter " + std::to_string(index) +
-                " name must be non-empty UTF-8 without embedded nulls."});
+            kInvalidArgumentCode, "Dialog filter " + std::to_string(index) +
+                                      " name must be non-empty UTF-8 without embedded nulls."});
     }
 
-    if (filter.pattern.empty() ||
-        !detail::IsValidUtf8WithoutEmbeddedNull(filter.pattern) ||
+    if (filter.pattern.empty() || !core::IsValidUtf8WithoutEmbeddedNull(filter.pattern) ||
         !IsValidFilterPattern(filter.pattern))
     {
         return core::VoidResult::FromError(core::Error{
@@ -158,31 +125,26 @@ struct PreparedDialogRequest final
 {
     if (parentWindowId.has_value() && !parentWindowId->IsValid())
     {
-        return core::Result<PreparedDialogRequest>::FromError(core::Error{
-            kInvalidArgumentCode,
-            "Dialog parent window ID must be absent or valid."});
+        return core::Result<PreparedDialogRequest>::FromError(
+            core::Error{kInvalidArgumentCode, "Dialog parent window ID must be absent or valid."});
     }
 
-    if (filters.size() >
-        static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    if (filters.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
     {
         return core::Result<PreparedDialogRequest>::FromError(core::Error{
-            kInvalidArgumentCode,
-            "Dialog filter count exceeds the backend representation range."});
+            kInvalidArgumentCode, "Dialog filter count exceeds the backend representation range."});
     }
 
     auto locationResult = ValidateDefaultLocation(defaultLocation);
     if (!locationResult.HasValue())
     {
-        return core::Result<PreparedDialogRequest>::FromError(
-            std::move(locationResult).GetError());
+        return core::Result<PreparedDialogRequest>::FromError(std::move(locationResult).GetError());
     }
 
-    PreparedDialogRequest prepared{
-        .kind = kind,
-        .parentWindowId = parentWindowId,
-        .defaultLocation = std::move(locationResult).GetValue(),
-        .allowMultipleSelection = allowMultipleSelection};
+    PreparedDialogRequest prepared{.kind = kind,
+                                   .parentWindowId = parentWindowId,
+                                   .defaultLocation = std::move(locationResult).GetValue(),
+                                   .allowMultipleSelection = allowMultipleSelection};
     prepared.filterNames.reserve(filters.size());
     prepared.filterPatterns.reserve(filters.size());
     prepared.filters.reserve(filters.size());
@@ -192,8 +154,7 @@ struct PreparedDialogRequest final
         core::VoidResult validation = ValidateFilter(filters[index], index);
         if (!validation.HasValue())
         {
-            return core::Result<PreparedDialogRequest>::FromError(
-                std::move(validation).GetError());
+            return core::Result<PreparedDialogRequest>::FromError(std::move(validation).GetError());
         }
 
         prepared.filterNames.push_back(filters[index].name);
@@ -202,16 +163,15 @@ struct PreparedDialogRequest final
 
     for (std::size_t index = 0; index < filters.size(); ++index)
     {
-        prepared.filters.push_back(SDL_DialogFileFilter{
-            .name = prepared.filterNames[index].c_str(),
-            .pattern = prepared.filterPatterns[index].c_str()});
+        prepared.filters.push_back(
+            SDL_DialogFileFilter{.name = prepared.filterNames[index].c_str(),
+                                 .pattern = prepared.filterPatterns[index].c_str()});
     }
 
     return prepared;
 }
 
-[[nodiscard]] std::string_view GetDialogOperation(
-    detail::BackendDialogKind kind) noexcept
+[[nodiscard]] std::string_view GetDialogOperation(detail::BackendDialogKind kind) noexcept
 {
     switch (kind)
     {
@@ -226,8 +186,8 @@ struct PreparedDialogRequest final
     return "SDL_ShowFileDialog";
 }
 
-[[nodiscard]] DialogFailure MakeDialogFailure(
-    detail::BackendDialogKind kind, std::string_view message)
+[[nodiscard]] DialogFailure MakeDialogFailure(detail::BackendDialogKind kind,
+                                              std::string_view message)
 {
     std::string text{GetDialogOperation(kind)};
     text += " failed for dialog request";
@@ -244,9 +204,8 @@ struct PreparedDialogRequest final
     return DialogFailure{core::Error{kBackendFailureCode, std::move(text)}};
 }
 
-[[nodiscard]] DialogOutcome CopyDialogOutcome(
-    const detail::DialogRequestState& request, const char* const* fileList,
-    int selectedFilter);
+[[nodiscard]] DialogOutcome CopyDialogOutcome(const detail::DialogRequestState& request,
+                                              const char* const* fileList, int selectedFilter);
 } // namespace
 
 namespace detail
@@ -269,16 +228,14 @@ struct DialogRequestState final
 
 namespace
 {
-[[nodiscard]] DialogOutcome CopyDialogOutcome(
-    const detail::DialogRequestState& request, const char* const* fileList,
-    int selectedFilter)
+[[nodiscard]] DialogOutcome CopyDialogOutcome(const detail::DialogRequestState& request,
+                                              const char* const* fileList, int selectedFilter)
 {
     if (fileList == nullptr)
     {
         const char* const rawError = SDL_GetError();
-        return MakeDialogFailure(
-            request.kind,
-            rawError != nullptr ? std::string_view{rawError} : std::string_view{});
+        return MakeDialogFailure(request.kind, rawError != nullptr ? std::string_view{rawError}
+                                                                   : std::string_view{});
     }
 
     if (fileList[0] == nullptr)
@@ -290,13 +247,12 @@ namespace
     for (std::size_t index = 0; fileList[index] != nullptr; ++index)
     {
         const std::string pathText{fileList[index]};
-        if (!detail::IsValidUtf8WithoutEmbeddedNull(pathText))
+        if (!core::IsValidUtf8WithoutEmbeddedNull(pathText))
         {
             return MakeDialogFailure(
-                request.kind,
-                "The backend returned a dialog path that was not valid UTF-8.");
+                request.kind, "The backend returned a dialog path that was not valid UTF-8.");
         }
-        paths.push_back(PathFromUtf8(pathText));
+        paths.push_back(io::PathFromUtf8(pathText));
     }
 
     if (paths.empty())
@@ -311,22 +267,17 @@ namespace
         if (index >= request.filters.size())
         {
             return MakeDialogFailure(
-                request.kind,
-                "The backend returned an out-of-range selected dialog filter index.");
+                request.kind, "The backend returned an out-of-range selected dialog filter index.");
         }
         selectedFilterIndex = index;
     }
 
-    return DialogSelection{
-        .paths = std::move(paths),
-        .selectedFilterIndex = selectedFilterIndex};
+    return DialogSelection{.paths = std::move(paths), .selectedFilterIndex = selectedFilterIndex};
 }
 
-void SDLCALL OnDialogCompleted(
-    void* userdata, const char* const* fileList, int selectedFilter)
+void SDLCALL OnDialogCompleted(void* userdata, const char* const* fileList, int selectedFilter)
 {
-    auto* const rawRequest =
-        static_cast<detail::DialogRequestState*>(userdata);
+    auto* const rawRequest = static_cast<detail::DialogRequestState*>(userdata);
     if (rawRequest == nullptr || rawRequest->runtime == nullptr)
     {
         return;
@@ -339,8 +290,8 @@ void SDLCALL OnDialogCompleted(
         return;
     }
 
-    DialogOutcome outcome = DialogFailure{core::Error{
-        kBackendFailureCode, "Dialog callback failed before copying a result."}};
+    DialogOutcome outcome = DialogFailure{
+        core::Error{kBackendFailureCode, "Dialog callback failed before copying a result."}};
     try
     {
         outcome = CopyDialogOutcome(*request, fileList, selectedFilter);
@@ -367,12 +318,11 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
 {
     VerifyOwnerThread("dialog request");
 
-    auto preparedResult = PrepareDialogRequest(
-        kind, parentWindowId, defaultLocation, filters, allowMultipleSelection);
+    auto preparedResult = PrepareDialogRequest(kind, parentWindowId, defaultLocation, filters,
+                                               allowMultipleSelection);
     if (!preparedResult.HasValue())
     {
-        return core::Result<DialogRequestId>::FromError(
-            std::move(preparedResult).GetError());
+        return core::Result<DialogRequestId>::FromError(std::move(preparedResult).GetError());
     }
 
     PreparedDialogRequest prepared = std::move(preparedResult).GetValue();
@@ -380,27 +330,24 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
     void* parentNativeWindow{};
     if (prepared.parentWindowId.has_value())
     {
-        const auto parent = std::ranges::find_if(
-            m_windowsByBackendId,
-            [id = *prepared.parentWindowId](const auto& entry)
-            {
-                return entry.second.id == id;
-            });
+        const auto parent = std::ranges::find_if(m_windowsByBackendId,
+                                                 [id = *prepared.parentWindowId](const auto& entry)
+                                                 {
+                                                     return entry.second.id == id;
+                                                 });
         if (parent == m_windowsByBackendId.end())
         {
-            return core::Result<DialogRequestId>::FromError(core::Error{
-                kNotFoundCode, "Dialog parent window was not found."});
+            return core::Result<DialogRequestId>::FromError(
+                core::Error{kNotFoundCode, "Dialog parent window was not found."});
         }
 
         parentWindow = parent->second.window;
-        PONDER_VERIFY(parentWindow != nullptr,
-                      "Dialog parent window record has no owning window");
+        PONDER_VERIFY(parentWindow != nullptr, "Dialog parent window record has no owning window");
         parentWindow->VerifyUsable("dialog parent lookup");
         parentNativeWindow = parentWindow->m_nativeWindow;
     }
 
-    PONDER_VERIFY(m_nextDialogRequestId != 0,
-                  "Platform dialog request ID space is exhausted");
+    PONDER_VERIFY(m_nextDialogRequestId != 0, "Platform dialog request ID space is exhausted");
     const DialogRequestId id{m_nextDialogRequestId};
 
     auto request = std::make_shared<DialogRequestState>();
@@ -415,9 +362,9 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
     request->filters.reserve(request->filterNames.size());
     for (std::size_t index = 0; index < request->filterNames.size(); ++index)
     {
-        request->filters.push_back(SDL_DialogFileFilter{
-            .name = request->filterNames[index].c_str(),
-            .pattern = request->filterPatterns[index].c_str()});
+        request->filters.push_back(
+            SDL_DialogFileFilter{.name = request->filterNames[index].c_str(),
+                                 .pattern = request->filterPatterns[index].c_str()});
     }
     request->allowMultipleSelection = prepared.allowMultipleSelection;
 
@@ -425,8 +372,7 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
         std::scoped_lock lock{m_dialogMutex};
         const auto [iterator, inserted] = m_dialogRequests.emplace(id, request);
         static_cast<void>(iterator);
-        PONDER_VERIFY(inserted, "Dialog request ID {} is already registered",
-                      id.GetValue());
+        PONDER_VERIFY(inserted, "Dialog request ID {} is already registered", id.GetValue());
     }
 
     bool requestRegistered{};
@@ -461,9 +407,8 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
         .parentWindow = parentNativeWindow,
         .filters = request->filters.empty() ? nullptr : request->filters.data(),
         .filterCount = static_cast<int>(request->filters.size()),
-        .defaultLocation = request->defaultLocation.has_value()
-                             ? request->defaultLocation->c_str()
-                             : nullptr,
+        .defaultLocation =
+            request->defaultLocation.has_value() ? request->defaultLocation->c_str() : nullptr,
         .allowMultipleSelection = request->allowMultipleSelection};
     m_backend.showDialog(m_backend.context, backendDesc);
 
@@ -474,23 +419,22 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
 core::Result<DialogRequestId> PlatformRuntimeState::ShowOpenFileDialog(
     const OpenFileDialogDesc& desc)
 {
-    return ShowDialog(BackendDialogKind::OpenFile, desc.parentWindowId,
-                      desc.defaultLocation, desc.filters,
-                      desc.allowMultipleSelection);
+    return ShowDialog(BackendDialogKind::OpenFile, desc.parentWindowId, desc.defaultLocation,
+                      desc.filters, desc.allowMultipleSelection);
 }
 
 core::Result<DialogRequestId> PlatformRuntimeState::ShowSaveFileDialog(
     const SaveFileDialogDesc& desc)
 {
-    return ShowDialog(BackendDialogKind::SaveFile, desc.parentWindowId,
-                      desc.defaultLocation, desc.filters, false);
+    return ShowDialog(BackendDialogKind::SaveFile, desc.parentWindowId, desc.defaultLocation,
+                      desc.filters, false);
 }
 
 core::Result<DialogRequestId> PlatformRuntimeState::ShowOpenFolderDialog(
     const OpenFolderDialogDesc& desc)
 {
-    return ShowDialog(BackendDialogKind::OpenFolder, desc.parentWindowId,
-                      desc.defaultLocation, {}, desc.allowMultipleSelection);
+    return ShowDialog(BackendDialogKind::OpenFolder, desc.parentWindowId, desc.defaultLocation, {},
+                      desc.allowMultipleSelection);
 }
 
 std::shared_ptr<DialogRequestState> PlatformRuntimeState::AcquireDialogRequest(
@@ -501,21 +445,19 @@ std::shared_ptr<DialogRequestState> PlatformRuntimeState::AcquireDialogRequest(
     return request != m_dialogRequests.end() ? request->second : nullptr;
 }
 
-void PlatformRuntimeState::EnqueueDialogCompletion(
-    DialogRequestId id, DialogOutcome outcome) noexcept
+void PlatformRuntimeState::EnqueueDialogCompletion(DialogRequestId id,
+                                                   DialogOutcome outcome) noexcept
 {
     std::scoped_lock lock{m_dialogMutex};
     const auto request = m_dialogRequests.find(id);
-    if (request == m_dialogRequests.end() ||
-        request->second->completionEnqueued)
+    if (request == m_dialogRequests.end() || request->second->completionEnqueued)
     {
         return;
     }
 
     request->second->completionEnqueued = true;
-    m_dialogCompletions.push_back(DialogCompletionRecord{
-        .requestId = id,
-        .outcome = std::move(outcome)});
+    m_dialogCompletions.push_back(
+        DialogCompletionRecord{.requestId = id, .outcome = std::move(outcome)});
 }
 
 std::optional<PlatformEvent> PlatformRuntimeState::PollDialogCompletion()
@@ -534,8 +476,7 @@ std::optional<PlatformEvent> PlatformRuntimeState::PollDialogCompletion()
         completion = std::move(m_dialogCompletions.front());
         m_dialogCompletions.pop_front();
 
-        const auto requestIterator =
-            m_dialogRequests.find(completion->requestId);
+        const auto requestIterator = m_dialogRequests.find(completion->requestId);
         PONDER_VERIFY(requestIterator != m_dialogRequests.end(),
                       "Dialog request {} completed after it was unregistered",
                       completion->requestId.GetValue());
@@ -549,22 +490,19 @@ std::optional<PlatformEvent> PlatformRuntimeState::PollDialogCompletion()
     }
     UnregisterRequest(request.get());
 
-    return PlatformEvent{DialogCompletedEvent{
-        .timestamp = Now(),
-        .requestId = completion->requestId,
-        .outcome = std::move(completion->outcome)}};
+    return PlatformEvent{DialogCompletedEvent{.timestamp = Now(),
+                                              .requestId = completion->requestId,
+                                              .outcome = std::move(completion->outcome)}};
 }
 } // namespace detail
 
-core::Result<DialogRequestId> PlatformRuntime::ShowOpenFileDialog(
-    const OpenFileDialogDesc& desc)
+core::Result<DialogRequestId> PlatformRuntime::ShowOpenFileDialog(const OpenFileDialogDesc& desc)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from PlatformRuntime");
     return m_state->ShowOpenFileDialog(desc);
 }
 
-core::Result<DialogRequestId> PlatformRuntime::ShowSaveFileDialog(
-    const SaveFileDialogDesc& desc)
+core::Result<DialogRequestId> PlatformRuntime::ShowSaveFileDialog(const SaveFileDialogDesc& desc)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from PlatformRuntime");
     return m_state->ShowSaveFileDialog(desc);

@@ -1,13 +1,11 @@
 #include <ponder/platform/TextInput.hpp>
 
 #include <gtest/gtest.h>
-
 #include <limits>
 
 namespace
 {
-static_assert(pond::platform::TextCompositionRange{} ==
-              pond::platform::TextCompositionRange{0, 0});
+static_assert(pond::platform::TextCompositionRange{} == pond::platform::TextCompositionRange{0, 0});
 static_assert(pond::platform::IsValid(pond::platform::TextInputArea{}));
 
 TEST(TextInputTests, DistinguishesZeroLengthAndNonzeroCompositionRanges)
@@ -22,9 +20,8 @@ TEST(TextInputTests, DistinguishesZeroLengthAndNonzeroCompositionRanges)
 
 TEST(TextInputTests, ValidatesLogicalAreaAndCursorValues)
 {
-    const pond::platform::TextInputArea valid{
-        .rectangle = {{-12.5F, 4.25F}, {180.0F, 24.0F}},
-        .cursorOffset = 30.5F};
+    const pond::platform::TextInputArea valid{.rectangle = {{-12.5F, 4.25F}, {180.0F, 24.0F}},
+                                              .cursorOffset = 30.5F};
     EXPECT_TRUE(pond::platform::IsValid(valid));
 
     pond::platform::TextInputArea invalid = valid;

@@ -123,7 +123,7 @@ endfunction()
 function(ponder_add_project_test target_name)
     set(options)
     set(one_value_args RESOURCE_LOCK)
-    set(multi_value_args SOURCES PRIVATE_DEPS)
+    set(multi_value_args SOURCES PRIVATE_DEPS LABELS)
 
     cmake_parse_arguments(
         PONDER_TEST
@@ -149,10 +149,23 @@ function(ponder_add_project_test target_name)
     ponder_enable_sanitizers("${target_name}")
 
     set(discovery_arguments DISCOVERY_TIMEOUT 30)
+    set(test_properties)
     if(PONDER_TEST_RESOURCE_LOCK)
-        list(APPEND discovery_arguments
-            PROPERTIES RESOURCE_LOCK "${PONDER_TEST_RESOURCE_LOCK}")
+        list(APPEND test_properties RESOURCE_LOCK "${PONDER_TEST_RESOURCE_LOCK}")
+    endif()
+    if(test_properties)
+        list(APPEND discovery_arguments PROPERTIES ${test_properties})
     endif()
 
     gtest_discover_tests("${target_name}" ${discovery_arguments})
+
+    if(PONDER_TEST_LABELS)
+        list(JOIN PONDER_TEST_LABELS ";" test_labels)
+        set(label_script "${CMAKE_CURRENT_BINARY_DIR}/${target_name}_labels.cmake")
+        file(WRITE "${label_script}"
+            "if(DEFINED ${target_name}_TESTS)\n"
+            "    set_tests_properties(\${${target_name}_TESTS} PROPERTIES LABELS \"${test_labels}\")\n"
+            "endif()\n")
+        set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${label_script}")
+    endif()
 endfunction()

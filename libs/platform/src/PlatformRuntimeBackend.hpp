@@ -5,7 +5,6 @@
 #include <ponder/platform/WindowGraphics.hpp>
 
 #include <SDL3/SDL_dialog.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -30,8 +29,7 @@ struct BackendWindowCreateDesc final
     int height{};
     bool resizable{};
     bool highPixelDensity{};
-    WindowGraphicsCompatibility graphicsCompatibility{
-        WindowGraphicsCompatibility::Default};
+    WindowGraphicsCompatibility graphicsCompatibility{WindowGraphicsCompatibility::Default};
 };
 
 struct BackendWindowProperties final
@@ -127,18 +125,12 @@ struct PlatformWindowBackend final
     bool (*setMinimumSize)(void* context, void* window, int width, int height){};
     bool (*show)(void* context, void* window){};
     bool (*hide)(void* context, void* window){};
-    bool (*getProperties)(void* context, void* window,
-                          BackendWindowProperties* properties){};
-    BackendWindowOperationResult (*setFullscreenModeToDesktop)(void* context,
-                                                                void* window){};
-    BackendWindowOperationResult (*setFullscreen)(void* context, void* window,
-                                                   bool fullscreen){};
-    BackendWindowOperationResult (*setBordered)(void* context, void* window,
-                                                 bool bordered){};
-    BackendWindowOperationResult (*setResizable)(void* context, void* window,
-                                                  bool resizable){};
-    BackendWindowOperationResult (*setAlwaysOnTop)(void* context, void* window,
-                                                    bool alwaysOnTop){};
+    bool (*getProperties)(void* context, void* window, BackendWindowProperties* properties){};
+    BackendWindowOperationResult (*setFullscreenModeToDesktop)(void* context, void* window){};
+    BackendWindowOperationResult (*setFullscreen)(void* context, void* window, bool fullscreen){};
+    BackendWindowOperationResult (*setBordered)(void* context, void* window, bool bordered){};
+    BackendWindowOperationResult (*setResizable)(void* context, void* window, bool resizable){};
+    BackendWindowOperationResult (*setAlwaysOnTop)(void* context, void* window, bool alwaysOnTop){};
     BackendWindowOperationResult (*minimize)(void* context, void* window){};
     BackendWindowOperationResult (*maximize)(void* context, void* window){};
     BackendWindowOperationResult (*restore)(void* context, void* window){};
@@ -146,15 +138,14 @@ struct PlatformWindowBackend final
     bool (*stopTextInput)(void* context, void* window){};
     bool (*isTextInputActive)(void* context, void* window){};
     bool (*clearTextComposition)(void* context, void* window){};
-    bool (*setTextInputArea)(void* context, void* window,
-                             const BackendTextInputArea* area){};
+    bool (*setTextInputArea)(void* context, void* window, const BackendTextInputArea* area){};
     bool (*setMouseGrab)(void* context, void* window, bool grabbed){};
     bool (*isMouseGrabbed)(void* context, void* window){};
     bool (*setRelativeMouseMode)(void* context, void* window, bool enabled){};
     bool (*isRelativeMouseModeEnabled)(void* context, void* window){};
-    BackendNativeWindowHandleResult (*getNativeHandle)(
-        void* context, void* window, void** cachedMetalView,
-        NativeWindowHandle* handle){};
+    BackendNativeWindowHandleResult (*getNativeHandle)(void* context, void* window,
+                                                       void** cachedMetalView,
+                                                       NativeWindowHandle* handle){};
     void (*destroyMetalView)(void* context, void* metalView){};
 };
 
@@ -180,14 +171,12 @@ struct PlatformDisplayBackend final
     void* context{};
     bool (*enumerate)(void* context, std::vector<std::uint32_t>& displayIds){};
     const char* (*getName)(void* context, std::uint32_t displayId){};
-    bool (*getBounds)(void* context, std::uint32_t displayId,
-                      BackendScreenRectangle* bounds){};
+    bool (*getBounds)(void* context, std::uint32_t displayId, BackendScreenRectangle* bounds){};
     bool (*getUsableBounds)(void* context, std::uint32_t displayId,
                             BackendScreenRectangle* bounds){};
     bool (*getCurrentRefreshRate)(void* context, std::uint32_t displayId,
                                   float* refreshRateHertz){};
-    BackendDisplayOrientation (*getCurrentOrientation)(void* context,
-                                                       std::uint32_t displayId){};
+    BackendDisplayOrientation (*getCurrentOrientation)(void* context, std::uint32_t displayId){};
     float (*getContentScale)(void* context, std::uint32_t displayId){};
     std::uint32_t (*getForWindow)(void* context, void* window){};
     float (*getWindowPixelDensity)(void* context, void* window){};
@@ -200,8 +189,7 @@ struct PlatformRuntimeBackend final
     bool (*isMainThread)(void* context){};
     bool (*hasInitializedSubsystems)(void* context){};
     bool (*hasExpectedRuntimeSubsystems)(void* context){};
-    const char* (*getAppMetadataProperty)(void* context,
-                                          ApplicationMetadataProperty property){};
+    const char* (*getAppMetadataProperty)(void* context, ApplicationMetadataProperty property){};
     bool (*setAppMetadataProperty)(void* context, ApplicationMetadataProperty property,
                                    const char* value){};
     const char* (*getHint)(void* context, const char* name){};
@@ -235,10 +223,8 @@ inline constexpr char kMouseAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
 
 [[nodiscard]] bool IsWindowGraphicsCompatibilitySupported(
     WindowGraphicsCompatibility compatibility) noexcept;
-[[nodiscard]] BackendNativeWindowDriver GetNativeWindowDriver(
-    std::string_view driverName) noexcept;
-[[nodiscard]] std::uint64_t BuildSdlWindowFlags(
-    const BackendWindowCreateDesc& desc) noexcept;
+[[nodiscard]] BackendNativeWindowDriver GetNativeWindowDriver(std::string_view driverName) noexcept;
+[[nodiscard]] std::uint64_t BuildSdlWindowFlags(const BackendWindowCreateDesc& desc) noexcept;
 [[nodiscard]] bool IsReservedSdlWindowPosition(std::int32_t value) noexcept;
 
 [[nodiscard]] PlatformRuntimeBackend GetPlatformRuntimeBackend() noexcept;

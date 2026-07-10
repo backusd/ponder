@@ -1,8 +1,7 @@
 #include <ponder/platform/Display.hpp>
 
-#include <gtest/gtest.h>
-
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <optional>
 #include <string>
 #include <type_traits>
