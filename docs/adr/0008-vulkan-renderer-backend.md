@@ -7,141 +7,156 @@ Accepted.
 ## Context
 
 The first durable desktop shell needs a renderer that can clear and present a
-platform window on Windows, Linux, and macOS without putting graphics ownership
-in `ponder_platform` or backend setup in `ponder-desktop`.
+platform window on Windows and Linux without putting graphics ownership in
+`ponder_platform` or backend setup in `ponder-desktop`.
 
-The project vision already identifies Vulkan as the intended rendering API.
-Selecting it now fixes the SDL window-creation contract, the native values that
-platform must expose, the macOS portability strategy, and the ownership boundary
-between render and UI before any of those types become public.
+The project vision identifies Vulkan as the intended first rendering API. Selecting it now fixes
+the SDL window-creation contract, the native values that platform must expose, and the ownership
+boundary between render and UI before those types become broader public contracts.
 
-SDL can create Vulkan surfaces from `SDL_Window`, but exposing that type would
-make SDL a render and UI contract. Having platform accept Vulkan objects and call
-`SDL_Vulkan_CreateSurface` would instead give platform graphics-surface
-responsibility. Both choices conflict with ADR 0007.
+macOS is deliberately not part of the Vulkan renderer contract. The later macOS renderer will use
+Metal directly. Treating Vulkan as a portability layer on macOS would force platform to expose a
+Metal-layer payload for a backend that `ponder_render` will not support there.
+
+SDL can create Vulkan surfaces from `SDL_Window`, but exposing that type would make SDL a render
+and UI contract. Having platform accept Vulkan objects and call `SDL_Vulkan_CreateSurface` would
+instead give platform graphics-surface responsibility. Both choices conflict with ADR 0007.
 
 ## Decision
 
-Use Vulkan as the first `ponder_render` backend.
+Use Vulkan as the first `ponder_render` backend on Windows and Linux.
 
 ### Backend And Dependency Boundary
 
-`ponder_render` owns Vulkan instance, physical/logical device, queues,
-`VkSurfaceKHR`, swapchain, image views, synchronization, resize recovery, present
-mode, and presentation lifetime. Vulkan and operating-system declarations stay
-in renderer-private implementation files.
+`ponder_render` owns Vulkan loader and instance lifetime, physical/logical device selection,
+queues, `VkSurfaceKHR`, swapchains, image views, synchronization, resize recovery, present mode,
+and presentation lifetime. Vulkan and operating-system declarations stay in renderer-private
+implementation files.
 
-The Vulkan headers/loader strategy, memory allocator, and MoltenVK packaging are
-implementation prerequisites tracked by the renderer roadmap. Those dependencies
-must follow ADR 0001: pinned repository dependencies, CMake targets, and license
-inventory updates are added together. Shader compilation dependencies wait for
-the renderer task that defines the shader pipeline.
+`ponder::core` and `ponder::platform` are public target dependencies of `ponder_render` because the
+public renderer contract uses their types. Vulkan headers, Volk, allocator support, validation
+layer integration, and operating-system dependencies stay private. A future Metal backend is a
+separate private implementation concern and is not part of this ADR.
 
-`ponder::core` and `ponder::platform` are public target dependencies of
-`ponder_render`. Vulkan/loader/allocator/MoltenVK/OS dependencies stay private.
-The renderer-owned ImGui draw bridge may also use private `ponder::imgui`, but
-render does not depend on `ponder_ui`.
+The initial backend targets Vulkan 1.2 as the runtime floor. It builds against pinned current
+unified Vulkan headers, queries the loader and physical-device API versions independently, and
+enables only the functionality actually supported by the selected device. Vulkan 1.3 and 1.4
+features may be used only through explicit capability checks and documented fallbacks.
 
-The initial backend targets Vulkan 1.2. It requires `VK_KHR_surface`, the active
-host WSI instance extension, and device extension `VK_KHR_swapchain`, but no
-optional device feature bit for the bootstrap clear pass. On macOS it also
-handles `VK_KHR_portability_enumeration` and its instance flag and enables
-`VK_KHR_portability_subset` when advertised.
+The required bootstrap path needs `VK_KHR_surface`, the active Windows/X11/Wayland WSI instance
+extension, and device extension `VK_KHR_swapchain`. It requires no optional device feature bit for
+the create/clear/present milestone.
 
-Windows and Linux use the standard dynamic Vulkan loader path compatible with
-SDL's automatic loader use for `SDL_WINDOW_VULKAN`; render must not statically
-link or independently select an incompatible loader. macOS packages MoltenVK.
-Developer validation configurations request `VK_LAYER_KHRONOS_validation` and
-`VK_EXT_debug_utils` and fail clearly if explicitly requested support is absent.
+Windows and Linux use the system Vulkan loader opened dynamically through private Volk
+integration, compatible with SDL's normal loader path for `SDL_WINDOW_VULKAN`. A
+Vulkan SDK, import-library link, or statically linked loader is not a runtime or
+consumer requirement. Developer validation
+configurations request `VK_LAYER_KHRONOS_validation` and `VK_EXT_debug_utils` and fail clearly if
+explicitly requested support is absent.
 
-### Window Creation And Bootstrap
+`ponder_render` intentionally does not build on macOS until the native Metal backend exists. A
+macOS configure with render enabled fails with an actionable message; configuring the repository
+with render disabled remains supported.
 
-`pond::platform::WindowGraphicsCompatibility` has exactly two alternatives:
+### Window Creation And Backend Selection
+
+`pond::platform::WindowGraphicsCompatibility` has these project-owned alternatives:
 
 - `Default` requests no graphics-specific SDL creation flag.
-- `Vulkan` requests the native state needed by this backend.
+- `Vulkan` requests the native state needed by the Vulkan backend on Windows and Linux.
+- `Metal` is reserved for the later native macOS backend.
 
-`Vulkan` maps to `SDL_WINDOW_VULKAN` on Windows and Linux. On macOS it maps to
-`SDL_WINDOW_METAL`, because MoltenVK presents through a `CAMetalLayer` and
-platform must create the SDL Metal view without exposing `SDL_Window`.
-High-pixel-density, visibility, resizability, and other window properties remain
-orthogonal.
+`Vulkan` maps to `SDL_WINDOW_VULKAN` on Windows and Linux only. Vulkan-compatible windows are not
+supported on macOS. `Metal` maps to `SDL_WINDOW_METAL` for the future macOS backend, but no Metal
+renderer or Metal native payload exists yet.
 
-Each `Window` stores the exact project compatibility selected in `WindowDesc`.
-Platform never infers it from SDL window flags, which are host-dependent and not
-an unambiguous representation of the project value.
+Each `Window` stores the exact project compatibility selected in `WindowDesc`. Platform never
+infers it from SDL window flags, which are host-dependent and not an unambiguous representation of
+the project value.
 
-Before creating the platform window, `ponder-desktop` calls
-`pond::render::GetRequiredWindowGraphicsCompatibility() noexcept`; the initial
-query returns `Vulkan`. The application does not hardcode SDL flags or infer the
-requirement from the host.
+Before creating a platform window, the application calls
+`pond::render::GetRequiredWindowGraphicsCompatibility() noexcept`. In a Vulkan build, this
+parameterless query returns `Vulkan`. Backend choice is selected by the build, not by a runtime
+backend selector, and the application does not hardcode SDL flags or infer the requirement from the
+host.
 
 ### Closed Native Window Contract
 
-`NativeWindowHandle` is a closed tagged variant with these exact payloads:
+The current Vulkan `NativeWindowHandle` contract contains exactly these payloads:
 
-- `NativeWin32Window`: opaque `instance` (`HINSTANCE`) and `window` (`HWND`)
-  pointers.
-- `NativeX11Window`: opaque `display` (`Display*`) and integer-sized `window`
-  (X11 `Window`).
-- `NativeWaylandWindow`: opaque `display` (`wl_display*`) and `surface`
-  (`wl_surface*`) pointers.
-- `NativeCocoaWindow`: opaque `metalLayer` (`CAMetalLayer*`) pointer.
+- `NativeWin32Window`: opaque `instance` (`HINSTANCE`) and `window` (`HWND`) pointers.
+- `NativeX11Window`: opaque `display` (`Display*`) and integer-sized `window` (X11 `Window`).
+- `NativeWaylandWindow`: opaque `display` (`wl_display*`) and `surface` (`wl_surface*`) pointers.
 
-The public structs use only `void*` and `std::uintptr_t`; they do not include OS,
-SDL, or Vulkan headers. No HDC, X11 screen, Wayland viewport/xdg object, Cocoa
-window, generic extra field, or externally owned-window alternative is included.
+The public structs use only `void*` and `std::uintptr_t`; they do not include OS, SDL, Vulkan, or
+Metal headers. No HDC, X11 screen, Wayland viewport/xdg object, Cocoa window, Metal layer, generic
+extra field, or externally owned-window alternative is included. The native Metal backend must
+introduce its own exact macOS payload when it is designed.
 
 The corresponding renderer-private Vulkan WSI paths are:
 
 - Win32: `VK_KHR_win32_surface` and `vkCreateWin32SurfaceKHR`.
 - X11: `VK_KHR_xlib_surface` and `vkCreateXlibSurfaceKHR`.
 - Wayland: `VK_KHR_wayland_surface` and `vkCreateWaylandSurfaceKHR`.
-- macOS: `VK_EXT_metal_surface` and `vkCreateMetalSurfaceEXT` through MoltenVK.
 
-The initial Linux contract supports SDL's X11 and Wayland drivers. Other SDL
-drivers return a platform `Unsupported` result for native Vulkan interop.
-Requesting the native handle of a `Default` window is an invalid-argument
-failure.
+The initial Linux contract supports SDL's X11 and Wayland drivers. Other SDL drivers return a
+platform `Unsupported` result for native Vulkan interop. Requesting the native handle of a
+`Default` or future `Metal` window for the Vulkan backend is an invalid-argument or unsupported
+capability result, as appropriate to the public API layer.
 
-### macOS Native State
+### Lifetime, Threading, And Multiple Windows
 
-Each macOS `Window` created for `Vulkan` lazily owns at most one cached
-`SDL_MetalView`. Repeated native-handle queries return that window's existing
-borrowed `CAMetalLayer*`. Platform destroys the view before its SDL window.
-Render may configure the borrowed layer as required by MoltenVK but does not own
-or destroy it. Render creates and owns the Vulkan surface.
+Native payloads are borrowed owner-thread snapshots. Renderer-owned code consumes
+the native snapshot synchronously during owner-thread surface preparation, creates
+and owns `VkSurfaceKHR`, and never stores or transfers the native snapshot itself.
 
-### Lifetime And Destruction
+`RenderBootstrap` is the owner-thread root for dynamic loader and instance state. It prepares
+surfaces from platform windows and outlives every prepared surface, device, and target created from
+it. Only the completed opaque surface handoff plus copied project-owned state such
+as `WindowId`, pixel size, visibility, and minimized/restored state may cross to
+the caller-selected render thread.
 
-Native payloads are borrowed owner-thread snapshots. Render destroys swapchain
-resources and `VkSurfaceKHR` before the platform window. Platform then destroys
-its macOS Metal view when present, destroys the window, and finally shuts down
-SDL after all children are gone.
+`RenderDevice` is separate from presentation-target lifetime. A single device can
+serve multiple independent window targets when the selected adapter can present to
+their surfaces. Device mutation, frame recording, submission, and target
+destruction are affine to the caller-selected render thread, which may be the
+platform owner thread. Render creates no hidden render thread and no
+process-global renderer singleton.
 
-This renderer-to-window lifetime is caller-enforced: platform's child registry
-cannot observe a renderer-owned surface. `Renderer` destruction must precede
-`Window` destruction. On Windows/Linux this also ensures Vulkan state is gone
-before SDL destroys the Vulkan-compatible window and releases its loader
-reference.
+The renderer-to-window lifetime is caller-enforced: platform's child registry cannot observe a
+renderer-owned surface. Shutdown destroys or abandons active frame tokens, destroys render targets
+and unconsumed prepared surfaces, destroys the render device, destroys `RenderBootstrap`, destroys
+platform windows, and finally destroys `PlatformRuntime`.
+
+Ordinary resize, minimize, hide/show, and swapchain staleness are handled from copied state
+snapshots on the render thread. Surface loss requires a fresh owner-thread preparation call; render
+must not reuse stored native data. Device loss is fatal to the selected device for the bootstrap
+milestone.
 
 ### Dear ImGui Rendering
 
-`ponder_ui` owns the Dear ImGui context and SDL-free platform adapter.
-`ponder_render` owns Vulkan resources and command submission used to render
-borrowed ImGui draw data. They meet at a narrow renderer-owned ImGui draw bridge;
-UI receives no Vulkan handles, and render does not depend on `ponder_ui`.
+Dear ImGui rendering is not part of the create/clear/present bootstrap milestone. The renderer
+foundation must leave a documented insertion point where a later renderer-owned ImGui bridge can
+record after the clear pass and before final submission.
+
+`ponder_ui` owns the Dear ImGui context and SDL-free platform adapter. `ponder_render` will own the
+backend resources and command submission used to render borrowed ImGui draw data. UI receives no
+Vulkan handles, and render does not depend on `ponder_ui`.
 
 ## Consequences
 
-The initial renderer and native interop contract are intentionally Vulkan-only.
-Adding another graphics API requires a later decision and only then may extend
-`WindowGraphicsCompatibility` or `NativeWindowHandle`.
+The initial renderer and native interop contract are intentionally Vulkan-on-Windows/Linux only.
+Adding Metal requires a later decision before platform exposes a macOS native payload or render
+builds on macOS.
 
-Platform can remain independent of Vulkan and renderer code. Render has no
-direct SDL dependency or compile usage while creating its own presentation
-surface; final executables still receive platform's link-only SDL dependency.
+Platform can remain independent of Vulkan and renderer code. Render has no direct SDL dependency or
+compile usage while creating its own presentation surface; final executables still receive
+platform's link-only SDL dependency.
 
-macOS support requires MoltenVK and an SDL-owned Metal view. Linux requires both
-X11 and Wayland native branches. These branches remain unverified until their
-owning hosts compile and exercise them.
+Vulkan 1.2 keeps the runtime floor broad while allowing newer Vulkan 1.3 and 1.4 functionality to
+be used opportunistically when queried capabilities prove it is available. Requiring Vulkan 1.4 is
+not part of the bootstrap contract.
+
+Windows on the current development laptop is the only initially verified runtime host. Linux X11
+and Wayland implementation paths remain unverified until they are configured, built, and exercised
+on native hosts.

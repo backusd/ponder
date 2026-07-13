@@ -97,26 +97,27 @@ IDs are translated privately. `DisplayId` follows the same zero-invalid,
 monotonic, non-reused runtime-local rules. Events for destroyed or unknown
 backend resources are ignored deterministically.
 
-Window creation includes `WindowGraphicsCompatibility` with exactly `Default`
-and `Vulkan`. `Default` requests no graphics-specific flag. `Vulkan` maps to
-`SDL_WINDOW_VULKAN` on Windows and Linux and to `SDL_WINDOW_METAL` on macOS,
-where MoltenVK presents through a Metal layer. This value does not transfer
-surface or device ownership into platform.
+Window creation includes `WindowGraphicsCompatibility` with exactly `Default`,
+`Vulkan`, and `Metal`. `Default` requests no graphics-specific flag. `Vulkan`
+maps to `SDL_WINDOW_VULKAN` on Windows and Linux only. macOS Vulkan presentation
+is unsupported and is not translated through Metal-layer semantics. `Metal` is
+reserved for a later native macOS renderer and maps to `SDL_WINDOW_METAL` only
+for that backend. This value does not transfer surface or device ownership into
+platform.
 `Window` stores the exact project compatibility selected in its descriptor and
 never reconstructs it from host-dependent SDL flags.
 
 Native window data is a closed tagged variant with `NativeWin32Window`
 (`HINSTANCE`, `HWND`), `NativeX11Window` (`Display*`, X11 `Window`),
-`NativeWaylandWindow` (`wl_display*`, `wl_surface*`), and `NativeCocoaWindow`
-(`CAMetalLayer*`) payloads represented only by opaque pointers and
-integer-sized values. It is not a generic bag of fields.
+and `NativeWaylandWindow` (`wl_display*`, `wl_surface*`) payloads represented
+only by opaque pointers and integer-sized values. It is not a generic bag of
+fields. No Cocoa or Metal-layer payload is part of the current Vulkan interop
+contract; the future native Metal backend must define its own exact payload
+before platform exposes it.
 
-On macOS, each Vulkan-compatible window lazily owns at most one cached SDL
-Metal view. Repeated native-handle queries return that window's existing borrowed
-layer, and platform destroys the view before its SDL window.
-On every host, renderer-private code performs OS casts and creates and owns
-`VkSurfaceKHR`. Native values are owner-thread snapshots valid while their
-window and native state remain alive.
+On Vulkan hosts, renderer-private code performs OS casts and creates and owns
+`VkSurfaceKHR`. Native values are borrowed owner-thread snapshots valid while
+their window and native state remain alive.
 
 Display data uses project-owned snapshot values. Display content scale, window
 pixel density, and window display scale are scalar values with distinct names.
@@ -188,9 +189,9 @@ most consumers, provided public types and behavior remain project-owned.
 The single-runtime and owner-thread contracts are intentional constraints.
 Tests and applications must structure resource lifetime accordingly.
 
-ADR 0008 finalizes Vulkan as the first renderer and the exact native payloads.
-A later backend requires another deliberate decision before either public
-interop type is extended.
+ADR 0008 finalizes Vulkan as the first renderer on Windows and Linux and
+explicitly excludes Vulkan on macOS. A later native Metal backend requires
+another deliberate decision before the macOS interop payload is added.
 
 Pure value and translation tests are separate from live SDL integration tests.
 SDL-free public-header self-containment and consumer targets are explicitly

@@ -43,7 +43,7 @@ until their roadmap tasks are implemented.
 | `2-input-drop-monitor` | Immediately buildable | `ponder::core`, `ponder::io`, `ponder::platform` | Input, IME, mouse, cursor, and inbound-drop behavior can be observed through console output and window titles. |
 | `3-desktop-services-workbench` | Immediately buildable | `ponder::core`, `ponder::io`, `ponder::platform` | Clipboard, URI, and asynchronous native dialogs are host services rather than rendered UI. |
 | `4-responsive-process-runner` | Immediately buildable | `ponder::core`, `ponder::platform` | Process launch is independent of the renderer; a simple window proves that blocking work stays off the event pump. |
-| `5-renderer-window-bootstrap` | Deferred until renderer bootstrap exists | `ponder::core`, `ponder::platform`, `ponder::render` | A native handle is only a meaningful example when a renderer consumes it and presents real frames. Dear ImGui is not required. |
+| `examples/render/1-clear-window` | Deferred until renderer bootstrap exists | `ponder::core`, `ponder::platform`, `ponder::render` | The canonical renderer example belongs under `examples/render/` once render can clear and present a window. Dear ImGui is not required. |
 | `6-imgui-platform-workbench` | Deferred until renderer and UI adapter exist | At least `ponder::core`, `ponder::platform`, `ponder::render`, `ponder::ui`; finalize direct ImGui usage with the UI API | This is the polished interactive tour and must use the project UI adapter, not the bundled SDL ImGui backend. |
 
 The first four examples should be implemented now. The renderer example starts
@@ -448,36 +448,39 @@ synchronized messages.
 - Its README states the initial environment/stdio contract, missing nonblocking
   status API, blocking-wait warning, exit-status portability, and lack of shell.
 
-## EXAMPLE PLAT-005: Renderer Window Bootstrap
+## RELATED RENDER EXAMPLE: Minimal Clear Window
 
-Directory: `examples/platform/5-renderer-window-bootstrap/`
+Directory: `examples/render/1-clear-window/`
 
-Executable: `ponder-platform-5-renderer-window-bootstrap`
+Executable: `ponder-render-clear-window`
 
 Readiness: deferred until the renderer has a stable surface/swapchain bootstrap,
-resize, and present API. Dear ImGui is not required.
+resize, minimize, shutdown, and present API. Dear ImGui is not required.
+
+This is no longer assigned to `examples/platform/`. The render roadmap owns the
+canonical example because renderer-private code, not platform example code,
+consumes native window snapshots and creates presentation surfaces.
 
 ### Scenario
 
 Ask `ponder_render` for its required window graphics compatibility, create one
-compatible window, and present clear frames. Renderer-private bootstrap obtains
-and interprets the borrowed native-window variant. Rebuild presentation
-resources after relevant window/display changes and demonstrate the required
-renderer-before-window teardown order.
+compatible platform window, and present clear frames. Renderer-private bootstrap
+obtains and interprets the borrowed native-window variant on the platform owner
+thread. The example rebuilds presentation resources after relevant
+window/display changes and demonstrates the required renderer-before-window
+teardown order.
 
 ### Features Exercised
 
 - `pond::render::GetRequiredWindowGraphicsCompatibility()` before window
   creation, followed by `Window::GetGraphicsCompatibility()` verification. The
-  initial renderer may return `WindowGraphicsCompatibility::Vulkan`, but the
-  example never hardcodes that backend choice.
-- Renderer-private `GetNativeHandle()` use and exhaustive handling of Win32,
-  X11, Wayland, and Cocoa payload alternatives without exposing those details
-  through the example or renderer-independent API.
+  example never hardcodes the backend choice.
+- Renderer-private `GetNativeHandle()` use for the active Windows/Linux Vulkan
+  payload without exposing SDL, OS, or Vulkan details through example code.
 - `InvalidArgument` on a default window, `Unsupported` on an unsupported video
-  driver, and complete-handle success on a supported host.
-- Borrowed-handle lifetime, re-query after show/hide, state/presentation change,
-  display migration, and renderer presentation rebuild boundaries.
+  driver, and complete-handle success on a supported Windows/Linux host.
+- Borrowed-handle lifetime, owner-thread surface preparation, copied window-state
+  snapshots, and renderer presentation rebuild boundaries.
 - Logical versus pixel resize, density and display-scale changes,
   minimize/restore, and desktop fullscreen around one presentation target.
 - Explicit destruction of surfaces/swapchains/presentation before `Window`.
@@ -485,15 +488,12 @@ renderer-before-window teardown order.
 ### Completion Criteria
 
 - The example renders and presents through public render and platform APIs; its
-  source contains no direct SDL use or OS-specific surface creation. The
-  renderer owns any host-specific interpretation behind its public boundary.
-- The handoff accepts the closed `NativeWindowHandle` variant, while only the
-  active host alternative executes inside renderer-private WSI code.
+  source contains no direct SDL use or OS-specific surface creation. The renderer
+  owns host-specific interpretation behind its public boundary.
 - Resize/minimize/display migration do not use stale dimensions or borrowed
   handles.
 - Its README distinguishes platform window ownership from renderer presentation
   ownership and lists supported host/driver prerequisites.
-
 ## EXAMPLE PLAT-006: ImGui Platform Workbench
 
 Directory: `examples/platform/6-imgui-platform-workbench/`
@@ -561,7 +561,7 @@ to the primary README instead of duplicating the explanation.
 | Clipboard text and explicit external URI | `3-desktop-services-workbench` |
 | All open/save/folder dialog descriptors, request IDs, and outcomes | `3-desktop-services-workbench` |
 | Shell-free launch, wait, exit variants, termination, and abandonment | `4-responsive-process-runner` |
-| Graphics compatibility and all borrowed native-handle alternatives | `5-renderer-window-bootstrap` |
+| Graphics compatibility and renderer/window handoff | `examples/render/1-clear-window` |
 | Renderer/UI adapter integration over public platform primitives | `6-imgui-platform-workbench` |
 
 ### Public Operation Checklist

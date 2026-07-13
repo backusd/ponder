@@ -23,8 +23,9 @@ Work:
   integration coverage wherever the host and driver support it. On POSIX hosts,
   explicitly verify abandoned-child reaping without zombies plus signal exit
   translation; on Windows, preserve high-bit unsigned normal exit statuses.
-- Compile `NativeWin32Window` on Windows, `NativeX11Window` and
-  `NativeWaylandWindow` on Linux, and `NativeCocoaWindow` on macOS.
+- Compile `NativeWin32Window` on Windows, and `NativeX11Window` plus
+  `NativeWaylandWindow` on Linux. Native Metal interop on macOS waits for the
+  future Metal backend contract.
 - Record capability-based skips rather than treating them as passes.
 - Add CI jobs when CI is introduced; until then maintain a dated manual matrix
   with exact compiler, OS, SDL driver, and result information.

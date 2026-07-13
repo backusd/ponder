@@ -179,9 +179,12 @@ privately by SDL3.
 - Provide project-owned primitives for `ponder_ui`; UI must not declare a direct
   SDL dependency, inherit SDL compile usage, or compile the bundled SDL ImGui
   backend.
-- `WindowGraphicsCompatibility` contains only `Default` and `Vulkan`. Map Vulkan
-  to SDL's Vulkan flag on Windows/Linux and Metal flag on macOS. Store the exact
-  project selection in each window; never reconstruct it from SDL flags.
+- `WindowGraphicsCompatibility` contains `Default`, `Vulkan`, and `Metal`.
+  Map `Vulkan` to SDL's Vulkan flag on Windows/Linux only. Map `Metal` to SDL's
+  Metal flag only for the later native macOS backend. Store the exact project
+  selection in each window; never reconstruct it from SDL flags.
+- Do not translate a Vulkan request on macOS into Metal-layer behavior. Vulkan on
+  macOS is unsupported by the render contract.
 - Stage native windows hidden until minimum-size setup, backend-ID routing, and
   runtime child registration have committed; show only at the end when the
   descriptor requests visibility. Remove routing before native destruction and
@@ -189,15 +192,15 @@ privately by SDL3.
 - Reject window dimensions that are zero or not representable by SDL's signed
   integer API, and reject screen coordinates that collide with SDL's encoded
   centered/undefined sentinels before calling SDL.
-- Keep native interop to the approved Win32, X11, Wayland, and Cocoa Metal-layer
-  payloads from ADR 0008. Values are tagged, borrowed, narrow, and OS-header-free.
+- Keep native Vulkan interop to the approved Win32, X11, and Wayland payloads
+  from ADR 0008. Values are tagged, borrowed, narrow, and OS-header-free.
 - Return `InvalidArgument` for native-handle queries on non-Vulkan windows,
-  `Unsupported` for video drivers outside `"windows"`, `"x11"`, `"wayland"`,
-  and `"cocoa"`, and `BackendFailure` for malformed or missing approved
-  backend data. Do not return a partially populated handle.
-- On macOS, each Vulkan-compatible window owns at most one cached SDL Metal view;
-  repeated queries expose the same borrowed layer, and the view is destroyed
-  before that SDL window. Consumers re-query borrowed native snapshots after
+  `Unsupported` for video drivers outside `"windows"`, `"x11"`, and
+  `"wayland"`, and `BackendFailure` for malformed or missing approved backend
+  data. Do not return a partially populated handle.
+- No Cocoa or Metal-layer payload is part of the current Vulkan native-handle
+  contract. The future Metal backend must define its own exact macOS payload
+  before platform exposes it. Consumers re-query borrowed native snapshots after
   window show/hide, presentation/state changes, display migration, or renderer
   presentation teardown/rebuild boundaries where stale state would matter.
 - Never create a Vulkan surface in platform. Render owns every `VkSurfaceKHR` and

@@ -37,9 +37,9 @@ self-containment target is explicitly never assigned a PCH.
   size, and pixel size are distinct concepts.
 - `ponder_ui` uses project-owned platform events and primitives for its Dear
   ImGui platform adapter. No public raw-SDL bridge is added.
-- Vulkan native-window data is the closed Win32, X11, Wayland, and Cocoa
-  Metal-layer variant approved by ADR 0008. It remains narrow, tagged, borrowed,
-  and owner-thread-only.
+- Vulkan native-window data is the closed Win32, X11, and Wayland variant
+  approved by ADR 0008. It remains narrow, tagged, borrowed, and
+  owner-thread-only. The future Metal payload is not yet defined.
 - Pure tests, SDL-private translation tests, and live SDL integration tests use
   separate targets.
 - `ponder_platform` intentionally uses no PCH. Reintroduce one only after
@@ -192,20 +192,21 @@ Work:
 
 Approved contract:
 
-- Vulkan is the first renderer backend under ADR 0008.
-- `WindowGraphicsCompatibility` contains exactly `Default` and `Vulkan`.
-  `Default` adds no graphics flag. `Vulkan` maps to `SDL_WINDOW_VULKAN` on
-  Windows/Linux and `SDL_WINDOW_METAL` on macOS.
-- `NativeWindowHandle` contains exactly:
+- Vulkan is the first renderer backend under ADR 0008 on Windows and Linux.
+  macOS rendering is reserved for a later native Metal backend.
+- `WindowGraphicsCompatibility` contains exactly `Default`, `Vulkan`, and
+  `Metal`. `Default` adds no graphics flag. `Vulkan` maps to
+  `SDL_WINDOW_VULKAN` on Windows/Linux only. `Metal` maps to `SDL_WINDOW_METAL`
+  for the future native macOS backend.
+- `NativeWindowHandle` for the current Vulkan consumer contains exactly:
   - `NativeWin32Window { void* instance; void* window; }`.
   - `NativeX11Window { void* display; std::uintptr_t window; }`.
   - `NativeWaylandWindow { void* display; void* surface; }`.
-  - `NativeCocoaWindow { void* metalLayer; }`.
-- Each macOS Vulkan-compatible window owns at most one cached `SDL_MetalView`.
-  Platform owns SDL/native windows; render owns `VkSurfaceKHR`, devices,
-  swapchains, synchronization, and presentation. The caller destroys renderer
-  presentation state before its platform window because platform cannot observe
-  renderer-owned surfaces.
+- No macOS native payload is defined until the Metal backend specifies its exact
+  requirements. Platform owns SDL/native windows; render owns `VkSurfaceKHR`,
+  devices, swapchains, synchronization, and presentation. The caller destroys
+  renderer presentation state before its platform window because platform cannot
+  observe renderer-owned surfaces.
 - Render exposes `GetRequiredWindowGraphicsCompatibility() noexcept` before
   desktop creates the window; desktop does not hardcode Vulkan or SDL flags.
 - UI owns one Dear ImGui context and a custom platform adapter over
@@ -661,19 +662,18 @@ Expose only the borrowed native data approved by PLAT-002.
 Work:
 
 - Add `NativeWindowHandle` as a closed tagged variant of `NativeWin32Window`,
-  `NativeX11Window`, `NativeWaylandWindow`, and `NativeCocoaWindow`.
+  `NativeX11Window`, and `NativeWaylandWindow`.
 - Use the exact fields approved by PLAT-002: Win32 `instance`/`window` pointers,
-  X11 `display` pointer/`window` integer, Wayland `display`/`surface` pointers,
-  and Cocoa `metalLayer` pointer.
+  X11 `display` pointer/`window` integer, and Wayland `display`/`surface`
+  pointers.
 - Represent OS handles with opaque pointer- or integer-sized fields without OS
   headers or typedefs.
 - Make invalid tag/payload combinations unrepresentable.
 - Require `WindowGraphicsCompatibility::Vulkan`; querying a `Default` window
-  returns an invalid-argument result.
+  returns an invalid-argument result, and future `Metal` native discovery waits
+  for the Metal backend payload contract.
 - Query SDL properties internally for drivers `"windows"`, `"x11"`, and
-  `"wayland"`. For `"cocoa"`, each Vulkan-compatible window lazily creates and
-  owns at most one cached `SDL_MetalView`; repeated queries return the same
-  borrowed layer, and the view is destroyed before that SDL window.
+  `"wayland"`.
 - Return `Unsupported` for every other SDL video driver instead of returning
   partial or generic native data.
 - Document that the result is a borrowed snapshot valid only on the runtime
@@ -1135,7 +1135,7 @@ Host-local verification record, 2026-07-10:
     borrowing, external-URI policy, clipboard error handling, and platform error
     semantics remain documented in the public headers and platform documents.
   - PLAT-013 renderer-ready status remains valid: platform owns SDL lifecycle
-    and windows and exposes only the approved borrowed native payloads needed
+    and windows and exposes only the approved borrowed Windows/Linux native payloads needed
     for renderer surface creation.
 - Pending verification:
   - Manual native file and folder dialog presentation/cancellation was not

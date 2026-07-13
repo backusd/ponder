@@ -1,20 +1,14 @@
 # Render Library Open Questions
 
-Status: initial design questionnaire for `ponder_render`.
+Status: answered design questionnaire for the first `ponder_render` milestone.
 
-This document treats the existing files under `libs/render/docs/` as background rather than as
-settled design. It asks about durable behavior, ownership, and public contracts. It intentionally
-does not ask for low-level Vulkan tuning choices that should follow from those contracts.
+This file now contains only decisions needed to validate Vulkan
+create/clear/present/resize/minimize/shutdown across multiple platform windows. Questions whose
+implementation belongs to later 3D work are in `open-questions-3d.txt`; Dear ImGui bridge questions
+are in `open-questions-ui.txt`.
 
-An explicit "defer" is a useful answer when accompanied by the boundary that must remain open.
-The identifiers are stable so answers can be recorded without quoting each entire question.
-
-For a first response pass, answer the contract, scope, architecture, lifetime, frame, and error
-sections. The later sections preserve questions that become answerable after those foundations are
-chosen; they do not all need answers before bootstrap work begins.
-
-Each recommendation is a proposed default, not an accepted decision. Record the project owner's
-decision on the following `Answer:` line, including an explicit deferral when appropriate.
+Recommendations are proposed defaults. The project owner's decision is recorded on each `Answer:`
+line, and those answers are the source for `roadmap.txt`.
 
 ## Fixed Inputs
 
@@ -66,7 +60,8 @@ Recommendation: Choose a default backend by platform while designing creation AP
 explicit backend selection later. Make the compatibility query take a backend value so adding
 runtime selection does not require replacing a parameterless public contract.
 
-Answer: Backend choice should be controlled by the build. Do not extend the API to allow selection at runtime. The goal is for the API to remain focused and not add unnecessary features.
+Answer: Backend choice should be controlled by the build. Do not extend the API to allow
+selection at runtime. The goal is for the API to remain focused and not add unnecessary features.
 
 - **CON-04:** Until the Metal backend exists, should `ponder_render` on macOS build as a
   backend-neutral library whose renderer/backend creation returns `Unsupported`, be omitted
@@ -76,7 +71,8 @@ Recommendation: Continue building backend-neutral headers and value utilities on
 every GPU device/backend creation request return `UnsupportedBackend` until Metal exists. This
 keeps consumers portable without implying that headless or presenting GPU functionality works.
 
-Answer: ponder_render on macOS should be configured in CMake to fail to compile. Do not add unnecessary/temporary features in the API simply to enable building on macOS
+Answer: ponder_render on macOS should be configured in CMake to fail to compile. Do not add
+unnecessary/temporary features in the API simply to enable building on macOS
 
 - **CON-05:** Should the existing `NativeCocoaWindow`/Metal-layer platform alternative remain as a
   forward-looking Metal contract, be redesigned before Metal work, or be removed until a concrete
@@ -100,39 +96,6 @@ device and presentation contract before shader, scene, and UI concerns can hide 
 
 Answer: Use the recommendation exactly - scope is only create/clear/present/resize/minimize/shutdown
 
-- **SCOPE-02:** What is the first real visualization vertical slice after bootstrap: atoms and
-  bonds, generic meshes, points/lines/glyphs, molecular surfaces, volumetric data, or something
-  else?
-
-Recommendation: Use an interactive atoms-and-bonds scene as the first vertical slice, implemented
-through reusable instanced glyph primitives. It exercises cameras, depth, dynamic attributes,
-picking identity, and scientific scale while remaining representative of the product.
-
-Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
-
-- **SCOPE-03:** Which representations must the first 3D milestone selected in SCOPE-02 support, and
-  which are explicit deferrals: ball-and-stick, space-filling, wireframe, ribbons, surfaces,
-  scalar/vector/tensor fields, volumes, anisotropic glyphs, streamlines, uncertainty displays,
-  labels, measurements, unit cells, and trajectories?
-
-Recommendation: Include ball-and-stick, space-filling, wireframe, unit-cell lines, selection, and
-per-frame trajectory coordinates in the first 3D milestone. Defer ribbons, generated surfaces,
-volumes, field visualization, advanced glyphs, labels, and measurements until the generic scene and
-resource-update contracts are proven.
-
-Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
-
-- **SCOPE-04:** Is the initial product strictly an interactive windowed desktop renderer, or must
-  the first architecture also support headless devices, offscreen targets, readback, screenshots,
-  image export, or remote execution?
-
-Recommendation: Design device and render-target ownership for windowed and offscreen use from the
-start, while implementing window presentation first and basic offscreen readback next. Scientific
-automation, CI, and publication output make headless rendering a structural requirement even if it
-is not in the bootstrap milestone.
-
-Answer: Use the recommendation exactly
-
 - **SCOPE-05:** Is rendering to multiple platform windows required initially, required not to be
   precluded, or explicitly deferred despite platform already supporting multiple windows?
 
@@ -141,46 +104,6 @@ independent children of a shared device. That keeps bootstrap small without baki
 ownership into the public model.
 
 Answer: Rendering to multiple platform windows is required immediately.
-
-- **SCOPE-06:** Must a single scene and its GPU resources be renderable into multiple windows,
-  multiple viewports, and offscreen targets without duplication?
-
-Recommendation: Yes. Separate scene/resources from views and targets so immutable GPU data can be
-shared while each target owns only size-, format-, and presentation-dependent state; this is
-essential for comparison views and publication rendering.
-
-Answer: Use the recommendation exactly
-
-- **SCOPE-07:** What representative upper bounds should guide the design: atoms, bonds, instances,
-  mesh triangles, volume dimensions, simultaneous scenes, trajectory frames per second, viewport
-  resolution, and number of views?
-
-Recommendation: Define benchmark tiers instead of public hard limits: 100,000 atoms plus bonds with
-60 Hz coordinate streaming at 1440p on a pinned integrated-GPU system, and 1,000,000 at 30 Hz on a
-pinned midrange discrete-GPU system. Add separate 10-million-triangle/4K and volume tiers when those
-features enter scope.
-
-Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
-
-- **SCOPE-08:** What interactive performance and latency targets define success at those scales,
-  and on what reference hardware classes?
-
-Recommendation: Pin exact integrated and discrete adapter models, driver branches, OS builds, and
-scene fixtures for the SCOPE-07 tiers. Require p95 frame times below 16.7 ms and 33.3 ms
-respectively, visible interaction within two presented frames, and separately recorded submission,
-GPU, upload-bandwidth, and presentation latency.
-
-Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
-
-- **SCOPE-09:** What image-quality requirements are non-negotiable for the first scientific scene,
-  and which may be quality/performance settings?
-
-Recommendation: Require correct geometry, depth, identity, linear color handling, stable camera
-mapping, and readable edges. Make antialiasing level, impostor tessellation, shadows, transparency
-quality, and post-processing explicit presets so performance choices never silently change
-scientific meaning.
-
-Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **SCOPE-10:** What minimum Windows and Linux GPU/driver classes may be required? Must integrated
   GPUs work, or may the initial renderer require a discrete GPU?
@@ -200,35 +123,7 @@ should be labeled unverified, not treated as runtime evidence.
 
 Answer: Use the recommendation exactly
 
-- **SCOPE-12:** Which expected update pattern should dominate the first design: mostly static
-  topology, per-frame coordinate changes for trajectories, frequent topology replacement,
-  streaming surfaces/volumes, or a mixture?
-
-Recommendation: Optimize first for stable topology with per-frame position and attribute updates,
-plus efficient sparse changes and an explicit bulk-replacement path. That matches trajectories and
-selection while leaving surface and volume streaming to later specialized resource paths.
-
-Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
-
 ## Public Architecture And Library Boundary -- Foundational
-
-- **ARCH-01:** Should the public API be a high-level visualization/scene API, a low-level
-  backend-neutral GPU API, or layered with a public high-level API over a private low-level layer?
-
-Recommendation: Expose a high-level domain-neutral scene/resource API over a private
-backend-neutral GPU layer. Publishing a low-level graphics API would greatly expand the permanent
-compatibility contract without helping the first scientific milestones.
-
-Answer: Use the recommendation exactly
-
-- **ARCH-02:** Should scene submission be retained mode, immutable per-frame snapshots,
-  immediate-mode draw packets, or a deliberate hybrid?
-
-Recommendation: Use a hybrid: retain long-lived resources, topology, and scene identity; apply
-explicit batched updates; and submit immutable per-frame view/state snapshots. Reserve immediate
-packets for transient overlays and debug drawing.
-
-Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **ARCH-03:** Should the public API be backend-neutral from its first revision so the future Metal
   backend consumes the same scene/resource contracts?
@@ -249,39 +144,14 @@ a window.
 
 Answer: Use the recommendation exactly
 
-- **ARCH-05:** May a process create multiple render devices or renderer instances? If so, may they
-  share public resources or scenes?
-
-Recommendation: Permit multiple devices for explicit adapter selection, isolation, and testing.
-GPU resources and compiled scenes remain device-affine; reusable CPU descriptions may be compiled
-independently for each device rather than implicitly shared.
-
-Answer: Use the recommendation exactly
-
 - **ARCH-06:** Should `ponder_render` be one target with private backend implementations, or should
   backend-neutral frontend and Vulkan/Metal implementations be separate internal targets?
 
 Recommendation: Keep one public `ponder_render` target backed by private frontend/core and Vulkan
 implementation targets, with a future private Metal target. This isolates native dependencies and
 supports backend conformance testing without exposing implementation targets.
-Answer:
 
-- **ARCH-07:** Should render publicly depend on `ponder::math` and accept its vectors, matrices,
-  rays, frusta, and viewports, or use render-owned interchange values with explicit conversions?
-
-Recommendation: Publicly depend on `ponder::math` and add narrow double-backed
-`WorldPosition`/`WorldOrigin` values there as a prerequisite for the large-scene contract,
-updating the math roadmap/ADR. Render should not invent a duplicate high-precision vocabulary.
-Answer:
-
-- **ARCH-08:** If offscreen support is required, should a platform-independent internal sub-target
-  sit beneath `ponder_render` while the public render target retains its accepted platform
-  dependency?
-
-Recommendation: Put device-independent resource, scene, and frame logic in a private
-platform-independent core beneath `ponder_render`, while retaining the accepted public platform
-dependency for presentation. Headless use should not require a second public API.
-Answer:
+Answer: Use the recommendation exactly
 
 - **ARCH-10:** How should backend-specific capabilities be exposed without either leaking native
   types or reducing every backend to the lowest common denominator?
@@ -289,7 +159,8 @@ Answer:
 Recommendation: Expose project-owned capability snapshots with typed features, limits, formats,
 and requirement/preference negotiation. Backend identity and opaque numeric diagnostics are useful,
 but native handles and structures should remain private.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **ARCH-11:** What source-compatibility policy should the early public API follow while
   static-first project policy leaves ABI and public value-layout stability explicitly uncommitted?
@@ -297,7 +168,9 @@ Answer:
 Recommendation: Mark the API experimental through the foundation and first 3D milestones and allow
 documented source-breaking changes during that phase, with no ABI promise. After accepting the
 first scene contract, preserve source compatibility within a release series and deprecate changes.
-Answer:
+
+Answer: Use the recommendation exactly - it will be okay to making breaking ABI changes for a
+long time. I do not plan on releasing anything permanent for a long time.
 
 - **ARCH-12:** Should public descriptors be freely constructible value types validated by create
   calls, invariant-preserving types with fallible factories, or use both patterns by role?
@@ -305,40 +178,9 @@ Answer:
 Recommendation: Use freely constructible value descriptors with safe defaults and transactional
 validation at create/update calls. Use strong invariant-preserving types for identities, extents,
 formats, and handles where invalid values would otherwise be easy to misuse.
-Answer:
 
-- **ARCH-13:** Should resource and scene references be move-only owners, opaque typed handles,
-  generation-checked handles into renderer-owned storage, or another ownership model?
+Answer: Use the recommendation exactly
 
-Recommendation: Represent each public independently owned resource as a move-only RAII wrapper
-backed by an opaque generation-checked registry handle. Expose separate copyable typed references
-for non-owning use in scenes/packets so ownership and stale-reference behavior are unambiguous.
-Answer:
-
-- **ARCH-14:** Is custom rendering intentionally closed to built-in features, or must application
-  code and future plugins eventually add materials, shaders, primitives, or passes?
-
-Recommendation: Keep custom rendering closed to built-in features initially, but maintain a
-private pass/resource architecture that can later support constrained extensions. Do not expose
-raw shaders or arbitrary command access before enforcing lifetime and synchronization rules.
-Answer:
-
-- **ARCH-15:** If plugins will render, should they submit only stable, project-owned visualization
-  data through the plugin SDK, or will a render-specific extension contract eventually be needed?
-
-Recommendation: Plugins should initially submit versioned project-owned visualization data through
-the plugin SDK. Add a separate render-extension contract only when real plugin requirements exceed
-that model, with independent capability negotiation and versioning.
-Answer:
-
-- **ARCH-16:** Does a domain-neutral retained scene/visualization layer belong inside
-  `ponder_render`, or in a separate future library that compiles scene data into a narrower render
-  submission API?
-
-Recommendation: Keep a thin retained scene in render for generic primitives, resources, identity,
-and updates. Put chemistry representations and higher-level visualization policy in a separate
-layer that compiles into this narrow scene contract.
-Answer:
 
 ## Lifetime, Threading, And Frame Ownership -- Foundational
 
@@ -349,7 +191,8 @@ Answer:
 Recommendation: Make GPU-facing objects affine to a caller-selected render thread, which may be the
 platform owner thread or a dedicated application-owned thread. Acquire native window data on the
 platform thread, keep device mutation/submission on the render thread, and create no hidden thread.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **LIFE-02:** If a render thread is allowed, who marshals platform resize/state changes and how is
   shutdown ordered with the owner thread?
@@ -357,15 +200,8 @@ Answer:
 Recommendation: The application should marshal coalesced immutable window-state snapshots to the
 render thread. Shutdown must stop submissions, drain/cancel render work, destroy targets and the
 device, and only then destroy the window and platform runtime.
-Answer:
 
-- **LIFE-03:** Which operations may run concurrently: resource creation, CPU data preparation,
-  uploads, shader/pipeline preparation, scene updates, command recording, readback, and queries?
-
-Recommendation: Allow immutable descriptor, scene-packet, and source-data preparation on any
-thread. Initially confine device mutation and submission to the render thread, adding concurrency
-only through explicitly thread-safe upload/readback queues.
-Answer:
+Answer: Use the recommendation exactly
 
 - **LIFE-04:** Should the top-level device/renderer owner be non-copyable and movable with
   heap-stable state like platform? May it move while child resources or presentation targets exist?
@@ -374,23 +210,27 @@ Recommendation: Make it non-copyable and movable with heap-stable state containi
 registry, so moving it does not invalidate children. Device destruction should perform
 release-active verification that the registry is empty; callers must destroy children first, and a
 violation terminates rather than risking use-after-free.
-Answer:
 
-- **LIFE-05:** What owns each parent-child lifetime: device, presentation target, frame context,
-  scene, resource, pipeline, and readback request?
+Answer: Use the recommendation exactly
 
-Recommendation: Make the device the root that outlives targets, resources, pipelines, scenes, and
-pending readbacks; targets own swapchain/frame contexts; frame tokens are scoped borrows. Scenes
-reference but do not silently extend resource ownership, and readbacks own their result state.
-Answer:
+- **LIFE-05:** What owns each bootstrap parent-child lifetime: instance bootstrap, device,
+  prepared surface, presentation target, frame context, and frame token?
+
+Recommendation: Make the instance bootstrap outlive prepared surfaces and devices; make each device
+outlive its targets; let targets own swapchain/frame contexts; and make frame tokens scoped borrows.
+Use release-active child registries so invalid teardown order cannot silently create dangling state.
+
+Answer: Use the recommendation exactly
 
 - **LIFE-06:** Should presentation retain a window borrow, store a native snapshot, or require a
   `Window` reference when operations need it?
 
-Recommendation: Store the native snapshot only for the active surface plus stable diagnostic
-window identity, not a long-lived `Window` object borrow. Require the window to outlive the target
-and have the platform owner supply a refreshed snapshot when explicit surface recreation needs one.
-Answer:
+Recommendation: Consume the borrowed native snapshot synchronously on the platform owner thread to
+create a render-owned surface, then retain only that surface and stable diagnostic window identity.
+Keep no long-lived `Window` borrow or native snapshot. Require the window to outlive the target and
+repeat the owner-thread preparation call when surface recreation needs a fresh native handle.
+
+Answer: Use the recommendation exactly
 
 - **LIFE-07:** What diagnostics can render provide for destroying a platform window before its
   presentation state without changing the accepted caller-enforced lifetime contract?
@@ -398,32 +238,17 @@ Answer:
 Recommendation: Attach window identity to target diagnostics, report surface errors with it, and
 track live target counts during shutdown. Document that render cannot perfectly observe premature
 window destruction rather than implying a guarantee it cannot enforce.
-Answer:
 
-- **LIFE-08:** Is ordinary GPU-resource destruction immediately blocking, explicitly deferred by
-  a completion token, or automatically retired after in-flight frames finish?
-
-Recommendation: Make ordinary destruction nonblocking and automatically retire backend objects
-after referencing frames complete. Offer completion tokens only when callers must observe
-reclamation or safely reuse external memory.
-Answer:
+Answer: Use the recommendation exactly
 
 - **LIFE-09:** May shutdown block until the device is idle? Which other public operations, if any,
   may block on GPU completion?
 
-Recommendation: Permit device shutdown, explicit `WaitIdle`, completion-token waits, and explicit
-synchronous readback to block. Other operations should not hide unbounded waits; any acquire or
-recreation wait must be documented and preferably bounded or target-local.
-Answer:
+Recommendation: Permit device shutdown, explicit `WaitIdle`, and completion-token waits to block.
+Other bootstrap operations should not hide unbounded waits; any acquire or recreation wait must be
+documented and preferably bounded or target-local.
 
-- **LIFE-10:** When callers submit spans, strings, shader bytes, pixels, meshes, or instance data,
-  are they copied before the call returns, borrowed through frame completion, or governed by an
-  explicit upload object?
-
-Recommendation: Copy descriptors, strings, and small payloads before returning. Large/asynchronous
-data should use an explicit upload object that owns its bytes or returns a token defining the borrow
-lifetime; never infer a long borrow from an ordinary span.
-Answer:
+Answer: Use the recommendation exactly
 
 - **LIFE-11:** Is the application allowed to build or submit more than one frame concurrently, and
   is frame ordering guaranteed?
@@ -431,15 +256,9 @@ Answer:
 Recommendation: Allow multiple frames in flight internally, but only one mutable frame encoder per
 target at a time and serialize accepted submissions in a defined order. Callers may prepare
 immutable scene/update packets concurrently before ordered submission.
-Answer:
 
-- **LIFE-12:** Are asynchronous operations represented by polling handles, callbacks, futures,
-  frame-completion tokens, or deliberately absent from the first API?
+Answer: Use the recommendation exactly
 
-Recommendation: Use move-only polling handles/tokens with `IsReady`, bounded wait, and result
-retrieval for uploads, readbacks, and completion. Avoid callbacks and `std::future` initially
-because they impose scheduler, threading, and exception policy outside render's responsibility.
-Answer:
 
 ## Device, Capability, Frame, And Presentation Policy -- Foundational
 
@@ -449,7 +268,8 @@ Answer:
 Recommendation: Support adapter enumeration, explicit selection by stable enumeration ID, and an
 automatic policy with high-performance, low-power, or software preferences. Automatic selection
 must satisfy hard requirements first, then apply preferences deterministically.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-02:** Which adapter properties and capabilities must callers be able to inspect before
   choosing a device?
@@ -457,7 +277,8 @@ Answer:
 Recommendation: Expose backend/API version, adapter type and identity, driver information,
 memory heaps/budgets where available, target presentation support, feature flags, relevant limits,
 and supported color/presentation policies. Keep native handles private.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-03:** Beyond the accepted Vulkan 1.2 baseline, what feature floor is mandatory, and which
   features should form optional capability tiers with fallbacks?
@@ -466,7 +287,8 @@ Recommendation: Keep the device floor at Vulkan 1.2 plus portable formats/limits
 scene features. Require WSI and swapchain support only for a window target; treat descriptor
 indexing, advanced synchronization, high MSAA, HDR, and similar enhancements as typed optional
 capabilities with explicit fallbacks.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-04:** Is a software Vulkan implementation acceptable as a runtime fallback, test-only
   backend, or never acceptable?
@@ -474,7 +296,8 @@ Answer:
 Recommendation: Allow software Vulkan for tests, CI, and explicit diagnostic/headless selection,
 but never select it silently when hardware selection fails. An automatic hardware request should
 return a clear no-compatible-adapter error.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-05:** Must Vulkan devices with separate graphics and presentation queue families work, or
   may the initial renderer require one family supporting both?
@@ -482,7 +305,8 @@ Answer:
 Recommendation: Support separate graphics and presentation queue families from the first backend.
 Requiring a combined family would reject valid mainstream devices and leak an avoidable Vulkan
 limitation into the product contract.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-06:** Should one device support presentation to multiple surfaces whose support differs,
   and what happens when a later window cannot be presented by the selected adapter?
@@ -490,7 +314,8 @@ Answer:
 Recommendation: Let one device serve every surface supported by its adapter. If a later target is
 incompatible, return a target-specific unsupported-surface result and let the application choose
 another device or rebuild; never migrate resources implicitly.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-07:** Should frame recording use an RAII frame/encoder token that makes invalid call order
   unrepresentable, or explicit `BeginFrame`/`EndFrame`/`Present` calls with state validation?
@@ -498,7 +323,8 @@ Answer:
 Recommendation: Return a move-only RAII frame/encoder token with a target-neutral fallible
 `Finish`/`Submit`. Window targets then perform or report presentation in their target workflow,
 while offscreen targets complete without present; unfinished tokens abandon safely.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-08:** How should a zero-pixel, minimized, hidden, occluded, or otherwise temporarily
   non-renderable target be represented: a successful skipped/suspended status, no frame value, or
@@ -506,7 +332,8 @@ Answer:
 
 Recommendation: Return a successful typed `Suspended` or `Skipped` frame status with no encoder.
 These are normal window-lifecycle states, not recoverable failures.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-09:** Should render query the window's current pixel size at recovery boundaries, consume
   explicit application resize notifications, or use both?
@@ -515,14 +342,17 @@ Recommendation: Treat platform-provided pixel extent as authoritative through ex
 snapshots; Wayland has no general independent window-size query. At creation/recovery, validate or
 clamp it against Vulkan surface capabilities and refresh native data through the platform owner only
 when surface recreation requires it.
-Answer:
+
+Answer: Use the recommendation exactly
+
 - **FRAME-10:** Should out-of-date/suboptimal swapchain recovery be entirely internal, or should a
   frame result report recreation and any required caller action?
 
 Recommendation: Handle ordinary out-of-date/suboptimal recreation internally, while returning
 metadata that reports recreation, suspension, or a changed selected configuration. Require caller
 action only for surface loss, incompatibility, or lifetime failure.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-11:** Which presentation policies are public: FIFO/vsync, mailbox, immediate, adaptive,
   or a simpler latency policy? What is the default?
@@ -530,7 +360,8 @@ Answer:
 Recommendation: Expose semantic `VSync`, `LowLatencyVSync`, and `Uncapped` policies with
 `VSync` as default, rather than raw Vulkan modes. Map backend choices internally and report the
 actual selected policy.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-12:** If a requested presentation mode, image count, format, or color space is
   unavailable, should creation fail, return the selected fallback, or silently use a documented
@@ -539,7 +370,8 @@ Answer:
 Recommendation: Mark descriptor fields as requirements or preferences. Fail unmet requirements;
 otherwise return the selected format, color space, latency/image configuration, and fallback reason
 instead of silently substituting.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-13:** Is frames-in-flight/latency public configuration or an implementation-selected
   detail? Must the application be able to cap input-to-display latency?
@@ -547,7 +379,8 @@ Answer:
 Recommendation: Expose semantic maximum queued-frame latency, defaulting to two frames with a small
 documented range such as one through three. Keep raw swapchain image count and synchronization
 topology private.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-14:** Is the initial output contract SDR with linear-light rendering into an sRGB
   presentation target? Are HDR and wide-gamut output deliberate extensions rather than accidental
@@ -556,7 +389,8 @@ Answer:
 Recommendation: Define the initial contract as linear-light rendering with explicit conversion to
 an SDR sRGB target. Make HDR and wide-gamut opt-in capability-negotiated extensions with separate
 color-space metadata.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **FRAME-15:** What alpha convention applies to render targets and compositing: opaque-only,
   straight alpha, premultiplied alpha, or selectable by target?
@@ -564,15 +398,8 @@ Answer:
 Recommendation: Make ordinary presentation targets opaque and compositable offscreen/overlay
 targets premultiplied-alpha, declared explicitly by the target. Avoid straight-alpha intermediate
 contracts because they are easier to compose incorrectly.
-Answer:
 
-- **FRAME-16:** Should reverse Z or forward Z be the renderer default, and are both required per
-  view/pass in the first scene API?
-
-Recommendation: Default 3D views to reverse Z for materially better precision, while supporting
-explicit forward Z per view for compatibility and tests. Projection, clear, comparison, readback,
-and picking must follow the selected convention consistently.
-Answer:
+Answer: Use the recommendation exactly
 
 - **FRAME-17:** On surface loss or device loss, should render recover transparently, expose an
   explicit recreation workflow, or require destruction and reconstruction by the application?
@@ -580,7 +407,9 @@ Answer:
 Recommendation: Recover swapchain staleness internally, expose surface loss as target recreation,
 and treat device loss as fatal to that device. The application should recreate the device and
 repopulate resources; render cannot transparently reconstruct caller-owned state reliably.
-Answer:
+
+Answer: Use the recommendation exactly
+
 
 ## Errors, Diagnostics, And Observability -- Foundational
 
@@ -590,17 +419,18 @@ Answer:
 Recommendation: Reserve `0x0003'0000` through `0x0003'FFFF` for never-renumbered render codes.
 Include `InvalidArgument`, `InvalidState`, `UnsupportedBackend`, `LoaderUnavailable`,
 `NoCompatibleAdapter`, `UnsupportedCapability`, `UnsupportedSurface`, `OutOfMemory`,
-`SurfaceLost`, `DeviceLost`, shader/pipeline failure, and upload/readback failure.
-Answer:
+`SurfaceLost`, `DeviceLost`, and `BackendFailure` for the bootstrap milestone.
 
-- **ERR-02:** Which outcomes are normal statuses rather than errors: skipped frame, timeout,
-  suboptimal presentation, swapchain recreation, pending upload/readback, and unavailable optional
-  capability?
+Answer: Use the recommendation exactly
 
-Recommendation: Model skipped/suspended frames, pending work, bounded-wait timeout,
-suboptimal/recreated presentation, and unavailable optional capabilities as typed statuses or
-capability results. Absence is an error only when the caller marked it required.
-Answer:
+- **ERR-02:** Which bootstrap outcomes are normal statuses rather than errors: skipped frame,
+  timeout, suboptimal presentation, swapchain recreation, and unavailable optional capability?
+
+Recommendation: Model skipped/suspended frames, bounded-wait timeout, suboptimal/recreated
+presentation, and unavailable optional capabilities as typed statuses or capability results.
+Absence is an error only when the caller marked it required.
+
+Answer: Use the recommendation exactly
 
 - **ERR-03:** Should native `VkResult` values remain diagnostic context only, or be retrievable
   through a deliberately backend-specific diagnostic record?
@@ -608,16 +438,8 @@ Answer:
 Recommendation: Keep `VkResult` out of common error codes, but attach an optional project-owned
 backend diagnostic with backend kind, numeric code, symbolic text, and validation context. This
 preserves detail without exposing Vulkan declarations.
-Answer:
 
-- **ERR-04:** Apart from the device/surface-loss policy in FRAME-17, what is the policy for GPU
-  out-of-memory, shader/pipeline failure, and partial resource-upload failure: retry, rollback,
-  explicit renderer recreation, or unrecoverable termination?
-
-Recommendation: Make resource, shader, pipeline, and upload operations transactional: roll back new
-state, return a specific error, and preserve prior usable state. Allow explicit retry after
-releasing memory; never publish a partially uploaded resource as successful.
-Answer:
+Answer: Use the recommendation exactly
 
 - **ERR-05:** How should Vulkan validation/debug messages map to core log levels and categories, and
   may known noisy messages be filtered or deduplicated?
@@ -625,7 +447,8 @@ Answer:
 Recommendation: Route messages through a dedicated render/Vulkan-validation category and map
 native severity to core levels. Permit only documented message-ID filters and rate-limited
 deduplication; validation tests should fail on unexpected warnings or errors.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **ERR-06:** Which validation modes should be available and enabled by default in developer builds
   and tests, given that explicitly requested but unavailable validation already fails creation?
@@ -633,7 +456,8 @@ Answer:
 Recommendation: Offer off, standard, synchronization, best-practices, and GPU-assisted modes where
 available. Auto-enable standard validation in developer builds when present, require standard plus
 synchronization in validation jobs, and default release builds off.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **ERR-07:** Should GPU object names, debug labels, timing markers, and RenderDoc-friendly regions
   exist in every build or only diagnostics configurations?
@@ -641,534 +465,17 @@ Answer:
 Recommendation: Compile names, labels, timing markers, and capture regions into every build, then
 activate them only when backend support and runtime diagnostics policy permit. Production captures
 remain useful without a separate diagnostics binary.
-Answer:
 
-- **ERR-08:** Which public observations are required: selected adapter, enabled capabilities,
-  present mode, memory budget/usage, resource counts, CPU/GPU timings, and frame statistics?
+Answer: Use the recommendation exactly
 
-Recommendation: Always expose immutable selected-adapter, enabled-capability, and actual
-presentation records. Provide budgets, resource counts, timings, and frame statistics through an
-optional snapshot that explicitly marks unsupported measurements.
-Answer:
 
-- **ERR-09:** Is a backend-neutral frame capture/replay description required for debugging or
-  reproducibility, or are external GPU capture tools sufficient?
 
-Recommendation: Defer a persistent backend-neutral replay format; initially use external capture
-tools, deterministic scene fixtures, and structured submission diagnostics. Keep packets
-deterministic, but do not freeze a replay schema before scene/resource APIs stabilize.
-Answer:
 
-## Scene And Scientific-Visualization Boundary -- Before The First 3D API
 
-- **SCENE-01:** Which library translates chemistry-domain objects into render data, given that
-  `ponder_render` must remain chemistry-independent?
 
-Recommendation: Put chemistry-to-render translation in a separate chemistry-aware visualization
-layer, not `ponder_render`. That layer should emit backend-neutral scene data so chemistry rules
-can evolve independently of GPU implementation details.
-Answer:
 
-- **SCENE-02:** What generic primitives should render understand directly: meshes, lines,
-  polylines, points, sprites, glyph instances, analytic spheres/cylinders, volumes, text quads, and
-  overlays?
 
-Recommendation: Initially support indexed meshes, instanced analytic spheres/cylinders/glyphs,
-points, lines/polylines, image or glyph quads, and overlay batches. Add scalar volumes as a
-first-class generic primitive only when the later volume milestone can define and implement its
-accuracy contract.
-Answer:
 
-- **SCENE-03:** Should chemistry-facing code submit semantic sphere/cylinder/glyph instances or
-  always provide pre-tessellated generic geometry?
-
-Recommendation: Make generic sphere, cylinder, and glyph instances first-class submissions while
-retaining meshes as the general fallback. Semantic instances enable scalable batching, bounded LOD,
-accurate radii, and backend optimization without forcing callers to tessellate.
-Answer:
-
-- **SCENE-04:** Who owns representation rules such as element radii/colors, bond-order layout,
-  aromatic styling, orbital semantics, periodic replication, trajectory interpolation, and
-  measurement formatting?
-
-Recommendation: Put representation rules in the chemistry-aware visualization layer; render should
-own only generic geometry, material, transfer-function, and composition behavior. This keeps
-chemical meaning out of the backend-neutral rendering contract.
-Answer:
-
-- **SCENE-05:** How are immutable topology and frequently changing attributes such as positions,
-  colors, radii, visibility, and selection state separated?
-
-Recommendation: Separate stable topology from independently versioned dynamic attribute streams
-for positions, colors, radii, visibility, and selection. Trajectories and interaction can then
-update without rebuilding connectivity or unrelated GPU resources.
-Answer:
-
-- **SCENE-06:** What partial-update granularity is required, and must sparse updates be efficient?
-
-Recommendation: Support contiguous range replacement and sparse index/value patches, applied
-atomically at a defined frame boundary. Dense updates serve trajectories efficiently, while sparse
-updates prevent selection or visibility changes from becoming full-buffer uploads.
-Answer:
-
-- **SCENE-07:** Must trajectory coordinates update every frame without reallocating topology or
-  rebuilding unrelated GPU data?
-
-Recommendation: Yes. Persistent topology and resource identities should allow coordinate and other
-dynamic-stream changes every frame without reallocating unrelated data; staging, buffering, and
-hazard management should remain private renderer responsibilities.
-Answer:
-
-- **SCENE-08:** Should scenes be mutable renderer-owned objects, immutable snapshots replaced as a
-  unit, or caller-owned data compiled into explicit GPU resources?
-
-Recommendation: Use retained renderer-owned compiled scenes addressed by typed handles, while
-callers retain authoritative CPU data and submit immutable versioned snapshots or deltas. This
-combines efficient GPU residency with deterministic updates and clear ownership.
-Answer:
-
-- **SCENE-09:** How does render carry caller/domain identity without depending on chemistry types:
-  opaque 64-bit tokens, UUID-derived values, typed render IDs, or caller-maintained lookup tables?
-
-Recommendation: Use strongly typed opaque 64-bit object and instance IDs with no domain semantics,
-and let callers maintain domain lookup. Keep source-object and occurrence/replica identity distinct
-so picking and updates remain unambiguous.
-Answer:
-
-- **SCENE-10:** Who creates spatial acceleration structures and owns their rebuild/refit policy:
-  render, the chemistry/visualization layer, or a separate scene library?
-
-Recommendation: Render should own acceleration structures needed for conservative culling,
-rendering, and visible picking of its compiled scene; the visualization layer should own
-authoritative source-data queries. Each can then rebuild or refit under its own correctness
-contract without exposing backend structures.
-Answer:
-- **SCENE-11:** Are culling, batching, instancing, and level-of-detail decisions renderer-owned, or
-  can callers provide pre-grouped/pre-culled submissions?
-
-Recommendation: Render should own final view-dependent culling, batching, instancing, and LOD,
-while callers provide semantic visibility filters, bounds, grouping hints, and permitted
-representations. Pre-culled submissions would be wrong for multiple views and obstruct backend
-optimization.
-Answer:
-
-- **SCENE-12:** Are molecular surfaces and isosurfaces generated outside render and submitted as
-  meshes, or is any GPU surface extraction a render responsibility?
-
-Recommendation: Generate molecular surfaces and isosurfaces outside render and submit them as
-generic meshes initially. Future GPU extraction belongs in visualization or compute code that
-produces the same mesh contract because scientific extraction is not rendering policy.
-Answer:
-
-- **SCENE-13:** Are volume textures and volume ray marching first-class render concepts? If so,
-  what interpolation, sampling, and accuracy contract is required?
-
-Recommendation: Add scalar volumes after the mesh milestone with explicit formats, transforms,
-missing-value handling, interpolation space, transfer/compositing rules, gradient treatment, and
-caller-selected step size. Classify the first ray marcher as deterministic qualitative
-visualization with no convergence claim; add a bounded-error publication mode only when validated.
-Answer:
-
-- **SCENE-14:** Who owns scalar normalization, transfer functions, colormaps, missing-value colors,
-  logarithmic mappings, and perceptual/color-vision-accessibility policy?
-
-Recommendation: The visualization layer should explicitly choose normalization, ranges, mappings,
-transfer functions, colormaps, and missing-value policy; render should apply them deterministically
-in a declared color space. Render must never infer or silently rescale scientific data.
-Answer:
-
-- **SCENE-15:** Are annotations, atom labels, measurement text, legends, and axes scene primitives,
-  UI overlays, or a separate overlay layer composed by render?
-
-Recommendation: Treat world-anchored annotations and axes as scene content, and screen-space
-labels, legends, and readouts as a backend-neutral overlay layer composed by render. Visualization
-and UI own text, layout, and meaning; render owns only primitive composition.
-Answer:
-
-- **SCENE-16:** Which clipping and slicing features are required, and must cuts produce caps,
-  contours, quantitative coordinates, or merely discard fragments?
-
-Recommendation: Initially support explicit clipping planes, boxes, and slice planes with
-deterministic fragment clipping. Quantitative contours, caps, and cut geometry should be produced by
-the visualization layer because they require source-data-aware accuracy.
-Answer:
-
-- **SCENE-17:** What should happen when submitted positions, radii, scalar values, transforms, or
-  colors contain NaN, infinity, missing, masked, or out-of-range values: reject the update, skip
-  affected items, substitute diagnostics, or report indexed errors?
-
-Recommendation: Reject non-finite geometry, transforms, radii, unmasked scalar values, and color
-components with indexed/ranged diagnostics; never substitute silently. Require explicit missing
-masks, and make out-of-range reject/clamp/map behavior a property of each format and transfer
-function.
-Answer:
-
-- **SCENE-18:** Is render entirely unit-agnostic? If so, what finite coordinate/radius range must
-  callers obey, and where are conversions from chemistry units performed?
-
-Recommendation: Keep render unit-agnostic with one caller-defined world unit per scene; chemistry
-conversion stays in visualization code. Use math-owned `WorldPosition`/`WorldOrigin` values with
-local FP32 chunk positions and explicit precision bounds for large scenes.
-Answer:
-
-- **SCENE-19:** Must periodic replicas preserve both source-object identity and replica identity for
-  picking, selection, and updates?
-
-Recommendation: Yes. Carry stable source identity separately from replica/instance identity so
-shared source updates remain efficient while selection, picking, and measurement of individual
-periodic images stay deterministic.
-Answer:
-
-- **SCENE-20:** May LOD/impostor substitutions alter silhouettes or apparent radii, and must
-  quantitative/picking behavior still use exact intended geometry?
-
-Recommendation: Permit presentation LOD only within an explicit caller-selected screen-space error
-bound, without silently changing intended quantitative dimensions. Picking and measurements should
-resolve canonical geometry unless a query explicitly requests the displayed approximation.
-Answer:
-
-## Camera, Coordinates, Precision, And View State -- Before The First 3D API
-
-- **VIEW-01:** Does render own a public camera type, or does the caller submit `ponder_math` view
-  and projection matrices plus explicit depth convention each frame?
-
-Recommendation: Render should own a lean backend-neutral `View` descriptor, not navigation or
-camera behavior. It should consume `ponder_math` transforms or canonical projection parameters
-with explicit depth, viewport, and origin information, then normalize backend differences.
-Answer:
-
-- **VIEW-02:** Must one target support multiple cameras, sub-viewports, scissors, stereo views, or
-  layered views initially or only remain extensible to them?
-
-Recommendation: Shape target submission around a list of views with independent viewports and
-scissors from the beginning, even if the first implementation permits one. Stereo and layered
-rendering can remain explicit later capabilities without assuming one camera per target.
-Answer:
-
-- **VIEW-03:** At what render boundary should the required Vulkan viewport-Y adaptation occur, and
-  what front-face/winding rule must shaders, meshes, culling, and the future Metal backend observe?
-
-Recommendation: Perform viewport-Y and winding adaptation only at the private backend boundary.
-Public geometry and shaders should consistently use project coordinates and counter-clockwise front
-faces, with each backend adapting viewport/projection and culling together.
-Answer:
-
-- **VIEW-04:** What are the canonical shader matrix multiplication, storage, transpose, and GPU
-  packing rules for `ponder_math` column-major values?
-
-Recommendation: Define shader math as column-vector multiplication,
-`clip = projection * view * model * position`, with conceptually column-major matrices and no
-caller transposition. Render should own explicit GPU packing generated or validated by reflection.
-Answer:
-
-- **VIEW-05:** Given the float-only math contract, what strategy supports large molecules,
-  periodic systems, and widely separated structures: documented float limits, camera-relative
-  coordinates, origin rebasing, spatial partitioning, double input converted at submission, or a
-  combination?
-
-Recommendation: Store geometry as FP32 positions local to spatial chunks with the math-owned
-double-backed `WorldOrigin`, deriving per-view origin transforms without duplicating geometry.
-Use deterministic rebasing and expose conversion error bounds so simultaneous views share resources
-without silently losing scientific scale.
-Answer:
-
-- **VIEW-06:** Who selects near/far planes, and must infinite-far projection be supported by the
-  standard camera path?
-
-Recommendation: Require callers to supply explicit near/far policy or opt into validated
-bounds-based fitting; render should not silently guess. Support reverse-Z infinite-far perspective
-as the preferred standard path while retaining explicit finite and forward-Z options.
-Answer:
-
-- **VIEW-07:** Are atom, bond, glyph, line, and point sizes always world-space, screen-space, or
-  selectable? How are quantitative and presentation-oriented modes distinguished?
-
-Recommendation: Make size space explicit per primitive: world-space by default for quantitative
-atoms, bonds, and glyphs, and screen-space for aids such as thin lines, points, and labels. The mode
-must also define picking and measurement semantics.
-Answer:
-
-- **VIEW-08:** How are platform logical coordinates, window pixel coordinates, render-target
-  coordinates, viewport coordinates, and NDC converted under high pixel density?
-
-Recommendation: Provide explicit conversions using a per-frame pixel-scale and viewport snapshot,
-with typed coordinate values and documented origins, extents, pixel-center rules, and rounding.
-This prevents high-density displays from making projection and picking ambiguous.
-Answer:
-
-- **VIEW-09:** Does render own scene-level frustum/occlusion culling, or should callers submit
-  already culled objects while continuing to use `ponder_math` for project/unproject operations?
-
-Recommendation: Render should own conservative view-dependent frustum, LOD, and optional occlusion
-culling from caller-supplied bounds; callers provide semantic visibility filters or coarse
-partitions. Keep project/unproject behavior in backend-neutral math/view utilities.
-Answer:
-
-- **VIEW-10:** Are temporal jitter, motion vectors, stereo transforms, and camera history deliberate
-  future contracts, or should the first camera API avoid implying them?
-
-Recommendation: Make the first view descriptor stateless per frame and avoid hidden camera
-history. Reserve explicit optional history, previous transforms, jitter, and motion inputs for
-temporal techniques so ordinary camera semantics remain simple.
-Answer:
-
-- **VIEW-11:** What numeric formats, quantization, clamping, and permitted error apply when source
-  positions, radii, scalar attributes, meshes, or volumes are converted to GPU representations,
-  especially when source data is double precision?
-
-Recommendation: Require callers to declare source format, legal range, and required precision/error,
-not a backend GPU layout. Render selects and reports a compliant internal format or fails; FP32
-camera/chunk-relative geometry is the default, and quantization is opt-in.
-Answer:
-
-## Resource, Shader, Material, And Pass Design -- Before General Drawing
-
-- **RES-01:** Which resource vocabulary is public at first: buffers, images, samplers, render
-  targets, shader modules, pipelines, materials, meshes, and descriptor/binding objects?
-
-Recommendation: Initially expose move-only high-level mesh, texture, material, render-target, and
-scene owners backed by generation-checked handles, with separate typed non-owning references. Defer
-volume resources to their milestone, and keep generic buffers, shaders, pipelines, descriptors, and
-bindings private.
-Answer:
-
-- **RES-02:** Are resource creation and uploads synchronous initially, asynchronous with completion
-  tokens, or internally staged while exposing a readiness state?
-
-Recommendation: Design uploads as asynchronous operations with readiness/completion tokens, plus an
-explicit blocking convenience for initialization and tests. This preserves scalability and makes
-synchronization visible without exposing backend fences.
-Answer:
-
-- **RES-03:** May resources be updated in place while in flight, and how are update hazards exposed
-  or hidden?
-
-Recommendation: Present updates as versioned replacements that become visible atomically at a
-defined frame boundary. Hide hazards through internal renaming, staging, and deferred retirement so
-callers never manage barriers or mutate GPU-consumed bytes.
-Answer:
-
-- **RES-04:** Are CPU/GPU memory budgets queryable, enforced, or advisory? Is automatic eviction or
-  out-of-core paging required for large meshes and volume bricks?
-
-Recommendation: Expose budget/usage estimates, enforce optional caller-configured hard budgets, and
-return actionable allocation failures. Automatically evict only resources explicitly declared
-reloadable or streamable; silent arbitrary eviction would harm determinism.
-Answer:
-
-- **RES-05:** Which GPU packing layouts should render own for vertices, instance data, uniforms,
-  storage data, and push constants? Are direct byte uploads from math values forbidden unless an
-  explicit packing contract says otherwise?
-
-Recommendation: Render should own every vertex, instance, uniform, storage, and constant packing
-layout and validate it against shader reflection. Forbid direct byte uploads from ordinary math or
-C++ objects unless the API names an explicit versioned packed layout.
-Answer:
-
-- **RES-06:** Should clients submit general command buffers/passes, typed draw lists, or only
-  high-level scene objects?
-
-Recommendation: Accept high-level scene objects and constrained typed draw packets, not general
-command buffers or native passes. This keeps synchronization, state transitions, and cross-backend
-correctness enforceable.
-Answer:
-
-- **RES-07:** Is a render/pass graph public, private, or deferred until multiple real passes require
-  resource scheduling and transient allocation?
-
-Recommendation: Keep the graph private and introduce it internally when real multipass scheduling
-requires it. Public APIs should describe semantic outputs/effects; expose graph extension points
-only after concrete needs define safe invariants.
-Answer:
-
-- **RES-08:** What shader source language/toolchain should serve Vulkan now and native Metal later:
-  one portable source compiled to SPIR-V and Metal output, or backend-specific sources behind shared
-  semantic interfaces?
-
-Recommendation: Use one portable renderer-owned shader source and semantic interface for SPIR-V and
-Metal, with isolated backend-specific code only where necessary. Before selecting the toolchain,
-prototype and compare both output targets plus reflection/debugging; two functioning runtime
-backends are not required for that prerequisite.
-Answer:
-
-- **RES-09:** Are shaders compiled offline at build time, during asset processing, or at runtime?
-  Is developer hot reload required?
-
-Recommendation: Compile production shaders offline during the build/asset pipeline and fail early
-on compilation, validation, or interface mismatch. Developer hot reload may reuse that compiler
-path, but runtime compilation should not be a deployed dependency.
-Answer:
-- **RES-10:** Are compiled shader artifacts checked in, generated in the build tree, or packaged as
-  runtime assets? How are their versions tied to the renderer?
-
-Recommendation: Generate artifacts in the build tree and embed them into the backend static library
-instead of checking opaque binaries into source or locating runtime files. Generated metadata
-should bind each artifact to source hashes, tool versions, backend, and renderer interface version.
-Answer:
-
-- **RES-11:** Is reflection required to generate/validate resource layouts, vertex formats, and
-  pipeline interfaces, or are layouts declared manually in C++ and shaders?
-
-Recommendation: Require reflection to generate or validate bindings, vertex inputs, constants, and
-pipeline interfaces. One reflected contract avoids duplication between C++ and shaders and enables
-cross-backend conformance tests.
-Answer:
-
-- **RES-12:** May applications or plugins supply shader code and custom materials, or are all
-  shaders and pipelines renderer-owned?
-
-Recommendation: Keep shaders and pipelines renderer-owned initially. If customization becomes
-necessary, add a constrained versioned backend-neutral material/shader extension rather than
-accepting arbitrary backend code through the core API.
-Answer:
-
-- **RES-13:** Who owns persistent pipeline-cache bytes and their storage policy, given render should
-  not own general filesystem or application configuration behavior?
-
-Recommendation: Maintain an in-memory cache and expose validated opaque cache blobs through
-caller-provided load/save data. The application owns persistence location/policy; render owns
-fingerprints, compatibility validation, and safe rejection.
-Answer:
-
-- **RES-14:** What is the first lighting/material contract: unlit data-faithful color, illustrative
-  lighting, physically based rendering, or several explicitly named modes?
-
-Recommendation: Make data-faithful unlit color mandatory and offer illustrative lighting as a
-separate named mode for shape perception. Defer PBR until a real need appears, and never let
-lighting become an implicit transformation of scalar-derived colors.
-Answer:
-
-- **RES-15:** What transparency correctness is required for overlapping atoms, bonds, surfaces, and
-  volumes: sorted blending, an approximate order-independent method, exact order-independent
-  transparency, or feature-specific policies?
-
-Recommendation: Define explicit guarantees: sorted alpha only for caller-asserted globally
-back-to-front-orderable submissions, weighted blended OIT as a deterministic interactive
-approximation, and depth peeling for publication until measured residual transmittance falls below
-a declared tolerance or a reported limit is hit. Never silently downgrade a requested guarantee.
-Answer:
-
-- **RES-16:** Which antialiasing and reconstruction techniques are requirements versus optional
-  capability/quality settings?
-
-Recommendation: Require a backend-neutral baseline using supported multisampling plus analytic
-coverage for line/glyph edges, with deterministic supersampling for export. Make temporal
-reconstruction optional and off by default because history can blur scientific detail.
-Answer:
-
-- **RES-17:** Must scalar-derived/data-faithful colors bypass lighting or tone mapping, and how are
-  display/export transforms documented so rendered values remain consistent with legends?
-
-Recommendation: Yes. Declare input color space, transfer function, linear-light composition, output
-transform, and clamping explicitly; legends and exports must use the identical mapping so displayed
-colors remain quantitatively interpretable.
-Answer:
-
-## Picking, Selection, And Interaction -- Before Interactive Scene Features
-
-- **PICK-01:** Is picking owned by render, by math/application code, or by a hybrid in which render
-  supplies visible IDs/depth and another layer resolves domain objects?
-
-Recommendation: Use a hybrid: render performs visibility/geometry-aware queries and returns
-backend-neutral render IDs and hits; visualization/domain code resolves authoritative chemistry
-objects. This preserves clipping/LOD knowledge without domain types in render.
-Answer:
-
-- **PICK-02:** Which entities must be pickable: atoms, bonds, glyphs, mesh objects/faces/vertices,
-  annotations, periodic images, volume samples, and isosurfaces?
-
-Recommendation: Every supported primitive should declare pickability and return object, instance,
-and meaningful primitive identity. Initially cover atoms/glyphs, bonds, mesh objects/faces,
-annotations, and periodic images; specialize vertex and volume sampling separately.
-Answer:
-
-- **PICK-03:** Should picking use CPU ray queries, a GPU ID/depth pass, hardware ray queries where
-  available, or multiple strategies behind one semantic contract?
-
-Recommendation: Provide one semantic query API backed by GPU ID/depth for displayed pixels, CPU
-analytic/BVH queries for canonical geometry, and optional hardware ray queries as an optimization.
-Callers should choose semantics, not a GPU mechanism.
-Answer:
-
-- **PICK-04:** Must a hit represent exact analytic geometry, submitted mesh geometry, or the pixels
-  actually visible after LOD, clipping, transparency, and post-processing?
-
-Recommendation: Expose distinct variants: a visible sample reads a pre-postprocess attribution
-attachment and may report no contributor or multiple weighted contributors, while a canonical hit
-reports exact geometry. Canonical refinement is an explicit follow-up using a contributor's source
-identity.
-Answer:
-
-- **PICK-05:** Is selection visible-surface-only, or must callers request through-selection,
-  occluded candidates, and all hits?
-
-Recommendation: Default to the nearest visible surface, but support explicit through-selection and
-all-hit modes with deterministic ordering. Scientific selection often requires occluded
-structures, so visibility must be query policy.
-Answer:
-
-- **PICK-06:** What result data is required: caller identity, primitive kind, instance/replica ID,
-  world hit point, normal, distance/depth, barycentrics, scalar value, and screen position?
-
-Recommendation: Use tagged visible and canonical variants tied to a query snapshot. Visible results
-carry pixel/depth plus zero or more weighted object/instance contributors; canonical hits carry one
-identity, world point, normal, distance, and only meaningful barycentric/scalar fields.
-Answer:
-
-- **PICK-07:** Must point/hover picking be synchronous, asynchronously returned after GPU readback,
-  or available in both forms with different guarantees?
-
-Recommendation: Make asynchronous completion standard for GPU hover and batch queries, with an
-explicit blocking convenience for clicks, CPU-resident queries, and tests. Both forms must use the
-same result semantics and identify the queried scene/frame snapshot.
-Answer:
-- **PICK-08:** Are rectangle, lasso, multi-hit, and nearest-N queries initial requirements or
-  explicit deferrals?
-
-Recommendation: Include point-nearest, rectangle, and multi-hit/through selection in the initial
-interaction contract. Defer lasso and nearest-N implementation behind an extensible query-shape
-and cardinality model rather than hard-coding only point picking.
-Answer:
-
-- **PICK-09:** What deterministic tie-breaking applies to coincident or nearly coincident hits?
-
-Recommendation: Build a transitive total-order key from a documented quantization of canonical
-distance or visible depth, followed by stable object, instance, primitive-kind, and primitive IDs.
-Require exact identity for canonical queries; test visible queries away from raster boundaries or
-with explicitly tolerance-bounded attribution.
-Answer:
-
-- **PICK-10:** How should transparent surfaces and volumetric data participate in picking?
-
-Recommendation: Canonical queries return ordered geometry intersections. Visible queries use the
-pre-postprocess attribution buffer and may return weighted transparent contributors under a
-declared cutoff; volume attribution uses a stated accumulated-opacity/scalar criterion, while
-quantitative sampling remains separate.
-Answer:
-
-- **PICK-11:** Who owns selection visualization such as color changes, outlines, glow, halos, and
-  hover state: render, the scene producer, or UI/overlay code?
-
-Recommendation: Visualization owns selected/hovered state and styling intent; render provides
-generic configurable tint, outline, halo, or mask composition. UI owns interaction timing, and
-render should never choose chemistry-specific selection meaning.
-Answer:
-
-- **PICK-12:** Do tiny points and lines require a configurable screen-space picking aperture and a
-  stable ranking rule when several candidates fall within it?
-
-Recommendation: Yes. Resolve a per-query screen-space aperture using the frame pixel scale, rank by
-screen-space distance, then depth and the stable ID tuple, and return the canonical geometry
-location separately.
-Answer:
-
-- **PICK-13:** Must measurement tools resolve original domain coordinates rather than approximate
-  LOD/impostor hit geometry, and which layer performs that resolution?
-
-Recommendation: Yes. Render returns stable IDs and canonical hit information; visualization/domain
-code maps those IDs to original-precision coordinates and performs measurements, never relying on
-LOD, raster, depth-buffer, or impostor approximations.
-Answer:
 
 ## Dear ImGui And Overlay Composition -- Before The UI Bridge
 
@@ -1178,195 +485,15 @@ Answer:
 Recommendation: Keep Dear ImGui out of the bootstrap completion criteria, then make it the next
 integration milestone before the first interactive 3D scene. This keeps the renderer foundation
 independently testable while validating overlay composition early.
-Answer:
 
-- **UI-02:** May a dedicated public bridge mention borrowed `ImDrawData` through a forward
-  declaration, or must UI translate it into a project-owned draw packet so ImGui remains wholly
-  private?
+Answer: Use the recommendation exactly
 
-Recommendation: Allow a dedicated opt-in bridge header to forward-declare and borrow `ImDrawData`,
-while keeping ImGui absent from the general render API and every backend type private. Translating
-ImGui internals into a duplicate packet would add fragile maintenance without strengthening the
-important Vulkan/Metal boundary.
-Answer:
 
-- **UI-03:** Who owns font-atlas upload/rebuild and its lifetime across device or swapchain
-  recreation?
 
-Recommendation: UI should own the ImGui context, atlas contents, and rebuild decision; the render
-bridge should own and upload the GPU atlas resource. Preserve it across swapchain recreation, but
-rebuild it after device recreation or an atlas revision and retire old resources safely.
-Answer:
 
-- **UI-04:** How are application/render textures registered for ImGui and represented as
-  `ImTextureID` without exposing Vulkan descriptors or unsafe stale handles?
 
-Recommendation: Register render texture views with the bridge and return opaque,
-generation-checked tokens encoded as `ImTextureID`. Registrations survive swapchain recreation,
-but device recreation invalidates them and requires explicit re-registration after resources are
-rebuilt; native descriptors never escape.
-Answer:
-
-- **UI-05:** Is ImGui always the final overlay pass, or must callers control composition order with
-  scientific overlays, post-processing, multiple viewports, and offscreen targets?
-
-Recommendation: Make ImGui the final UI overlay by default, represented as a named constrained
-composition stage with explicit target selection. Preserve a stable high-level order of scene,
-post-processing, scientific overlays, then UI instead of exposing arbitrary backend pass ordering.
-Answer:
-
-- **UI-06:** Must the bridge support multiple presentation targets even while secondary ImGui OS
-  viewports remain deferred?
-
-Recommendation: Support the bridge across multiple presentation targets from the outset, sharing
-device-level font and texture resources while keeping frame state target-local. Secondary
-ImGui-created OS viewports can remain deferred without imposing a one-window architecture.
-Answer:
-
-## Headless, Offscreen, Readback, And Export -- Decide Before Locking Device Ownership
-
-- **OFF-01:** Must a render device be creatable without `PlatformRuntime`, a window, a native
-  handle, a presentation surface, or a swapchain?
-
-Recommendation: Permit device creation without platform runtime, window, native handle, surface, or
-swapchain; require only the backend loader and suitable adapter. Presentation should be an optional
-child capability added by creating a window target.
-Answer:
-
-- **OFF-02:** Which headless environments matter: a physical GPU workstation, software Vulkan,
-  CI/container hosts, remote servers, or all of them?
-
-Recommendation: Qualify a pinned software Vulkan ICD in CI and a physical-GPU headless workstation
-first, while using the same loader/ICD contract for containers and remote servers. Claim additional
-environments only after their provisioning is actually tested.
-Answer:
-
-- **OFF-03:** Should windowed and offscreen targets share the same device, resource, scene, and
-  frame abstractions?
-
-Recommendation: Yes. Use the same device, resources, scenes, frame encoding, and synchronization
-with distinct target descriptors/capabilities, avoiding parallel rendering architectures and data
-duplication.
-Answer:
-
-- **OFF-04:** Which offscreen attachments may callers request or read back: color, alpha, depth,
-  normals, object IDs, motion, and visualization scalar values? What accuracy contract distinguishes
-  visualization outputs from source scientific data?
-
-Recommendation: Initially support typed color/alpha, depth, and exact integer object IDs; add
-normals, scalars, and motion as explicit optional attachments. Declare formats, conventions, and
-tolerances, and state that render-derived buffers do not replace scientific source data.
-Answer:
-
-- **OFF-05:** Are readbacks synchronous, asynchronous, or both, and who owns returned pixel memory?
-
-Recommendation: Make asynchronous readback with a completion token the primary API and provide an
-explicit blocking convenience. Completion should yield a move-only CPU-owned image buffer whose
-lifetime is independent of staging resources and the device.
-Answer:
-
-- **OFF-06:** What typed raw image-buffer API should render expose, given that `ponder_io` owns
-  PNG/TIFF/EXR and other encoding?
-
-Recommendation: Expose a project-owned image buffer containing extent, row pitch, pixel format,
-color/transfer metadata, alpha convention, and owned bytes, plus typed non-owning views where
-needed. Keep encoding and paths entirely in `ponder_io`.
-Answer:
-
-- **OFF-07:** What publication-output requirements exist: arbitrary resolution, transparent
-  backgrounds, supersampling, tiled rendering beyond GPU limits, DPI metadata, color profiles, and
-  HDR formats?
-
-Recommendation: Guarantee requested pixel dimensions, transparent backgrounds, supersampling, and
-tiled rendering beyond target limits, and return explicit color/linear-format metadata. Application
-or IO owns DPI/profile embedding; HDR output uses an explicit float target.
-Answer:
-
-- **OFF-08:** What deterministic per-frame submission/readback contract should render provide for
-  caller-owned trajectory sequencing, interpolation, timing, motion data, and output encoding?
-
-Recommendation: Submit an accepted retained-scene version plus immutable per-frame view/output
-state, frame index, time, and seed/history state. Bind completion/readback to a logical sequence
-token so callers restore order without requiring physical asynchronous completion order; render
-does not own trajectory timing or encoding.
-Answer:
-
-- **OFF-10:** Which renderer-owned metadata (camera, quality/capability fallbacks, shader/backend
-  version, and color transforms) should accompany readback, while application/project layers own
-  dataset identity and provenance?
-
-Recommendation: Return structured metadata covering renderer/shader versions, backend and
-adapter/driver identity, capabilities/fallbacks, target formats, color/depth conventions, quality,
-frame index, and optionally submitted view state. Higher layers add dataset provenance.
-Answer:
-
-## Compute, Multi-GPU, And Extensibility -- May Be Deferred, But Shape Ownership
-
-- **EXT-01:** Will compute-generated geometry, trajectories, and volumes initially cross into
-  render through CPU memory, or is zero-copy GPU interoperability a requirement?
-
-Recommendation: Start with explicit CPU uploads using reusable staging and partial updates. Preserve
-an imported-resource extension point, but do not burden the stable API with zero-copy
-synchronization before a concrete producer requires it.
-Answer:
-
-- **EXT-02:** If GPU interop is required, which ecosystems matter (Vulkan compute, CUDA, HIP, SYCL,
-  OpenCL, or external processes), and which side owns device selection?
-
-Recommendation: Require no external ecosystem initially; use the render device for render-owned
-Vulkan compute, then add CUDA/HIP/other integrations only for concrete consumers. The application
-coordinates device choice using stable adapter identity.
-Answer:
-
-- **EXT-03:** Who owns external-memory/semaphore import/export and cross-queue synchronization, and
-  may those native mechanisms appear only in a separate backend-specific interop module?
-
-Recommendation: Put native external-memory, semaphore, and queue ownership in a separate
-backend-specific interop module. Render retains lifetime/state-transition authority through opaque
-resources and completion tokens; native handles never enter the general API.
-Answer:
-
-- **EXT-04:** Must rendering and compute share one physical GPU, support peer transfer across GPUs,
-  or remain independent with explicit staging?
-
-Recommendation: Require the same physical GPU for zero-copy interoperability and use explicit CPU
-staging when adapters differ. Peer transfer should be a later negotiated capability, not an
-implicit fallback.
-Answer:
-
-- **EXT-05:** Is explicit multi-GPU rendering or adapter migration a requirement, a future
-  capability to preserve, or out of scope?
-
-Recommendation: Keep multi-GPU rendering and live migration out of scope while permitting
-independent devices. Resources remain device-local; caller-owned source data is re-uploaded through
-an explicit reconstruction path.
-Answer:
-
-- **EXT-06:** If custom passes become possible, what prevents extensions from violating resource
-  lifetime, synchronization, color/depth, and deterministic-order contracts?
-
-Recommendation: Expose typed declared inputs, outputs, usages, and a scoped renderer-controlled
-encoder. Render owns scheduling, barriers, transient lifetimes, conventions, and ordering;
-extensions may neither retain transient handles nor access native devices/queues.
-Answer:
-
-- **EXT-07:** Does a future plugin-facing visualization contract need versioning/capability
-  negotiation independently of the internal C++ render API?
-
-Recommendation: Yes. Give the plugin-facing contract independent versioning and capability
-negotiation; plugins exchange stable project-owned data through the SDK, and an adapter compiles it
-into the current internal render submissions.
-Answer:
 
 ## Testing, Reproducibility, And Performance Gates -- Define With The Milestones
-
-- **TEST-01:** What test tiers are required: backend-free value/state tests, mocked-backend tests,
-  shader interface tests, live headless Vulkan tests, live WSI/window tests, and image tests?
-
-Recommendation: Require backend-free state/lifetime tests, public-header and shader-interface
-tests, pinned software-ICD headless integration, hardware smoke tests, WSI tests, and semantic/image
-tests as features arrive. Prefer narrow fault-injection seams over a full mocked Vulkan backend.
-Answer:
 
 - **TEST-02:** Should any Vulkan validation warning or error fail a test? Which message filters, if
   any, are permitted and how are they reviewed?
@@ -1374,7 +501,8 @@ Answer:
 Recommendation: Fail tests on every validation error and warning by default; informational messages
 need not fail. Allow only exact message-ID/vendor/driver-scoped entries with rationale, tracking
 issue, owner, and expiry/review condition.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **TEST-03:** May live GPU/window tests skip when no suitable device, loader, display server, or
   validation layer exists, or is that a failure on supported developer/CI hosts?
@@ -1382,47 +510,8 @@ Answer:
 Recommendation: Missing capabilities should fail jobs designated as supported render environments;
 optional local or compile-coverage jobs may skip with a precise reason. Infrastructure omissions
 must not masquerade as passing support.
-Answer:
 
-- **TEST-04:** Should a software ICD such as lavapipe be a supported deterministic CI path, with
-  hardware-vendor runs as additional coverage?
-
-Recommendation: Use a pinned lavapipe build as the required deterministic headless CI path, plus
-periodic NVIDIA, AMD, and Intel hardware runs. Software rendering is stable infrastructure, not
-proof of hardware portability.
-Answer:
-
-- **TEST-06:** If golden images are used, what reference environment, color pipeline, tolerance
-  metric, masking policy, and update-review process handles legitimate GPU/driver differences?
-
-Recommendation: Pin OS, compiler, software ICD, shader tools, renderer version, scene, and color
-pipeline for golden generation. Compare in a documented color space with absolute/perceptual
-tolerances, forbid ad hoc masks, and require reviewed images, metrics, and cause for updates.
-Answer:
-
-- **TEST-07:** Which correctness tests should compare IDs, depth, geometry, and scalar samples
-  numerically instead of relying on screenshots?
-
-Recommendation: Compare identities exactly and depth, reconstructed positions, normals, projected
-geometry, and scalar attachments numerically using format-derived tolerances. Use screenshots only
-for appearance/composition that lacks a stronger semantic representation.
-Answer:
-
-- **TEST-08:** What does reproducibility mean: bit-identical pixels, tolerance-bounded images,
-  stable geometry/picking, stable submission ordering, or same-host repeatability?
-
-Recommendation: Require stable logical order and exact canonical identities, primitive ordering,
-and other discrete fields; compare hit positions, distances, normals, geometry, depth, scalar, and
-color with declared tolerances. Visible attribution is exact only away from raster ambiguity, and
-bit-identical pixels apply solely to a validated pinned software environment.
-Answer:
-- **TEST-09:** Which ordering must be deterministic: scene submission, transparent draws, picking
-  ties, asynchronous completions, resource IDs, and exported frame sequences?
-
-Recommendation: Make every observable logical order deterministic: scene sorting, transparency
-policy, picking ties, completion sequence numbers, and exported frame numbering. Do not promise
-stable opaque handle values or physical asynchronous completion order across runs.
-Answer:
+Answer: Use the recommendation exactly
 
 - **TEST-10:** What Windows compiler/GPU/driver matrix defines initial support? When does Linux move
   from compile-only to a host-tested support claim?
@@ -1431,7 +520,8 @@ Recommendation: Pin the current project-supported MSVC toolset and current Clang
 Windows, plus current GCC and Clang majors on a pinned Linux LTS image. Run software-ICD tests every
 change and weekly Intel-integrated, AMD, and NVIDIA jobs on pinned production driver branches;
 promote Linux only after both compilers and live X11/Wayland pass that matrix continuously.
-Answer:
+
+Answer: Right now, we are only testing on the one Windows laptop I have
 
 - **TEST-11:** Should render adopt PCH-free public-header self-containment tests and compile-only
   consumer/documentation examples from the first public header?
@@ -1439,15 +529,8 @@ Answer:
 Recommendation: Yes. Add one PCH-free translation unit per public header, an install-tree consumer,
 and compile-tested examples with the first API; these prevent accidental transitive includes and
 unusable packaging.
-Answer:
 
-- **TEST-12:** Which failure paths require deliberate tests or fault injection: unsupported device,
-  allocation failure, surface loss, device loss, shader rejection, resize races, and partial upload?
-
-Recommendation: Test every listed path with deterministic injection where hardware cannot reproduce
-it reliably. Verify transactional rollback, diagnostic context, subsequent valid state where
-possible, and safe destruction after every failure.
-Answer:
+Answer: Use the recommendation exactly
 
 - **TEST-13:** Which resource-leak, lifetime-order, synchronization, and validation-clean shutdown
   checks gate each milestone?
@@ -1455,25 +538,9 @@ Answer:
 Recommendation: Gate every milestone on repeated validation-clean create/destroy/resize cycles,
 zero tracked resources at shutdown, correct parent-child diagnostics, and safe retirement of
 in-flight resources. Add sanitizers and controlled lifetime permutations where supported.
-Answer:
 
-- **TEST-14:** Which representative scientific scenes, frame-time metrics, upload rates, memory
-  limits, and regression thresholds become performance gates?
+Answer: Use the recommendation exactly
 
-Recommendation: Gate the SCOPE-07 routine and large tiers at p95 16.7 ms and 33.3 ms, p99 hitch
-below twice those budgets, sustained staged upload of at least 1 GiB/s, and device-memory overhead
-below 50% of packed payload plus 256 MiB fixed renderer overhead. Block statistically significant
-regressions above 10% on pinned hosts and add volume-specific budgets with that milestone.
-Answer:
-
-- **TEST-15:** For stochastic, temporal, or tiled rendering, must tests control seeds and frame
-  indices, define history reset/warm-up, require tile-order independence, and record actual quality
-  and capability fallbacks?
-
-Recommendation: Yes. Require explicit seeds/frame indices, defined history reset and warm-up, and
-tile-order-independent results within tolerance; record actual quality settings and capability
-fallbacks with every result.
-Answer:
 
 ## Dependencies, Build, And Asset Tooling -- Resolve Before Adding Dependencies
 
@@ -1483,15 +550,8 @@ Answer:
 Recommendation: Pin Vulkan-Headers, Volk for private function loading through the system Vulkan
 loader, and Vulkan Memory Allocator for private allocation under ADR 0001. These focused components
 keep native complexity and dependency types behind the backend boundary.
-Answer:
 
-- **BUILD-02:** Beyond the separately installed system runtime loader, must Vulkan headers and all
-  build-time SDK/tool inputs be repository-managed and pinned under ADR 0001?
-
-Recommendation: Yes. Pin Vulkan headers and every shader compiler, optimizer, validator, and
-reflection input; only the runtime loader and normal platform toolchain remain environmental. Build
-output must not depend on whichever SDK happens to be installed.
-Answer:
+Answer: Use the recommendation exactly
 
 - **BUILD-03:** Should renderer code use the Vulkan C API directly or a private C++ wrapper such as
   `vulkan.hpp`, and what exception/ownership configuration must that choice obey?
@@ -1499,27 +559,20 @@ Answer:
 Recommendation: Use the Vulkan C API through small project-owned RAII implementation wrappers, with
 Volk and VMA private to the backend. This keeps failure propagation, ownership, and destruction
 aligned with `Result` without adopting another exception/dispatcher model.
-Answer:
 
-- **BUILD-04:** Should shader compiler, optimizer, validator, and reflection tools be build-only
-  dependencies, runtime dependencies, or both?
+Answer: Use the recommendation exactly
 
-Recommendation: Make compilation, optimization, validation, and reflection offline build-time
-tools. Runtime compilation should exist only as an optional developer hot-reload path, never as a
-required deployed-renderer dependency.
-Answer:
-
-- **BUILD-06:** Which CMake options are required for enabling render, enabling the Vulkan backend,
-  validation, shader rebuilding, integration tests, and future Metal support?
+- **BUILD-06:** Which CMake options are required for enabling render, the Vulkan backend,
+  validation, and integration tests?
 
 Recommendation: Add `PONDER_BUILD_RENDER=ON`,
 `PONDER_RENDER_ENABLE_VULKAN=ON` on Windows/Linux and off elsewhere,
 `PONDER_RENDER_ENABLE_VALIDATION=ON` when Vulkan is built, and
-`PONDER_BUILD_RENDER_INTEGRATION_TESTS` following `PONDER_BUILD_TESTS`. Always generate shaders
-for clean builds, select validation at runtime, add Metal only when implemented, and reject backend
-options that conflict with the selected platform; when render is off, force backend/test options off
-without probing Vulkan inputs.
-Answer:
+`PONDER_BUILD_RENDER_INTEGRATION_TESTS` following `PONDER_BUILD_TESTS`. Select validation at
+runtime and reject backend options that conflict with the selected platform; when render is off,
+force backend/test options off without probing Vulkan inputs.
+
+Answer: Use the recommendation exactly
 
 - **BUILD-07:** Should configuration succeed without a Vulkan SDK/loader when render is disabled,
   and should a built renderer report a missing runtime loader only at device creation?
@@ -1527,86 +580,19 @@ Answer:
 Recommendation: Configuration must succeed without Vulkan inputs when render is disabled. With
 render enabled, pinned build inputs should suffice; a missing dynamically loaded runtime should
 produce an actionable `Result` only when Vulkan device creation is attempted.
-Answer:
 
-- **BUILD-08:** How are generated shader artifacts packaged and found without making render own
-  general filesystem or application installation policy?
+Answer: Use the recommendation exactly
 
-Recommendation: Embed generated shader binaries, reflected interface metadata, and version hashes
-into the backend static library through deterministic build-tree sources. This removes runtime path
-policy while tying every shader artifact exactly to the renderer build.
-Answer:
 
-- **BUILD-10:** What compile-only coverage is required now for untested Linux X11/Wayland branches,
-  and how will those branches avoid silently becoming stale?
 
-Recommendation: Add Linux CI configurations that force both X11 and Wayland implementations to
-compile with warnings-as-errors on every change, with branch-specific contract tests. Keep support
-unverified until each also passes native live integration tests.
-Answer:
+## Intentionally Deferred Bootstrap Implementation Details
 
-## Future Native Metal Backend -- Preserve These Decisions Now
-
-- **METAL-01:** Which public resource, scene, frame, error, and capability semantics must be shared
-  exactly between Vulkan and Metal?
-
-Recommendation: Share ownership, handles, lifetimes, frame/status semantics, target descriptors,
-scene submissions, coordinates/depth, formats/color/alpha, errors, capabilities, readback, and
-deterministic ordering exactly. Capability availability and performance need not match.
-Answer:
-
-- **METAL-02:** Which backend differences may be surfaced as capabilities or backend-specific
-  extensions rather than forced into common-denominator behavior?
-
-Recommendation: Surface genuine differences such as format support, limits, HDR/presentation,
-bindless tiers, ray tracing, queue models, and timestamps through neutral capabilities and explicit
-fallbacks. Reserve backend extensions for features that cannot be expressed honestly in common.
-Answer:
-
-- **METAL-03:** Must the initial shader and material system guarantee a Metal compilation path from
-  day one, or is a later separate Metal shader implementation acceptable?
-
-Recommendation: Require the initial shader/material contracts and canonical shader source to have a
-validated Metal compilation path from day one, even before runtime Metal exists. Narrow
-backend-specific implementations may sit behind the same reflected semantic interface.
-Answer:
-
-- **METAL-04:** Should backend conformance tests render the same scenes and compare semantic outputs
-  such as IDs/depth as well as tolerance-bounded color images?
-
-Recommendation: Yes. Compare exact statuses, canonical-query identities, and resource semantics,
-plus tolerance-bounded depth, geometry, scalar, and color. Visible picks should use scenes safely
-away from raster ambiguity or an explicit attribution tolerance; backend-only capabilities get
-separate tests.
-Answer:
-
-- **METAL-05:** Where should backend coordinate, viewport, winding, pixel-format, color-space, and
-  synchronization differences be normalized so callers do not branch by backend?
-
-Recommendation: Normalize them inside each backend's target setup, shader ABI, resource-state
-translation, and command encoding. Callers should observe only canonical `ponder_math` and render
-conventions and never repair a backend themselves.
-Answer:
-
-- **METAL-06:** Should public names avoid `Vulkan` entirely except in capability/diagnostic APIs, or
-  is a small explicit backend vocabulary desirable?
-
-Recommendation: Keep ordinary names backend-neutral while exposing a small explicit
-`RenderBackend::{Vulkan, Metal}` vocabulary for adapter selection, capabilities, and diagnostics.
-Native Vulkan/Metal terms and types should appear nowhere else in the general API.
-Answer:
-
-## Intentionally Deferred Implementation Questions
-
-The following choices should become concrete only after the higher-level answers above select a
-frame, resource, shader, and capability model:
+These private choices belong inside their corresponding roadmap tasks. They are not additional
+public design decisions:
 
 - Exact command-pool and command-buffer topology.
 - Exact fence, binary/timeline semaphore, and barrier implementation.
-- Descriptor pool block sizes, bindless table sizes, and binding numbers.
-- Allocator page sizes, staging chunk sizes, and transient-resource budgets.
 - Swapchain format/image-count tie-break algorithms beyond the selected public fallback policy.
-- Pipeline-cache key/file format and shader permutation hashing.
 - Individual optional Vulkan extensions that do not change the declared capability floor or public
   behavior.
 - File and class names for private backend implementation details.

@@ -3,7 +3,7 @@
 `ponder_platform` owns reusable operating-system and desktop-platform
 integration.
 
-Status: platform contracts revised on 2026-07-10.
+Status: platform contracts revised on 2026-07-13 for renderer interop.
 
 ## Decision Records
 
@@ -242,28 +242,31 @@ Status: platform contracts revised on 2026-07-10.
 
 ### Renderer And Dear ImGui Interop
 
-- `WindowGraphicsCompatibility` has exactly `Default` and `Vulkan`. `Default`
-  requests no graphics-specific SDL flag. `Vulkan` maps to
-  `SDL_WINDOW_VULKAN` on Windows/Linux and `SDL_WINDOW_METAL` on macOS.
+- `WindowGraphicsCompatibility` has exactly `Default`, `Vulkan`, and `Metal`.
+  `Default` requests no graphics-specific SDL flag. `Vulkan` maps to
+  `SDL_WINDOW_VULKAN` on Windows/Linux only. `Metal` is reserved for the later
+  native macOS backend and maps to `SDL_WINDOW_METAL` only for that backend.
+- Vulkan-compatible windows are unsupported on macOS. Platform must not translate
+  a Vulkan request into Metal-layer semantics.
 - Each `Window` stores the exact project compatibility selected at creation. It
   is never reconstructed from SDL flags, whose meaning is host-dependent.
-- `NativeWindowHandle` is a closed tagged variant of:
+- `NativeWindowHandle` for the current Vulkan interop contract is a closed tagged
+  variant of:
   - `NativeWin32Window`: `void* instance` and `void* window`.
   - `NativeX11Window`: `void* display` and `std::uintptr_t window`.
   - `NativeWaylandWindow`: `void* display` and `void* surface`.
-  - `NativeCocoaWindow`: `void* metalLayer`.
+- No Cocoa or Metal-layer payload is part of the current Vulkan native-handle
+  contract. The future Metal backend must define its own macOS payload before
+  platform exposes it.
 - `Window::GetNativeHandle()` is available only for Vulkan-compatible windows
-  using SDL video drivers `"windows"`, `"x11"`, `"wayland"`, and
-  `"cocoa"`. A `Default` window returns `InvalidArgument`; every other
-  driver returns `Unsupported`.
+  using SDL video drivers `"windows"`, `"x11"`, and `"wayland"`. A `Default`
+  window returns `InvalidArgument`; a `Metal` window has no native-handle payload
+  until the Metal backend defines one; every other driver returns `Unsupported`.
 - Native data is a borrowed snapshot. It is valid only on the runtime owner
   thread while the owning window and relevant native state remain valid. Callers
   re-query after window destruction/recreation, show/hide, presentation,
   minimized/maximized restore, display migration, or any renderer-owned surface
   teardown/rebuild boundary where stale native state would matter.
-- On macOS, each Vulkan-compatible `Window` lazily owns at most one cached
-  `SDL_MetalView`. Repeated queries expose the same borrowed `CAMetalLayer*`, and
-  platform destroys the view before that window.
 - `ponder_render` interprets native payloads privately and owns devices,
   contexts, surfaces, swapchains, and rendering.
 - The caller destroys renderer presentation state before its platform window.
@@ -276,7 +279,6 @@ Status: platform contracts revised on 2026-07-10.
   a custom single-OS-viewport adapter; pointer warping, gamepad navigation,
   touch/pen sources, and secondary ImGui platform windows are not required
   initially.
-
 ### Clipboard, External URIs, Dialogs, And Processes
 
 - Owner-thread UTF-8 text clipboard get/set operations on `PlatformRuntime`.
