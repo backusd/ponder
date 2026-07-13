@@ -221,7 +221,7 @@ void PlatformRuntimeState::DestroySystemCursors() noexcept
 core::VoidResult WindowImpl::SetMouseGrab(bool grabbed)
 {
     VerifyUsable("mouse-grab update");
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.setMouseGrab(m_backend.context, m_nativeWindow, grabbed))
     {
         return core::VoidResult::FromError(
@@ -245,7 +245,7 @@ core::VoidResult WindowImpl::SetRelativeMouseMode(bool enabled)
         return core::VoidResult::Success();
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.setRelativeMouseMode(m_backend.context, m_nativeWindow, enabled))
     {
         return core::VoidResult::FromError(

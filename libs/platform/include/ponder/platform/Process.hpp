@@ -17,11 +17,7 @@ class Process;
 namespace detail
 {
 class ProcessState;
-struct PlatformProcessBackend;
 struct ProcessFactory;
-
-[[nodiscard]] core::Result<Process> LaunchProcess(const ProcessDesc& desc,
-                                                  PlatformProcessBackend backend);
 } // namespace detail
 
 struct ProcessDesc final
@@ -34,7 +30,7 @@ struct ProcessDesc final
 
 struct ProcessNormalExit final
 {
-    int exitCode{};
+    std::uint32_t exitCode{};
 
     [[nodiscard]] friend constexpr bool operator==(ProcessNormalExit,
                                                    ProcessNormalExit) noexcept = default;
@@ -73,6 +69,8 @@ public:
     Process(Process&&) noexcept;
     Process& operator=(Process&&) noexcept;
 
+    // Blocks until the child process exits. Do not call from the desktop event
+    // loop or any UI/platform/render pumping thread.
     [[nodiscard]] core::Result<ProcessExitStatus> Wait();
     [[nodiscard]] core::VoidResult Terminate(ProcessTerminationMode mode);
 

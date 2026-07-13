@@ -7,7 +7,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -43,11 +42,6 @@ constexpr core::ErrorCode kNotFoundCode = ToErrorCode(PlatformErrorCode::NotFoun
     return "display " + std::to_string(id.GetValue());
 }
 
-[[nodiscard]] std::string MakeWindowContext(WindowId id)
-{
-    return "window " + std::to_string(id.GetValue());
-}
-
 [[nodiscard]] core::Result<ScreenRectangle> ConvertRectangle(
     const detail::BackendScreenRectangle& rectangle, std::string_view operation,
     std::string_view context)
@@ -59,10 +53,7 @@ constexpr core::ErrorCode kNotFoundCode = ToErrorCode(PlatformErrorCode::NotFoun
                                  std::string{context} + "."));
     }
 
-    constexpr int kMinimumPosition = static_cast<int>(std::numeric_limits<std::int32_t>::min());
-    constexpr int kMaximumPosition = static_cast<int>(std::numeric_limits<std::int32_t>::max());
-    if (rectangle.x < kMinimumPosition || rectangle.x > kMaximumPosition ||
-        rectangle.y < kMinimumPosition || rectangle.y > kMaximumPosition)
+    if (!std::in_range<std::int32_t>(rectangle.x) || !std::in_range<std::int32_t>(rectangle.y))
     {
         return core::Result<ScreenRectangle>::FromError(MakeBackendDataError(
             std::string{operation} + " returned an out-of-range position for " +
@@ -111,6 +102,18 @@ constexpr core::ErrorCode kNotFoundCode = ToErrorCode(PlatformErrorCode::NotFoun
 
 namespace detail
 {
+namespace
+{
+struct PendingDisplayConnection final
+{
+    std::uint32_t backendId{};
+    DisplayId id;
+    bool needsBackendMapping{};
+    bool backendMappingInserted{};
+    bool projectMappingInserted{};
+};
+} // namespace
+
 std::optional<DisplayId> PlatformRuntimeState::FindConnectedDisplayId(
     std::uint32_t backendDisplayId) const
 {
@@ -197,21 +200,62 @@ std::optional<DisplayId> PlatformRuntimeState::ConnectDisplayFromEvent(
 
     PONDER_VERIFY(m_nextDisplayId != 0, "Platform display ID space is exhausted");
     const DisplayId id{m_nextDisplayId};
-    auto nextByBackend = m_displaysByBackendId;
-    auto nextByProject = m_displaysById;
 
-    nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
-    const auto [iterator, inserted] =
-        nextByProject.emplace(id, RuntimeBackendDisplayRecord{backendDisplayId, true});
-    static_cast<void>(iterator);
-    PONDER_VERIFY(inserted, "Platform display ID {} is already registered", id.GetValue());
+    std::vector<std::uint32_t> nextConnectedBackendIds = m_connectedBackendDisplayIds;
+    nextConnectedBackendIds.emplace_back(backendDisplayId);
 
-    m_displaysByBackendId.swap(nextByBackend);
-    m_displaysById.swap(nextByProject);
+    const bool needsBackendMapping = current == m_displaysByBackendId.end();
+    m_displaysById.reserve(m_displaysById.size() + 1);
+    if (needsBackendMapping)
+    {
+        m_displaysByBackendId.reserve(m_displaysByBackendId.size() + 1);
+    }
+
+    bool projectMappingInserted = false;
+    bool backendMappingInserted = false;
+    try
+    {
+        const auto [projectIterator, projectInserted] =
+            m_displaysById.emplace(id, RuntimeBackendDisplayRecord{backendDisplayId, false});
+        static_cast<void>(projectIterator);
+        projectMappingInserted = projectInserted;
+        PONDER_VERIFY(projectInserted, "Platform display ID {} is already registered",
+                      id.GetValue());
+
+        if (needsBackendMapping)
+        {
+            const auto [backendIterator, backendInserted] = m_displaysByBackendId.emplace(
+                backendDisplayId, RuntimeDisplayRecord{id, false, false});
+            static_cast<void>(backendIterator);
+            backendMappingInserted = backendInserted;
+            PONDER_VERIFY(backendInserted, "Backend display {} is already registered",
+                          backendDisplayId);
+        }
+    }
+    catch (...)
+    {
+        if (backendMappingInserted)
+        {
+            m_displaysByBackendId.erase(backendDisplayId);
+        }
+        if (projectMappingInserted)
+        {
+            m_displaysById.erase(id);
+        }
+        throw;
+    }
+
+    auto backendMapping = m_displaysByBackendId.find(backendDisplayId);
+    auto projectMapping = m_displaysById.find(id);
+    PONDER_VERIFY(backendMapping != m_displaysByBackendId.end() &&
+                      projectMapping != m_displaysById.end(),
+                  "Display {} could not commit its identity mapping", id.GetValue());
+    backendMapping->second = RuntimeDisplayRecord{id, true, false};
+    projectMapping->second.connected = true;
+    m_connectedBackendDisplayIds.swap(nextConnectedBackendIds);
     ++m_nextDisplayId;
     return id;
 }
-
 void PlatformRuntimeState::DisconnectDisplayFromEvent(std::uint32_t backendDisplayId)
 {
     VerifyOwnerThread("display disconnection event");
@@ -228,6 +272,7 @@ void PlatformRuntimeState::DisconnectDisplayFromEvent(std::uint32_t backendDispl
     mapping->second.connected = false;
     mapping->second.removalEventPending = false;
     projectMapping->second.connected = false;
+    std::erase(m_connectedBackendDisplayIds, backendDisplayId);
 }
 
 void PlatformRuntimeState::ReconcileDisplayFromEvent(std::uint32_t backendDisplayId)
@@ -269,23 +314,9 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
         }
     }
 
-    auto nextByBackend = m_displaysByBackendId;
-    auto nextByProject = m_displaysById;
-    for (auto& [backendId, record] : nextByBackend)
-    {
-        static_cast<void>(backendId);
-        if (record.connected)
-        {
-            record.removalEventPending = true;
-        }
-        record.connected = false;
-    }
-    for (auto& [projectId, record] : nextByProject)
-    {
-        static_cast<void>(projectId);
-        record.connected = false;
-    }
-
+    std::vector<std::uint32_t> nextConnectedBackendIds = backendDisplayIds;
+    std::vector<PendingDisplayConnection> pendingConnections;
+    pendingConnections.reserve(backendDisplayIds.size());
     DisplayId::ValueType nextDisplayId = m_nextDisplayId;
     for (const std::uint32_t backendDisplayId : backendDisplayIds)
     {
@@ -295,30 +326,106 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
         if (wasConnected)
         {
             const DisplayId id = current->second.id;
-            nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
-            const auto project = nextByProject.find(id);
-            PONDER_VERIFY(project != nextByProject.end(),
+            const auto project = m_displaysById.find(id);
+            PONDER_VERIFY(project != m_displaysById.end(),
                           "Connected display {} has no project mapping", id.GetValue());
-            project->second.connected = true;
             continue;
         }
 
         PONDER_VERIFY(nextDisplayId != 0, "Platform display ID space is exhausted");
         const DisplayId id{nextDisplayId};
         ++nextDisplayId;
-        nextByBackend[backendDisplayId] = RuntimeDisplayRecord{id, true, false};
-        const auto [iterator, inserted] =
-            nextByProject.emplace(id, RuntimeBackendDisplayRecord{backendDisplayId, true});
-        static_cast<void>(iterator);
-        PONDER_VERIFY(inserted, "Platform display ID {} is already registered", id.GetValue());
+        pendingConnections.emplace_back(
+            PendingDisplayConnection{backendDisplayId, id, current == m_displaysByBackendId.end()});
     }
 
-    m_displaysByBackendId.swap(nextByBackend);
-    m_displaysById.swap(nextByProject);
+    std::size_t newBackendMappingCount = 0;
+    for (const PendingDisplayConnection& connection : pendingConnections)
+    {
+        newBackendMappingCount += connection.needsBackendMapping ? 1U : 0U;
+    }
+    if (newBackendMappingCount != 0)
+    {
+        m_displaysByBackendId.reserve(m_displaysByBackendId.size() + newBackendMappingCount);
+    }
+    if (!pendingConnections.empty())
+    {
+        m_displaysById.reserve(m_displaysById.size() + pendingConnections.size());
+    }
+
+    try
+    {
+        for (PendingDisplayConnection& connection : pendingConnections)
+        {
+            const auto [projectIterator, projectInserted] = m_displaysById.emplace(
+                connection.id, RuntimeBackendDisplayRecord{connection.backendId, false});
+            static_cast<void>(projectIterator);
+            connection.projectMappingInserted = projectInserted;
+            PONDER_VERIFY(projectInserted, "Platform display ID {} is already registered",
+                          connection.id.GetValue());
+
+            if (connection.needsBackendMapping)
+            {
+                const auto [backendIterator, backendInserted] = m_displaysByBackendId.emplace(
+                    connection.backendId, RuntimeDisplayRecord{connection.id, false, false});
+                static_cast<void>(backendIterator);
+                connection.backendMappingInserted = backendInserted;
+                PONDER_VERIFY(backendInserted, "Backend display {} is already registered",
+                              connection.backendId);
+            }
+        }
+    }
+    catch (...)
+    {
+        for (const PendingDisplayConnection& connection : pendingConnections)
+        {
+            if (connection.backendMappingInserted)
+            {
+                m_displaysByBackendId.erase(connection.backendId);
+            }
+            if (connection.projectMappingInserted)
+            {
+                m_displaysById.erase(connection.id);
+            }
+        }
+        throw;
+    }
+
+    for (const std::uint32_t backendDisplayId : m_connectedBackendDisplayIds)
+    {
+        if (uniqueIds.contains(backendDisplayId))
+        {
+            continue;
+        }
+
+        const auto backendMapping = m_displaysByBackendId.find(backendDisplayId);
+        PONDER_VERIFY(backendMapping != m_displaysByBackendId.end() &&
+                          backendMapping->second.connected,
+                      "Connected backend display {} has no active mapping", backendDisplayId);
+        const auto projectMapping = m_displaysById.find(backendMapping->second.id);
+        PONDER_VERIFY(projectMapping != m_displaysById.end() && projectMapping->second.connected,
+                      "Connected display {} has no active project mapping",
+                      backendMapping->second.id.GetValue());
+        backendMapping->second.connected = false;
+        backendMapping->second.removalEventPending = true;
+        projectMapping->second.connected = false;
+    }
+
+    for (const PendingDisplayConnection& connection : pendingConnections)
+    {
+        const auto backendMapping = m_displaysByBackendId.find(connection.backendId);
+        const auto projectMapping = m_displaysById.find(connection.id);
+        PONDER_VERIFY(backendMapping != m_displaysByBackendId.end() &&
+                          projectMapping != m_displaysById.end(),
+                      "Display {} could not commit its identity mapping", connection.id.GetValue());
+        backendMapping->second = RuntimeDisplayRecord{connection.id, true, false};
+        projectMapping->second.connected = true;
+    }
+
+    m_connectedBackendDisplayIds.swap(nextConnectedBackendIds);
     m_nextDisplayId = nextDisplayId;
     return core::Result<std::vector<std::uint32_t>>::FromValue(std::move(backendDisplayIds));
 }
-
 core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
     DisplayId id, std::uint32_t backendDisplayId) const
 {
@@ -462,16 +569,15 @@ core::Result<DisplayInfo> PlatformRuntimeState::GetDisplayInfo(DisplayId id)
 }
 
 core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(void* nativeWindow,
-                                                                    WindowId windowId)
+                                                                    std::string_view windowContext)
 {
     VerifyOwnerThread("window display query");
-    const std::string context = MakeWindowContext(windowId);
     const std::uint32_t backendDisplayId =
         m_displayBackend.getForWindow(m_displayBackend.context, nativeWindow);
     if (backendDisplayId == 0)
     {
         return core::Result<DisplayId>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayForWindow", context));
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayForWindow", windowContext));
     }
 
     auto refresh = RefreshDisplays();
@@ -489,34 +595,32 @@ core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(void* native
     return mapping->second.id;
 }
 
-core::Result<float> PlatformRuntimeState::GetPixelDensityForWindow(void* nativeWindow,
-                                                                   WindowId windowId) const
+core::Result<float> PlatformRuntimeState::GetPixelDensityForWindow(
+    void* nativeWindow, std::string_view windowContext) const
 {
     VerifyOwnerThread("window pixel density query");
-    const std::string context = MakeWindowContext(windowId);
     const float density =
         m_displayBackend.getWindowPixelDensity(m_displayBackend.context, nativeWindow);
     if (density == 0.0F)
     {
         return core::Result<float>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowPixelDensity", context));
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowPixelDensity", windowContext));
     }
-    return ValidateScale(density, "SDL_GetWindowPixelDensity", context);
+    return ValidateScale(density, "SDL_GetWindowPixelDensity", windowContext);
 }
 
-core::Result<float> PlatformRuntimeState::GetDisplayScaleForWindow(void* nativeWindow,
-                                                                   WindowId windowId) const
+core::Result<float> PlatformRuntimeState::GetDisplayScaleForWindow(
+    void* nativeWindow, std::string_view windowContext) const
 {
     VerifyOwnerThread("window display scale query");
-    const std::string context = MakeWindowContext(windowId);
     const float scale =
         m_displayBackend.getWindowDisplayScale(m_displayBackend.context, nativeWindow);
     if (scale == 0.0F)
     {
         return core::Result<float>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowDisplayScale", context));
+            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowDisplayScale", windowContext));
     }
-    return ValidateScale(scale, "SDL_GetWindowDisplayScale", context);
+    return ValidateScale(scale, "SDL_GetWindowDisplayScale", windowContext);
 }
 } // namespace detail
 
@@ -555,19 +659,19 @@ namespace detail
 core::Result<DisplayId> WindowImpl::GetDisplayId() const
 {
     VerifyUsable("display query");
-    return m_runtime->GetDisplayIdForWindow(m_nativeWindow, m_id);
+    return m_runtime->GetDisplayIdForWindow(m_nativeWindow, GetErrorContext());
 }
 
 core::Result<float> WindowImpl::GetPixelDensity() const
 {
     VerifyUsable("pixel density query");
-    return m_runtime->GetPixelDensityForWindow(m_nativeWindow, m_id);
+    return m_runtime->GetPixelDensityForWindow(m_nativeWindow, GetErrorContext());
 }
 
 core::Result<float> WindowImpl::GetDisplayScale() const
 {
     VerifyUsable("display scale query");
-    return m_runtime->GetDisplayScaleForWindow(m_nativeWindow, m_id);
+    return m_runtime->GetDisplayScaleForWindow(m_nativeWindow, GetErrorContext());
 }
 } // namespace detail
 } // namespace pond::platform

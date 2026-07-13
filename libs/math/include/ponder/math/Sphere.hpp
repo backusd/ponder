@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Vector3.hpp>
 
 namespace pond::math
@@ -8,17 +9,17 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteSphereVector(Vector3 value) noexcept
 {
-    return ::pond::math::IsFinite(value.x) && ::pond::math::IsFinite(value.y) &&
-           ::pond::math::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
+           ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
 class Sphere final
 {
 public:
-    [[nodiscard]] static inline core::Result<Sphere> Create(Vector3 center, float radius)
+    [[nodiscard]] static constexpr core::Result<Sphere> Create(Vector3 center, float radius)
     {
-        if (!detail::IsFiniteSphereVector(center) || !IsFinite(radius)) [[unlikely]]
+        if (!detail::IsFiniteSphereVector(center) || !core::IsFinite(radius)) [[unlikely]]
         {
             return core::Result<Sphere>::FromError(
                 core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),

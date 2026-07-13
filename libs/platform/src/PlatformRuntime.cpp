@@ -493,6 +493,11 @@ std::optional<WindowId> PlatformRuntimeState::FindWindowId(std::uint32_t backend
 PlatformTimestamp PlatformRuntimeState::Now() const
 {
     VerifyOwnerThread("timestamp query");
+    return CaptureBackendTimestamp();
+}
+
+PlatformTimestamp PlatformRuntimeState::CaptureBackendTimestamp() const
+{
     const std::uint64_t ticks = m_backend.getTicksNanoseconds(m_backend.context);
     constexpr auto kMaximumTicks =
         static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());

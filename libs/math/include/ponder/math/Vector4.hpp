@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ponder/core/Assert.hpp>
-#include <ponder/math/Scalar.hpp>
+#include <ponder/core/Numbers.hpp>
+#include <ponder/math/MathError.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -29,41 +29,7 @@ struct Vector4 final
         return Vector4{};
     }
 
-    [[nodiscard]] float& operator[](std::size_t index)
-    {
-        PONDER_VERIFY(index < 4, "Vector4 index {} is out of range.", index);
-
-        switch (index)
-        {
-        case 0:
-            return x;
-        case 1:
-            return y;
-        case 2:
-            return z;
-        default:
-            return w;
-        }
-    }
-
-    [[nodiscard]] const float& operator[](std::size_t index) const
-    {
-        PONDER_VERIFY(index < 4, "Vector4 index {} is out of range.", index);
-
-        switch (index)
-        {
-        case 0:
-            return x;
-        case 1:
-            return y;
-        case 2:
-            return z;
-        default:
-            return w;
-        }
-    }
-
-    [[nodiscard]] core::Result<std::reference_wrapper<float>> At(std::size_t index)
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<float>> At(std::size_t index)
     {
         switch (index)
         {
@@ -75,13 +41,14 @@ struct Vector4 final
             return std::ref(z);
         case 3:
             return std::ref(w);
-        default: [[unlikely]]
-            return core::Result<std::reference_wrapper<float>>::FromError(core::Error{
+        default:
+            [[unlikely]] return core::Result<std::reference_wrapper<float>>::FromError(core::Error{
                 ToErrorCode(MathErrorCode::InvalidArgument), "Vector4 index is out of range."});
         }
     }
 
-    [[nodiscard]] core::Result<std::reference_wrapper<const float>> At(std::size_t index) const
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(
+        std::size_t index) const
     {
         switch (index)
         {
@@ -93,9 +60,10 @@ struct Vector4 final
             return std::cref(z);
         case 3:
             return std::cref(w);
-        default: [[unlikely]]
-            return core::Result<std::reference_wrapper<const float>>::FromError(core::Error{
-                ToErrorCode(MathErrorCode::InvalidArgument), "Vector4 index is out of range."});
+        default:
+            [[unlikely]] return core::Result<std::reference_wrapper<const float>>::FromError(
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
+                            "Vector4 index is out of range."});
         }
     }
 
@@ -155,7 +123,7 @@ struct Vector4 final
 
 [[nodiscard]] inline float Length(Vector4 vector) noexcept
 {
-    return std::sqrt(SquaredLength(vector));
+    return std::hypot(std::hypot(vector.x, vector.y), std::hypot(vector.z, vector.w));
 }
 
 [[nodiscard]] constexpr float SquaredDistance(Vector4 lhs, Vector4 rhs) noexcept
@@ -165,7 +133,8 @@ struct Vector4 final
 
 [[nodiscard]] inline float Distance(Vector4 lhs, Vector4 rhs) noexcept
 {
-    return Length(lhs - rhs);
+    return std::hypot(std::hypot(lhs.x - rhs.x, lhs.y - rhs.y),
+                      std::hypot(lhs.z - rhs.z, lhs.w - rhs.w));
 }
 
 [[nodiscard]] constexpr Vector4 ComponentMin(Vector4 lhs, Vector4 rhs) noexcept
@@ -182,20 +151,20 @@ struct Vector4 final
 
 [[nodiscard]] constexpr Vector4 Lerp(Vector4 start, Vector4 end, float amount) noexcept
 {
-    return Vector4{Lerp(start.x, end.x, amount), Lerp(start.y, end.y, amount),
-                   Lerp(start.z, end.z, amount), Lerp(start.w, end.w, amount)};
+    return Vector4{core::Lerp(start.x, end.x, amount), core::Lerp(start.y, end.y, amount),
+                   core::Lerp(start.z, end.z, amount), core::Lerp(start.w, end.w, amount)};
 }
 
-[[nodiscard]] constexpr bool IsNear(Vector4 lhs, Vector4 rhs, Tolerance tolerance) noexcept
+[[nodiscard]] constexpr bool IsNear(Vector4 lhs, Vector4 rhs, core::Tolerance tolerance) noexcept
 {
-    return IsNear(lhs.x, rhs.x, tolerance) && IsNear(lhs.y, rhs.y, tolerance) &&
-           IsNear(lhs.z, rhs.z, tolerance) && IsNear(lhs.w, rhs.w, tolerance);
+    return core::IsNear(lhs.x, rhs.x, tolerance) && core::IsNear(lhs.y, rhs.y, tolerance) &&
+           core::IsNear(lhs.z, rhs.z, tolerance) && core::IsNear(lhs.w, rhs.w, tolerance);
 }
 
 [[nodiscard]] inline core::Result<Vector4> Normalize(Vector4 vector)
 {
-    if (!IsFinite(vector.x) || !IsFinite(vector.y) || !IsFinite(vector.z) ||
-        !IsFinite(vector.w)) [[unlikely]]
+    if (!core::IsFinite(vector.x) || !core::IsFinite(vector.y) || !core::IsFinite(vector.z) ||
+        !core::IsFinite(vector.w)) [[unlikely]]
     {
         return core::Result<Vector4>::FromError(
             core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
@@ -213,7 +182,7 @@ struct Vector4 final
 
     const Vector4 scaled = vector / maxMagnitude;
     const float scaledLength = Length(scaled);
-    if (!IsFinite(scaledLength) || scaledLength == 0.0F) [[unlikely]]
+    if (!core::IsFinite(scaledLength) || scaledLength == 0.0F) [[unlikely]]
     {
         return core::Result<Vector4>::FromError(
             core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
@@ -221,8 +190,8 @@ struct Vector4 final
     }
 
     const Vector4 normalized = scaled / scaledLength;
-    if (!IsFinite(normalized.x) || !IsFinite(normalized.y) || !IsFinite(normalized.z) ||
-        !IsFinite(normalized.w)) [[unlikely]]
+    if (!core::IsFinite(normalized.x) || !core::IsFinite(normalized.y) ||
+        !core::IsFinite(normalized.z) || !core::IsFinite(normalized.w)) [[unlikely]]
     {
         return core::Result<Vector4>::FromError(
             core::Error{ToErrorCode(MathErrorCode::DegenerateInput),

@@ -6,11 +6,10 @@
 
 #include <SDL3/SDL_error.h>
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -31,10 +30,11 @@ constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::
 constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 constexpr core::ErrorCode kNotFoundCode = ToErrorCode(PlatformErrorCode::NotFound);
 
-[[nodiscard]] bool IsValidFilterPatternCharacter(char character) noexcept
+[[nodiscard]] constexpr bool IsValidFilterPatternCharacter(char character) noexcept
 {
-    const auto value = static_cast<unsigned char>(character);
-    return std::isalnum(value) != 0 || character == '-' || character == '_' || character == '.';
+    return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+           (character >= '0' && character <= '9') || character == '-' || character == '_' ||
+           character == '.';
 }
 
 [[nodiscard]] bool IsValidFilterPattern(std::string_view pattern) noexcept
@@ -114,7 +114,6 @@ struct PreparedDialogRequest final
     std::optional<std::string> defaultLocation;
     std::vector<std::string> filterNames;
     std::vector<std::string> filterPatterns;
-    std::vector<SDL_DialogFileFilter> filters;
     bool allowMultipleSelection{};
 };
 
@@ -129,7 +128,7 @@ struct PreparedDialogRequest final
             core::Error{kInvalidArgumentCode, "Dialog parent window ID must be absent or valid."});
     }
 
-    if (filters.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    if (!std::in_range<int>(filters.size()))
     {
         return core::Result<PreparedDialogRequest>::FromError(core::Error{
             kInvalidArgumentCode, "Dialog filter count exceeds the backend representation range."});
@@ -147,7 +146,6 @@ struct PreparedDialogRequest final
                                    .allowMultipleSelection = allowMultipleSelection};
     prepared.filterNames.reserve(filters.size());
     prepared.filterPatterns.reserve(filters.size());
-    prepared.filters.reserve(filters.size());
 
     for (std::size_t index = 0; index < filters.size(); ++index)
     {
@@ -159,13 +157,6 @@ struct PreparedDialogRequest final
 
         prepared.filterNames.push_back(filters[index].name);
         prepared.filterPatterns.push_back(filters[index].pattern);
-    }
-
-    for (std::size_t index = 0; index < filters.size(); ++index)
-    {
-        prepared.filters.push_back(
-            SDL_DialogFileFilter{.name = prepared.filterNames[index].c_str(),
-                                 .pattern = prepared.filterPatterns[index].c_str()});
     }
 
     return prepared;
@@ -205,7 +196,8 @@ struct PreparedDialogRequest final
 }
 
 [[nodiscard]] DialogOutcome CopyDialogOutcome(const detail::DialogRequestState& request,
-                                              const char* const* fileList, int selectedFilter);
+                                              const char* const* fileList, int selectedFilter,
+                                              std::string_view capturedError);
 } // namespace
 
 namespace detail
@@ -215,27 +207,30 @@ struct DialogRequestState final
     PlatformRuntimeState* runtime{};
     DialogRequestId id;
     BackendDialogKind kind{BackendDialogKind::OpenFile};
-    std::optional<WindowId> parentWindowId;
     WindowImpl* parentWindow{};
     std::optional<std::string> defaultLocation;
     std::vector<std::string> filterNames;
     std::vector<std::string> filterPatterns;
     std::vector<SDL_DialogFileFilter> filters;
     bool allowMultipleSelection{};
+    std::optional<DialogCompletionRecord> completion;
+    std::optional<DialogFailure> callbackFailure;
+    PlatformTimestamp callbackFailureTimestamp{};
+    DialogRequestState* nextCompleted{};
     bool completionEnqueued{};
+    bool completionIsCallbackFailure{};
 };
 } // namespace detail
 
 namespace
 {
 [[nodiscard]] DialogOutcome CopyDialogOutcome(const detail::DialogRequestState& request,
-                                              const char* const* fileList, int selectedFilter)
+                                              const char* const* fileList, int selectedFilter,
+                                              std::string_view capturedError)
 {
     if (fileList == nullptr)
     {
-        const char* const rawError = SDL_GetError();
-        return MakeDialogFailure(request.kind, rawError != nullptr ? std::string_view{rawError}
-                                                                   : std::string_view{});
+        return MakeDialogFailure(request.kind, capturedError);
     }
 
     if (fileList[0] == nullptr)
@@ -275,37 +270,80 @@ namespace
     return DialogSelection{.paths = std::move(paths), .selectedFilterIndex = selectedFilterIndex};
 }
 
-void SDLCALL OnDialogCompleted(void* userdata, const char* const* fileList, int selectedFilter)
+[[nodiscard]] detail::DialogCompletionRecord TakeDialogCompletion(
+    detail::DialogRequestState& request)
 {
-    auto* const rawRequest = static_cast<detail::DialogRequestState*>(userdata);
-    if (rawRequest == nullptr || rawRequest->runtime == nullptr)
+    if (request.completionIsCallbackFailure)
     {
-        return;
+        PONDER_VERIFY(request.callbackFailure.has_value(),
+                      "Dialog request {} is missing its callback failure fallback",
+                      request.id.GetValue());
+        return detail::DialogCompletionRecord{.timestamp = request.callbackFailureTimestamp,
+                                              .requestId = request.id,
+                                              .outcome = std::move(*request.callbackFailure)};
     }
 
-    std::shared_ptr<detail::DialogRequestState> request =
-        rawRequest->runtime->AcquireDialogRequest(rawRequest->id);
-    if (request == nullptr)
-    {
-        return;
-    }
+    PONDER_VERIFY(request.completion.has_value(), "Dialog request {} has no completion record",
+                  request.id.GetValue());
+    return std::move(*request.completion);
+}
 
-    DialogOutcome outcome = DialogFailure{
-        core::Error{kBackendFailureCode, "Dialog callback failed before copying a result."}};
+void SDLCALL OnDialogCompleted(void* userdata, const char* const* fileList,
+                               int selectedFilter) noexcept
+{
+    detail::DialogRequestState* rawRequest{};
+    PlatformTimestamp timestamp{};
+
     try
     {
-        outcome = CopyDialogOutcome(*request, fileList, selectedFilter);
-    }
-    catch (const std::exception& exception)
-    {
-        outcome = MakeDialogFailure(request->kind, exception.what());
+        rawRequest = static_cast<detail::DialogRequestState*>(userdata);
+        if (rawRequest == nullptr || rawRequest->runtime == nullptr)
+        {
+            return;
+        }
+
+        std::string capturedError;
+        if (fileList == nullptr)
+        {
+            const char* const rawError = SDL_GetError();
+            if (rawError != nullptr)
+            {
+                capturedError = rawError;
+            }
+        }
+
+        std::shared_ptr<detail::DialogRequestState> request =
+            rawRequest->runtime->AcquireDialogRequest(rawRequest->id);
+        if (request == nullptr)
+        {
+            return;
+        }
+
+        timestamp = request->runtime->CaptureBackendTimestamp();
+
+        DialogOutcome outcome = DialogCancellation{};
+        try
+        {
+            outcome = CopyDialogOutcome(*request, fileList, selectedFilter, capturedError);
+        }
+        catch (const std::exception& exception)
+        {
+            outcome = MakeDialogFailure(request->kind, exception.what());
+        }
+        catch (...)
+        {
+            outcome = MakeDialogFailure(request->kind, "Unknown dialog callback failure.");
+        }
+
+        request->runtime->EnqueueDialogCompletion(request->id, timestamp, std::move(outcome));
     }
     catch (...)
     {
-        outcome = MakeDialogFailure(request->kind, "Unknown dialog callback failure.");
+        if (rawRequest != nullptr && rawRequest->runtime != nullptr)
+        {
+            rawRequest->runtime->MarkDialogCallbackFailure(rawRequest->id, timestamp);
+        }
     }
-
-    request->runtime->EnqueueDialogCompletion(request->id, std::move(outcome));
 }
 } // namespace
 
@@ -354,7 +392,6 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
     request->runtime = this;
     request->id = id;
     request->kind = prepared.kind;
-    request->parentWindowId = prepared.parentWindowId;
     request->parentWindow = parentWindow;
     request->defaultLocation = std::move(prepared.defaultLocation);
     request->filterNames = std::move(prepared.filterNames);
@@ -367,6 +404,8 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
                                  .pattern = request->filterPatterns[index].c_str()});
     }
     request->allowMultipleSelection = prepared.allowMultipleSelection;
+    request->callbackFailure = MakeDialogFailure(
+        request->kind, "Dialog callback failed before a completion could be safely enqueued.");
 
     {
         std::scoped_lock lock{m_dialogMutex};
@@ -375,12 +414,10 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
         PONDER_VERIFY(inserted, "Dialog request ID {} is already registered", id.GetValue());
     }
 
-    bool requestRegistered{};
     bool parentCounted{};
     try
     {
         RegisterRequest(request.get());
-        requestRegistered = true;
         if (parentWindow != nullptr)
         {
             parentWindow->IncrementPendingDialogRequestCount();
@@ -397,8 +434,6 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
         }
         throw;
     }
-
-    static_cast<void>(requestRegistered);
 
     const BackendDialogRequestDesc backendDesc{
         .kind = request->kind,
@@ -437,16 +472,15 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowOpenFolderDialog(
                       desc.allowMultipleSelection);
 }
 
-std::shared_ptr<DialogRequestState> PlatformRuntimeState::AcquireDialogRequest(
-    DialogRequestId id) noexcept
+std::shared_ptr<DialogRequestState> PlatformRuntimeState::AcquireDialogRequest(DialogRequestId id)
 {
     std::scoped_lock lock{m_dialogMutex};
     const auto request = m_dialogRequests.find(id);
     return request != m_dialogRequests.end() ? request->second : nullptr;
 }
 
-void PlatformRuntimeState::EnqueueDialogCompletion(DialogRequestId id,
-                                                   DialogOutcome outcome) noexcept
+void PlatformRuntimeState::EnqueueDialogCompletion(DialogRequestId id, PlatformTimestamp timestamp,
+                                                   DialogOutcome outcome)
 {
     std::scoped_lock lock{m_dialogMutex};
     const auto request = m_dialogRequests.find(id);
@@ -455,9 +489,52 @@ void PlatformRuntimeState::EnqueueDialogCompletion(DialogRequestId id,
         return;
     }
 
-    request->second->completionEnqueued = true;
-    m_dialogCompletions.push_back(
-        DialogCompletionRecord{.requestId = id, .outcome = std::move(outcome)});
+    DialogRequestState& completedRequest = *request->second;
+    completedRequest.completion.emplace(DialogCompletionRecord{
+        .timestamp = timestamp, .requestId = id, .outcome = std::move(outcome)});
+    completedRequest.completionIsCallbackFailure = false;
+    completedRequest.completionEnqueued = true;
+    if (m_lastCompletedDialogRequest != nullptr)
+    {
+        m_lastCompletedDialogRequest->nextCompleted = &completedRequest;
+    }
+    else
+    {
+        m_firstCompletedDialogRequest = &completedRequest;
+    }
+    m_lastCompletedDialogRequest = &completedRequest;
+}
+
+void PlatformRuntimeState::MarkDialogCallbackFailure(DialogRequestId id,
+                                                     PlatformTimestamp timestamp) noexcept
+{
+    try
+    {
+        std::scoped_lock lock{m_dialogMutex};
+        const auto request = m_dialogRequests.find(id);
+        if (request == m_dialogRequests.end() || request->second->completionEnqueued)
+        {
+            return;
+        }
+
+        DialogRequestState& completedRequest = *request->second;
+        completedRequest.callbackFailureTimestamp = timestamp;
+        completedRequest.completionIsCallbackFailure = true;
+        completedRequest.completionEnqueued = true;
+        if (m_lastCompletedDialogRequest != nullptr)
+        {
+            m_lastCompletedDialogRequest->nextCompleted = &completedRequest;
+        }
+        else
+        {
+            m_firstCompletedDialogRequest = &completedRequest;
+        }
+        m_lastCompletedDialogRequest = &completedRequest;
+    }
+    catch (...)
+    {
+        std::terminate();
+    }
 }
 
 std::optional<PlatformEvent> PlatformRuntimeState::PollDialogCompletion()
@@ -468,20 +545,26 @@ std::optional<PlatformEvent> PlatformRuntimeState::PollDialogCompletion()
     std::shared_ptr<DialogRequestState> request;
     {
         std::scoped_lock lock{m_dialogMutex};
-        if (m_dialogCompletions.empty())
+        DialogRequestState* const completedRequest = m_firstCompletedDialogRequest;
+        if (completedRequest == nullptr)
         {
             return std::nullopt;
         }
 
-        completion = std::move(m_dialogCompletions.front());
-        m_dialogCompletions.pop_front();
-
-        const auto requestIterator = m_dialogRequests.find(completion->requestId);
-        PONDER_VERIFY(requestIterator != m_dialogRequests.end(),
-                      "Dialog request {} completed after it was unregistered",
-                      completion->requestId.GetValue());
-        request = std::move(requestIterator->second);
-        m_dialogRequests.erase(requestIterator);
+        const auto completionIterator = m_dialogRequests.find(completedRequest->id);
+        PONDER_VERIFY(completionIterator != m_dialogRequests.end() &&
+                          completionIterator->second.get() == completedRequest,
+                      "Completed dialog request {} is not registered",
+                      completedRequest->id.GetValue());
+        request = completionIterator->second;
+        completion = TakeDialogCompletion(*request);
+        m_firstCompletedDialogRequest = completedRequest->nextCompleted;
+        if (m_firstCompletedDialogRequest == nullptr)
+        {
+            m_lastCompletedDialogRequest = nullptr;
+        }
+        completedRequest->nextCompleted = nullptr;
+        m_dialogRequests.erase(completionIterator);
     }
 
     if (request->parentWindow != nullptr)
@@ -490,7 +573,7 @@ std::optional<PlatformEvent> PlatformRuntimeState::PollDialogCompletion()
     }
     UnregisterRequest(request.get());
 
-    return PlatformEvent{DialogCompletedEvent{.timestamp = Now(),
+    return PlatformEvent{DialogCompletedEvent{.timestamp = completion->timestamp,
                                               .requestId = completion->requestId,
                                               .outcome = std::move(completion->outcome)}};
 }

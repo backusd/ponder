@@ -14,7 +14,6 @@ ponder_add_project_test(ponder_math_tests
         MatrixTests.cpp
         QuaternionTests.cpp
         RendererReadyTests.cpp
-        ScalarTests.cpp
         VectorAlgebraTests.cpp
         ViewportTests.cpp
         VectorTests.cpp
@@ -39,7 +38,6 @@ add_library(ponder_math_header_tests OBJECT
     HeaderSelfContainment/Matrix3x3Header.cpp
     HeaderSelfContainment/Matrix4x4Header.cpp
     HeaderSelfContainment/QuaternionHeader.cpp
-    HeaderSelfContainment/ScalarHeader.cpp
     HeaderSelfContainment/Vector2Header.cpp
     HeaderSelfContainment/Vector3Header.cpp
     HeaderSelfContainment/Vector4Header.cpp

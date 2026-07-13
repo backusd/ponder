@@ -25,28 +25,38 @@
 
 namespace
 {
+using pond::platform::detail::AbandonedProcessEntry;
+using pond::platform::detail::BackendProcessExitKind;
+using pond::platform::detail::BackendProcessExitStatus;
 using pond::platform::detail::BackendProcessKillResult;
 using pond::platform::detail::PlatformProcessBackend;
+using pond::platform::detail::PlatformProcessReaperBackend;
 
 struct FakeProcessHandle final
 {
-    int exitCode{};
-    bool waitSucceeds{true};
+    BackendProcessExitStatus exitStatus{};
+    std::atomic<bool> nonblockingWaitExits{true};
+    std::atomic<int> nonblockingWaitFailuresRemaining{};
+    std::atomic<int> blockingWaitFailuresRemaining{};
     BackendProcessKillResult gracefulKillResult{BackendProcessKillResult::Succeeded};
     BackendProcessKillResult forceKillResult{BackendProcessKillResult::Succeeded};
-    int waitCalls{};
+    std::atomic<int> waitCalls{};
+    std::atomic<int> blockingWaitCalls{};
+    std::atomic<int> nonblockingWaitCalls{};
     std::vector<bool> killForces;
-    bool destroyed{};
+    std::atomic<bool> destroyed{};
 };
 
 struct FakeProcessBackend final
 {
     bool createFails{};
-    int nextExitCode{};
-    bool nextWaitSucceeds{true};
+    BackendProcessExitStatus nextExitStatus{};
+    bool nextNonblockingWaitExits{true};
+    int nextNonblockingWaitFailures{};
+    int nextBlockingWaitFailures{};
     BackendProcessKillResult nextGracefulKillResult{BackendProcessKillResult::Succeeded};
     BackendProcessKillResult nextForceKillResult{BackendProcessKillResult::Succeeded};
-    int destroyCalls{};
+    std::atomic<int> destroyCalls{};
     std::vector<std::vector<std::string>> launches;
     std::list<FakeProcessHandle> handles;
 };
@@ -76,25 +86,54 @@ struct FakeProcessBackend final
         copiedArguments.emplace_back(*current);
     }
     fake.launches.push_back(std::move(copiedArguments));
-    fake.handles.push_back(FakeProcessHandle{.exitCode = fake.nextExitCode,
-                                             .waitSucceeds = fake.nextWaitSucceeds,
-                                             .gracefulKillResult = fake.nextGracefulKillResult,
-                                             .forceKillResult = fake.nextForceKillResult});
-    return &fake.handles.back();
+    FakeProcessHandle& handle = fake.handles.emplace_back();
+    handle.exitStatus = fake.nextExitStatus;
+    handle.nonblockingWaitExits.store(fake.nextNonblockingWaitExits, std::memory_order_relaxed);
+    handle.nonblockingWaitFailuresRemaining.store(fake.nextNonblockingWaitFailures,
+                                                  std::memory_order_relaxed);
+    handle.blockingWaitFailuresRemaining.store(fake.nextBlockingWaitFailures,
+                                               std::memory_order_relaxed);
+    handle.gracefulKillResult = fake.nextGracefulKillResult;
+    handle.forceKillResult = fake.nextForceKillResult;
+    return &handle;
 }
 
-[[nodiscard]] bool FakeWaitProcess(void*, void* process, bool block, int* exitCode)
+[[nodiscard]] bool FakeWaitProcess(void*, void* process, bool block,
+                                   BackendProcessExitStatus* status)
 {
-    EXPECT_TRUE(block);
     FakeProcessHandle& fakeProcess = GetFakeProcess(process);
-    ++fakeProcess.waitCalls;
-    if (!fakeProcess.waitSucceeds)
+    fakeProcess.waitCalls.fetch_add(1, std::memory_order_relaxed);
+    if (block)
+    {
+        fakeProcess.blockingWaitCalls.fetch_add(1, std::memory_order_relaxed);
+    }
+    else
+    {
+        fakeProcess.nonblockingWaitCalls.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    std::atomic<int>& failuresRemaining = block ? fakeProcess.blockingWaitFailuresRemaining
+                                                : fakeProcess.nonblockingWaitFailuresRemaining;
+    int failureCount = failuresRemaining.load(std::memory_order_relaxed);
+    while (failureCount > 0 && !failuresRemaining.compare_exchange_weak(
+                                   failureCount, failureCount - 1, std::memory_order_relaxed))
+    {
+    }
+    if (failureCount > 0)
     {
         static_cast<void>(SDL_SetError("synthetic wait failure"));
         return false;
     }
+    if (!block && !fakeProcess.nonblockingWaitExits.load(std::memory_order_acquire))
+    {
+        SDL_ClearError();
+        return false;
+    }
 
-    *exitCode = fakeProcess.exitCode;
+    if (status != nullptr)
+    {
+        *status = fakeProcess.exitStatus;
+    }
     return true;
 }
 
@@ -114,8 +153,8 @@ struct FakeProcessBackend final
 void FakeDestroyProcess(void* context, void* process) noexcept
 {
     FakeProcessBackend& fake = GetFake(context);
-    ++fake.destroyCalls;
-    GetFakeProcess(process).destroyed = true;
+    fake.destroyCalls.fetch_add(1, std::memory_order_relaxed);
+    GetFakeProcess(process).destroyed.store(true, std::memory_order_release);
 }
 
 [[nodiscard]] PlatformProcessBackend MakeFakeBackend(FakeProcessBackend& fake)
@@ -125,6 +164,33 @@ void FakeDestroyProcess(void* context, void* process) noexcept
                                   .wait = FakeWaitProcess,
                                   .kill = FakeKillProcess,
                                   .destroy = FakeDestroyProcess};
+}
+
+struct FakeProcessReaper final
+{
+    bool startSucceeds{true};
+    int ensureCalls{};
+    std::atomic<AbandonedProcessEntry*> enqueued{};
+};
+
+[[nodiscard]] bool FakeEnsureProcessReaper(void* context) noexcept
+{
+    auto& fake = *static_cast<FakeProcessReaper*>(context);
+    ++fake.ensureCalls;
+    return fake.startSucceeds;
+}
+
+void FakeEnqueueAbandonedProcess(void* context, AbandonedProcessEntry* entry) noexcept
+{
+    auto& fake = *static_cast<FakeProcessReaper*>(context);
+    fake.enqueued.store(entry, std::memory_order_release);
+}
+
+[[nodiscard]] PlatformProcessReaperBackend MakeFakeReaperBackend(FakeProcessReaper& fake)
+{
+    return PlatformProcessReaperBackend{.context = &fake,
+                                        .ensureStarted = FakeEnsureProcessReaper,
+                                        .enqueue = FakeEnqueueAbandonedProcess};
 }
 
 [[nodiscard]] pond::platform::ProcessDesc MakeFakeProcessDesc()
@@ -184,6 +250,21 @@ private:
     return std::filesystem::exists(path);
 }
 
+template <typename Predicate>
+[[nodiscard]] bool WaitUntil(Predicate predicate, std::chrono::milliseconds timeout)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        if (predicate())
+        {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    return predicate();
+}
+
 [[nodiscard]] std::vector<std::string> ReadLines(const std::filesystem::path& path)
 {
     std::ifstream file{path, std::ios::binary};
@@ -222,13 +303,104 @@ TEST(ProcessBackendTests, BuildsShellFreeArgumentVectorAndDestroysTrackingState)
         EXPECT_EQ(fake.launches.front(),
                   (std::vector<std::string>{"C:/Program Files/ponder helper.exe", "alpha beta",
                                             std::string{"angstrom-\xC3\x85"}}));
-        EXPECT_EQ(fake.destroyCalls, 0);
+        EXPECT_EQ(fake.destroyCalls.load(std::memory_order_relaxed), 0);
     }
 
-    EXPECT_EQ(fake.destroyCalls, 1);
+    EXPECT_EQ(fake.destroyCalls.load(std::memory_order_relaxed), 1);
     ASSERT_FALSE(fake.handles.empty());
-    EXPECT_TRUE(fake.handles.front().destroyed);
+    EXPECT_TRUE(fake.handles.front().destroyed.load(std::memory_order_acquire));
     EXPECT_TRUE(fake.handles.front().killForces.empty());
+}
+
+TEST(ProcessBackendTests, AbandonedRunningProcessIsReapedAsynchronously)
+{
+    FakeProcessBackend fake;
+    fake.nextNonblockingWaitExits = false;
+    FakeProcessHandle* handle{};
+
+    {
+        auto result =
+            pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+        ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
+        handle = &fake.handles.front();
+        pond::platform::Process process = std::move(result).GetValue();
+    }
+
+    ASSERT_NE(handle, nullptr);
+    EXPECT_EQ(handle->nonblockingWaitCalls.load(std::memory_order_relaxed), 1);
+    EXPECT_FALSE(handle->destroyed.load(std::memory_order_acquire));
+    EXPECT_TRUE(WaitUntil(
+        [handle]()
+        {
+            return handle->nonblockingWaitCalls.load(std::memory_order_acquire) > 1;
+        },
+        std::chrono::seconds{1}));
+    EXPECT_FALSE(handle->destroyed.load(std::memory_order_acquire));
+
+    handle->nonblockingWaitExits.store(true, std::memory_order_release);
+    EXPECT_TRUE(WaitUntil(
+        [handle]()
+        {
+            return handle->destroyed.load(std::memory_order_acquire);
+        },
+        std::chrono::seconds{1}));
+    EXPECT_EQ(handle->blockingWaitCalls.load(std::memory_order_relaxed), 0);
+    EXPECT_EQ(fake.destroyCalls.load(std::memory_order_relaxed), 1);
+}
+
+TEST(ProcessBackendTests, ReaperPollsLaterProcessesWithoutWaitingForEarlierOnes)
+{
+    FakeProcessBackend fake;
+    fake.nextNonblockingWaitExits = false;
+    auto firstResult =
+        pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+    ASSERT_TRUE(firstResult.HasValue()) << firstResult.GetError().GetMessage();
+    FakeProcessHandle* const first = &fake.handles.back();
+
+    fake.nextNonblockingWaitExits = true;
+    fake.nextNonblockingWaitFailures = 1;
+    auto secondResult =
+        pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+    ASSERT_TRUE(secondResult.HasValue()) << secondResult.GetError().GetMessage();
+    FakeProcessHandle* const second = &fake.handles.back();
+
+    {
+        pond::platform::Process firstProcess = std::move(firstResult).GetValue();
+        pond::platform::Process secondProcess = std::move(secondResult).GetValue();
+    }
+
+    EXPECT_TRUE(WaitUntil(
+        [second]()
+        {
+            return second->destroyed.load(std::memory_order_acquire);
+        },
+        std::chrono::seconds{1}));
+    EXPECT_FALSE(first->destroyed.load(std::memory_order_acquire));
+
+    first->nonblockingWaitExits.store(true, std::memory_order_release);
+    EXPECT_TRUE(WaitUntil(
+        [first]()
+        {
+            return first->destroyed.load(std::memory_order_acquire);
+        },
+        std::chrono::seconds{1}));
+    EXPECT_EQ(fake.destroyCalls.load(std::memory_order_relaxed), 2);
+}
+
+TEST(ProcessBackendTests, RejectsReaperStartupFailureBeforeCreatingChild)
+{
+    FakeProcessBackend fake;
+    FakeProcessReaper reaper{.startSucceeds = false};
+
+    auto result = pond::platform::detail::LaunchProcess(
+        MakeFakeProcessDesc(), MakeFakeBackend(fake), MakeFakeReaperBackend(reaper));
+
+    ASSERT_FALSE(result.HasValue());
+    ExpectErrorCode(result.GetError(), pond::platform::PlatformErrorCode::BackendFailure);
+    EXPECT_EQ(reaper.ensureCalls, 1);
+    EXPECT_EQ(reaper.enqueued.load(std::memory_order_acquire), nullptr);
+    EXPECT_TRUE(fake.launches.empty());
+    EXPECT_TRUE(fake.handles.empty());
 }
 
 TEST(ProcessBackendTests, RejectsInvalidDescriptorsBeforeBackendLaunch)
@@ -253,7 +425,8 @@ TEST(ProcessBackendTests, RejectsInvalidDescriptorsBeforeBackendLaunch)
 TEST(ProcessBackendTests, MapsWaitExitStatusAlternatives)
 {
     {
-        FakeProcessBackend fake{.nextExitCode = 7};
+        FakeProcessBackend fake{.nextExitStatus = BackendProcessExitStatus{
+                                    .kind = BackendProcessExitKind::Normal, .value = 7U}};
         auto result =
             pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
         ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
@@ -262,11 +435,26 @@ TEST(ProcessBackendTests, MapsWaitExitStatusAlternatives)
         auto wait = process.Wait();
         ASSERT_TRUE(wait.HasValue()) << wait.GetError().GetMessage();
         ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(*wait));
-        EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*wait).exitCode, 7);
+        EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*wait).exitCode, 7U);
     }
 
     {
-        FakeProcessBackend fake{.nextExitCode = -15};
+        FakeProcessBackend fake{.nextExitStatus = BackendProcessExitStatus{
+                                    .kind = BackendProcessExitKind::Normal, .value = 0x80000000U}};
+        auto result =
+            pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+        ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
+        pond::platform::Process process = std::move(result).GetValue();
+
+        auto wait = process.Wait();
+        ASSERT_TRUE(wait.HasValue()) << wait.GetError().GetMessage();
+        ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(*wait));
+        EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*wait).exitCode, 0x80000000U);
+    }
+
+    {
+        FakeProcessBackend fake{.nextExitStatus = BackendProcessExitStatus{
+                                    .kind = BackendProcessExitKind::Signal, .value = 15U}};
         auto result =
             pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
         ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
@@ -279,7 +467,8 @@ TEST(ProcessBackendTests, MapsWaitExitStatusAlternatives)
     }
 
     {
-        FakeProcessBackend fake{.nextExitCode = -255};
+        FakeProcessBackend fake{
+            .nextExitStatus = BackendProcessExitStatus{.kind = BackendProcessExitKind::Unknown}};
         auto result =
             pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
         ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
@@ -302,15 +491,23 @@ TEST(ProcessBackendTests, ReportsWaitLaunchAndTerminationFailures)
     }
 
     {
-        FakeProcessBackend fake{.nextWaitSucceeds = false};
-        auto result =
-            pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
-        ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
-        pond::platform::Process process = std::move(result).GetValue();
+        FakeProcessBackend fake{.nextBlockingWaitFailures = 1};
+        {
+            auto result =
+                pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+            ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
+            pond::platform::Process process = std::move(result).GetValue();
 
-        auto wait = process.Wait();
-        ASSERT_FALSE(wait.HasValue());
-        ExpectErrorCode(wait.GetError(), pond::platform::PlatformErrorCode::BackendFailure);
+            auto wait = process.Wait();
+            ASSERT_FALSE(wait.HasValue());
+            ExpectErrorCode(wait.GetError(), pond::platform::PlatformErrorCode::BackendFailure);
+        }
+        EXPECT_TRUE(WaitUntil(
+            [&fake]()
+            {
+                return fake.destroyCalls.load(std::memory_order_acquire) == 1;
+            },
+            std::chrono::seconds{1}));
     }
 
     {
@@ -353,6 +550,22 @@ TEST(ProcessBackendTests, GracefulPreferredFallsBackToForceWhenUnsupported)
     EXPECT_EQ(fake.handles.front().killForces, (std::vector<bool>{false, true}));
 }
 
+TEST(ProcessBackendTests, RejectsInvalidTerminationModeBeforeCallingBackend)
+{
+    FakeProcessBackend fake;
+    auto result =
+        pond::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+    ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
+    pond::platform::Process process = std::move(result).GetValue();
+
+    const auto invalidMode = static_cast<pond::platform::ProcessTerminationMode>(0xFF);
+    auto termination = process.Terminate(invalidMode);
+
+    ASSERT_FALSE(termination.HasValue());
+    ExpectErrorCode(termination.GetError(), pond::platform::PlatformErrorCode::InvalidArgument);
+    EXPECT_TRUE(fake.handles.front().killForces.empty());
+}
+
 TEST(ProcessBackendTests, EnforcesLaunchingThreadAffinityAfterMove)
 {
     FakeProcessBackend fake;
@@ -377,7 +590,7 @@ TEST(ProcessBackendTests, EnforcesLaunchingThreadAffinityAfterMove)
 
     EXPECT_TRUE(caughtVerifyFailure.load());
     process.reset();
-    EXPECT_EQ(fake.destroyCalls, 1);
+    EXPECT_EQ(fake.destroyCalls.load(std::memory_order_relaxed), 1);
 }
 
 TEST(ProcessBackendTests, HelperPreservesArgumentsAndReportsExitCode)
@@ -394,10 +607,25 @@ TEST(ProcessBackendTests, HelperPreservesArgumentsAndReportsExitCode)
     auto wait = process.Wait();
     ASSERT_TRUE(wait.HasValue()) << wait.GetError().GetMessage();
     ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(*wait));
-    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*wait).exitCode, 23);
+    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*wait).exitCode, 23U);
     EXPECT_EQ(ReadLines(argumentsFile.GetPath()),
               (std::vector<std::string>{"alpha beta", nonAsciiArgument}));
 }
+
+#if defined(_WIN32)
+TEST(ProcessBackendTests, PreservesHighBitWindowsExitStatusAsNormalExit)
+{
+    auto result = pond::platform::LaunchProcess(pond::platform::ProcessDesc{
+        .executable = GetHelperPath(), .arguments = {"--exit-code", "-2147483648"}});
+    ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
+    pond::platform::Process process = std::move(result).GetValue();
+
+    auto wait = process.Wait();
+    ASSERT_TRUE(wait.HasValue()) << wait.GetError().GetMessage();
+    ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(*wait));
+    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*wait).exitCode, 0x80000000U);
+}
+#endif
 
 TEST(ProcessBackendTests, DestroyingProcessDoesNotTerminateHelper)
 {
@@ -430,5 +658,8 @@ TEST(ProcessBackendTests, ForceTerminationStopsRunningHelper)
 
     auto wait = process.Wait();
     ASSERT_TRUE(wait.HasValue()) << wait.GetError().GetMessage();
+#if !defined(_WIN32)
+    EXPECT_TRUE(std::holds_alternative<pond::platform::ProcessSignalTermination>(*wait));
+#endif
 }
 } // namespace

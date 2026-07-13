@@ -93,10 +93,14 @@ void ExpectVectorNear(pond::math::Vector3 actual, pond::math::Vector3 expected,
                                                 pond::math::Vector3 screenPoint, float nearDepth,
                                                 float farDepth)
 {
-    auto nearPoint = pond::math::Unproject(
-        viewProjection, viewport, pond::math::Vector3{screenPoint.x, screenPoint.y, nearDepth});
-    auto farPoint = pond::math::Unproject(
-        viewProjection, viewport, pond::math::Vector3{screenPoint.x, screenPoint.y, farDepth});
+    auto clipToWorld = pond::math::Inverse(viewProjection);
+    EXPECT_TRUE(clipToWorld.HasValue());
+    auto nearPoint = pond::math::UnprojectFromClipToWorld(
+        clipToWorld.GetValue(), viewport,
+        pond::math::Vector3{screenPoint.x, screenPoint.y, nearDepth});
+    auto farPoint = pond::math::UnprojectFromClipToWorld(
+        clipToWorld.GetValue(), viewport,
+        pond::math::Vector3{screenPoint.x, screenPoint.y, farDepth});
     EXPECT_TRUE(nearPoint.HasValue());
     EXPECT_TRUE(farPoint.HasValue());
 

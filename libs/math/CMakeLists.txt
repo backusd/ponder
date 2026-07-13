@@ -12,7 +12,6 @@ ponder_add_project_library(math
         include/ponder/math/Ray.hpp
         include/ponder/math/RayBoxHit.hpp
         include/ponder/math/RayTriangleHit.hpp
-        include/ponder/math/Scalar.hpp
         include/ponder/math/Sphere.hpp
         include/ponder/math/Triangle.hpp
         include/ponder/math/Viewport.hpp

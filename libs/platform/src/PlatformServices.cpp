@@ -7,7 +7,6 @@
 #include <source_location>
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include "PlatformRuntimeState.hpp"
 #include "SdlError.hpp"
@@ -19,7 +18,6 @@ namespace
 constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
 constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
-constexpr std::string_view kMissingSdlError{"SDL did not provide an error message"};
 
 [[nodiscard]] core::Error MakeUnsupportedClipboardError(
     std::source_location location = std::source_location::current())
@@ -27,26 +25,6 @@ constexpr std::string_view kMissingSdlError{"SDL did not provide an error messag
     return core::Error{kUnsupportedCode,
                        "Text clipboard operations are unsupported by the active video driver.",
                        location};
-}
-
-[[nodiscard]] core::Error MakeCapturedSdlFailure(
-    std::string_view operation, std::string_view objectContext, std::string_view capturedError,
-    std::source_location location = std::source_location::current())
-{
-    const std::string_view errorText = !capturedError.empty() ? capturedError : kMissingSdlError;
-    std::string message;
-    message.reserve(operation.size() + objectContext.size() + errorText.size() + 16);
-    message.append(operation);
-    message.append(" failed");
-    if (!objectContext.empty())
-    {
-        message.append(" (");
-        message.append(objectContext);
-        message.push_back(')');
-    }
-    message.append(": ");
-    message.append(errorText);
-    return core::Error{kBackendFailureCode, std::move(message), location};
 }
 
 [[nodiscard]] core::VoidResult ValidateNullTerminatedUtf8(std::string_view text,
@@ -76,8 +54,8 @@ core::Result<std::string> PlatformRuntimeState::GetClipboardText() const
     const BackendClipboardTextResult backendText = m_backend.getClipboardText(m_backend.context);
     if (backendText.text == nullptr)
     {
-        return core::Result<std::string>::FromError(MakeCapturedSdlFailure(
-            "SDL_GetClipboardText", "clipboard text", backendText.errorText));
+        return core::Result<std::string>::FromError(detail::CaptureSdlFailure(
+            kBackendFailureCode, "SDL_GetClipboardText", "clipboard text", backendText.errorText));
     }
 
     auto freeText = core::MakeScopeExit(
@@ -89,8 +67,8 @@ core::Result<std::string> PlatformRuntimeState::GetClipboardText() const
     const std::string text{backendText.text};
     if (text.empty() && !backendText.errorText.empty())
     {
-        return core::Result<std::string>::FromError(MakeCapturedSdlFailure(
-            "SDL_GetClipboardText", "clipboard text", backendText.errorText));
+        return core::Result<std::string>::FromError(detail::CaptureSdlFailure(
+            kBackendFailureCode, "SDL_GetClipboardText", "clipboard text", backendText.errorText));
     }
 
     return text;

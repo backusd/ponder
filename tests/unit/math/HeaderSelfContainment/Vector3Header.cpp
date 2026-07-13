@@ -2,6 +2,8 @@
 
 namespace
 {
+constexpr auto kTolerance = pond::core::Tolerance::Create(0.01F, 0.0F);
+static_assert(kTolerance.HasValue());
 static_assert(pond::math::Vector3{}.x == 0.0F);
 static_assert(pond::math::Vector3{}.y == 0.0F);
 static_assert(pond::math::Vector3{}.z == 0.0F);
@@ -22,4 +24,6 @@ static_assert(pond::math::Dot(pond::math::Vector3{1.0F, 2.0F, 3.0F},
 static_assert(pond::math::Cross(pond::math::Vector3{1.0F, 0.0F, 0.0F},
                                 pond::math::Vector3{0.0F, 1.0F, 0.0F}) ==
               pond::math::Vector3{0.0F, 0.0F, 1.0F});
+static_assert(pond::math::IsNear(pond::math::Vector3{1.0F, 2.0F, 3.0F},
+                                 pond::math::Vector3{1.005F, 1.995F, 3.0F}, kTolerance.GetValue()));
 } // namespace

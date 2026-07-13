@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ponder/math/Scalar.hpp>
+#include <ponder/core/Numbers.hpp>
 
 namespace pond::math
 {
@@ -44,11 +44,11 @@ private:
 
 [[nodiscard]] constexpr Radians ToRadians(Degrees degrees) noexcept
 {
-    return Radians{degrees.GetValue() * (kPi / 180.0F)};
+    return Radians{degrees.GetValue() * (core::kPi / 180.0F)};
 }
 
 [[nodiscard]] constexpr Degrees ToDegrees(Radians radians) noexcept
 {
-    return Degrees{radians.GetValue() * (180.0F / kPi)};
+    return Degrees{radians.GetValue() * (180.0F / core::kPi)};
 }
 } // namespace pond::math

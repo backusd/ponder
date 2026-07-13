@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/AxisAlignedBox.hpp>
 #include <ponder/math/Frustum.hpp>
 #include <ponder/math/Matrix4x4.hpp>
@@ -26,7 +27,7 @@ using Classification = pond::math::CollisionClassification;
 [[nodiscard]] pond::core::Result<pond::math::Frustum> MakeInfinitePerspectiveFrustum()
 {
     auto projection =
-        pond::math::Matrix4x4::InfinitePerspective(pond::math::Radians{pond::math::kHalfPi}, 1.0F,
+        pond::math::Matrix4x4::InfinitePerspective(pond::math::Radians{pond::core::kHalfPi}, 1.0F,
                                                    1.0F, pond::math::ProjectionDepth::ForwardZ);
     if (!projection.HasValue())
     {
@@ -88,6 +89,20 @@ TEST(CollisionClassificationTests, ClassifiesFiniteFrustumSpheres)
               Classification::Disjoint);
     EXPECT_EQ(frustum->Classify(MakeSphere(pond::math::Vector3{-2.0F, -2.0F, -1.0F}, 0.0F)),
               Classification::Intersects);
+}
+
+TEST(CollisionClassificationTests, KeepsDisjointDominantAcrossLaterIntersectingPlanes)
+{
+    auto frustum = MakeOrthographicFrustum();
+    ASSERT_TRUE(frustum.HasValue());
+
+    const auto outsideLeftTouchingTopBox =
+        MakeBox(pond::math::Vector3{-4.0F, 2.0F, -5.0F}, pond::math::Vector3{-3.0F, 2.0F, -4.0F});
+    const auto outsideLeftCrossingTopSphere =
+        MakeSphere(pond::math::Vector3{-3.0F, 2.0F, -5.0F}, 0.25F);
+
+    EXPECT_EQ(frustum->Classify(outsideLeftTouchingTopBox), Classification::Disjoint);
+    EXPECT_EQ(frustum->Classify(outsideLeftCrossingTopSphere), Classification::Disjoint);
 }
 
 TEST(CollisionClassificationTests, ClassifiesZeroSizeAndVerySmallFiniteObjects)

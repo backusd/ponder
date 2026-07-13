@@ -1,17 +1,19 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/Vector2.hpp>
 #include <ponder/math/Vector3.hpp>
 #include <ponder/math/Vector4.hpp>
 
+#include <cmath>
 #include <gtest/gtest.h>
 #include <limits>
 #include <random>
 
 namespace
 {
-[[nodiscard]] pond::math::Tolerance RequireTolerance(float absoluteTolerance,
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
                                                      float relativeTolerance)
 {
-    auto result = pond::math::Tolerance::Create(absoluteTolerance, relativeTolerance);
+    auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
     return result.GetValue();
 }
@@ -102,6 +104,86 @@ TEST(VectorAlgebraTests, ComputesProductsLengthsDistancesMinMaxAndInterpolation)
               30.0F);
 }
 
+TEST(VectorAlgebraTests, ComputesScaleSafeVector2LengthsAndDistances)
+{
+    constexpr float kMaximum = std::numeric_limits<float>::max();
+    constexpr float kMinimumSubnormal = std::numeric_limits<float>::denorm_min();
+
+    EXPECT_FLOAT_EQ(pond::math::Length(pond::math::Vector2{3.0F, 4.0F}), 5.0F);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector2{kMaximum, 0.0F}), kMaximum);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector2{kMinimumSubnormal, 0.0F}), kMinimumSubnormal);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector2{kMaximum, kMinimumSubnormal}), kMaximum);
+    EXPECT_FALSE(std::signbit(pond::math::Length(pond::math::Vector2{-0.0F, 0.0F})));
+
+    EXPECT_EQ(pond::math::Distance(pond::math::Vector2{}, pond::math::Vector2{kMaximum, 0.0F}),
+              kMaximum);
+    EXPECT_EQ(
+        pond::math::Distance(pond::math::Vector2{}, pond::math::Vector2{kMinimumSubnormal, 0.0F}),
+        kMinimumSubnormal);
+    EXPECT_TRUE(std::isinf(pond::math::Distance(pond::math::Vector2{-kMaximum, 0.0F},
+                                                pond::math::Vector2{kMaximum, 0.0F})));
+}
+
+TEST(VectorAlgebraTests, ComputesScaleSafeVector3LengthsAndDistances)
+{
+    constexpr float kMaximum = std::numeric_limits<float>::max();
+    constexpr float kMinimumSubnormal = std::numeric_limits<float>::denorm_min();
+
+    EXPECT_FLOAT_EQ(pond::math::Length(pond::math::Vector3{2.0F, -3.0F, 6.0F}), 7.0F);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector3{0.0F, kMaximum, 0.0F}), kMaximum);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector3{0.0F, 0.0F, kMinimumSubnormal}),
+              kMinimumSubnormal);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector3{kMinimumSubnormal, kMaximum, 0.0F}), kMaximum);
+    EXPECT_FALSE(std::signbit(pond::math::Length(pond::math::Vector3{-0.0F, 0.0F, -0.0F})));
+
+    EXPECT_EQ(
+        pond::math::Distance(pond::math::Vector3{}, pond::math::Vector3{0.0F, kMaximum, 0.0F}),
+        kMaximum);
+    EXPECT_EQ(pond::math::Distance(pond::math::Vector3{},
+                                   pond::math::Vector3{0.0F, 0.0F, kMinimumSubnormal}),
+              kMinimumSubnormal);
+    EXPECT_TRUE(std::isinf(pond::math::Distance(pond::math::Vector3{-kMaximum, 0.0F, 0.0F},
+                                                pond::math::Vector3{kMaximum, 0.0F, 0.0F})));
+}
+
+TEST(VectorAlgebraTests, ComputesScaleSafeVector4LengthsAndDistances)
+{
+    constexpr float kMaximum = std::numeric_limits<float>::max();
+    constexpr float kMinimumSubnormal = std::numeric_limits<float>::denorm_min();
+
+    EXPECT_FLOAT_EQ(pond::math::Length(pond::math::Vector4{1.0F, 2.0F, 2.0F, 4.0F}), 5.0F);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector4{0.0F, 0.0F, kMaximum, 0.0F}), kMaximum);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector4{0.0F, kMinimumSubnormal, 0.0F, 0.0F}),
+              kMinimumSubnormal);
+    EXPECT_EQ(pond::math::Length(pond::math::Vector4{kMaximum, 0.0F, kMinimumSubnormal, 0.0F}),
+              kMaximum);
+    EXPECT_FALSE(std::signbit(pond::math::Length(pond::math::Vector4{-0.0F, 0.0F, -0.0F, 0.0F})));
+
+    EXPECT_EQ(pond::math::Distance(pond::math::Vector4{},
+                                   pond::math::Vector4{0.0F, 0.0F, kMaximum, 0.0F}),
+              kMaximum);
+    EXPECT_EQ(pond::math::Distance(pond::math::Vector4{},
+                                   pond::math::Vector4{0.0F, kMinimumSubnormal, 0.0F, 0.0F}),
+              kMinimumSubnormal);
+    EXPECT_TRUE(std::isinf(pond::math::Distance(pond::math::Vector4{-kMaximum, 0.0F, 0.0F, 0.0F},
+                                                pond::math::Vector4{kMaximum, 0.0F, 0.0F, 0.0F})));
+}
+
+TEST(VectorAlgebraTests, InterpolatesExtremeVectorsWithoutIntermediateOverflow)
+{
+    constexpr float kMaximum = std::numeric_limits<float>::max();
+
+    EXPECT_EQ(pond::math::Lerp(pond::math::Vector2{-kMaximum, kMaximum},
+                               pond::math::Vector2{kMaximum, -kMaximum}, 0.5F),
+              pond::math::Vector2{});
+    EXPECT_EQ(pond::math::Lerp(pond::math::Vector3{-kMaximum, kMaximum, -kMaximum},
+                               pond::math::Vector3{kMaximum, -kMaximum, kMaximum}, 0.5F),
+              pond::math::Vector3{});
+    EXPECT_EQ(pond::math::Lerp(pond::math::Vector4{-kMaximum, kMaximum, -kMaximum, kMaximum},
+                               pond::math::Vector4{kMaximum, -kMaximum, kMaximum, -kMaximum}, 0.5F),
+              pond::math::Vector4{});
+}
+
 TEST(VectorAlgebraTests, PreservesBasisVectorOrientation)
 {
     constexpr pond::math::Vector3 xAxis{1.0F, 0.0F, 0.0F};
@@ -116,7 +198,7 @@ TEST(VectorAlgebraTests, PreservesBasisVectorOrientation)
 
 TEST(VectorAlgebraTests, ComparesVectorsWithCallerTolerance)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
+    const pond::core::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
 
     EXPECT_TRUE(pond::math::IsNear(pond::math::Vector3{1.0F, 2.0F, 3.0F},
                                    pond::math::Vector3{1.005F, 1.995F, 3.0F}, tolerance));
@@ -183,9 +265,9 @@ TEST(VectorAlgebraTests, SeededFinitePropertyChecks)
 {
     std::mt19937 generator{0x506F6E64U};
     std::uniform_real_distribution<float> distribution{-10.0F, 10.0F};
-    const pond::math::Tolerance vectorTolerance = RequireTolerance(1.0e-3F, 1.0e-5F);
-    const pond::math::Tolerance scalarTolerance = RequireTolerance(1.0e-3F, 1.0e-5F);
-    const pond::math::Tolerance orthogonalityTolerance = RequireTolerance(1.0e-2F, 1.0e-5F);
+    const pond::core::Tolerance vectorTolerance = RequireTolerance(1.0e-3F, 1.0e-5F);
+    const pond::core::Tolerance scalarTolerance = RequireTolerance(1.0e-3F, 1.0e-5F);
+    const pond::core::Tolerance orthogonalityTolerance = RequireTolerance(1.0e-2F, 1.0e-5F);
 
     for (int iteration = 0; iteration < 64; ++iteration)
     {
@@ -198,18 +280,18 @@ TEST(VectorAlgebraTests, SeededFinitePropertyChecks)
         EXPECT_TRUE(pond::math::IsNear((a + b) - b, a, vectorTolerance));
         EXPECT_TRUE(pond::math::IsNear((a * 3.0F) / 3.0F, a, vectorTolerance));
         EXPECT_TRUE(
-            pond::math::IsNear(pond::math::Dot(a, b), pond::math::Dot(b, a), scalarTolerance));
-        EXPECT_TRUE(pond::math::IsNear(pond::math::SquaredDistance(a, b),
+            pond::core::IsNear(pond::math::Dot(a, b), pond::math::Dot(b, a), scalarTolerance));
+        EXPECT_TRUE(pond::core::IsNear(pond::math::SquaredDistance(a, b),
                                        pond::math::SquaredDistance(b, a), scalarTolerance));
 
         const pond::math::Vector3 cross = pond::math::Cross(a, b);
-        EXPECT_TRUE(pond::math::IsNear(pond::math::Dot(cross, a), 0.0F, orthogonalityTolerance));
-        EXPECT_TRUE(pond::math::IsNear(pond::math::Dot(cross, b), 0.0F, orthogonalityTolerance));
+        EXPECT_TRUE(pond::core::IsNear(pond::math::Dot(cross, a), 0.0F, orthogonalityTolerance));
+        EXPECT_TRUE(pond::core::IsNear(pond::math::Dot(cross, b), 0.0F, orthogonalityTolerance));
 
         auto normalized = pond::math::Normalize(a);
         ASSERT_TRUE(normalized.HasValue());
         EXPECT_TRUE(
-            pond::math::IsNear(pond::math::Length(normalized.GetValue()), 1.0F, scalarTolerance));
+            pond::core::IsNear(pond::math::Length(normalized.GetValue()), 1.0F, scalarTolerance));
     }
 }
 } // namespace

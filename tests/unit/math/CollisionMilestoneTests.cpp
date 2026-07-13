@@ -126,21 +126,6 @@ struct DoubleVector3 final
            static_cast<double>(plane.GetOffset());
 }
 
-[[nodiscard]] Classification MergeClassification(Classification current,
-                                                 Classification next) noexcept
-{
-    if (next == Classification::Disjoint)
-    {
-        return Classification::Disjoint;
-    }
-    if (next == Classification::Intersects)
-    {
-        return Classification::Intersects;
-    }
-
-    return current;
-}
-
 [[nodiscard]] Classification ClassifyBoxAgainstPlane(const pond::math::Plane& plane,
                                                      const pond::math::AxisAlignedBox& box)
 {
@@ -187,21 +172,44 @@ template <typename Shape, typename PlaneClassifier>
 [[nodiscard]] Classification ClassifyFrustumOracle(const pond::math::Frustum& frustum,
                                                    const Shape& shape, PlaneClassifier classifier)
 {
-    Classification result = Classification::Contains;
-    result = MergeClassification(result, classifier(frustum.GetLeftPlane(), shape));
-    result = MergeClassification(result, classifier(frustum.GetRightPlane(), shape));
-    result = MergeClassification(result, classifier(frustum.GetBottomPlane(), shape));
-    result = MergeClassification(result, classifier(frustum.GetTopPlane(), shape));
+    std::array<Classification, 6> planeClassifications{classifier(frustum.GetLeftPlane(), shape),
+                                                       classifier(frustum.GetRightPlane(), shape),
+                                                       classifier(frustum.GetBottomPlane(), shape),
+                                                       classifier(frustum.GetTopPlane(), shape),
+                                                       Classification::Contains,
+                                                       Classification::Contains};
+    std::size_t planeCount = 4;
+
     if (frustum.GetMinimumDepthPlane().has_value())
     {
-        result = MergeClassification(result, classifier(*frustum.GetMinimumDepthPlane(), shape));
+        planeClassifications[planeCount] = classifier(*frustum.GetMinimumDepthPlane(), shape);
+        ++planeCount;
     }
     if (frustum.GetMaximumDepthPlane().has_value())
     {
-        result = MergeClassification(result, classifier(*frustum.GetMaximumDepthPlane(), shape));
+        planeClassifications[planeCount] = classifier(*frustum.GetMaximumDepthPlane(), shape);
+        ++planeCount;
     }
 
-    return result;
+    const auto activeEnd = planeClassifications.begin() + planeCount;
+    if (std::any_of(planeClassifications.begin(), activeEnd,
+                    [](Classification classification)
+                    {
+                        return classification == Classification::Disjoint;
+                    }))
+    {
+        return Classification::Disjoint;
+    }
+    if (std::any_of(planeClassifications.begin(), activeEnd,
+                    [](Classification classification)
+                    {
+                        return classification == Classification::Intersects;
+                    }))
+    {
+        return Classification::Intersects;
+    }
+
+    return Classification::Contains;
 }
 
 [[nodiscard]] bool UpdateRayBoxOracleInterval(float origin, float direction, float minimum,

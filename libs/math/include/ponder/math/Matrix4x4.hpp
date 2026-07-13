@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ponder/math/Angle.hpp>
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Matrix3x3.hpp>
 #include <ponder/math/Vector3.hpp>
 #include <ponder/math/Vector4.hpp>
@@ -15,6 +16,86 @@
 namespace pond::math
 {
 class Quaternion;
+
+namespace detail
+{
+struct WideVector3 final
+{
+    double x{0.0};
+    double y{0.0};
+    double z{0.0};
+
+    constexpr WideVector3() noexcept = default;
+
+    constexpr WideVector3(double xValue, double yValue, double zValue) noexcept
+        : x(xValue), y(yValue), z(zValue)
+    {
+    }
+};
+
+[[nodiscard]] constexpr double WideAbs(double value) noexcept
+{
+    return value < 0.0 ? -value : value;
+}
+
+[[nodiscard]] constexpr double WideMax(double lhs, double rhs) noexcept
+{
+    return lhs < rhs ? rhs : lhs;
+}
+
+[[nodiscard]] constexpr bool TryConvertFiniteFloat(double value, float& converted) noexcept
+{
+    constexpr double kLowestFloat = static_cast<double>(std::numeric_limits<float>::lowest());
+    constexpr double kHighestFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!core::IsFinite(value) || value < kLowestFloat || value > kHighestFloat) [[unlikely]]
+    {
+        return false;
+    }
+
+    converted = static_cast<float>(value);
+    return core::IsFinite(converted);
+}
+
+[[nodiscard]] constexpr bool TryConvertNonZeroFiniteFloat(double value, float& converted) noexcept
+{
+    return TryConvertFiniteFloat(value, converted) && converted != 0.0F;
+}
+
+[[nodiscard]] inline bool TryNormalize(WideVector3 value, WideVector3& normalized) noexcept
+{
+    const double maxMagnitude =
+        WideMax(WideMax(WideAbs(value.x), WideAbs(value.y)), WideAbs(value.z));
+    if (maxMagnitude == 0.0 || !core::IsFinite(maxMagnitude)) [[unlikely]]
+    {
+        return false;
+    }
+
+    const double scaledX = value.x / maxMagnitude;
+    const double scaledY = value.y / maxMagnitude;
+    const double scaledZ = value.z / maxMagnitude;
+    const double length = std::sqrt(scaledX * scaledX + scaledY * scaledY + scaledZ * scaledZ);
+    if (length == 0.0 || !core::IsFinite(length)) [[unlikely]]
+    {
+        return false;
+    }
+
+    normalized = WideVector3{scaledX / length, scaledY / length, scaledZ / length};
+    return core::IsFinite(normalized.x) && core::IsFinite(normalized.y) &&
+           core::IsFinite(normalized.z);
+}
+
+[[nodiscard]] constexpr WideVector3 Cross(WideVector3 lhs, WideVector3 rhs) noexcept
+{
+    return WideVector3{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z,
+                       lhs.x * rhs.y - lhs.y * rhs.x};
+}
+
+[[nodiscard]] constexpr double Dot(WideVector3 lhs, Vector3 rhs) noexcept
+{
+    return lhs.x * static_cast<double>(rhs.x) + lhs.y * static_cast<double>(rhs.y) +
+           lhs.z * static_cast<double>(rhs.z);
+}
+} // namespace detail
 
 enum class ProjectionDepth
 {
@@ -130,41 +211,23 @@ struct Matrix4x4 final
             return core::Result<Matrix4x4>::FromError(MakeViewNonFiniteError());
         }
 
-        return LookTo(eye, target - eye, up);
+        return MakeView(eye,
+                        detail::WideVector3{static_cast<double>(target.x) - eye.x,
+                                            static_cast<double>(target.y) - eye.y,
+                                            static_cast<double>(target.z) - eye.z},
+                        up);
     }
 
     [[nodiscard]] static inline core::Result<Matrix4x4> LookTo(Vector3 eye, Vector3 direction,
                                                                Vector3 up)
     {
-        if (!IsFiniteVector3(eye) || !IsFiniteVector3(direction) || !IsFiniteVector3(up)) [[unlikely]]
+        if (!IsFiniteVector3(eye) || !IsFiniteVector3(direction) || !IsFiniteVector3(up))
+            [[unlikely]]
         {
             return core::Result<Matrix4x4>::FromError(MakeViewNonFiniteError());
         }
 
-        auto forward = Normalize(direction);
-        if (!forward.HasValue()) [[unlikely]]
-        {
-            return core::Result<Matrix4x4>::FromError(MakeViewDegenerateError());
-        }
-
-        auto upDirection = Normalize(up);
-        if (!upDirection.HasValue()) [[unlikely]]
-        {
-            return core::Result<Matrix4x4>::FromError(MakeViewDegenerateError());
-        }
-
-        auto right = Normalize(Cross(forward.GetValue(), upDirection.GetValue()));
-        if (!right.HasValue()) [[unlikely]]
-        {
-            return core::Result<Matrix4x4>::FromError(MakeViewDegenerateError());
-        }
-
-        const Vector3 correctedUp = Cross(right.GetValue(), forward.GetValue());
-        const Vector3 backward = -forward.GetValue();
-        return Matrix4x4{right->x,      right->y,      right->z,      -Dot(right.GetValue(), eye),
-                         correctedUp.x, correctedUp.y, correctedUp.z, -Dot(correctedUp, eye),
-                         backward.x,    backward.y,    backward.z,    -Dot(backward, eye),
-                         0.0F,          0.0F,          0.0F,          1.0F};
+        return MakeView(eye, detail::WideVector3{direction.x, direction.y, direction.z}, up);
     }
 
     [[nodiscard]] static inline core::Result<Matrix4x4> Perspective(Radians verticalFieldOfView,
@@ -173,112 +236,200 @@ struct Matrix4x4 final
                                                                     float farDistance,
                                                                     ProjectionDepth depth)
     {
-        if (!IsFinite(verticalFieldOfView.GetValue()) || !IsFinite(aspectRatio) ||
-            !IsFinite(nearDistance) || !IsFinite(farDistance)) [[unlikely]]
+        if (!core::IsFinite(verticalFieldOfView.GetValue()) || !core::IsFinite(aspectRatio) ||
+            !core::IsFinite(nearDistance) || !core::IsFinite(farDistance)) [[unlikely]]
         {
             return core::Result<Matrix4x4>::FromError(MakeProjectionNonFiniteError());
         }
 
-        if (verticalFieldOfView.GetValue() <= 0.0F || verticalFieldOfView.GetValue() >= kPi ||
+        if (verticalFieldOfView.GetValue() <= 0.0F || verticalFieldOfView.GetValue() >= core::kPi ||
             aspectRatio <= 0.0F || nearDistance <= 0.0F || farDistance <= nearDistance) [[unlikely]]
         {
-            [[unlikely]] return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
         }
 
-        const float yScale = 1.0F / std::tan(verticalFieldOfView.GetValue() * 0.5F);
-        const float xScale = yScale / aspectRatio;
+        const double yScale =
+            1.0 / std::tan(static_cast<double>(verticalFieldOfView.GetValue()) * 0.5);
+        const double xScale = yScale / static_cast<double>(aspectRatio);
+        const double nearValue = static_cast<double>(nearDistance);
+        const double farValue = static_cast<double>(farDistance);
+        const double depthSpan = farValue - nearValue;
+
+        float xScaleFloat{0.0F};
+        float yScaleFloat{0.0F};
+        if (!detail::TryConvertNonZeroFiniteFloat(xScale, xScaleFloat) ||
+            !detail::TryConvertNonZeroFiniteFloat(yScale, yScaleFloat)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+        }
+
+        double depthScale{0.0};
+        double depthOffset{0.0};
         switch (depth)
         {
         case ProjectionDepth::ForwardZ:
-            return MakeProjectionMatrix(
-                Matrix4x4{xScale, 0.0F, 0.0F, 0.0F, 0.0F, yScale, 0.0F, 0.0F, 0.0F, 0.0F,
-                          farDistance / (nearDistance - farDistance),
-                          (nearDistance * farDistance) / (nearDistance - farDistance), 0.0F, 0.0F,
-                          -1.0F, 0.0F});
+            depthScale = -farValue / depthSpan;
+            depthOffset = -(nearValue * farValue) / depthSpan;
+            break;
         case ProjectionDepth::ReverseZ:
-            return MakeProjectionMatrix(
-                Matrix4x4{xScale, 0.0F, 0.0F, 0.0F, 0.0F, yScale, 0.0F, 0.0F, 0.0F, 0.0F,
-                          nearDistance / (farDistance - nearDistance),
-                          (nearDistance * farDistance) / (farDistance - nearDistance), 0.0F, 0.0F,
-                          -1.0F, 0.0F});
+            depthScale = nearValue / depthSpan;
+            depthOffset = (nearValue * farValue) / depthSpan;
+            break;
+        default:
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
         }
 
-        [[unlikely]] return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+        float depthScaleFloat{0.0F};
+        float depthOffsetFloat{0.0F};
+        if (!detail::TryConvertNonZeroFiniteFloat(depthScale, depthScaleFloat) ||
+            !detail::TryConvertNonZeroFiniteFloat(depthOffset, depthOffsetFloat)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+        }
+
+        return Matrix4x4{xScaleFloat,
+                         0.0F,
+                         0.0F,
+                         0.0F,
+                         0.0F,
+                         yScaleFloat,
+                         0.0F,
+                         0.0F,
+                         0.0F,
+                         0.0F,
+                         depthScaleFloat,
+                         depthOffsetFloat,
+                         0.0F,
+                         0.0F,
+                         -1.0F,
+                         0.0F};
     }
 
     [[nodiscard]] static inline core::Result<Matrix4x4> InfinitePerspective(
         Radians verticalFieldOfView, float aspectRatio, float nearDistance, ProjectionDepth depth)
     {
-        if (!IsFinite(verticalFieldOfView.GetValue()) || !IsFinite(aspectRatio) ||
-            !IsFinite(nearDistance)) [[unlikely]]
+        if (!core::IsFinite(verticalFieldOfView.GetValue()) || !core::IsFinite(aspectRatio) ||
+            !core::IsFinite(nearDistance)) [[unlikely]]
         {
             return core::Result<Matrix4x4>::FromError(MakeProjectionNonFiniteError());
         }
 
-        if (verticalFieldOfView.GetValue() <= 0.0F || verticalFieldOfView.GetValue() >= kPi ||
+        if (verticalFieldOfView.GetValue() <= 0.0F || verticalFieldOfView.GetValue() >= core::kPi ||
             aspectRatio <= 0.0F || nearDistance <= 0.0F) [[unlikely]]
         {
-            [[unlikely]] return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
         }
 
-        const float yScale = 1.0F / std::tan(verticalFieldOfView.GetValue() * 0.5F);
-        const float xScale = yScale / aspectRatio;
+        const double yScale =
+            1.0 / std::tan(static_cast<double>(verticalFieldOfView.GetValue()) * 0.5);
+        const double xScale = yScale / static_cast<double>(aspectRatio);
+        float xScaleFloat{0.0F};
+        float yScaleFloat{0.0F};
+        if (!detail::TryConvertNonZeroFiniteFloat(xScale, xScaleFloat) ||
+            !detail::TryConvertNonZeroFiniteFloat(yScale, yScaleFloat)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+        }
+
         switch (depth)
         {
         case ProjectionDepth::ForwardZ:
-            return MakeProjectionMatrix(Matrix4x4{xScale, 0.0F, 0.0F, 0.0F, 0.0F, yScale, 0.0F,
-                                                  0.0F, 0.0F, 0.0F, -1.0F, -nearDistance, 0.0F,
-                                                  0.0F, -1.0F, 0.0F});
+            return Matrix4x4{xScaleFloat, 0.0F, 0.0F,  0.0F, 0.0F,  yScaleFloat,
+                             0.0F,        0.0F, 0.0F,  0.0F, -1.0F, -nearDistance,
+                             0.0F,        0.0F, -1.0F, 0.0F};
         case ProjectionDepth::ReverseZ:
-            return MakeProjectionMatrix(Matrix4x4{xScale, 0.0F, 0.0F, 0.0F, 0.0F, yScale, 0.0F,
-                                                  0.0F, 0.0F, 0.0F, 0.0F, nearDistance, 0.0F, 0.0F,
-                                                  -1.0F, 0.0F});
+            return Matrix4x4{xScaleFloat, 0.0F, 0.0F, 0.0F,         0.0F, yScaleFloat, 0.0F,  0.0F,
+                             0.0F,        0.0F, 0.0F, nearDistance, 0.0F, 0.0F,        -1.0F, 0.0F};
+        default:
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
         }
-
-        [[unlikely]] return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
     }
 
-    [[nodiscard]] static inline core::Result<Matrix4x4> Orthographic(float left, float right,
-                                                                     float bottom, float top,
-                                                                     float nearDistance,
-                                                                     float farDistance,
-                                                                     ProjectionDepth depth)
+    [[nodiscard]] static constexpr core::Result<Matrix4x4> Orthographic(float left, float right,
+                                                                        float bottom, float top,
+                                                                        float nearDistance,
+                                                                        float farDistance,
+                                                                        ProjectionDepth depth)
     {
-        if (!IsFinite(left) || !IsFinite(right) || !IsFinite(bottom) || !IsFinite(top) ||
-            !IsFinite(nearDistance) || !IsFinite(farDistance)) [[unlikely]]
+        if (!core::IsFinite(left) || !core::IsFinite(right) || !core::IsFinite(bottom) ||
+            !core::IsFinite(top) || !core::IsFinite(nearDistance) || !core::IsFinite(farDistance))
+            [[unlikely]]
         {
             return core::Result<Matrix4x4>::FromError(MakeProjectionNonFiniteError());
         }
 
-        if (right <= left || top <= bottom || nearDistance <= 0.0F || farDistance <= nearDistance) [[unlikely]]
+        if (right <= left || top <= bottom || nearDistance <= 0.0F || farDistance <= nearDistance)
+            [[unlikely]]
         {
-            [[unlikely]] return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
         }
 
-        const float width = right - left;
-        const float height = top - bottom;
-        const float xScale = 2.0F / width;
-        const float yScale = 2.0F / height;
-        const float xOffset = -(right + left) / width;
-        const float yOffset = -(top + bottom) / height;
+        const double leftValue = static_cast<double>(left);
+        const double rightValue = static_cast<double>(right);
+        const double bottomValue = static_cast<double>(bottom);
+        const double topValue = static_cast<double>(top);
+        const double nearValue = static_cast<double>(nearDistance);
+        const double farValue = static_cast<double>(farDistance);
+        const double width = rightValue - leftValue;
+        const double height = topValue - bottomValue;
+        const double depthSpan = farValue - nearValue;
+
+        float xScale{0.0F};
+        float yScale{0.0F};
+        float xOffset{0.0F};
+        float yOffset{0.0F};
+        if (!detail::TryConvertNonZeroFiniteFloat(2.0 / width, xScale) ||
+            !detail::TryConvertNonZeroFiniteFloat(2.0 / height, yScale) ||
+            !detail::TryConvertFiniteFloat(-(rightValue + leftValue) / width, xOffset) ||
+            !detail::TryConvertFiniteFloat(-(topValue + bottomValue) / height, yOffset))
+            [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+        }
+
+        double depthScale{0.0};
+        double depthOffset{0.0};
         switch (depth)
         {
         case ProjectionDepth::ForwardZ:
-            return MakeProjectionMatrix(
-                Matrix4x4{xScale, 0.0F, 0.0F, xOffset, 0.0F, yScale, 0.0F, yOffset, 0.0F, 0.0F,
-                          1.0F / (nearDistance - farDistance),
-                          nearDistance / (nearDistance - farDistance), 0.0F, 0.0F, 0.0F, 1.0F});
+            depthScale = -1.0 / depthSpan;
+            depthOffset = -nearValue / depthSpan;
+            break;
         case ProjectionDepth::ReverseZ:
-            return MakeProjectionMatrix(
-                Matrix4x4{xScale, 0.0F, 0.0F, xOffset, 0.0F, yScale, 0.0F, yOffset, 0.0F, 0.0F,
-                          1.0F / (farDistance - nearDistance),
-                          farDistance / (farDistance - nearDistance), 0.0F, 0.0F, 0.0F, 1.0F});
+            depthScale = 1.0 / depthSpan;
+            depthOffset = farValue / depthSpan;
+            break;
+        default:
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
         }
 
-        [[unlikely]] return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+        float depthScaleFloat{0.0F};
+        float depthOffsetFloat{0.0F};
+        if (!detail::TryConvertNonZeroFiniteFloat(depthScale, depthScaleFloat) ||
+            !detail::TryConvertNonZeroFiniteFloat(depthOffset, depthOffsetFloat)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
+        }
+
+        return Matrix4x4{xScale,
+                         0.0F,
+                         0.0F,
+                         xOffset,
+                         0.0F,
+                         yScale,
+                         0.0F,
+                         yOffset,
+                         0.0F,
+                         0.0F,
+                         depthScaleFloat,
+                         depthOffsetFloat,
+                         0.0F,
+                         0.0F,
+                         0.0F,
+                         1.0F};
     }
 
-    [[nodiscard]] core::Result<Vector4> Row(std::size_t row) const
+    [[nodiscard]] constexpr core::Result<Vector4> Row(std::size_t row) const
     {
         switch (row)
         {
@@ -295,7 +446,7 @@ struct Matrix4x4 final
         }
     }
 
-    [[nodiscard]] core::Result<Vector4> Column(std::size_t column) const
+    [[nodiscard]] constexpr core::Result<Vector4> Column(std::size_t column) const
     {
         switch (column)
         {
@@ -312,8 +463,8 @@ struct Matrix4x4 final
         }
     }
 
-    [[nodiscard]] core::Result<std::reference_wrapper<float>> At(std::size_t row,
-                                                                 std::size_t column)
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<float>> At(std::size_t row,
+                                                                           std::size_t column)
     {
         if (row >= kDimension || column >= kDimension) [[unlikely]]
         {
@@ -323,8 +474,8 @@ struct Matrix4x4 final
         return std::ref(AtUnchecked(row, column));
     }
 
-    [[nodiscard]] core::Result<std::reference_wrapper<const float>> At(std::size_t row,
-                                                                       std::size_t column) const
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(
+        std::size_t row, std::size_t column) const
     {
         if (row >= kDimension || column >= kDimension) [[unlikely]]
         {
@@ -348,7 +499,74 @@ private:
 
     [[nodiscard]] static constexpr bool IsFiniteVector3(Vector3 vector) noexcept
     {
-        return IsFinite(vector.x) && IsFinite(vector.y) && IsFinite(vector.z);
+        return core::IsFinite(vector.x) && core::IsFinite(vector.y) && core::IsFinite(vector.z);
+    }
+
+    [[nodiscard]] static inline core::Result<Matrix4x4> MakeView(Vector3 eye,
+                                                                 detail::WideVector3 direction,
+                                                                 Vector3 up)
+    {
+        detail::WideVector3 forward{};
+        detail::WideVector3 upDirection{};
+        if (!detail::TryNormalize(direction, forward) ||
+            !detail::TryNormalize(detail::WideVector3{static_cast<double>(up.x),
+                                                      static_cast<double>(up.y),
+                                                      static_cast<double>(up.z)},
+                                  upDirection)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeViewDegenerateError());
+        }
+
+        detail::WideVector3 right{};
+        if (!detail::TryNormalize(detail::Cross(forward, upDirection), right)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeViewDegenerateError());
+        }
+
+        const detail::WideVector3 correctedUp = detail::Cross(right, forward);
+        const detail::WideVector3 backward{-forward.x, -forward.y, -forward.z};
+        const double rightOffset = -detail::Dot(right, eye);
+        const double upOffset = -detail::Dot(correctedUp, eye);
+        const double backwardOffset = -detail::Dot(backward, eye);
+
+        float rightX{0.0F};
+        float rightY{0.0F};
+        float rightZ{0.0F};
+        float correctedUpX{0.0F};
+        float correctedUpY{0.0F};
+        float correctedUpZ{0.0F};
+        float backwardX{0.0F};
+        float backwardY{0.0F};
+        float backwardZ{0.0F};
+        float rightOffsetFloat{0.0F};
+        float upOffsetFloat{0.0F};
+        float backwardOffsetFloat{0.0F};
+        if (!detail::TryConvertFiniteFloat(right.x, rightX) ||
+            !detail::TryConvertFiniteFloat(right.y, rightY) ||
+            !detail::TryConvertFiniteFloat(right.z, rightZ) ||
+            !detail::TryConvertFiniteFloat(correctedUp.x, correctedUpX) ||
+            !detail::TryConvertFiniteFloat(correctedUp.y, correctedUpY) ||
+            !detail::TryConvertFiniteFloat(correctedUp.z, correctedUpZ) ||
+            !detail::TryConvertFiniteFloat(backward.x, backwardX) ||
+            !detail::TryConvertFiniteFloat(backward.y, backwardY) ||
+            !detail::TryConvertFiniteFloat(backward.z, backwardZ) ||
+            !detail::TryConvertFiniteFloat(rightOffset, rightOffsetFloat) ||
+            !detail::TryConvertFiniteFloat(upOffset, upOffsetFloat) ||
+            !detail::TryConvertFiniteFloat(backwardOffset, backwardOffsetFloat)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeViewUnrepresentableError());
+        }
+
+        const Matrix4x4 view{rightX,       rightY,       rightZ,       rightOffsetFloat,
+                             correctedUpX, correctedUpY, correctedUpZ, upOffsetFloat,
+                             backwardX,    backwardY,    backwardZ,    backwardOffsetFloat,
+                             0.0F,         0.0F,         0.0F,         1.0F};
+        if (!IsFiniteMatrix(view)) [[unlikely]]
+        {
+            return core::Result<Matrix4x4>::FromError(MakeViewUnrepresentableError());
+        }
+
+        return view;
     }
 
     [[nodiscard]] static core::Error MakeViewNonFiniteError()
@@ -363,6 +581,13 @@ private:
         return core::Error{
             ToErrorCode(MathErrorCode::DegenerateInput),
             "Matrix4x4 view construction requires non-zero, non-parallel direction and up."};
+    }
+
+    [[nodiscard]] static core::Error MakeViewUnrepresentableError()
+    {
+        return core::Error{
+            ToErrorCode(MathErrorCode::InvalidArgument),
+            "Matrix4x4 view construction result is not representable as finite floats."};
     }
 
     [[nodiscard]] static core::Error MakeProjectionNonFiniteError()
@@ -380,27 +605,17 @@ private:
 
     [[nodiscard]] static constexpr bool IsFiniteMatrix(Matrix4x4 matrix) noexcept
     {
-        return IsFinite(matrix.row0Column0) && IsFinite(matrix.row1Column0) &&
-               IsFinite(matrix.row2Column0) && IsFinite(matrix.row3Column0) &&
-               IsFinite(matrix.row0Column1) && IsFinite(matrix.row1Column1) &&
-               IsFinite(matrix.row2Column1) && IsFinite(matrix.row3Column1) &&
-               IsFinite(matrix.row0Column2) && IsFinite(matrix.row1Column2) &&
-               IsFinite(matrix.row2Column2) && IsFinite(matrix.row3Column2) &&
-               IsFinite(matrix.row0Column3) && IsFinite(matrix.row1Column3) &&
-               IsFinite(matrix.row2Column3) && IsFinite(matrix.row3Column3);
+        return core::IsFinite(matrix.row0Column0) && core::IsFinite(matrix.row1Column0) &&
+               core::IsFinite(matrix.row2Column0) && core::IsFinite(matrix.row3Column0) &&
+               core::IsFinite(matrix.row0Column1) && core::IsFinite(matrix.row1Column1) &&
+               core::IsFinite(matrix.row2Column1) && core::IsFinite(matrix.row3Column1) &&
+               core::IsFinite(matrix.row0Column2) && core::IsFinite(matrix.row1Column2) &&
+               core::IsFinite(matrix.row2Column2) && core::IsFinite(matrix.row3Column2) &&
+               core::IsFinite(matrix.row0Column3) && core::IsFinite(matrix.row1Column3) &&
+               core::IsFinite(matrix.row2Column3) && core::IsFinite(matrix.row3Column3);
     }
 
-    [[nodiscard]] static core::Result<Matrix4x4> MakeProjectionMatrix(Matrix4x4 matrix)
-    {
-        if (!IsFiniteMatrix(matrix)) [[unlikely]]
-        {
-            [[unlikely]] return core::Result<Matrix4x4>::FromError(MakeProjectionInvalidArgumentError());
-        }
-
-        return matrix;
-    }
-
-    [[nodiscard]] float& AtUnchecked(std::size_t row, std::size_t column) noexcept
+    [[nodiscard]] constexpr float& AtUnchecked(std::size_t row, std::size_t column) noexcept
     {
         switch (column)
         {
@@ -455,7 +670,8 @@ private:
         }
     }
 
-    [[nodiscard]] const float& AtUnchecked(std::size_t row, std::size_t column) const noexcept
+    [[nodiscard]] constexpr const float& AtUnchecked(std::size_t row,
+                                                     std::size_t column) const noexcept
     {
         switch (column)
         {
@@ -511,35 +727,36 @@ private:
     }
 };
 
-[[nodiscard]] constexpr bool IsNear(Matrix4x4 lhs, Matrix4x4 rhs, Tolerance tolerance) noexcept
+[[nodiscard]] constexpr bool IsNear(Matrix4x4 lhs, Matrix4x4 rhs,
+                                    core::Tolerance tolerance) noexcept
 {
-    return IsNear(lhs.row0Column0, rhs.row0Column0, tolerance) &&
-           IsNear(lhs.row1Column0, rhs.row1Column0, tolerance) &&
-           IsNear(lhs.row2Column0, rhs.row2Column0, tolerance) &&
-           IsNear(lhs.row3Column0, rhs.row3Column0, tolerance) &&
-           IsNear(lhs.row0Column1, rhs.row0Column1, tolerance) &&
-           IsNear(lhs.row1Column1, rhs.row1Column1, tolerance) &&
-           IsNear(lhs.row2Column1, rhs.row2Column1, tolerance) &&
-           IsNear(lhs.row3Column1, rhs.row3Column1, tolerance) &&
-           IsNear(lhs.row0Column2, rhs.row0Column2, tolerance) &&
-           IsNear(lhs.row1Column2, rhs.row1Column2, tolerance) &&
-           IsNear(lhs.row2Column2, rhs.row2Column2, tolerance) &&
-           IsNear(lhs.row3Column2, rhs.row3Column2, tolerance) &&
-           IsNear(lhs.row0Column3, rhs.row0Column3, tolerance) &&
-           IsNear(lhs.row1Column3, rhs.row1Column3, tolerance) &&
-           IsNear(lhs.row2Column3, rhs.row2Column3, tolerance) &&
-           IsNear(lhs.row3Column3, rhs.row3Column3, tolerance);
+    return core::IsNear(lhs.row0Column0, rhs.row0Column0, tolerance) &&
+           core::IsNear(lhs.row1Column0, rhs.row1Column0, tolerance) &&
+           core::IsNear(lhs.row2Column0, rhs.row2Column0, tolerance) &&
+           core::IsNear(lhs.row3Column0, rhs.row3Column0, tolerance) &&
+           core::IsNear(lhs.row0Column1, rhs.row0Column1, tolerance) &&
+           core::IsNear(lhs.row1Column1, rhs.row1Column1, tolerance) &&
+           core::IsNear(lhs.row2Column1, rhs.row2Column1, tolerance) &&
+           core::IsNear(lhs.row3Column1, rhs.row3Column1, tolerance) &&
+           core::IsNear(lhs.row0Column2, rhs.row0Column2, tolerance) &&
+           core::IsNear(lhs.row1Column2, rhs.row1Column2, tolerance) &&
+           core::IsNear(lhs.row2Column2, rhs.row2Column2, tolerance) &&
+           core::IsNear(lhs.row3Column2, rhs.row3Column2, tolerance) &&
+           core::IsNear(lhs.row0Column3, rhs.row0Column3, tolerance) &&
+           core::IsNear(lhs.row1Column3, rhs.row1Column3, tolerance) &&
+           core::IsNear(lhs.row2Column3, rhs.row2Column3, tolerance) &&
+           core::IsNear(lhs.row3Column3, rhs.row3Column3, tolerance);
 }
 [[nodiscard]] constexpr bool IsFinite(Matrix4x4 matrix) noexcept
 {
-    return IsFinite(matrix.row0Column0) && IsFinite(matrix.row1Column0) &&
-           IsFinite(matrix.row2Column0) && IsFinite(matrix.row3Column0) &&
-           IsFinite(matrix.row0Column1) && IsFinite(matrix.row1Column1) &&
-           IsFinite(matrix.row2Column1) && IsFinite(matrix.row3Column1) &&
-           IsFinite(matrix.row0Column2) && IsFinite(matrix.row1Column2) &&
-           IsFinite(matrix.row2Column2) && IsFinite(matrix.row3Column2) &&
-           IsFinite(matrix.row0Column3) && IsFinite(matrix.row1Column3) &&
-           IsFinite(matrix.row2Column3) && IsFinite(matrix.row3Column3);
+    return core::IsFinite(matrix.row0Column0) && core::IsFinite(matrix.row1Column0) &&
+           core::IsFinite(matrix.row2Column0) && core::IsFinite(matrix.row3Column0) &&
+           core::IsFinite(matrix.row0Column1) && core::IsFinite(matrix.row1Column1) &&
+           core::IsFinite(matrix.row2Column1) && core::IsFinite(matrix.row3Column1) &&
+           core::IsFinite(matrix.row0Column2) && core::IsFinite(matrix.row1Column2) &&
+           core::IsFinite(matrix.row2Column2) && core::IsFinite(matrix.row3Column2) &&
+           core::IsFinite(matrix.row0Column3) && core::IsFinite(matrix.row1Column3) &&
+           core::IsFinite(matrix.row2Column3) && core::IsFinite(matrix.row3Column3);
 }
 
 [[nodiscard]] constexpr Matrix4x4 operator+(Matrix4x4 lhs, Matrix4x4 rhs) noexcept
@@ -622,13 +839,13 @@ using Matrix4x4AugmentedRows = std::array<std::array<double, 8>, 4>;
     return value < 0.0 ? -value : value;
 }
 
-[[nodiscard]] inline bool IsFinite(Matrix4x4AugmentedRows rows) noexcept
+[[nodiscard]] constexpr bool IsFinite(const Matrix4x4AugmentedRows& rows) noexcept
 {
     for (const auto& row : rows)
     {
         for (double value : row)
         {
-            if (!std::isfinite(value))
+            if (!core::IsFinite(value))
             {
                 return false;
             }
@@ -697,59 +914,137 @@ using Matrix4x4AugmentedRows = std::array<std::array<double, 8>, 4>;
     return Vector3{transformed.x, transformed.y, transformed.z};
 }
 
-[[nodiscard]] inline core::Result<Vector3> PerspectiveDivide(Vector4 clip)
+namespace detail
 {
-    constexpr float kMinimumUsableHomogeneousW = std::numeric_limits<float>::min();
-    const auto abs = [](float value) noexcept
-    {
-        return value < 0.0F ? -value : value;
-    };
-
-    if (!IsFinite(clip.w) || abs(clip.w) < kMinimumUsableHomogeneousW) [[unlikely]]
+[[nodiscard]] constexpr core::Result<Vector3> PerspectiveDivideWide(double clipX, double clipY,
+                                                                    double clipZ, double clipW)
+{
+    if (!core::IsFinite(clipW) || clipW == 0.0) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(core::Error{
             ToErrorCode(MathErrorCode::UndefinedHomogeneousCoordinate),
-            "Perspective division requires a finite, usable homogeneous w coordinate."});
+            "Perspective division requires a finite, non-zero homogeneous w coordinate."});
     }
 
-    if (!IsFinite(clip.x) || !IsFinite(clip.y) || !IsFinite(clip.z)) [[unlikely]]
+    if (!core::IsFinite(clipX) || !core::IsFinite(clipY) || !core::IsFinite(clipZ)) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(
             core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
                         "Perspective division requires finite clip coordinates."});
     }
 
-    const Vector3 ndc{clip.x / clip.w, clip.y / clip.w, clip.z / clip.w};
-    if (!IsFinite(ndc.x) || !IsFinite(ndc.y) || !IsFinite(ndc.z)) [[unlikely]]
+    float x{0.0F};
+    float y{0.0F};
+    float z{0.0F};
+    if (!TryConvertFiniteFloat(clipX / clipW, x) || !TryConvertFiniteFloat(clipY / clipW, y) ||
+        !TryConvertFiniteFloat(clipZ / clipW, z)) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(core::Error{
             ToErrorCode(MathErrorCode::UndefinedHomogeneousCoordinate),
-            "Perspective division result is not representable as finite NDC coordinates."});
+            "Perspective division result is not representable as finite Cartesian coordinates."});
     }
 
-    return ndc;
+    return Vector3{x, y, z};
+}
+} // namespace detail
+
+[[nodiscard]] constexpr core::Result<Vector3> PerspectiveDivide(Vector4 clip)
+{
+    return detail::PerspectiveDivideWide(static_cast<double>(clip.x), static_cast<double>(clip.y),
+                                         static_cast<double>(clip.z), static_cast<double>(clip.w));
 }
 
-[[nodiscard]] inline core::Result<Vector3> TransformPointToNdc(Matrix4x4 worldToClip, Vector3 point)
+[[nodiscard]] constexpr core::Result<Vector3> TransformPointToNdc(Matrix4x4 worldToClip,
+                                                                  Vector3 point)
 {
-    return PerspectiveDivide(TransformPointToClip(worldToClip, point));
-}
-
-[[nodiscard]] inline core::Result<Vector3> TransformNormal(Matrix4x4 transform, Vector3 normal)
-{
-    const Matrix3x3 linearPart{transform.row0Column0, transform.row0Column1, transform.row0Column2,
-                               transform.row1Column0, transform.row1Column1, transform.row1Column2,
-                               transform.row2Column0, transform.row2Column1, transform.row2Column2};
-    auto inverse = Inverse(linearPart);
-    if (!inverse.HasValue()) [[unlikely]]
+    if (!IsFinite(worldToClip) || !core::IsFinite(point.x) || !core::IsFinite(point.y) ||
+        !core::IsFinite(point.z)) [[unlikely]]
     {
-        return core::Result<Vector3>::FromError(inverse.GetError());
+        return core::Result<Vector3>::FromError(
+            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
+                        "Checked homogeneous transformation requires finite matrix and point "
+                        "components."});
     }
 
-    return Transpose(inverse.GetValue()) * normal;
+    const double x = static_cast<double>(worldToClip.row0Column0) * point.x +
+                     static_cast<double>(worldToClip.row0Column1) * point.y +
+                     static_cast<double>(worldToClip.row0Column2) * point.z +
+                     static_cast<double>(worldToClip.row0Column3);
+    const double y = static_cast<double>(worldToClip.row1Column0) * point.x +
+                     static_cast<double>(worldToClip.row1Column1) * point.y +
+                     static_cast<double>(worldToClip.row1Column2) * point.z +
+                     static_cast<double>(worldToClip.row1Column3);
+    const double z = static_cast<double>(worldToClip.row2Column0) * point.x +
+                     static_cast<double>(worldToClip.row2Column1) * point.y +
+                     static_cast<double>(worldToClip.row2Column2) * point.z +
+                     static_cast<double>(worldToClip.row2Column3);
+    const double w = static_cast<double>(worldToClip.row3Column0) * point.x +
+                     static_cast<double>(worldToClip.row3Column1) * point.y +
+                     static_cast<double>(worldToClip.row3Column2) * point.z +
+                     static_cast<double>(worldToClip.row3Column3);
+    return detail::PerspectiveDivideWide(x, y, z, w);
 }
 
-[[nodiscard]] inline core::Result<Matrix4x4> Inverse(Matrix4x4 matrix)
+[[nodiscard]] constexpr core::Result<Vector3> TransformNormal(Matrix4x4 transform, Vector3 normal)
+{
+    if (!IsFinite(transform) || !core::IsFinite(normal.x) || !core::IsFinite(normal.y) ||
+        !core::IsFinite(normal.z)) [[unlikely]]
+    {
+        return core::Result<Vector3>::FromError(
+            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
+                        "Normal transformation requires finite matrix and vector components."});
+    }
+
+    const double m00 = static_cast<double>(transform.row0Column0);
+    const double m01 = static_cast<double>(transform.row0Column1);
+    const double m02 = static_cast<double>(transform.row0Column2);
+    const double m10 = static_cast<double>(transform.row1Column0);
+    const double m11 = static_cast<double>(transform.row1Column1);
+    const double m12 = static_cast<double>(transform.row1Column2);
+    const double m20 = static_cast<double>(transform.row2Column0);
+    const double m21 = static_cast<double>(transform.row2Column1);
+    const double m22 = static_cast<double>(transform.row2Column2);
+
+    const double c00 = m11 * m22 - m12 * m21;
+    const double c01 = m02 * m21 - m01 * m22;
+    const double c02 = m01 * m12 - m02 * m11;
+    const double c10 = m12 * m20 - m10 * m22;
+    const double c11 = m00 * m22 - m02 * m20;
+    const double c12 = m02 * m10 - m00 * m12;
+    const double c20 = m10 * m21 - m11 * m20;
+    const double c21 = m01 * m20 - m00 * m21;
+    const double c22 = m00 * m11 - m01 * m10;
+    const double determinant = m00 * c00 + m01 * c10 + m02 * c20;
+    if (determinant == 0.0) [[unlikely]]
+    {
+        return core::Result<Vector3>::FromError(
+            core::Error{ToErrorCode(MathErrorCode::SingularMatrix),
+                        "Normal transformation requires a nonsingular linear transform."});
+    }
+
+    const double normalX = static_cast<double>(normal.x);
+    const double normalY = static_cast<double>(normal.y);
+    const double normalZ = static_cast<double>(normal.z);
+    const double transformedX = (c00 * normalX + c10 * normalY + c20 * normalZ) / determinant;
+    const double transformedY = (c01 * normalX + c11 * normalY + c21 * normalZ) / determinant;
+    const double transformedZ = (c02 * normalX + c12 * normalY + c22 * normalZ) / determinant;
+
+    float x{0.0F};
+    float y{0.0F};
+    float z{0.0F};
+    if (!detail::TryConvertFiniteFloat(transformedX, x) ||
+        !detail::TryConvertFiniteFloat(transformedY, y) ||
+        !detail::TryConvertFiniteFloat(transformedZ, z)) [[unlikely]]
+    {
+        return core::Result<Vector3>::FromError(
+            core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
+                        "Normal transformation result is not representable as finite floats."});
+    }
+
+    return Vector3{x, y, z};
+}
+
+[[nodiscard]] constexpr core::Result<Matrix4x4> Inverse(Matrix4x4 matrix)
 {
     if (!IsFinite(matrix)) [[unlikely]]
     {

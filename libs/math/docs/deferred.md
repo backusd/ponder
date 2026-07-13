@@ -1,7 +1,10 @@
 # Deferred Math Features
 
-TASK MATH-025: Run The Cross-Platform Portability Matrix
--------------------------------------------------------
+## Cross-Platform Portability Matrix
+
+This validation remains deferred until dedicated host, compiler, architecture, and CI capacity is
+available. Record unverified rows honestly; primary-host completion does not imply portability
+evidence.
 
 Collect actual evidence for supported hosts, compilers, and architectures.
 
@@ -33,12 +36,12 @@ Done when:
 - Remaining skips, unavailable rows, and tolerated cross-host numerical differences are explicit,
   justified, and linked to follow-up work.
 
-This register records capabilities excluded from the initial implementation in `roadmap.txt`.
-It is derived from `Boundary.md`, ADR 0009, and the roadmap. A deferred candidate should enter the
-roadmap only when a concrete consumer establishes its semantics, constraints, and verification
+This register records capabilities excluded from the initial math implementation.
+It is derived from `Boundary.md` and ADR 0009. A deferred candidate should enter the public
+contract only when a concrete consumer establishes its semantics, constraints, and verification
 requirements.
 
-## Included In The Initial Roadmap
+## Included In The Initial Contract
 
 The following are not deferred. They are part of the first renderer-ready math library:
 

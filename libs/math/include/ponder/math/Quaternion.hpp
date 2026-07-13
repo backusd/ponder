@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ponder/math/Angle.hpp>
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Matrix3x3.hpp>
 #include <ponder/math/Matrix4x4.hpp>
 #include <ponder/math/Vector3.hpp>
@@ -27,7 +28,7 @@ public:
 
     [[nodiscard]] static inline core::Result<Quaternion> FromAxisAngle(Vector3 axis, Radians angle)
     {
-        if (!IsFinite(angle.GetValue())) [[unlikely]]
+        if (!core::IsFinite(angle.GetValue())) [[unlikely]]
         {
             return core::Result<Quaternion>::FromError(
                 core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
@@ -73,8 +74,8 @@ public:
 private:
     friend constexpr Quaternion Conjugate(Quaternion quaternion) noexcept;
     friend constexpr Matrix3x3 ToMatrix3x3(Quaternion rotation) noexcept;
-    friend inline Quaternion operator*(Quaternion lhs, Quaternion rhs);
-    friend inline core::Result<Quaternion> Slerp(Quaternion start, Quaternion end, float amount);
+    friend inline Quaternion operator*(Quaternion lhs, Quaternion rhs) noexcept;
+    friend constexpr core::Result<Quaternion> Slerp(Quaternion start, Quaternion end, float amount);
 
     constexpr Quaternion(float x, float y, float z, float w) noexcept
         : m_x(x), m_y(y), m_z(z), m_w(w)
@@ -84,7 +85,8 @@ private:
     [[nodiscard]] static inline core::Result<Quaternion> NormalizeFiniteComponents(float x, float y,
                                                                                    float z, float w)
     {
-        if (!IsFinite(x) || !IsFinite(y) || !IsFinite(z) || !IsFinite(w)) [[unlikely]]
+        if (!core::IsFinite(x) || !core::IsFinite(y) || !core::IsFinite(z) || !core::IsFinite(w))
+            [[unlikely]]
         {
             return core::Result<Quaternion>::FromError(
                 core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
@@ -100,8 +102,8 @@ private:
         }
 
         const Quaternion result = NormalizeFiniteComponentsUnchecked(x, y, z, w);
-        if (!IsFinite(result.GetX()) || !IsFinite(result.GetY()) || !IsFinite(result.GetZ()) ||
-            !IsFinite(result.GetW())) [[unlikely]]
+        if (!core::IsFinite(result.GetX()) || !core::IsFinite(result.GetY()) ||
+            !core::IsFinite(result.GetZ()) || !core::IsFinite(result.GetW())) [[unlikely]]
         {
             return core::Result<Quaternion>::FromError(
                 core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
@@ -156,22 +158,25 @@ private:
     return Conjugate(quaternion);
 }
 
-[[nodiscard]] constexpr bool IsNear(Quaternion lhs, Quaternion rhs, Tolerance tolerance) noexcept
+[[nodiscard]] constexpr bool IsNear(Quaternion lhs, Quaternion rhs,
+                                    core::Tolerance tolerance) noexcept
 {
-    return IsNear(lhs.GetX(), rhs.GetX(), tolerance) && IsNear(lhs.GetY(), rhs.GetY(), tolerance) &&
-           IsNear(lhs.GetZ(), rhs.GetZ(), tolerance) && IsNear(lhs.GetW(), rhs.GetW(), tolerance);
+    return core::IsNear(lhs.GetX(), rhs.GetX(), tolerance) &&
+           core::IsNear(lhs.GetY(), rhs.GetY(), tolerance) &&
+           core::IsNear(lhs.GetZ(), rhs.GetZ(), tolerance) &&
+           core::IsNear(lhs.GetW(), rhs.GetW(), tolerance);
 }
 
 [[nodiscard]] constexpr bool IsSameRotation(Quaternion lhs, Quaternion rhs,
-                                            Tolerance tolerance) noexcept
+                                            core::Tolerance tolerance) noexcept
 {
-    return IsNear(lhs, rhs, tolerance) || (IsNear(lhs.GetX(), -rhs.GetX(), tolerance) &&
-                                           IsNear(lhs.GetY(), -rhs.GetY(), tolerance) &&
-                                           IsNear(lhs.GetZ(), -rhs.GetZ(), tolerance) &&
-                                           IsNear(lhs.GetW(), -rhs.GetW(), tolerance));
+    return IsNear(lhs, rhs, tolerance) || (core::IsNear(lhs.GetX(), -rhs.GetX(), tolerance) &&
+                                           core::IsNear(lhs.GetY(), -rhs.GetY(), tolerance) &&
+                                           core::IsNear(lhs.GetZ(), -rhs.GetZ(), tolerance) &&
+                                           core::IsNear(lhs.GetW(), -rhs.GetW(), tolerance));
 }
 
-[[nodiscard]] inline Quaternion operator*(Quaternion lhs, Quaternion rhs)
+[[nodiscard]] inline Quaternion operator*(Quaternion lhs, Quaternion rhs) noexcept
 {
     return Quaternion::NormalizeFiniteComponentsUnchecked(
         lhs.m_w * rhs.m_x + lhs.m_x * rhs.m_w + lhs.m_y * rhs.m_z - lhs.m_z * rhs.m_y,
@@ -187,13 +192,24 @@ private:
     return vector + rotation.GetW() * doubledCross + Cross(vectorPart, doubledCross);
 }
 
-[[nodiscard]] inline core::Result<Quaternion> Slerp(Quaternion start, Quaternion end, float amount)
+[[nodiscard]] constexpr core::Result<Quaternion> Slerp(Quaternion start, Quaternion end,
+                                                       float amount)
 {
-    if (!IsFinite(amount)) [[unlikely]]
+    if (!core::IsFinite(amount)) [[unlikely]]
     {
         return core::Result<Quaternion>::FromError(
             core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
                         "Quaternion interpolation requires a finite amount."});
+    }
+
+    if (amount == 0.0F)
+    {
+        return start;
+    }
+
+    if (amount == 1.0F)
+    {
+        return end;
     }
 
     float endX = end.m_x;
@@ -211,17 +227,7 @@ private:
         cosine = -cosine;
     }
 
-    if (amount == 0.0F)
-    {
-        return start;
-    }
-
-    if (amount == 1.0F)
-    {
-        return Quaternion{endX, endY, endZ, endW};
-    }
-
-    cosine = Clamp(cosine, -1.0F, 1.0F);
+    cosine = core::Clamp(cosine, -1.0F, 1.0F);
     constexpr float kLinearThreshold{0.9995F};
     if (cosine > kLinearThreshold)
     {
@@ -287,8 +293,8 @@ constexpr Matrix4x4 Matrix4x4::Rotation(Quaternion rotation) noexcept
 
 namespace detail
 {
-[[nodiscard]] inline core::Result<void> ValidateRotationMatrix(Matrix3x3 matrix,
-                                                               Tolerance tolerance)
+[[nodiscard]] constexpr core::Result<void> ValidateRotationMatrix(Matrix3x3 matrix,
+                                                                  core::Tolerance tolerance)
 {
     if (!IsFinite(matrix)) [[unlikely]]
     {
@@ -298,7 +304,7 @@ namespace detail
     }
 
     const float determinant = Determinant(matrix);
-    if (IsNear(determinant, 0.0F, tolerance)) [[unlikely]]
+    if (core::IsNear(determinant, 0.0F, tolerance)) [[unlikely]]
     {
         return core::Result<void>::FromError(
             core::Error{ToErrorCode(MathErrorCode::SingularMatrix),
@@ -309,12 +315,13 @@ namespace detail
     const Vector3 column1{matrix.row0Column1, matrix.row1Column1, matrix.row2Column1};
     const Vector3 column2{matrix.row0Column2, matrix.row1Column2, matrix.row2Column2};
 
-    if (!IsNear(Dot(column0, column0), 1.0F, tolerance) ||
-        !IsNear(Dot(column1, column1), 1.0F, tolerance) ||
-        !IsNear(Dot(column2, column2), 1.0F, tolerance) ||
-        !IsNear(Dot(column0, column1), 0.0F, tolerance) ||
-        !IsNear(Dot(column0, column2), 0.0F, tolerance) ||
-        !IsNear(Dot(column1, column2), 0.0F, tolerance) || !IsNear(determinant, 1.0F, tolerance)) [[unlikely]]
+    if (!core::IsNear(Dot(column0, column0), 1.0F, tolerance) ||
+        !core::IsNear(Dot(column1, column1), 1.0F, tolerance) ||
+        !core::IsNear(Dot(column2, column2), 1.0F, tolerance) ||
+        !core::IsNear(Dot(column0, column1), 0.0F, tolerance) ||
+        !core::IsNear(Dot(column0, column2), 0.0F, tolerance) ||
+        !core::IsNear(Dot(column1, column2), 0.0F, tolerance) ||
+        !core::IsNear(determinant, 1.0F, tolerance)) [[unlikely]]
     {
         return core::Result<void>::FromError(
             core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
@@ -325,7 +332,8 @@ namespace detail
 }
 } // namespace detail
 
-[[nodiscard]] inline core::Result<Quaternion> ToQuaternion(Matrix3x3 matrix, Tolerance tolerance)
+[[nodiscard]] inline core::Result<Quaternion> ToQuaternion(Matrix3x3 matrix,
+                                                           core::Tolerance tolerance)
 {
     auto validation = detail::ValidateRotationMatrix(matrix, tolerance);
     if (!validation.HasValue()) [[unlikely]]
@@ -381,7 +389,8 @@ namespace detail
         static_cast<float>((matrix.row1Column0 - matrix.row0Column1) / scale));
 }
 
-[[nodiscard]] inline core::Result<Quaternion> ToQuaternion(Matrix4x4 matrix, Tolerance tolerance)
+[[nodiscard]] inline core::Result<Quaternion> ToQuaternion(Matrix4x4 matrix,
+                                                           core::Tolerance tolerance)
 {
     return ToQuaternion(Matrix3x3{matrix.row0Column0, matrix.row0Column1, matrix.row0Column2,
                                   matrix.row1Column0, matrix.row1Column1, matrix.row1Column2,

@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/AxisAlignedBox.hpp>
 #include <ponder/math/Frustum.hpp>
 #include <ponder/math/Matrix3x3.hpp>
@@ -347,20 +348,20 @@ TEST(MathDirectXReferenceTests, QuaternionAxisAngleFactoriesMatchDirectXMath)
     const pond::math::Vector3 arbitraryAxis{1.0F, -2.0F, 3.0F};
 
     auto quarterTurnX =
-        pond::math::Quaternion::FromAxisAngle(xAxis, pond::math::Radians{pond::math::kHalfPi});
+        pond::math::Quaternion::FromAxisAngle(xAxis, pond::math::Radians{pond::core::kHalfPi});
     ASSERT_TRUE(quarterTurnX.HasValue());
     ExpectQuaternionNear(
         quarterTurnX.GetValue(),
         DirectX::XMQuaternionRotationAxis(DirectX::XMVectorSet(xAxis.x, xAxis.y, xAxis.z, 0.0F),
-                                          pond::math::kHalfPi));
+                                          pond::core::kHalfPi));
 
     auto halfTurnY =
-        pond::math::Quaternion::FromAxisAngle(yAxis, pond::math::Radians{pond::math::kPi});
+        pond::math::Quaternion::FromAxisAngle(yAxis, pond::math::Radians{pond::core::kPi});
     ASSERT_TRUE(halfTurnY.HasValue());
     ExpectQuaternionNear(
         halfTurnY.GetValue(),
         DirectX::XMQuaternionRotationAxis(DirectX::XMVectorSet(yAxis.x, yAxis.y, yAxis.z, 0.0F),
-                                          pond::math::kPi));
+                                          pond::core::kPi));
 
     auto arbitrary =
         pond::math::Quaternion::FromAxisAngle(arbitraryAxis, pond::math::Radians{1.25F});
@@ -403,7 +404,7 @@ TEST(MathDirectXReferenceTests, QuaternionAlgebraAndInterpolationMatchDirectXMat
 
 TEST(MathDirectXReferenceTests, QuaternionMatrixConversionsMatchDirectXMath)
 {
-    auto tolerance = pond::math::Tolerance::Create(1.0e-4F, 1.0e-4F);
+    auto tolerance = pond::core::Tolerance::Create(1.0e-4F, 1.0e-4F);
     ASSERT_TRUE(tolerance.HasValue());
 
     auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, -2.0F, 3.0F},
@@ -542,7 +543,7 @@ TEST(MathDirectXReferenceTests, FrustumClassificationMatchesDirectXCollisionAway
 {
     constexpr float kNearDistance{1.0F};
     constexpr float kFarDistance{10.0F};
-    auto projection = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi},
+    auto projection = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi},
                                                          1.0F, kNearDistance, kFarDistance,
                                                          pond::math::ProjectionDepth::ForwardZ);
     ASSERT_TRUE(projection.HasValue());
@@ -553,7 +554,7 @@ TEST(MathDirectXReferenceTests, FrustumClassificationMatchesDirectXCollisionAway
     DirectX::BoundingFrustum reference{};
     DirectX::BoundingFrustum::CreateFromMatrix(
         reference,
-        DirectX::XMMatrixPerspectiveFovLH(pond::math::kHalfPi, 1.0F, kNearDistance, kFarDistance));
+        DirectX::XMMatrixPerspectiveFovLH(pond::core::kHalfPi, 1.0F, kNearDistance, kFarDistance));
 
     const auto expectBoxMatches = [&](pond::math::Vector3 minimum, pond::math::Vector3 maximum)
     {

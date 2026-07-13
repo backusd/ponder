@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/Matrix3x3.hpp>
 
 #include <array>
@@ -10,10 +11,10 @@ namespace
 {
 using MatrixRows = std::array<std::array<double, 3>, 3>;
 
-[[nodiscard]] pond::math::Tolerance RequireTolerance(float absoluteTolerance,
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
                                                      float relativeTolerance)
 {
-    auto result = pond::math::Tolerance::Create(absoluteTolerance, relativeTolerance);
+    auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
     return result.GetValue();
 }
@@ -147,7 +148,7 @@ TEST(Matrix3x3AlgebraTests, ComposesInColumnVectorApplicationOrder)
 
 TEST(Matrix3x3AlgebraTests, InvertsRepresentativeMatrices)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-5F);
+    const pond::core::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-5F);
     const pond::math::Matrix3x3 matrix{1.0F, 2.0F, 3.0F, 0.0F, 1.0F, 4.0F, 5.0F, 6.0F, 0.0F};
     const pond::math::Matrix3x3 expectedInverse{-24.0F, 18.0F, 5.0F, 20.0F, -15.0F,
                                                 -4.0F,  -5.0F, 4.0F, 1.0F};

@@ -36,8 +36,9 @@ Core owns these project-wide contracts:
   the build tree.
 - Core owns only generic stable identifier primitives such as `Uuid`; domain IDs
   belong in the owning library.
-- Core may own tiny dependency-free utilities, currently `ScopeExit` and UTF-8
-  string conversion helpers, when they are broadly useful and well tested.
+- Core may own tiny dependency-free utilities, currently `ScopeExit`, project-wide
+  number helpers, and UTF-8 string conversion helpers, when they are broadly useful
+  and well tested.
 
 Core does not own domain models, workflow orchestration, IO, rendering, UI,
 platform environment access, filesystem/path utilities, job systems,

@@ -1,5 +1,6 @@
 #include <ponder/platform/Process.hpp>
 
+#include <cstdint>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <string>
@@ -16,6 +17,8 @@ static_assert(std::is_nothrow_move_constructible_v<pond::platform::Process>);
 static_assert(std::is_nothrow_move_assignable_v<pond::platform::Process>);
 static_assert(std::is_nothrow_destructible_v<pond::platform::Process>);
 static_assert(std::variant_size_v<pond::platform::ProcessExitStatus> == 3U);
+static_assert(
+    std::is_same_v<decltype(pond::platform::ProcessNormalExit{}.exitCode), std::uint32_t>);
 static_assert(std::is_same_v<decltype(std::declval<pond::platform::Process&>().Wait()),
                              pond::core::Result<pond::platform::ProcessExitStatus>>);
 static_assert(std::is_same_v<decltype(std::declval<pond::platform::Process&>().Terminate(
@@ -37,9 +40,14 @@ TEST(ProcessTypesTests, OwnsDescriptorArguments)
 TEST(ProcessTypesTests, RepresentsDistinctExitOutcomes)
 {
     const pond::platform::ProcessExitStatus normal{
-        pond::platform::ProcessNormalExit{.exitCode = 7}};
+        pond::platform::ProcessNormalExit{.exitCode = 7U}};
     ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(normal));
-    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(normal).exitCode, 7);
+    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(normal).exitCode, 7U);
+
+    const pond::platform::ProcessExitStatus highBitNormal{
+        pond::platform::ProcessNormalExit{.exitCode = 0x80000000U}};
+    ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(highBitNormal));
+    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(highBitNormal).exitCode, 0x80000000U);
 
     const pond::platform::ProcessExitStatus signaled{
         pond::platform::ProcessSignalTermination{.signal = 15}};

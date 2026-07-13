@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/Viewport.hpp>
 
 #include <gtest/gtest.h>
@@ -136,6 +137,42 @@ TEST(ViewportTests, MapsViewportCoordinatesBackToNdc)
         pond::math::Vector3{0.0F, 0.0F, 0.5F});
 }
 
+TEST(ViewportTests, MapsRepresentableMaximumRangeCoordinatesWithoutIntermediateOverflow)
+{
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+    const pond::math::Viewport viewport = RequireViewport(
+        0.0F, 0.0F, kFiniteMaximum, kFiniteMaximum, -kFiniteMaximum, kFiniteMaximum);
+
+    auto maximumEdge = pond::math::NdcToViewport(viewport, pond::math::Vector3{1.0F, -1.0F, 0.5F});
+    ASSERT_TRUE(maximumEdge.HasValue());
+    EXPECT_FLOAT_EQ(maximumEdge->x, kFiniteMaximum);
+    EXPECT_FLOAT_EQ(maximumEdge->y, kFiniteMaximum);
+    EXPECT_FLOAT_EQ(maximumEdge->z, 0.0F);
+
+    auto minimumEdge = pond::math::NdcToViewport(viewport, pond::math::Vector3{-1.0F, 1.0F, 0.0F});
+    ASSERT_TRUE(minimumEdge.HasValue());
+    EXPECT_FLOAT_EQ(minimumEdge->x, 0.0F);
+    EXPECT_FLOAT_EQ(minimumEdge->y, 0.0F);
+    EXPECT_FLOAT_EQ(minimumEdge->z, -kFiniteMaximum);
+
+    auto roundTrip = pond::math::ViewportToNdc(
+        viewport, pond::math::Vector3{kFiniteMaximum, kFiniteMaximum, 0.0F});
+    ASSERT_TRUE(roundTrip.HasValue());
+    EXPECT_EQ(roundTrip.GetValue(), (pond::math::Vector3{1.0F, -1.0F, 0.5F}));
+
+    const pond::math::Viewport offsetViewport =
+        RequireViewport(kFiniteMaximum * 0.5F, -kFiniteMaximum * 0.5F, kFiniteMaximum * 0.5F,
+                        kFiniteMaximum * 0.5F);
+    auto offsetEdge =
+        pond::math::NdcToViewport(offsetViewport, pond::math::Vector3{1.0F, -1.0F, 0.5F});
+    ASSERT_TRUE(offsetEdge.HasValue());
+    EXPECT_FLOAT_EQ(offsetEdge->x, kFiniteMaximum);
+    EXPECT_FLOAT_EQ(offsetEdge->y, 0.0F);
+    EXPECT_FLOAT_EQ(offsetEdge->z, 0.5F);
+    ExpectVectorResultNear(pond::math::ViewportToNdc(offsetViewport, offsetEdge.GetValue()),
+                           pond::math::Vector3{1.0F, -1.0F, 0.5F});
+}
+
 TEST(ViewportTests, RejectsNonFiniteMappingInputs)
 {
     const pond::math::Viewport viewport = RequireViewport(0.0F, 0.0F, 100.0F, 100.0F);
@@ -148,16 +185,23 @@ TEST(ViewportTests, RejectsNonFiniteMappingInputs)
     ExpectVectorFailure(
         pond::math::ViewportToNdc(viewport, pond::math::Vector3{0.0F, quietNaN, 0.0F}),
         pond::math::MathErrorCode::NonFiniteInput);
+
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+    const pond::math::Viewport overflowing =
+        RequireViewport(kFiniteMaximum, 0.0F, kFiniteMaximum, 1.0F);
+    ExpectVectorFailure(
+        pond::math::NdcToViewport(overflowing, pond::math::Vector3{1.0F, 0.0F, 0.0F}),
+        pond::math::MathErrorCode::InvalidArgument);
 }
 
 TEST(ViewportTests, ProjectsForwardAndReverseDepthDirections)
 {
     const pond::math::Viewport viewport = RequireViewport(0.0F, 0.0F, 800.0F, 600.0F);
     auto forward =
-        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi}, 4.0F / 3.0F,
+        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi}, 4.0F / 3.0F,
                                            1.0F, 10.0F, pond::math::ProjectionDepth::ForwardZ);
     auto reverse =
-        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi}, 4.0F / 3.0F,
+        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi}, 4.0F / 3.0F,
                                            1.0F, 10.0F, pond::math::ProjectionDepth::ReverseZ);
     ASSERT_TRUE(forward.HasValue());
     ASSERT_TRUE(reverse.HasValue());
@@ -176,14 +220,59 @@ TEST(ViewportTests, ProjectsForwardAndReverseDepthDirections)
         pond::math::Vector3{400.0F, 300.0F, 0.0F}, 2.0e-5F);
 }
 
+TEST(ViewportTests, CheckedProjectionAndUnprojectionUseWideHomogeneousProducts)
+{
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+    const pond::math::Viewport viewport = RequireViewport(0.0F, 0.0F, 100.0F, 100.0F);
+    const pond::math::Matrix4x4 clipToWorld{kFiniteMaximum, kFiniteMaximum, 0.0F, 0.0F, 0.0F, 1.0F,
+                                            0.0F,           0.0F,           0.0F, 0.0F, 1.0F, 0.0F,
+                                            0.0F,           0.0F,           0.0F, 1.0F};
+
+    auto projected =
+        pond::math::Project(clipToWorld, viewport, pond::math::Vector3{2.0F, -2.0F, 0.0F});
+    ASSERT_TRUE(projected.HasValue());
+    EXPECT_EQ(projected.GetValue(), (pond::math::Vector3{50.0F, 150.0F, 0.0F}));
+
+    const pond::math::Vector3 cancellationPoint{150.0F, 150.0F, 0.0F};
+    auto cached = pond::math::UnprojectFromClipToWorld(clipToWorld, viewport, cancellationPoint);
+    ASSERT_TRUE(cached.HasValue());
+    EXPECT_EQ(cached.GetValue(), (pond::math::Vector3{0.0F, -2.0F, 0.0F}));
+
+    constexpr float kExactlyInvertibleLargeValue = 0x1.0p+126F;
+    const pond::math::Matrix4x4 regularClipToWorld{kExactlyInvertibleLargeValue,
+                                                   kExactlyInvertibleLargeValue,
+                                                   0.0F,
+                                                   0.0F,
+                                                   0.0F,
+                                                   1.0F,
+                                                   0.0F,
+                                                   0.0F,
+                                                   0.0F,
+                                                   0.0F,
+                                                   1.0F,
+                                                   0.0F,
+                                                   0.0F,
+                                                   0.0F,
+                                                   0.0F,
+                                                   1.0F};
+    auto worldToClip = pond::math::Inverse(regularClipToWorld);
+    ASSERT_TRUE(worldToClip.HasValue());
+    auto regular = pond::math::Unproject(worldToClip.GetValue(), viewport,
+                                         pond::math::Vector3{450.0F, 450.0F, 0.0F});
+    ASSERT_TRUE(regular.HasValue());
+    EXPECT_EQ(regular.GetValue(), (pond::math::Vector3{0.0F, -8.0F, 0.0F}));
+}
+
 TEST(ViewportTests, RoundTripsPerspectiveWorldScreenWorld)
 {
     const pond::math::Viewport viewport =
         RequireViewport(13.0F, 17.0F, 1280.0F, 720.0F, 0.1F, 0.9F);
     auto projection =
-        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi}, 16.0F / 9.0F,
+        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi}, 16.0F / 9.0F,
                                            0.5F, 50.0F, pond::math::ProjectionDepth::ForwardZ);
     ASSERT_TRUE(projection.HasValue());
+    auto clipToWorld = pond::math::Inverse(projection.GetValue());
+    ASSERT_TRUE(clipToWorld.HasValue());
 
     const pond::math::Vector3 points[]{pond::math::Vector3{0.0F, 0.0F, -1.0F},
                                        pond::math::Vector3{0.25F, -0.5F, -2.0F},
@@ -196,6 +285,9 @@ TEST(ViewportTests, RoundTripsPerspectiveWorldScreenWorld)
         ExpectVectorResultNear(
             pond::math::Unproject(projection.GetValue(), viewport, projected.GetValue()), point,
             2.0e-4F);
+        ExpectVectorResultNear(pond::math::UnprojectFromClipToWorld(clipToWorld.GetValue(),
+                                                                    viewport, projected.GetValue()),
+                               point, 2.0e-4F);
     }
 }
 
@@ -239,5 +331,12 @@ TEST(ViewportTests, PropagatesProjectAndUnprojectFailures)
     ExpectVectorFailure(pond::math::Unproject(inverseProducesZeroW, viewport,
                                               pond::math::Vector3{50.0F, 50.0F, 0.5F}),
                         pond::math::MathErrorCode::UndefinedHomogeneousCoordinate);
+
+    pond::math::Matrix4x4 nonFiniteClipToWorld = pond::math::Matrix4x4::Identity();
+    nonFiniteClipToWorld.row0Column0 = std::numeric_limits<float>::infinity();
+    ExpectVectorFailure(
+        pond::math::UnprojectFromClipToWorld(nonFiniteClipToWorld, viewport,
+                                             pond::math::Vector3{50.0F, 50.0F, 0.5F}),
+        pond::math::MathErrorCode::NonFiniteInput);
 }
 } // namespace

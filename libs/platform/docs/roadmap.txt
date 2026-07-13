@@ -19,7 +19,8 @@ self-containment target is explicitly never assigned a PCH.
 
 - SDL3 is the private backend. Public headers expose project-owned and
   standard-library types only.
-- `ponder::core` is a public CMake dependency; `ponder::SDL3` is private.
+- `ponder::core` is a public CMake dependency; `ponder::io` and
+  `ponder::SDL3` are private.
 - Recoverable failures use `pond::core::Result<T>` or
   `pond::core::VoidResult`.
 - One logical `PlatformRuntime` may be live per process.
@@ -122,8 +123,8 @@ Wire the final dependency direction and test seams before public API work.
 
 Work:
 
-- Add `ponder::core` to `PUBLIC_DEPS` and `ponder::SDL3` to `PRIVATE_DEPS` for
-  `ponder_platform`.
+- Add `ponder::core` to `PUBLIC_DEPS` and `ponder::io` plus `ponder::SDL3` to
+  `PRIVATE_DEPS` for `ponder_platform`.
 - Keep using `ponder_add_project_library`; it supplies static linkage, C++23,
   warnings-as-errors, sanitizers, install handling, and explicit opt-in PCH
   support. Platform intentionally does not opt in to PCH use.
@@ -154,7 +155,7 @@ Done when:
 
 - A consumer links `ponder::platform` without declaring SDL or inheriting SDL
   include paths or compile definitions.
-- The static target still supplies SDL as the required final link dependency.
+- The static target still supplies IO and SDL as required final link dependencies.
 - Error context, copied text, and empty-error fallback behavior have direct tests
   using caller-selected core codes.
 - The expanded test tree configures without placeholder targets, and the
@@ -470,13 +471,15 @@ Work:
   decoration values return `InvalidArgument`. Known unavailable operations,
   including maximizing a non-resizable window, return `Unsupported`; other SDL
   failures return contextual `BackendFailure` without parsing error text.
-- Query current backend flags on demand rather than caching visible requested
-  state. `IsVisible()` means not hidden, minimization does not imply hidden, and
-  `IsFocused()` means input focus rather than mouse focus. Because SDL merges
-  current and pending flags, retain the last successful hidden state request
-  only until `Show()` to disambiguate an old current bit from a new opposite
-  pending bit. Simultaneous minimized and maximized flags without that marker
-  are malformed backend data.
+- Query current backend flags on demand rather than exposing visible requested
+  state as observation. `IsVisible()` means not hidden, minimization does not
+  imply hidden, and `IsFocused()` means input focus rather than mouse focus.
+  Retain accepted visible presentation/state targets only as private routing
+  metadata so stale flags cannot suppress an immediate opposite request.
+  Because SDL merges current and pending flags, retain the last successful
+  hidden state request until a confirmed show to disambiguate an old current bit
+  from a new opposite pending bit. Simultaneous minimized and maximized flags
+  without that marker are malformed backend data.
 - Keep mutators idempotent. For hidden windows, normalize an opposite pending
   minimize/maximize request before submitting the new one and make the latest
   successful hidden request authoritative until the window is shown.
@@ -904,8 +907,10 @@ Work:
 - Defer non-blocking status polling because SDL's documented non-blocking wait
   result cannot distinguish a running process from every failure.
 - Document that blocking `Wait()` must not run in the desktop event loop.
-- Make destruction release SDL tracking state without waiting for, killing, or
-  terminating a still-running child.
+- Make destruction release public ownership without waiting for, killing, or
+  terminating a still-running child. Transfer its backend handle to prestarted
+  private asynchronous cleanup that retains it until exit can be confirmed and
+  reaped.
 - Build a small project-owned helper executable for deterministic argument,
   exit-code, waiting, destruction-while-running, and termination tests. Prove
   that destroying the tracking object does not terminate the child. Do not
@@ -1027,7 +1032,8 @@ Done when:
 TASK PLAT-021: Verify Complete Host-Local Platform Services
 ----------------------------------------------------------
 
-Status: completed on 2026-07-09 for the local Windows host.
+Status: automated host-local verification completed on Windows; manual native
+dialog presentation remains pending.
 
 Treat this as the completion gate for all services in this roadmap.
 
@@ -1057,8 +1063,8 @@ Work:
   `git status --short`, apply an equivalent whitespace check to every intended
   untracked text file before staging it, and reject generated files, logs, build
   outputs, and local environment files.
-- Confirm the production dependency set remains public core plus private SDL3
-  and that no SDL compile usage requirement leaks to consumers.
+- Confirm the production dependency set remains public core plus private IO and
+  SDL3, and that no SDL compile usage requirement leaks to consumers.
 - Confirm lifecycle, threading, dialog, process, native-handle,
   external-URI, dialog-cancellation-as-outcome, and error semantics in the
   generated public documentation or headers.
@@ -1075,220 +1081,165 @@ Done when:
 - Renderer-ready status from PLAT-013 remains valid after service additions.
 - Completion is explicitly described as host-local pending `future.txt`.
 
-Host-local verification record, 2026-07-09:
+Host-local verification record, 2026-07-10:
 
 - Host: Windows 10.0.26200 from the Visual Studio 2026 Developer Command Prompt
-  18.7.3.
-- Tool check: `scripts\check-tools.ps1` passed required tools with CMake/CTest
-  4.2.3, Ninja 1.13.2, MSBuild 18.7.8, clang-format/clang-tidy 22.1.3, and
-  Visual Studio LLVM available. The script still reported recommended-tool
-  probes for `cl`, `link`, and WindowsApps `bash` as broken, but the MSVC
-  compiler/linker were exercised successfully by the configured builds.
-- SDL: revision `SDL-3.5.0-release-3.4.0-1106-ge0b323890`, compiled static
-  with Windows, dummy, and offscreen video drivers enabled.
-- Clean primary-host configure/build:
-  - `cmake --preset windows-msvc-debug`
-  - `cmake --preset windows-msvc-release`
-  - Build targets in both presets: `ponder_platform`,
-    `ponder_platform_header_tests`, `ponder_platform_tests`,
+  18.7.3, using MSVC toolset 14.51.36231.
+- Tool check: `scripts\check-tools.ps1` found CMake/CTest 4.2.3, Ninja 1.13.2,
+  MSBuild 17.14.40, and clang-format/clang-tidy 22.1.3. The actual Visual Studio
+  build used MSBuild 18.7.8. Plain-shell probes for recommended `cl`, `link`, and
+  WindowsApps `bash` were unavailable, but the configured Developer Command
+  Prompt builds exercised MSVC and the linker.
+- SDL: revision `SDL-3.5.0-release-3.4.0-1106-ge0b323890`, built statically with
+  the Windows, dummy, and offscreen video drivers enabled.
+- Build and test:
+  - Debug and Release were configured with `cmake --preset windows-msvc-debug`
+    and `cmake --preset windows-msvc-release`.
+  - The complete platform target set built successfully in Debug and Release:
+    `ponder_platform`, `ponder_platform_header_tests`, `ponder_platform_tests`,
     `ponder_platform_backend_tests`, `ponder_platform_integration_tests`, and
     `ponder_platform_process_helper`.
-- Analysis configure/build:
-  - `scripts\build.ps1 -Preset windows-ninja-analysis -ConfigureOnly`
-  - `build\windows-ninja-analysis\compile_commands.json` was generated.
-  - The same platform targets were built once in the analysis tree so
-    clang-tidy could read generated C++ module dependency response files.
-- Tests:
-  - `ctest --preset windows-msvc-debug -L platform --output-on-failure` passed
-    176 of 176 platform-labelled tests.
+  - That target list was passed to `cmake --build --preset windows-msvc-debug`
+    and `cmake --build --preset windows-msvc-release`.
+  - `ctest --preset windows-msvc-debug -L platform --output-on-failure`
+    completed all 191 platform-labelled tests with no failures.
   - `ctest --preset windows-msvc-release -L platform --output-on-failure`
-    passed 176 of 176 platform-labelled tests.
-  - Each configuration reported the expected dummy-driver skip for
+    completed all 191 platform-labelled tests with no failures.
+  - Each configuration reported the one documented GoogleTest skip,
     `PlatformRuntimeIntegrationTests.ReportsNativeHandleUnsupportedUnderDummyDriver`.
-    The integration tests select SDL's dummy driver for hidden-window coverage,
-    so native-handle presentation remains intentionally unsupported there.
-- Analysis and formatting:
-  - Scoped clang-format was applied to and then checked across platform public
-    headers, private sources, unit tests, integration tests, header
-    self-containment TUs, and the process helper.
-  - Scoped clang-tidy completed over 57 platform translation units using
-    `windows-ninja-analysis`; it reported warnings but no clang-tidy errors.
-    The warnings are currently style/advisory diagnostics such as enum backing
-    size, designated-initializer suggestions, redundant explicit default member
-    initializers, and a few test-helper naming/C-array suggestions.
-  - `git diff HEAD --check` completed without whitespace errors. Git emitted
-    Windows LF/CRLF normalization warnings for formatted C++ files only.
-- Dependency and public-header audit:
-  - `ponder_platform` remains `PUBLIC` on `ponder::core` and `PRIVATE` on
-    `ponder::SDL3`.
-  - SDL usage does not leak to consumers through the public headers; the
-    SDL-free public-header target builds in Debug, Release, and the analysis
-    tree.
-- Contract audit:
-  - Lifecycle, owner-thread rules, callback-thread marshalling, process-thread
-    exception, dialog cancellation-as-outcome, native-handle borrowing,
-    external-URI policy, clipboard error handling, and platform error semantics
-    are documented in `Boundary.md`, `Codex.md`,
-    `HeadlessAndHostVerification.md`, and the public headers.
-  - PLAT-013 renderer-ready status remains valid after the host-local services:
-    platform still owns SDL windows/lifecycle and exposes only the approved
-    borrowed native payloads required for renderer surface creation.
-- Skipped or not applicable on this host-local pass:
-  - Linux Clang ASAN/UBSAN was not run because the current host is Windows.
-  - Manual native file/folder dialog presentation was not performed from this
-    non-interactive automation session; dialog presentation remains unverified
-    until a capable GUI host performs the documented manual open/cancel smoke.
+    The hidden-window/event tests intentionally select SDL's dummy video driver,
+    where native handles are unsupported. The host clipboard test uses the
+    default Windows driver and also passed.
+- Analysis:
+  - `scripts\build.ps1 -Preset windows-ninja-analysis -ConfigureOnly` generated
+    `build\windows-ninja-analysis\compile_commands.json`.
+  - The complete platform target set built successfully in the
+    `windows-ninja-analysis` tree through an explicitly x64 Visual Studio
+    Developer Command Prompt before analysis was run, using the same target list
+    with `cmake --build --preset windows-ninja-analysis`.
+  - Scoped clang-tidy passed over 56 platform translation units with no errors.
+    Its remaining diagnostics were advisory warnings only.
+- Repository checks:
+  - Scoped clang-format checking passed for platform production code, public
+    headers, tests, header self-containment translation units, and the process
+    helper.
+  - Tracked changed-line and intended untracked-text whitespace scans passed.
+  - Dependency scans confirmed that `ponder_platform` remains `PUBLIC` on
+    `ponder::core` and `PRIVATE` on `ponder::io` plus `ponder::SDL3`.
+  - Public-header self-containment and SDL-leak scans passed. SDL compile usage
+    remains private, and the SDL-free public-header target builds in Debug,
+    Release, and analysis configurations.
+- Contract review:
+  - Lifecycle, owner-thread rules, callback-thread marshalling, process
+    ownership and wait behavior, dialog cancellation-as-outcome, native-handle
+    borrowing, external-URI policy, clipboard error handling, and platform error
+    semantics remain documented in the public headers and platform documents.
+  - PLAT-013 renderer-ready status remains valid: platform owns SDL lifecycle
+    and windows and exposes only the approved borrowed native payloads needed
+    for renderer surface creation.
+- Pending verification:
+  - Manual native file and folder dialog presentation/cancellation was not
+    performed in this non-interactive session. The documented open/cancel smoke
+    matrix remains pending on a capable GUI host.
+  - Linux, macOS, other compiler, sanitizer, native-interop, and POSIX process
+    behavior remain future-matrix work in `future.txt`.
 
-Completion is host-local only. Cross-platform compiler, sanitizer, and native
-interop rows are tracked in `future.txt`.
+The automated completion result is host-local to the recorded Windows system.
 
 ## Final Audit
 
-Audit scope: production headers, private headers, sources, and build wiring were
-reviewed against PLAT-000 through PLAT-021. Unit, backend, header, and integration
-test implementations were deliberately not reviewed in this pass. Consequently,
-the PLAT-018 and PLAT-019 coverage conclusions remain outside this audit and must
-be reassessed in the planned test-only review.
+Audit date: 2026-07-10.
 
-### Overall Result
+### Result
 
-No production service described by the roadmap is wholly absent. The runtime,
-multi-window ownership, displays, window state, typed events, input, native
-interop, drag-and-drop, clipboard, URI, dialog, and process surfaces all exist and
-mostly follow the intended SDL-private boundary. The first pass is substantial,
-but the following correctness and contract gaps mean the roadmap should not yet
-be treated as fully closed.
+The final audit compared every PLAT-000 through PLAT-021 requirement with the
+installed API, private backend seams, production implementation, CMake graph,
+durable contracts, and all three platform test layers. It also rechecked the
+earlier roadmap-completeness and library-boundary corrections after the final
+quality work.
 
-### Roadmap Completeness And Correctness
+No unresolved roadmap, correctness, boundary, implementation-quality, or
+obvious performance finding remains. All seven requested quality/performance
+items and both roadmap/verification cleanup items are implemented. The platform
+target exposes only ponder::core publicly, keeps ponder::io and ponder::SDL3
+private, and leaks no SDL compile surface through installed headers.
 
-1. **High: abandoning a running process can leave a POSIX zombie.**
-   `ProcessState::~ProcessState()` immediately calls the backend destroy function
-   (`src/Process.cpp:176`). The SDL backend calls `SDL_DestroyProcess`, which makes
-   one non-blocking wait and then discards its PID storage even when the child is
-   still alive. On POSIX, a child that exits later can no longer be reaped. This
-   does not provide a robust implementation of PLAT-017's non-waiting,
-   non-terminating destruction contract. Transfer abandoned live handles to an
-   asynchronous reaper, or revise the public contract to require an explicit wait
-   or detach operation before destruction.
+The automated Windows host-local completion gate is satisfied. The two remaining
+rows are environment-dependent evidence—the interactive native-dialog matrix and
+the portability matrix—not known implementation defects.
 
-2. **High: process exit translation is not cross-platform correct and has a
-   reachable signed-overflow case.** `MakeProcessExitStatus()` treats every
-   negative `int` except `-255` as a POSIX signal and negates it
-   (`src/Process.cpp:50`). SDL converts the Windows `DWORD` exit status directly
-   to `int`; legitimate high-bit Windows statuses are therefore mislabeled as
-   signals, and `0x80000000` becomes `INT_MIN`, whose negation is undefined
-   behavior. Make the private backend return a structured, host-aware status and
-   use an unsigned normal-exit representation capable of preserving the full
-   Windows status. Do not infer termination kind from one overloaded signed
-   integer in platform-independent code.
+### Closed Quality And Performance Findings
 
-3. **High: generic window-state failures are overclassified as unsupported.**
-   The production wrappers for minimize, maximize, and restore translate every
-   false SDL return to `BackendWindowOperationResult::Unsupported`
-   (`src/PlatformRuntimeBackend.cpp:502`). PLAT-007 requires only positively known
-   unavailable transitions to use `Unsupported`; other failures must use
-   `BackendFailure`. Return `Failed` for an unclassified false SDL result and keep
-   explicit cases such as maximizing a non-resizable window as `Unsupported`.
+- Display refresh now stages only new identity records, rolls those insertions
+  back transactionally, and stores current topology separately from permanent
+  identity tombstones. Normal refresh and enumeration no longer copy or scan
+  all historical displays.
+- Dialog filter validation uses an explicit locale-independent ASCII grammar.
+  Request preparation no longer constructs unused filters or retains redundant
+  parent/registration fields.
+- Dialog completion uses a request-owned intrusive FIFO, giving owner-thread
+  polling O(1) empty checks and pops without scanning every pending request.
+  The callback snapshots SDL failure text before any later backend call, records
+  completion time at callback completion, and contains all exceptions at the C
+  ABI boundary with prebuilt no-allocation fallback state.
+- Each window caches its immutable diagnostic context once its project ID is
+  assigned, eliminating repeated string construction in successful state,
+  display, text-input, and mouse paths.
+- Asynchronous presentation and state requests retain routing-only accepted
+  targets without changing observed getters. Marker domains follow live
+  visibility, accepted duplicates remain idempotent, immediate reversals reach
+  SDL while flags lag, and delayed SHOWN events cannot erase newer hidden or
+  visible intent.
+- Production and fake backend tables use designated initializers, keeping every
+  function pointer visibly associated with its field.
+- Process termination rejects forged enum values before backend dispatch. The
+  process-lifetime abandoned-child reaper is created before child launch, blocks
+  while idle, polls all active handles fairly, and never makes public destruction
+  allocate, wait, terminate a child, or re-enter a destroyed static singleton.
+- Clipboard failures use the shared captured-SDL-error formatter. Production
+  text ownership remains exception-safe, and the live test proves successful
+  restoration of the prior host clipboard value.
 
-4. **Medium: dialog completion timestamps describe consumption, not
-   completion.** `DialogCompletionRecord` stores only an ID and outcome
-   (`src/PlatformRuntimeState.hpp:32`), while `PollDialogCompletion()` samples
-   `Now()` when the owner thread eventually consumes the record
-   (`src/Dialog.cpp:463`). This weakens PLAT-016's timestamp correlation contract
-   and can misorder a completion relative to SDL events that accumulated before
-   polling. Capture the SDL tick-domain timestamp when the callback enqueues the
-   completion, store it in the record, and preserve it during delivery. If
-   delivery-time stamping is intentional instead, state that weaker contract
-   explicitly and stop describing the timestamp as completion correlation.
+### Roadmap And Boundary Closure
 
-5. **Medium: the dialog callback is not fully exception-safe at the C ABI
-   boundary.** `OnDialogCompleted()` performs request acquisition and constructs
-   its fallback `core::Error` before entering its `try` block
-   (`src/Dialog.cpp:278`), and `EnqueueDialogCompletion()` is `noexcept` even
-   though `std::deque::push_back` can allocate (`src/Dialog.cpp:448`). An exception
-   can therefore escape into SDL or terminate implicitly. Make the callback
-   explicitly `noexcept`, cover its entire body, and define an explicit fatal or
-   preallocated fallback for failures that cannot themselves be enqueued.
+- PLAT-016 lifetime requirements now have direct death tests proving that a
+  parent window and a runtime cannot be destroyed while a dialog request or
+  unconsumed completion remains registered.
+- The roadmap, ADR, boundary documentation, and high-level roadmap consistently
+  describe the public-core/private-IO-and-SDL dependency graph.
+- Structured process exits preserve unsigned 32-bit Windows codes and keep
+  POSIX signal interpretation in host-aware backend translation. The blocking
+  Process::Wait contract remains documented at the public and durable layers.
+- Generic window backend failures remain BackendFailure unless the backend
+  positively identifies an unsupported operation.
+- Reusable identifier, hash, numeric, UTF-8, and path helpers remain in core or
+  IO rather than platform.
 
-6. **PLAT-017's blocking-wait warning is not durably documented.** `Wait()` passes
-   `block=true` to SDL (`src/Process.cpp:190`), but the roadmap's requirement that
-   it must not run in the desktop event loop appears in neither `Boundary.md`,
-   `Codex.md`, nor `Process.hpp`. Add the warning to the public API documentation
-   and the durable boundary document.
+### Final Verification Evidence
 
-7. **PLAT-021 still has one explicit manual verification gap.** Its own record
-   says native file/folder dialog presentation was not exercised. Keep the gate
-   labeled as automated host-local completion with manual dialog presentation
-   pending, or perform and record the documented open/cancel matrix before
-   calling the host-local gate fully complete.
+- The complete platform target set built successfully with Windows MSVC in
+  Debug and Release and with the explicitly x64 Ninja analysis preset.
+- Debug and Release each ran all 191 platform-labelled tests with zero failures.
+  The 38 public/unit tests, 142 backend tests, and 11 live integration tests
+  include the dialog lifetime, display transactionality, asynchronous window
+  sequencing, process reaping/exit/enum, clipboard restoration, and captured
+  SDL-error regressions. Both configurations reported only the documented
+  dummy-driver native-handle skip.
+- Clang-tidy completed all 56 platform translation units without an error;
+  remaining diagnostics are advisory warnings. Clang-format dry-run/Werror
+  passed all 79 platform production, installed-header, unit, backend,
+  integration, header-self-containment, and process-helper source files.
+- Tracked and intended-untracked whitespace checks, dependency scans,
+  public-header self-containment, and public SDL-leak scans passed.
 
-### Library Boundary Findings
+### Outstanding Environment Evidence
 
-- `WindowId`, `DisplayId`, and `DialogRequestId` repeat the same zero-invalid
-  64-bit strong-ID implementation and hash plumbing in `Identifiers.hpp`. Move
-  the reusable mechanics to a tag-based `ponder/core/Identifier.hpp`, while
-  retaining platform-owned tags or aliases and all allocation/routing policy in
-  platform.
-- `RoundToBackendInteger()` in `src/WindowTextInput.cpp:21` is a pure finite,
-  range-checked floating-to-integral conversion. A constrained reusable helper
-  belongs in `ponder/core/Numbers.hpp`. The other integral range checks in the
-  library should use standard checked-range facilities such as `std::in_range`
-  where they fit rather than growing more platform-local conversion helpers.
-- The installed `Process.hpp` exposes the injected
-  `detail::LaunchProcess(..., PlatformProcessBackend)` seam even though the
-  backend definition is private. Move that overload declaration to
-  `src/ProcessBackend.hpp`; it belongs in platform, but not in platform's public
-  API.
-- No additional IO extraction is indicated. Dialog, process, and dropped-file
-  paths now correctly use `ponder::io` for UTF-8/path conversion. Geometry,
-  platform timestamps, input values, dialog/process services, and runtime child
-  tracking carry platform-specific semantics and should remain here.
+- Native open-file, save-file, and open-folder presentation plus user
+  cancellation still require the documented manual smoke matrix on an
+  interactive GUI host.
+- Linux, macOS, other supported compiler, sanitizer, native-interoperability,
+  and host-specific POSIX process lifetime/signal rows remain in future.txt
+  until those environments are actually exercised.
 
-### Implementation Quality And Performance
-
-- **Display refresh cost grows with historical topology churn.**
-  `ConnectDisplayFromEvent()` and `RefreshDisplays()` copy both complete identity
-  maps before every commit (`src/Display.cpp:183` and `src/Display.cpp:250`).
-  Because disconnected project-ID tombstones intentionally remain forever,
-  ordinary enumeration, `GetDisplayInfo()`, and window-display queries perform
-  allocations and copies proportional to every display identity ever observed.
-  Preserve transactional behavior with targeted staged insertions/updates or a
-  stable indexed record store rather than cloning both maps.
-- Dialog filter validation uses locale-sensitive `std::isalnum`
-  (`src/Dialog.cpp:34`) even though the accepted grammar is explicitly ASCII.
-  Use direct ASCII range checks so a changed C locale cannot make platform
-  accept a pattern that SDL rejects.
-- `PrepareDialogRequest()` allocates and fills an SDL filter vector that is never
-  consumed; `ShowDialog()` rebuilds the vector in request-owned storage
-  (`src/Dialog.cpp:110` and `src/Dialog.cpp:360`). Remove the first vector and its
-  pointer construction. Also remove the unused stored `parentWindowId` and dead
-  `requestRegistered` bookkeeping in the same path.
-- Many successful window queries eagerly allocate error-context strings. For
-  example, `WindowImpl::GetProperties()` constructs `"window <id>"` before it
-  knows whether SDL failed (`src/WindowProperties.cpp:85`), and `GetState()` can
-  construct the same context again. Cache the immutable per-window context after
-  ID assignment or build diagnostic strings only on failure, especially for
-  state queries that UI code may call every frame.
-- The SDL backend tables are initialized positionally with long lists of raw
-  function pointers (`src/PlatformRuntimeBackend.cpp:809`). Several entries have
-  identical signatures, so a field reorder or accidental swap can compile and
-  silently wire the wrong operation. Use C++23 designated initializers and keep
-  each entry visibly paired with its field name.
-- `ProcessState::Terminate()` treats every forged `ProcessTerminationMode` other
-  than `Force` as `GracefulPreferred` (`src/Process.cpp:203`). Validate the closed
-  enum and return `InvalidArgument`, matching the other public enum-taking APIs.
-- Clipboard's captured-error formatter duplicates the private SDL failure
-  message builder. Extend the SDL error adapter with an overload accepting an
-  already captured error string so the exceptional clipboard snapshot ordering
-  stays intact without maintaining two message formats.
-
-### Roadmap And Verification Cleanup
-
-- The guiding dependency statement and PLAT-021 verification record still say
-  production depends on public core plus private SDL only. The current and
-  intended target is public `ponder::core` plus private `ponder::io` and
-  `ponder::SDL3`; update those two stale roadmap statements.
-- After the production corrections above and the separate test audit, rerun the
-  full PLAT-021 host-local gate. Keep cross-platform compiler, sanitizer, POSIX
-  process-lifetime, and native-interoperability evidence pending in `future.txt`
-  until those hosts are actually exercised.
+Subject only to those explicitly recorded environment rows, the first platform
+implementation pass is complete and ready for renderer and UI integration.

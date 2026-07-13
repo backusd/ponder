@@ -3,7 +3,7 @@
 `ponder_platform` owns reusable operating-system and desktop-platform
 integration.
 
-Status: platform contracts revised on 2026-07-09.
+Status: platform contracts revised on 2026-07-10.
 
 ## Decision Records
 
@@ -95,12 +95,24 @@ Status: platform contracts revised on 2026-07-09.
   sources and can retain an old current state bit while a hidden window stages
   the opposite pending state. Platform therefore retains only the last
   successful hidden state request as a disambiguation marker until `Show()`;
-  all other state remains live backend data. Simultaneous minimized and
-  maximized flags without that marker are `BackendFailure`.
+  all observed state remains live backend data. A separate accepted-request
+  marker is used only by asynchronous presentation/state mutators so stale live
+  flags cannot discard an immediate opposite request; it is never returned as
+  observed state. Simultaneous minimized and maximized flags without the hidden
+  marker are `BackendFailure`.
 - Window-manager presentation and state requests may be asynchronous. Success
   means the request was accepted, not that the observed state already changed.
+  Before a state mutator decides whether to call SDL, platform moves its private
+  accepted-request marker into the live hidden/visible domain and clears a
+  visible marker when the observed state has caught up. Repeating the accepted
+  target is idempotent; requesting its opposite still reaches SDL while live
+  flags lag.
   `Restore()` requests the OS restore behavior and may restore a minimized
   window to its prior maximized state.
+- A delayed `SDL_EVENT_WINDOW_SHOWN` clears/transfers hidden-state intent only
+  when a live flag query confirms the window is currently shown. A historical
+  event observed after the window was hidden again cannot erase newer intent,
+  and an older hidden marker cannot overwrite a newer visible request.
 - Mutators are idempotent. Maximizing a non-resizable window and positively
   identified unavailable backend operations return `Unsupported`. Decoration
   and resizability cannot change while fullscreen. Drivers that silently ignore
@@ -297,15 +309,27 @@ Status: platform contracts revised on 2026-07-09.
 - Move-only process tracking with
   `Wait() -> pond::core::Result<ProcessExitStatus>` and explicit termination
   returning `pond::core::VoidResult`.
+- `Wait()` is a blocking wait for process exit. It must not run from the desktop
+  event loop or any thread that must continue pumping UI, platform, or render
+  work while the child is running.
 - Termination modes are `GracefulPreferred` and `Force`; graceful delivery is
   best effort and may fall back to forced termination where SDL requires it.
-- `ProcessExitStatus` distinguishes a normal exit code, signal termination, and
-  an unknown termination. Non-blocking status polling is deferred because SDL's
-  documented API cannot distinguish a running process from every failure.
-- Destroying a process object releases SDL tracking state but does not
-  implicitly wait for, kill, or terminate the child. Standard-IO piping,
-  working-directory control, environment customization, process trees, and
-  supervision are deferred.
+- `ProcessExitStatus` distinguishes a 32-bit unsigned normal exit code, signal
+  termination, and an unknown termination. Non-blocking status polling is
+  deferred because SDL's documented API cannot distinguish a running process
+  from every failure.
+- Destroying a process object releases public tracking without killing or
+  terminating the child. If the child is still running, platform transfers SDL
+  tracking to a prestarted private asynchronous cleanup worker. Cleanup polls
+  all abandoned handles fairly, retains every inconclusive wait, and destroys a
+  handle only after exit is confirmed; caller destruction itself does not wait.
+  The cleanup worker is a deliberately process-lifetime service: its storage is
+  constant-initialized before dynamic globals and is not destructed during C++
+  static teardown. Late or static-storage `Process` destruction therefore stays
+  non-blocking and cannot enqueue through a destroyed singleton; the OS owns the
+  worker's final process-exit teardown.
+  Standard-IO piping, working-directory control, environment customization,
+  process trees, and supervision are deferred.
 
 ## Errors And Diagnostics
 

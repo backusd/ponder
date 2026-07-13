@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Vector3.hpp>
 
 #include <cmath>
@@ -10,8 +11,8 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFinitePlaneVector(Vector3 value) noexcept
 {
-    return ::pond::math::IsFinite(value.x) && ::pond::math::IsFinite(value.y) &&
-           ::pond::math::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
+           ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
@@ -20,7 +21,7 @@ class Plane final
 public:
     [[nodiscard]] static inline core::Result<Plane> Create(Vector3 normal, float offset)
     {
-        if (!detail::IsFinitePlaneVector(normal) || !IsFinite(offset)) [[unlikely]]
+        if (!detail::IsFinitePlaneVector(normal) || !core::IsFinite(offset)) [[unlikely]]
         {
             return core::Result<Plane>::FromError(
                 core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
@@ -41,7 +42,8 @@ public:
         const Vector3 normalized{static_cast<float>(x / length), static_cast<float>(y / length),
                                  static_cast<float>(z / length)};
         const float adjustedOffset = static_cast<float>(static_cast<double>(offset) / length);
-        if (!detail::IsFinitePlaneVector(normalized) || !IsFinite(adjustedOffset)) [[unlikely]]
+        if (!detail::IsFinitePlaneVector(normalized) || !core::IsFinite(adjustedOffset))
+            [[unlikely]]
         {
             return core::Result<Plane>::FromError(core::Error{
                 ToErrorCode(MathErrorCode::DegenerateInput),

@@ -1,6 +1,6 @@
 # Headless And Host Verification
 
-Status: platform verification guidance current as of 2026-07-09.
+Status: platform verification guidance current as of 2026-07-10.
 
 This document explains how to interpret platform tests that depend on SDL video
 drivers, hidden windows, host services, or native desktop capabilities. It also
@@ -117,13 +117,8 @@ creation, routing, state, or service behavior regresses. A skip is allowed only
 after the test has positively identified an unsupported driver, missing
 capability, or intentionally selected no-display mode.
 
-Current permitted integration skips are:
+The current permitted integration skip is:
 
-- `PlatformRuntimeIntegrationTests.SupportsLiveClipboardTextAndRestoresPreviousText`
-  may skip when runtime creation fails before clipboard access, so no SDL video
-  driver is available for the live clipboard check. It must fail when runtime
-  creation succeeds but clipboard read, write, round-trip, or restore behavior
-  fails.
 - `PlatformRuntimeIntegrationTests.ReportsNativeHandleUnsupportedUnderDummyDriver`
   may skip when the dummy driver cannot create a Vulkan-compatible hidden window
   on this host. It must fail when the default-window `InvalidArgument` check
@@ -162,6 +157,11 @@ On a headless or remote host where native dialogs cannot be presented, record
 dialog presentation as unverified. Do not count the automated callback tests as
 native dialog presentation coverage.
 
+If a PLAT-021 host-local gate cannot run this smoke procedure, label the result
+as automated host-local verification with manual native dialog presentation
+pending. Do not call the complete host-local gate fully closed until the
+open/cancel matrix above is performed and recorded on a capable GUI host.
+
 ## Command Catalog
 
 Use a Visual Studio Developer Command Prompt or Developer PowerShell for Windows
@@ -178,8 +178,8 @@ cmake --build --preset windows-msvc-debug --target `
     ponder_platform_header_tests `
     ponder_platform_tests `
     ponder_platform_backend_tests
-build\windows-msvc-debug\bin\ponder_platform_tests.exe
-build\windows-msvc-debug\bin\ponder_platform_backend_tests.exe
+build\windows-msvc-debug\bin\Debug\ponder_platform_tests.exe
+build\windows-msvc-debug\bin\Debug\ponder_platform_backend_tests.exe
 ctest --test-dir build\windows-msvc-debug -C Debug -L integration --output-on-failure
 ```
 
@@ -210,8 +210,8 @@ cmake --build --preset windows-msvc-debug --target `
     ponder_platform_tests `
     ponder_platform_backend_tests `
     ponder_platform_integration_tests
-build\windows-msvc-debug\bin\ponder_platform_tests.exe
-build\windows-msvc-debug\bin\ponder_platform_backend_tests.exe
+build\windows-msvc-debug\bin\Debug\ponder_platform_tests.exe
+build\windows-msvc-debug\bin\Debug\ponder_platform_backend_tests.exe
 ctest --test-dir build\windows-msvc-debug -C Debug -L integration --output-on-failure
 ```
 

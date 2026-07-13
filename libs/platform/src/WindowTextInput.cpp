@@ -1,11 +1,10 @@
 #include <ponder/core/Assert.hpp>
+#include <ponder/core/Numbers.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Window.hpp>
 
-#include <cmath>
-#include <limits>
 #include <optional>
-#include <string>
+#include <string_view>
 #include <utility>
 
 #include "SdlError.hpp"
@@ -18,24 +17,6 @@ namespace
 constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
 constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 
-[[nodiscard]] std::optional<int> RoundToBackendInteger(float value) noexcept
-{
-    if (!std::isfinite(value))
-    {
-        return std::nullopt;
-    }
-
-    const double rounded = std::round(static_cast<double>(value));
-    constexpr double kMinimum = static_cast<double>(std::numeric_limits<int>::min());
-    constexpr double kMaximum = static_cast<double>(std::numeric_limits<int>::max());
-    if (rounded < kMinimum || rounded > kMaximum)
-    {
-        return std::nullopt;
-    }
-
-    return static_cast<int>(rounded);
-}
-
 [[nodiscard]] core::Result<detail::BackendTextInputArea> ToBackendTextInputArea(TextInputArea area)
 {
     if (!IsValid(area.rectangle))
@@ -45,11 +26,11 @@ constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::B
                                   "nonnegative extents."});
     }
 
-    const std::optional<int> x = RoundToBackendInteger(area.rectangle.origin.x);
-    const std::optional<int> y = RoundToBackendInteger(area.rectangle.origin.y);
-    const std::optional<int> width = RoundToBackendInteger(area.rectangle.extent.width);
-    const std::optional<int> height = RoundToBackendInteger(area.rectangle.extent.height);
-    const std::optional<int> cursorOffset = RoundToBackendInteger(area.cursorOffset);
+    const std::optional<int> x = core::RoundToInteger<int>(area.rectangle.origin.x);
+    const std::optional<int> y = core::RoundToInteger<int>(area.rectangle.origin.y);
+    const std::optional<int> width = core::RoundToInteger<int>(area.rectangle.extent.width);
+    const std::optional<int> height = core::RoundToInteger<int>(area.rectangle.extent.height);
+    const std::optional<int> cursorOffset = core::RoundToInteger<int>(area.cursorOffset);
     if (!x.has_value() || !y.has_value() || !width.has_value() || !height.has_value() ||
         !cursorOffset.has_value())
     {
@@ -72,7 +53,7 @@ core::VoidResult WindowImpl::StartTextInput()
         return core::VoidResult::Success();
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.startTextInput(m_backend.context, m_nativeWindow))
     {
         return core::VoidResult::FromError(
@@ -90,7 +71,7 @@ core::VoidResult WindowImpl::StopTextInput()
         return core::VoidResult::Success();
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.stopTextInput(m_backend.context, m_nativeWindow))
     {
         return core::VoidResult::FromError(
@@ -109,7 +90,7 @@ bool WindowImpl::IsTextInputActive() const
 core::VoidResult WindowImpl::ClearTextComposition()
 {
     VerifyUsable("text composition clear");
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.clearTextComposition(m_backend.context, m_nativeWindow))
     {
         return core::VoidResult::FromError(
@@ -129,7 +110,7 @@ core::VoidResult WindowImpl::SetTextInputArea(TextInputArea area)
     }
 
     const BackendTextInputArea backendArea = std::move(backendAreaResult).GetValue();
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.setTextInputArea(m_backend.context, m_nativeWindow, &backendArea))
     {
         return core::VoidResult::FromError(
@@ -142,7 +123,7 @@ core::VoidResult WindowImpl::SetTextInputArea(TextInputArea area)
 core::VoidResult WindowImpl::ClearTextInputArea()
 {
     VerifyUsable("text input area clear");
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.setTextInputArea(m_backend.context, m_nativeWindow, nullptr))
     {
         return core::VoidResult::FromError(

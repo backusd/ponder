@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/Matrix3x3.hpp>
 #include <ponder/math/Matrix4x4.hpp>
 
@@ -50,10 +51,10 @@ template <std::size_t Count, typename Matrix>
     return std::bit_cast<std::array<float, Count>>(matrix);
 }
 
-[[nodiscard]] pond::math::Tolerance RequireTolerance(float absoluteTolerance,
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
                                                      float relativeTolerance)
 {
-    auto result = pond::math::Tolerance::Create(absoluteTolerance, relativeTolerance);
+    auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
     return result.GetValue();
 }
@@ -134,7 +135,7 @@ TEST(Matrix3x3Tests, ComparesExactlyAndWithCallerTolerance)
     const pond::math::Matrix3x3 far{1.02F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
     const pond::math::Matrix3x3 nonFinite{
         std::numeric_limits<float>::infinity(), 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
-    const pond::math::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
+    const pond::core::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
 
     EXPECT_EQ(base, base);
     EXPECT_FALSE(base == close);
@@ -218,7 +219,7 @@ TEST(Matrix4x4Tests, ComparesExactlyAndWithCallerTolerance)
         1.0F,  2.0F,  3.0F,  4.0F,  5.0F,  std::numeric_limits<float>::quiet_NaN(),
         7.0F,  8.0F,  9.0F,  10.0F, 11.0F, 12.0F,
         13.0F, 14.0F, 15.0F, 16.0F};
-    const pond::math::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
+    const pond::core::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
 
     EXPECT_EQ(base, base);
     EXPECT_FALSE(base == close);

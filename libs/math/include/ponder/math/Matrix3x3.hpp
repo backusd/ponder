@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ponder/core/Numbers.hpp>
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Vector3.hpp>
 
 #include <cstddef>
@@ -51,7 +53,7 @@ struct Matrix3x3 final
         return Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F};
     }
 
-    [[nodiscard]] core::Result<Vector3> Row(std::size_t row) const
+    [[nodiscard]] constexpr core::Result<Vector3> Row(std::size_t row) const
     {
         switch (row)
         {
@@ -66,7 +68,7 @@ struct Matrix3x3 final
         }
     }
 
-    [[nodiscard]] core::Result<Vector3> Column(std::size_t column) const
+    [[nodiscard]] constexpr core::Result<Vector3> Column(std::size_t column) const
     {
         switch (column)
         {
@@ -81,8 +83,8 @@ struct Matrix3x3 final
         }
     }
 
-    [[nodiscard]] core::Result<std::reference_wrapper<float>> At(std::size_t row,
-                                                                 std::size_t column)
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<float>> At(std::size_t row,
+                                                                           std::size_t column)
     {
         if (row >= kDimension || column >= kDimension) [[unlikely]]
         {
@@ -92,8 +94,8 @@ struct Matrix3x3 final
         return std::ref(AtUnchecked(row, column));
     }
 
-    [[nodiscard]] core::Result<std::reference_wrapper<const float>> At(std::size_t row,
-                                                                       std::size_t column) const
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(
+        std::size_t row, std::size_t column) const
     {
         if (row >= kDimension || column >= kDimension) [[unlikely]]
         {
@@ -115,7 +117,7 @@ private:
                            "Matrix3x3 index is out of range."};
     }
 
-    [[nodiscard]] float& AtUnchecked(std::size_t row, std::size_t column) noexcept
+    [[nodiscard]] constexpr float& AtUnchecked(std::size_t row, std::size_t column) noexcept
     {
         switch (column)
         {
@@ -152,7 +154,8 @@ private:
         }
     }
 
-    [[nodiscard]] const float& AtUnchecked(std::size_t row, std::size_t column) const noexcept
+    [[nodiscard]] constexpr const float& AtUnchecked(std::size_t row,
+                                                     std::size_t column) const noexcept
     {
         switch (column)
         {
@@ -190,26 +193,27 @@ private:
     }
 };
 
-[[nodiscard]] constexpr bool IsNear(Matrix3x3 lhs, Matrix3x3 rhs, Tolerance tolerance) noexcept
+[[nodiscard]] constexpr bool IsNear(Matrix3x3 lhs, Matrix3x3 rhs,
+                                    core::Tolerance tolerance) noexcept
 {
-    return IsNear(lhs.row0Column0, rhs.row0Column0, tolerance) &&
-           IsNear(lhs.row1Column0, rhs.row1Column0, tolerance) &&
-           IsNear(lhs.row2Column0, rhs.row2Column0, tolerance) &&
-           IsNear(lhs.row0Column1, rhs.row0Column1, tolerance) &&
-           IsNear(lhs.row1Column1, rhs.row1Column1, tolerance) &&
-           IsNear(lhs.row2Column1, rhs.row2Column1, tolerance) &&
-           IsNear(lhs.row0Column2, rhs.row0Column2, tolerance) &&
-           IsNear(lhs.row1Column2, rhs.row1Column2, tolerance) &&
-           IsNear(lhs.row2Column2, rhs.row2Column2, tolerance);
+    return core::IsNear(lhs.row0Column0, rhs.row0Column0, tolerance) &&
+           core::IsNear(lhs.row1Column0, rhs.row1Column0, tolerance) &&
+           core::IsNear(lhs.row2Column0, rhs.row2Column0, tolerance) &&
+           core::IsNear(lhs.row0Column1, rhs.row0Column1, tolerance) &&
+           core::IsNear(lhs.row1Column1, rhs.row1Column1, tolerance) &&
+           core::IsNear(lhs.row2Column1, rhs.row2Column1, tolerance) &&
+           core::IsNear(lhs.row0Column2, rhs.row0Column2, tolerance) &&
+           core::IsNear(lhs.row1Column2, rhs.row1Column2, tolerance) &&
+           core::IsNear(lhs.row2Column2, rhs.row2Column2, tolerance);
 }
 
 [[nodiscard]] constexpr bool IsFinite(Matrix3x3 matrix) noexcept
 {
-    return IsFinite(matrix.row0Column0) && IsFinite(matrix.row1Column0) &&
-           IsFinite(matrix.row2Column0) && IsFinite(matrix.row0Column1) &&
-           IsFinite(matrix.row1Column1) && IsFinite(matrix.row2Column1) &&
-           IsFinite(matrix.row0Column2) && IsFinite(matrix.row1Column2) &&
-           IsFinite(matrix.row2Column2);
+    return core::IsFinite(matrix.row0Column0) && core::IsFinite(matrix.row1Column0) &&
+           core::IsFinite(matrix.row2Column0) && core::IsFinite(matrix.row0Column1) &&
+           core::IsFinite(matrix.row1Column1) && core::IsFinite(matrix.row2Column1) &&
+           core::IsFinite(matrix.row0Column2) && core::IsFinite(matrix.row1Column2) &&
+           core::IsFinite(matrix.row2Column2);
 }
 
 [[nodiscard]] constexpr Matrix3x3 operator+(Matrix3x3 lhs, Matrix3x3 rhs) noexcept
@@ -285,7 +289,7 @@ private:
                      lhs * Vector3{rhs.row0Column2, rhs.row1Column2, rhs.row2Column2}};
 }
 
-[[nodiscard]] inline core::Result<Matrix3x3> Inverse(Matrix3x3 matrix)
+[[nodiscard]] constexpr core::Result<Matrix3x3> Inverse(Matrix3x3 matrix)
 {
     if (!IsFinite(matrix)) [[unlikely]]
     {

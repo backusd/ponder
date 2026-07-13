@@ -13,4 +13,12 @@ namespace pond::platform::detail
 [[nodiscard]] core::Error CaptureSdlFailure(
     core::ErrorCode code, std::string_view operation, std::string_view objectContext = {},
     std::source_location location = std::source_location::current());
+
+// Formats an SDL error string that the caller already captured. This overload performs no SDL
+// calls, allowing exceptional APIs such as clipboard reads to preserve their required snapshot
+// ordering. The operation must be non-empty.
+[[nodiscard]] core::Error CaptureSdlFailure(
+    core::ErrorCode code, std::string_view operation, std::string_view objectContext,
+    std::string_view capturedError,
+    std::source_location location = std::source_location::current());
 } // namespace pond::platform::detail

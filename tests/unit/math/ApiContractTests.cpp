@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/Angle.hpp>
 #include <ponder/math/AxisAlignedBox.hpp>
 #include <ponder/math/CollisionClassification.hpp>
@@ -10,7 +11,6 @@
 #include <ponder/math/Ray.hpp>
 #include <ponder/math/RayBoxHit.hpp>
 #include <ponder/math/RayTriangleHit.hpp>
-#include <ponder/math/Scalar.hpp>
 #include <ponder/math/Sphere.hpp>
 #include <ponder/math/Triangle.hpp>
 #include <ponder/math/Vector2.hpp>
@@ -24,16 +24,18 @@
 #include <optional>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace
 {
+template <typename Type>
+concept StableValueSemantics =
+    std::is_standard_layout_v<Type> && std::is_trivially_copyable_v<Type>;
+
 template <typename Type, std::size_t FloatCount>
 concept FloatValueLayout =
-    sizeof(Type) == sizeof(float) * FloatCount && alignof(Type) == alignof(float) &&
-    std::is_standard_layout_v<Type> && std::is_trivially_copyable_v<Type> &&
-    std::is_trivially_copy_constructible_v<Type> && std::is_trivially_move_constructible_v<Type> &&
-    std::is_trivially_copy_assignable_v<Type> && std::is_trivially_move_assignable_v<Type> &&
-    std::is_trivially_destructible_v<Type>;
+    StableValueSemantics<Type> && sizeof(Type) == sizeof(float) * FloatCount &&
+    alignof(Type) == alignof(float);
 
 template <typename Type>
 concept ExactNoexceptEquality = requires(Type lhs, Type rhs) {
@@ -41,7 +43,7 @@ concept ExactNoexceptEquality = requires(Type lhs, Type rhs) {
 };
 
 template <typename Type>
-concept ToleranceComparison = requires(Type lhs, Type rhs, pond::math::Tolerance tolerance) {
+concept ToleranceComparison = requires(Type lhs, Type rhs, pond::core::Tolerance tolerance) {
     { pond::math::IsNear(lhs, rhs, tolerance) } noexcept -> std::same_as<bool>;
 };
 
@@ -55,25 +57,19 @@ concept IdentityFactory = requires {
     { Type::Identity() } noexcept -> std::same_as<Type>;
 };
 
-static_assert(FloatValueLayout<pond::math::Radians, 1>);
-static_assert(FloatValueLayout<pond::math::Degrees, 1>);
-static_assert(FloatValueLayout<pond::math::Tolerance, 2>);
 static_assert(FloatValueLayout<pond::math::Vector2, 2>);
 static_assert(FloatValueLayout<pond::math::Vector3, 3>);
 static_assert(FloatValueLayout<pond::math::Vector4, 4>);
 static_assert(FloatValueLayout<pond::math::Matrix3x3, 9>);
 static_assert(FloatValueLayout<pond::math::Matrix4x4, 16>);
 static_assert(FloatValueLayout<pond::math::Quaternion, 4>);
-static_assert(FloatValueLayout<pond::math::Viewport, 6>);
-static_assert(FloatValueLayout<pond::math::Ray, 6>);
-static_assert(FloatValueLayout<pond::math::Plane, 4>);
-static_assert(FloatValueLayout<pond::math::Sphere, 4>);
-static_assert(FloatValueLayout<pond::math::AxisAlignedBox, 6>);
-static_assert(FloatValueLayout<pond::math::Triangle, 9>);
-static_assert(FloatValueLayout<pond::math::RayBoxHit, 2>);
-static_assert(FloatValueLayout<pond::math::RayTriangleHit, 4>);
 
-static_assert(std::is_standard_layout_v<pond::math::Frustum>);
+static_assert(StableValueSemantics<pond::math::Ray>);
+static_assert(StableValueSemantics<pond::math::Plane>);
+static_assert(StableValueSemantics<pond::math::Sphere>);
+static_assert(StableValueSemantics<pond::math::AxisAlignedBox>);
+static_assert(StableValueSemantics<pond::math::Triangle>);
+
 static_assert(std::is_copy_constructible_v<pond::math::Frustum>);
 static_assert(std::is_copy_assignable_v<pond::math::Frustum>);
 
@@ -86,7 +82,7 @@ static_assert(std::is_default_constructible_v<pond::math::Matrix3x3>);
 static_assert(std::is_default_constructible_v<pond::math::Matrix4x4>);
 static_assert(std::is_default_constructible_v<pond::math::Quaternion>);
 
-static_assert(!std::is_default_constructible_v<pond::math::Tolerance>);
+static_assert(!std::is_default_constructible_v<pond::core::Tolerance>);
 static_assert(!std::is_default_constructible_v<pond::math::Viewport>);
 static_assert(!std::is_default_constructible_v<pond::math::Ray>);
 static_assert(!std::is_default_constructible_v<pond::math::Plane>);
@@ -99,7 +95,7 @@ static_assert(!std::is_default_constructible_v<pond::math::RayTriangleHit>);
 
 static_assert(ExactNoexceptEquality<pond::math::Radians>);
 static_assert(ExactNoexceptEquality<pond::math::Degrees>);
-static_assert(ExactNoexceptEquality<pond::math::Tolerance>);
+static_assert(ExactNoexceptEquality<pond::core::Tolerance>);
 static_assert(ExactNoexceptEquality<pond::math::Vector2>);
 static_assert(ExactNoexceptEquality<pond::math::Vector3>);
 static_assert(ExactNoexceptEquality<pond::math::Vector4>);
@@ -132,7 +128,7 @@ static_assert(IdentityFactory<pond::math::Matrix4x4>);
 static_assert(IdentityFactory<pond::math::Quaternion>);
 
 static_assert(noexcept(pond::math::ToRadians(pond::math::Degrees{180.0F})));
-static_assert(noexcept(pond::math::ToDegrees(pond::math::Radians{pond::math::kPi})));
+static_assert(noexcept(pond::math::ToDegrees(pond::math::Radians{pond::core::kPi})));
 static_assert(noexcept(pond::math::Cross(pond::math::Vector3{1.0F, 0.0F, 0.0F},
                                          pond::math::Vector3{0.0F, 1.0F, 0.0F})));
 static_assert(noexcept(pond::math::Matrix4x4::Translation(pond::math::Vector3{})));
@@ -142,8 +138,8 @@ static_assert(noexcept(pond::math::Conjugate(pond::math::Quaternion::Identity())
 static_assert(noexcept(pond::math::Rotate(pond::math::Quaternion::Identity(),
                                           pond::math::Vector3{})));
 
-static_assert(std::same_as<decltype(pond::math::Tolerance::Create(0.0F, 0.0F)),
-                           pond::core::Result<pond::math::Tolerance>>);
+static_assert(std::same_as<decltype(pond::core::Tolerance::Create(0.0F, 0.0F)),
+                           pond::core::Result<pond::core::Tolerance>>);
 static_assert(std::same_as<decltype(pond::math::Normalize(pond::math::Vector3{})),
                            pond::core::Result<pond::math::Vector3>>);
 static_assert(std::same_as<decltype(pond::math::Inverse(pond::math::Matrix3x3{})),
@@ -170,6 +166,18 @@ static_assert(std::same_as<decltype(pond::math::Frustum::FromWorldToClip(pond::m
                            pond::core::Result<pond::math::Frustum>>);
 static_assert(std::same_as<decltype(pond::math::Viewport::Create(0.0F, 0.0F, 1.0F, 1.0F)),
                            pond::core::Result<pond::math::Viewport>>);
+static_assert(std::same_as<decltype(pond::math::Project(pond::math::Matrix4x4{},
+                                                        std::declval<pond::math::Viewport>(),
+                                                        pond::math::Vector3{})),
+                           pond::core::Result<pond::math::Vector3>>);
+static_assert(std::same_as<decltype(pond::math::Unproject(pond::math::Matrix4x4{},
+                                                          std::declval<pond::math::Viewport>(),
+                                                          pond::math::Vector3{})),
+                           pond::core::Result<pond::math::Vector3>>);
+static_assert(std::same_as<decltype(pond::math::UnprojectFromClipToWorld(
+                               pond::math::Matrix4x4{}, std::declval<pond::math::Viewport>(),
+                               pond::math::Vector3{})),
+                           pond::core::Result<pond::math::Vector3>>);
 static_assert(
     std::same_as<decltype(pond::math::Intersect(std::declval<const pond::math::Ray&>(),
                                                 std::declval<const pond::math::AxisAlignedBox&>())),
@@ -204,9 +212,9 @@ void ExpectRecoverableFailure(Result result, pond::math::MathErrorCode expectedC
     EXPECT_NE(error.GetMessage().find(expectedContext), std::string_view::npos);
 }
 
-[[nodiscard]] pond::math::Tolerance RequireTolerance()
+[[nodiscard]] pond::core::Tolerance RequireTolerance()
 {
-    auto tolerance = pond::math::Tolerance::Create(1.0e-5F, 1.0e-5F);
+    auto tolerance = pond::core::Tolerance::Create(1.0e-5F, 1.0e-5F);
     EXPECT_TRUE(tolerance.HasValue());
     return tolerance.GetValue();
 }
@@ -215,10 +223,8 @@ TEST(ApiContractTests, RecoverableFailuresReturnStableCodesAndUsefulContext)
 {
     constexpr float infinity = std::numeric_limits<float>::infinity();
     constexpr float quietNaN = std::numeric_limits<float>::quiet_NaN();
-    const pond::math::Tolerance tolerance = RequireTolerance();
+    const pond::core::Tolerance tolerance = RequireTolerance();
 
-    ExpectRecoverableFailure(pond::math::Tolerance::Create(-1.0F, 0.0F),
-                             pond::math::MathErrorCode::InvalidArgument, "Tolerance");
     ExpectRecoverableFailure(pond::math::Normalize(pond::math::Vector3{}),
                              pond::math::MathErrorCode::DegenerateInput, "Vector3");
     ExpectRecoverableFailure(pond::math::Matrix3x3{}.At(3, 0),

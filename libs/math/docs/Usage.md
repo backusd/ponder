@@ -76,6 +76,9 @@ The selected CPU value layouts are public math-value contracts:
 Matrix member names are logical row/column names, but storage is contiguous column-major `float`
 order. For example, `Matrix4x4::row3Column0` is the fourth scalar in memory.
 
+Vectors expose public named components and checked `At(index)` access. They intentionally do not
+provide `operator[]`; caller-controlled invalid indices remain recoverable `Result` errors.
+
 These guarantees do not mean the same values can be copied directly into a vertex buffer, uniform
 buffer, storage buffer, push constants, or shader parameter block. Renderer code owns GPU packing
 types and conversions. Vulkan viewport flipping and negative-height viewport setup also belong in
@@ -85,6 +88,10 @@ renderer code, not in `ponder_math`.
 
 The first implementation uses concrete `float` math types. There are no public scalar templates,
 `double` families, integer-vector families, or half-precision families.
+
+Project-wide constants, `Tolerance`, scalar `Clamp`, scalar `Lerp`, scalar
+`IsNear`, and finite-number helpers are owned by
+`<ponder/core/Numbers.hpp>`. Math adds only overloads for its own value types.
 
 Angles are explicit strong values:
 
@@ -97,7 +104,7 @@ const pond::math::Radians fovY =
 validated tolerance:
 
 ```cpp
-auto tolerance = pond::math::Tolerance::Create(1.0e-5F, 1.0e-5F);
+auto tolerance = pond::core::Tolerance::Create(1.0e-5F, 1.0e-5F);
 if (!tolerance.HasValue())
 {
     return tolerance.GetError();
@@ -111,6 +118,14 @@ Quaternions have two comparison concepts:
 - `IsNear(lhs, rhs, tolerance)` compares stored components.
 - `IsSameRotation(lhs, rhs, tolerance)` also treats `q` and `-q` as the same rotation.
 
+`Slerp` requires a finite amount but does not clamp it. Amounts in `[0, 1]` interpolate and
+amounts outside that interval extrapolate along the same shortest-path rotation. Exact amounts zero
+and one return the exact input endpoints.
+
+`ToQuaternion(Matrix4x4)` inspects and validates only the upper-left 3x3 linear part. Translation
+and the matrix bottom row are intentionally ignored; the extracted linear part must still be a
+proper rotation.
+
 ## Checked Failure Behavior
 
 Recoverable invalid input and mathematically unavailable results return
@@ -121,12 +136,16 @@ Common examples:
 - invalid finite domains, such as a negative sphere radius, return `InvalidArgument`;
 - non-finite inputs return `NonFiniteInput`;
 - zero-length normalization inputs return `DegenerateInput`;
-- singular matrix inversion returns `SingularMatrix`;
-- unusable homogeneous `w` during perspective divide returns
-  `UndefinedHomogeneousCoordinate`.
+- singular or finite-`float`-unrepresentable matrix inversion returns `SingularMatrix`;
+- zero or non-finite homogeneous `w`, or a perspective-division result outside the finite `float`
+  range, returns `UndefinedHomogeneousCoordinate`.
 
-Callers must handle or propagate these results. Assertions are reserved for internal invariants, not
-caller-reachable invalid inputs.
+Callers must handle or propagate these results. Assertions are reserved for internal invariants,
+not caller-reachable invalid inputs.
+
+`PerspectiveDivide` accepts any finite nonzero `w`, including subnormal values, when all three
+quotients convert to finite `float` NDC coordinates. It rejects zero or non-finite `w`, non-finite
+clip coordinates, and quotients outside the finite `float` result range.
 
 ## Points, Vectors, And Normals
 
@@ -144,8 +163,9 @@ auto transformedNormal = pond::math::TransformNormal(world, localNormal);
 `w = 0` and ignores translation. `TransformNormal` uses the inverse-transpose of the linear part so
 normals remain perpendicular under non-uniform scale and shear.
 
-`TransformNormal` can fail because the linear part can be singular. It does not silently normalize
-the output; normalize explicitly when your caller needs a unit normal.
+`TransformNormal` is fully checked: the complete matrix and input normal must be finite, the linear
+part must be invertible, and the transformed result must remain finite and representable. It does
+not silently normalize the output; normalize explicitly when your caller needs a unit normal.
 
 ## Camera, Projection, NDC, And Viewport
 
@@ -182,8 +202,8 @@ NDC uses +Y up and depth `[0, 1]`.
 
 `Viewport` uses continuous screen coordinates with top-left origin and +Y down. NDC `(-1, +1)`
 maps to the top-left viewport edge. NDC `(+1, -1)` maps to the bottom-right viewport edge. No
-half-pixel or pixel-center offset is applied. Viewport depth maps linearly into the explicit ordered
-viewport depth interval.
+half-pixel or pixel-center offset is applied. Viewport depth maps linearly into the explicit
+ordered viewport depth interval.
 
 `Project` transforms world points to viewport coordinates. `Unproject` transforms viewport
 coordinates back to world coordinates:
@@ -192,6 +212,21 @@ coordinates back to world coordinates:
 auto screen = pond::math::Project(worldToClip, viewport, worldPoint);
 auto world = pond::math::Unproject(worldToClip, viewport, screen.GetValue());
 ```
+
+`Unproject` validates and inverts `worldToClip` on each call. It fails when that inverse is
+singular or cannot be represented as a finite `Matrix4x4`. When unprojecting more than one point
+with the same transform, invert once and use the explicitly named cached path:
+
+```cpp
+auto clipToWorld = pond::math::Inverse(worldToClip);
+auto nearPoint = pond::math::UnprojectFromClipToWorld(
+    clipToWorld.GetValue(), viewport, nearScreenPoint);
+auto farPoint = pond::math::UnprojectFromClipToWorld(
+    clipToWorld.GetValue(), viewport, farScreenPoint);
+```
+
+The cached helper accepts clip-to-world, not world-to-clip; the name is intentionally explicit to
+make accidental matrix-direction swaps visible at the call site.
 
 ## Collision And Picking
 
@@ -220,6 +255,22 @@ Boundaries are inclusive. Culling conservatively retains objects that touch a bo
 inside the documented floating-point uncertainty region. Ray hit distances are world distances
 because ray directions are normalized. `RayTriangleHit` barycentrics are ordered to match
 `Triangle::GetVertex0`, `GetVertex1`, and `GetVertex2`.
+
+Frustum classification uses a scale-aware floating-point error bound derived from the magnitudes in
+each plane test. A value confidently outside any plane is `Disjoint`; a boundary or value inside
+that error bound is retained as `Intersects`. The bound is an algorithmic accuracy policy, not a
+caller-selected tolerance or a frozen public multiplier.
+
+Ray/triangle intersection uses scale-aware determinant, barycentric, and distance error bounds.
+Near-parallel and near-degenerate configurations are treated as no hit because their result is
+ill-conditioned. Boundary barycentrics and distances inside the uncertainty bound are accepted,
+clamped to the exact boundary, and renormalized when needed.
+
+The concrete-float picking API supports hits only when every reported distance and barycentric is
+finite and representable as `float`. A geometric hit beyond that result domain returns
+`std::nullopt`, indistinguishable from a miss; callers that require larger coordinate spans need a
+different scalar or result contract. The deterministic higher-precision collision corpus exercises
+characteristic scales `1e-3`, `1`, and `1e6`. Those test scales are evidence, not API limits.
 
 ## Compiled Documentation Examples
 

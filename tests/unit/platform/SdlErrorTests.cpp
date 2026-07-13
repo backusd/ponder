@@ -67,6 +67,29 @@ TEST_F(PlatformSdlErrorTests, UsesFallbackForEmptySdlError)
                                                    "SDL did not provide an error message"});
 }
 
+TEST_F(PlatformSdlErrorTests, FormatsAlreadyCapturedErrorWithoutReplacingItFromSdlState)
+{
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Unsupported, 73};
+    static_cast<void>(SDL_SetError("new SDL state"));
+
+    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
+        kCode, "SDL_GetClipboardText", "clipboard text", "captured clipboard failure");
+
+    EXPECT_TRUE(error.GetCode() == kCode);
+    EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_GetClipboardText failed (clipboard text): "
+                                                   "captured clipboard failure"});
+    EXPECT_STREQ(SDL_GetError(), "new SDL state");
+}
+
+TEST_F(PlatformSdlErrorTests, UsesFallbackForEmptyCapturedError)
+{
+    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
+        pond::core::ErrorCode{}, "SDL_GetClipboardText", "clipboard text", "");
+
+    EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_GetClipboardText failed (clipboard text): "
+                                                   "SDL did not provide an error message"});
+}
+
 TEST_F(PlatformSdlErrorTests, UsesCallerSourceLocationByDefault)
 {
     constexpr pond::core::ErrorCode kCode;

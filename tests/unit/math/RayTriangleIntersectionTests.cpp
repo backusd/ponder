@@ -208,6 +208,33 @@ TEST(RayTriangleIntersectionTests, RejectsMissesBehindOriginParallelRaysAndZeroA
         zeroArea));
 }
 
+TEST(RayTriangleIntersectionTests, RejectsNearParallelAndNearDegenerateUncertainHits)
+{
+    const auto nearParallelTriangle = MakeTriangle(pond::math::Vector3{0.0F, 0.0F, -5.0F},
+                                                   pond::math::Vector3{1.0F, -1.0F, -4.0F},
+                                                   pond::math::Vector3{1.0F, -1.0F, -7.0F});
+    const pond::math::Vector3 nearParallelHitPoint{0.5F, -0.5F, -5.25F};
+    const pond::math::Vector3 nearParallelDirection{1.0F, -0.999999F, 0.0F};
+    const auto nearParallelRay =
+        MakeRay(nearParallelHitPoint - nearParallelDirection * 2.0F, nearParallelDirection);
+
+    ASSERT_TRUE(IntersectDoubleOracle(nearParallelRay, nearParallelTriangle).has_value());
+    EXPECT_FALSE(pond::math::Intersect(nearParallelRay, nearParallelTriangle).has_value());
+
+    const auto nearDegenerateTriangle = MakeTriangle(pond::math::Vector3{0.0F, 0.0F, -5.0F},
+                                                     pond::math::Vector3{1.0F, -1.0F, -5.0F},
+                                                     pond::math::Vector3{1.0F, -0.999999F, -5.0F});
+    const pond::math::Vector3 nearDegenerateHitPoint = nearDegenerateTriangle.GetVertex0() * 0.5F +
+                                                       nearDegenerateTriangle.GetVertex1() * 0.25F +
+                                                       nearDegenerateTriangle.GetVertex2() * 0.25F;
+    const auto nearDegenerateRay =
+        MakeRay(nearDegenerateHitPoint + pond::math::Vector3{0.0F, 0.0F, 2.0F},
+                pond::math::Vector3{0.0F, 0.0F, -1.0F});
+
+    ASSERT_TRUE(IntersectDoubleOracle(nearDegenerateRay, nearDegenerateTriangle).has_value());
+    EXPECT_FALSE(pond::math::Intersect(nearDegenerateRay, nearDegenerateTriangle).has_value());
+}
+
 TEST(RayTriangleIntersectionTests, HandlesVerySmallAndVeryLargeFiniteCoordinates)
 {
     ExpectTriangleHitNear(

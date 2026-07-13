@@ -30,6 +30,8 @@ revisiting basic error, diagnostic, and utility conventions.
   and CMake metadata.
 - `Hash.hpp`: deterministic constexpr helpers for hashing narrow project-owned
   identifier values.
+- `Identifier.hpp`: tag-based, zero-invalid, unsigned 64-bit strong identifier
+  mechanics for libraries that own their own identifier domains.
 - `Log.hpp`: logging levels, log entries, category-aware logging functions,
   macros, async flush/shutdown controls, and scoped test overrides.
 - `Numbers.hpp`: constrained constexpr numeric helpers.
@@ -74,11 +76,14 @@ revisiting basic error, diagnostic, and utility conventions.
   logging implementation detail, not a general job system.
 - Build/version information is generated into the build tree and exposed through
   `BuildInfo.hpp`.
-- Generic stable identifiers use `Uuid`. Domain-specific IDs should wrap or
-  otherwise use stable representations in their owning libraries.
+- Generic stable identifiers use `Uuid`. Libraries that need local monotonic or
+  otherwise library-owned integer identifiers may use `Identifier<Tag>` with
+  tags owned by that library. Domain-specific IDs should wrap or otherwise use
+  stable representations in their owning libraries.
 - Small dependency-free helpers may live in core when they are broadly useful and
-  have clear tests. Current examples are `ScopeExit`, identifier hashing, string
-  conversion, UTF-8 validation, and finite-number checks.
+  have clear tests. Current examples are `ScopeExit`, tag-based identifiers,
+  identifier hashing, string conversion, UTF-8 validation, finite-number checks,
+  and checked floating-to-integral rounding.
 - Low-level value types and observers should stay constexpr/noexcept where doing so
   does not hide runtime diagnostics, allocation, stacktrace capture, entropy, or
   other inherently runtime behavior.
@@ -122,19 +127,38 @@ invocable, no-throw move constructible, and no-throw destructible. Use a normal
 named RAII type or explicit cleanup path when cleanup can fail and needs a
 recoverable error path.
 
-### Hashing
+### Identifiers And Hashing
+
+`Identifier.hpp` provides constexpr, no-throw, tag-based strong identifier
+mechanics for libraries that own zero-invalid unsigned 64-bit identifier domains.
+The tag type remains in the owning library so core supplies only the reusable
+value mechanics, comparison, and hash integration, not domain identity or
+allocation policy.
 
 `Hash.hpp` provides constexpr, no-throw hashing helpers for small project-owned
 identifier wrappers. `HashIdentifierValue` hashes a `std::uint64_t` value with a
-deterministic byte-order policy so domain libraries can share a stable hashing
-primitive without centralizing the domain-specific identifier types themselves.
+deterministic byte-order policy so libraries can share a stable hashing
+primitive without centralizing domain-specific identifier types themselves.
 
 ### Numbers
 
-`Numbers.hpp` provides constrained, constexpr, no-throw helpers for simple numeric
-observations. `IsFinite` accepts integral and floating-point values except `bool`.
-Integral values are always finite; floating-point infinities and NaNs are rejected
-without requiring platform math APIs.
+`Numbers.hpp` provides constrained, constexpr-friendly project-wide numeric
+building blocks. Its value-only observers and arithmetic helpers are no-throw;
+checked factories retain the normal runtime diagnostic path. It owns the
+mathematical constants, `Tolerance`, `Clamp`, `Lerp`, scalar `IsNear`,
+finite-number checks, and checked numeric rounding used by higher-level
+libraries.
+
+`Tolerance::Create` validates explicit non-negative finite absolute and relative
+tolerances; the project defines no universal epsilon. `IsNear` combines those
+tolerances without overflow-prone float subtraction, and `Lerp` keeps finite,
+representable interpolations stable across large endpoints, including
+opposite-sign extremes.
+`IsFinite` accepts integral and floating-point values except `bool`. Integral
+values are always finite; floating-point infinities and NaNs are rejected without
+requiring platform math APIs. `RoundToInteger<T>` rounds finite floating-point
+values to explicitly constrained integral targets and returns `std::nullopt`
+when the input is non-finite or outside the target range.
 
 ### String Conversion
 

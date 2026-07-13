@@ -36,4 +36,35 @@ static_assert(pond::math::ToMatrix4x4(pond::math::Quaternion::Identity()) ==
               pond::math::Matrix4x4::Identity());
 static_assert(pond::math::Matrix4x4::Rotation(pond::math::Quaternion::Identity()) ==
               pond::math::Matrix4x4::Identity());
+static_assert(noexcept(pond::math::Quaternion::Identity() * pond::math::Quaternion::Identity()));
+
+[[nodiscard]] constexpr bool SlerpEndpointsAreConstantEvaluable()
+{
+    auto start = pond::math::Slerp(pond::math::Quaternion::Identity(),
+                                   pond::math::Quaternion::Identity(), 0.0F);
+    auto end = pond::math::Slerp(pond::math::Quaternion::Identity(),
+                                 pond::math::Quaternion::Identity(), 1.0F);
+    return start.HasValue() && start.GetValue() == pond::math::Quaternion::Identity() &&
+           end.HasValue() && end.GetValue() == pond::math::Quaternion::Identity();
+}
+
+[[nodiscard]] constexpr bool QuaternionNearComparisonsAreConstantEvaluable()
+{
+    auto tolerance = pond::core::Tolerance::Create(1.0e-5F, 1.0e-5F);
+    if (!tolerance.HasValue())
+    {
+        return false;
+    }
+
+    auto validation = pond::math::detail::ValidateRotationMatrix(pond::math::Matrix3x3::Identity(),
+                                                                 tolerance.GetValue());
+    return pond::math::IsNear(pond::math::Quaternion::Identity(),
+                              pond::math::Quaternion::Identity(), tolerance.GetValue()) &&
+           pond::math::IsSameRotation(pond::math::Quaternion::Identity(),
+                                      pond::math::Quaternion::Identity(), tolerance.GetValue()) &&
+           validation.HasValue();
+}
+
+static_assert(SlerpEndpointsAreConstantEvaluable());
+static_assert(QuaternionNearComparisonsAreConstantEvaluable());
 } // namespace

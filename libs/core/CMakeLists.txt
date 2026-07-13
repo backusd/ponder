@@ -12,6 +12,7 @@ ponder_add_project_library(core
         include/ponder/core/Assert.hpp
         include/ponder/core/BuildInfo.hpp
         include/ponder/core/Hash.hpp
+        include/ponder/core/Identifier.hpp
         include/ponder/core/Log.hpp
         include/ponder/core/Numbers.hpp
         include/ponder/core/PonderException.hpp

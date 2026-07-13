@@ -10,8 +10,8 @@ namespace pond::math
 {
 class RayTriangleHit;
 
-[[nodiscard]] inline std::optional<RayTriangleHit> Intersect(const Ray& ray,
-                                                             const Triangle& triangle) noexcept;
+[[nodiscard]] inline constexpr std::optional<RayTriangleHit> Intersect(
+    const Ray& ray, const Triangle& triangle) noexcept;
 
 namespace detail
 {
@@ -115,6 +115,80 @@ struct RayTriangleVector final
 
     return value;
 }
+
+struct RayTriangleIntersection final
+{
+    double distance{0.0};
+    double barycentric0{0.0};
+    double barycentric1{0.0};
+    double barycentric2{0.0};
+};
+
+[[nodiscard]] constexpr std::optional<RayTriangleIntersection> IntersectRayTriangleValues(
+    Vector3 rayOrigin, Vector3 rayDirection, Vector3 triangleVertex0, Vector3 triangleVertex1,
+    Vector3 triangleVertex2) noexcept
+{
+    const RayTriangleVector origin = ToRayTriangleVector(rayOrigin);
+    const RayTriangleVector direction = ToRayTriangleVector(rayDirection);
+    const RayTriangleVector vertex0 = ToRayTriangleVector(triangleVertex0);
+    const RayTriangleVector vertex1 = ToRayTriangleVector(triangleVertex1);
+    const RayTriangleVector vertex2 = ToRayTriangleVector(triangleVertex2);
+    const RayTriangleVector edge0 = vertex1 - vertex0;
+    const RayTriangleVector edge1 = vertex2 - vertex0;
+    const RayTriangleVector pVector = Cross(direction, edge1);
+    const double determinant = Dot(edge0, pVector);
+    const double determinantError = DeterminantErrorBound(edge0, pVector);
+
+    if (AbsRayTriangleValue(determinant) <= determinantError)
+    {
+        return std::nullopt;
+    }
+
+    const RayTriangleVector originToVertex0 = origin - vertex0;
+    const double barycentric1Numerator = Dot(originToVertex0, pVector);
+    const RayTriangleVector qVector = Cross(originToVertex0, edge0);
+    const double barycentric2Numerator = Dot(direction, qVector);
+    const double barycentric1 = barycentric1Numerator / determinant;
+    const double barycentric2 = barycentric2Numerator / determinant;
+    const double barycentric0 = 1.0 - barycentric1 - barycentric2;
+    const double barycentricTolerance =
+        BarycentricErrorBound(determinant, barycentric1Numerator, barycentric2Numerator);
+
+    if (barycentric0 < -barycentricTolerance || barycentric1 < -barycentricTolerance ||
+        barycentric2 < -barycentricTolerance)
+    {
+        return std::nullopt;
+    }
+
+    double adjustedBarycentric0 = ClampRayTriangleBarycentric(barycentric0);
+    double adjustedBarycentric1 = ClampRayTriangleBarycentric(barycentric1);
+    double adjustedBarycentric2 = ClampRayTriangleBarycentric(barycentric2);
+    const double barycentricSum =
+        adjustedBarycentric0 + adjustedBarycentric1 + adjustedBarycentric2;
+    if (barycentricSum == 0.0)
+    {
+        return std::nullopt;
+    }
+    adjustedBarycentric0 /= barycentricSum;
+    adjustedBarycentric1 /= barycentricSum;
+    adjustedBarycentric2 /= barycentricSum;
+
+    const double distanceNumerator = Dot(edge1, qVector);
+    double distance = distanceNumerator / determinant;
+    const double distanceTolerance =
+        DistanceErrorBound(origin, vertex0, vertex1, vertex2, distance);
+    if (distance < -distanceTolerance)
+    {
+        return std::nullopt;
+    }
+    if (distance < 0.0)
+    {
+        distance = 0.0;
+    }
+
+    return RayTriangleIntersection{distance, adjustedBarycentric0, adjustedBarycentric1,
+                                   adjustedBarycentric2};
+}
 } // namespace detail
 
 class RayTriangleHit final
@@ -144,8 +218,8 @@ public:
                                                    const RayTriangleHit& rhs) noexcept = default;
 
 private:
-    friend std::optional<RayTriangleHit> Intersect(const Ray& ray,
-                                                   const Triangle& triangle) noexcept;
+    friend constexpr std::optional<RayTriangleHit> Intersect(const Ray& ray,
+                                                             const Triangle& triangle) noexcept;
 
     constexpr RayTriangleHit(float distance, float barycentric0, float barycentric1,
                              float barycentric2) noexcept
@@ -160,73 +234,23 @@ private:
     float m_barycentric2;
 };
 
-[[nodiscard]] inline std::optional<RayTriangleHit> Intersect(const Ray& ray,
-                                                             const Triangle& triangle) noexcept
+[[nodiscard]] inline constexpr std::optional<RayTriangleHit> Intersect(
+    const Ray& ray, const Triangle& triangle) noexcept
 {
-    const detail::RayTriangleVector origin = detail::ToRayTriangleVector(ray.GetOrigin());
-    const detail::RayTriangleVector direction = detail::ToRayTriangleVector(ray.GetDirection());
-    const detail::RayTriangleVector vertex0 = detail::ToRayTriangleVector(triangle.GetVertex0());
-    const detail::RayTriangleVector vertex1 = detail::ToRayTriangleVector(triangle.GetVertex1());
-    const detail::RayTriangleVector vertex2 = detail::ToRayTriangleVector(triangle.GetVertex2());
-    const detail::RayTriangleVector edge0 = vertex1 - vertex0;
-    const detail::RayTriangleVector edge1 = vertex2 - vertex0;
-    const detail::RayTriangleVector pVector = detail::Cross(direction, edge1);
-    const double determinant = detail::Dot(edge0, pVector);
-    const double determinantError = detail::DeterminantErrorBound(edge0, pVector);
-
-    if (detail::AbsRayTriangleValue(determinant) <= determinantError)
+    const auto intersection = detail::IntersectRayTriangleValues(
+        ray.GetOrigin(), ray.GetDirection(), triangle.GetVertex0(), triangle.GetVertex1(),
+        triangle.GetVertex2());
+    if (!intersection.has_value())
     {
         return std::nullopt;
     }
 
-    const detail::RayTriangleVector originToVertex0 = origin - vertex0;
-    const double barycentric1Numerator = detail::Dot(originToVertex0, pVector);
-    const detail::RayTriangleVector qVector = detail::Cross(originToVertex0, edge0);
-    const double barycentric2Numerator = detail::Dot(direction, qVector);
-    const double barycentric1 = barycentric1Numerator / determinant;
-    const double barycentric2 = barycentric2Numerator / determinant;
-    const double barycentric0 = 1.0 - barycentric1 - barycentric2;
-    const double barycentricTolerance =
-        detail::BarycentricErrorBound(determinant, barycentric1Numerator, barycentric2Numerator);
-
-    if (barycentric0 < -barycentricTolerance || barycentric1 < -barycentricTolerance ||
-        barycentric2 < -barycentricTolerance)
-    {
-        return std::nullopt;
-    }
-
-    double adjustedBarycentric0 = detail::ClampRayTriangleBarycentric(barycentric0);
-    double adjustedBarycentric1 = detail::ClampRayTriangleBarycentric(barycentric1);
-    double adjustedBarycentric2 = detail::ClampRayTriangleBarycentric(barycentric2);
-    const double barycentricSum =
-        adjustedBarycentric0 + adjustedBarycentric1 + adjustedBarycentric2;
-    if (barycentricSum == 0.0)
-    {
-        return std::nullopt;
-    }
-    adjustedBarycentric0 /= barycentricSum;
-    adjustedBarycentric1 /= barycentricSum;
-    adjustedBarycentric2 /= barycentricSum;
-
-    const double distanceNumerator = detail::Dot(edge1, qVector);
-    double distance = distanceNumerator / determinant;
-    const double distanceTolerance =
-        detail::DistanceErrorBound(origin, vertex0, vertex1, vertex2, distance);
-    if (distance < -distanceTolerance)
-    {
-        return std::nullopt;
-    }
-    if (distance < 0.0)
-    {
-        distance = 0.0;
-    }
-
-    const float resultDistance = static_cast<float>(distance);
-    const float resultBarycentric0 = static_cast<float>(adjustedBarycentric0);
-    const float resultBarycentric1 = static_cast<float>(adjustedBarycentric1);
-    const float resultBarycentric2 = static_cast<float>(adjustedBarycentric2);
-    if (!IsFinite(resultDistance) || !IsFinite(resultBarycentric0) ||
-        !IsFinite(resultBarycentric1) || !IsFinite(resultBarycentric2))
+    const float resultDistance = static_cast<float>(intersection->distance);
+    const float resultBarycentric0 = static_cast<float>(intersection->barycentric0);
+    const float resultBarycentric1 = static_cast<float>(intersection->barycentric1);
+    const float resultBarycentric2 = static_cast<float>(intersection->barycentric2);
+    if (!core::IsFinite(resultDistance) || !core::IsFinite(resultBarycentric0) ||
+        !core::IsFinite(resultBarycentric1) || !core::IsFinite(resultBarycentric2))
     {
         return std::nullopt;
     }

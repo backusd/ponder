@@ -1,5 +1,7 @@
 #include "PlatformRuntimeBackend.hpp"
 
+#include <ponder/core/ScopeExit.hpp>
+
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
@@ -15,11 +17,11 @@
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 #include <atomic>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace pond::platform::detail
@@ -305,9 +307,16 @@ void DestroyCursor(void*, void* cursor) noexcept
 {
     static_cast<void>(SDL_ClearError());
     char* const text = SDL_GetClipboardText();
+    auto freeTextOnFailure = core::MakeScopeExit(
+        [text]() noexcept
+        {
+            SDL_free(text);
+        });
     const char* const rawError = SDL_GetError();
-    return BackendClipboardTextResult{
+    BackendClipboardTextResult result{
         .text = text, .errorText = rawError != nullptr ? std::string{rawError} : std::string{}};
+    freeTextOnFailure.Dismiss();
+    return result;
 }
 
 void FreeClipboardText(void*, char* text) noexcept
@@ -503,21 +512,21 @@ void DestroyWindow(void*, void* window) noexcept
 {
     return SDL_MinimizeWindow(static_cast<SDL_Window*>(window))
                ? BackendWindowOperationResult::Succeeded
-               : BackendWindowOperationResult::Unsupported;
+               : BackendWindowOperationResult::Failed;
 }
 
 [[nodiscard]] BackendWindowOperationResult MaximizeWindow(void*, void* window) noexcept
 {
     return SDL_MaximizeWindow(static_cast<SDL_Window*>(window))
                ? BackendWindowOperationResult::Succeeded
-               : BackendWindowOperationResult::Unsupported;
+               : BackendWindowOperationResult::Failed;
 }
 
 [[nodiscard]] BackendWindowOperationResult RestoreWindow(void*, void* window) noexcept
 {
     return SDL_RestoreWindow(static_cast<SDL_Window*>(window))
                ? BackendWindowOperationResult::Succeeded
-               : BackendWindowOperationResult::Unsupported;
+               : BackendWindowOperationResult::Failed;
 }
 
 [[nodiscard]] bool StartWindowTextInput(void*, void* window) noexcept
@@ -599,12 +608,9 @@ void DestroyWindow(void*, void* window) noexcept
     {
         return NativeHandleFailure("SDL window is missing X11 native properties.");
     }
-    if constexpr (sizeof(std::uintptr_t) < sizeof(Sint64))
+    if (!std::in_range<std::uintptr_t>(window))
     {
-        if (window > static_cast<Sint64>(std::numeric_limits<std::uintptr_t>::max()))
-        {
-            return NativeHandleFailure("SDL X11 window property is too large for uintptr_t.");
-        }
+        return NativeHandleFailure("SDL X11 window property is too large for uintptr_t.");
     }
 
     *handle = NativeX11Window{.display = display, .window = static_cast<std::uintptr_t>(window)};
@@ -806,81 +812,87 @@ void DestroyMetalView(void*, void* metalView) noexcept
     return SDL_GetWindowDisplayScale(static_cast<SDL_Window*>(window));
 }
 
-constexpr PlatformWindowBackend kSdlWindowBackend{nullptr,
-                                                  CreateWindow,
-                                                  DestroyWindow,
-                                                  GetWindowId,
-                                                  GetWindowTitle,
-                                                  SetWindowTitle,
-                                                  GetWindowPosition,
-                                                  SetWindowPosition,
-                                                  GetWindowSize,
-                                                  GetWindowSizeInPixels,
-                                                  SetWindowSize,
-                                                  SetWindowMinimumSize,
-                                                  ShowWindow,
-                                                  HideWindow,
-                                                  GetWindowProperties,
-                                                  SetFullscreenModeToDesktop,
-                                                  SetWindowFullscreen,
-                                                  SetWindowBordered,
-                                                  SetWindowResizable,
-                                                  SetWindowAlwaysOnTop,
-                                                  MinimizeWindow,
-                                                  MaximizeWindow,
-                                                  RestoreWindow,
-                                                  StartWindowTextInput,
-                                                  StopWindowTextInput,
-                                                  IsWindowTextInputActive,
-                                                  ClearWindowTextComposition,
-                                                  SetWindowTextInputArea,
-                                                  SetWindowMouseGrab,
-                                                  IsWindowMouseGrabbed,
-                                                  SetWindowRelativeMouseMode,
-                                                  IsWindowRelativeMouseModeEnabled,
-                                                  GetNativeWindowHandle,
-                                                  DestroyMetalView};
+constexpr PlatformWindowBackend kSdlWindowBackend{
+    .context = nullptr,
+    .create = CreateWindow,
+    .destroy = DestroyWindow,
+    .getId = GetWindowId,
+    .getTitle = GetWindowTitle,
+    .setTitle = SetWindowTitle,
+    .getPosition = GetWindowPosition,
+    .setPosition = SetWindowPosition,
+    .getSize = GetWindowSize,
+    .getSizeInPixels = GetWindowSizeInPixels,
+    .setSize = SetWindowSize,
+    .setMinimumSize = SetWindowMinimumSize,
+    .show = ShowWindow,
+    .hide = HideWindow,
+    .getProperties = GetWindowProperties,
+    .setFullscreenModeToDesktop = SetFullscreenModeToDesktop,
+    .setFullscreen = SetWindowFullscreen,
+    .setBordered = SetWindowBordered,
+    .setResizable = SetWindowResizable,
+    .setAlwaysOnTop = SetWindowAlwaysOnTop,
+    .minimize = MinimizeWindow,
+    .maximize = MaximizeWindow,
+    .restore = RestoreWindow,
+    .startTextInput = StartWindowTextInput,
+    .stopTextInput = StopWindowTextInput,
+    .isTextInputActive = IsWindowTextInputActive,
+    .clearTextComposition = ClearWindowTextComposition,
+    .setTextInputArea = SetWindowTextInputArea,
+    .setMouseGrab = SetWindowMouseGrab,
+    .isMouseGrabbed = IsWindowMouseGrabbed,
+    .setRelativeMouseMode = SetWindowRelativeMouseMode,
+    .isRelativeMouseModeEnabled = IsWindowRelativeMouseModeEnabled,
+    .getNativeHandle = GetNativeWindowHandle,
+    .destroyMetalView = DestroyMetalView,
+};
 
-constexpr PlatformDisplayBackend kSdlDisplayBackend{nullptr,
-                                                    EnumerateDisplays,
-                                                    GetDisplayName,
-                                                    GetDisplayBounds,
-                                                    GetDisplayUsableBounds,
-                                                    GetCurrentDisplayRefreshRate,
-                                                    GetCurrentDisplayOrientation,
-                                                    GetDisplayContentScale,
-                                                    GetDisplayForWindow,
-                                                    GetWindowPixelDensity,
-                                                    GetWindowDisplayScale};
+constexpr PlatformDisplayBackend kSdlDisplayBackend{
+    .context = nullptr,
+    .enumerate = EnumerateDisplays,
+    .getName = GetDisplayName,
+    .getBounds = GetDisplayBounds,
+    .getUsableBounds = GetDisplayUsableBounds,
+    .getCurrentRefreshRate = GetCurrentDisplayRefreshRate,
+    .getCurrentOrientation = GetCurrentDisplayOrientation,
+    .getContentScale = GetDisplayContentScale,
+    .getForWindow = GetDisplayForWindow,
+    .getWindowPixelDensity = GetWindowPixelDensity,
+    .getWindowDisplayScale = GetWindowDisplayScale,
+};
 
-constexpr PlatformRuntimeBackend kSdlBackend{nullptr,
-                                             IsMainThread,
-                                             HasInitializedSubsystems,
-                                             HasExpectedRuntimeSubsystems,
-                                             GetAppMetadataProperty,
-                                             SetAppMetadataProperty,
-                                             GetHint,
-                                             SetHintOverride,
-                                             ResetHint,
-                                             InitializeVideo,
-                                             Quit,
-                                             GetTicksNanoseconds,
-                                             PollEvent,
-                                             SupportsGlobalMouse,
-                                             GetGlobalMousePosition,
-                                             SetMouseCapture,
-                                             CreateSystemCursor,
-                                             SetCursor,
-                                             DestroyCursor,
-                                             ShowCursor,
-                                             HideCursor,
-                                             IsCursorVisible,
-                                             SupportsClipboardText,
-                                             GetClipboardText,
-                                             FreeClipboardText,
-                                             SetClipboardText,
-                                             OpenExternalUri,
-                                             ShowDialog};
+constexpr PlatformRuntimeBackend kSdlBackend{
+    .context = nullptr,
+    .isMainThread = IsMainThread,
+    .hasInitializedSubsystems = HasInitializedSubsystems,
+    .hasExpectedRuntimeSubsystems = HasExpectedRuntimeSubsystems,
+    .getAppMetadataProperty = GetAppMetadataProperty,
+    .setAppMetadataProperty = SetAppMetadataProperty,
+    .getHint = GetHint,
+    .setHintOverride = SetHintOverride,
+    .resetHint = ResetHint,
+    .initializeVideo = InitializeVideo,
+    .quit = Quit,
+    .getTicksNanoseconds = GetTicksNanoseconds,
+    .pollEvent = PollEvent,
+    .supportsGlobalMouse = SupportsGlobalMouse,
+    .getGlobalMousePosition = GetGlobalMousePosition,
+    .setMouseCapture = SetMouseCapture,
+    .createSystemCursor = CreateSystemCursor,
+    .setCursor = SetCursor,
+    .destroyCursor = DestroyCursor,
+    .showCursor = ShowCursor,
+    .hideCursor = HideCursor,
+    .isCursorVisible = IsCursorVisible,
+    .supportsClipboardText = SupportsClipboardText,
+    .getClipboardText = GetClipboardText,
+    .freeClipboardText = FreeClipboardText,
+    .setClipboardText = SetClipboardText,
+    .openExternalUri = OpenExternalUri,
+    .showDialog = ShowDialog,
+};
 
 std::atomic<const PlatformRuntimeBackend*> backendOverride{nullptr};
 std::atomic<const PlatformWindowBackend*> windowBackendOverride{nullptr};

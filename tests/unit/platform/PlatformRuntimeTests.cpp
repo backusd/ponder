@@ -145,6 +145,7 @@ struct FakeRuntimeBackend final
     std::string failingHint;
     int hintFailuresRemaining{};
     std::uint64_t ticks{123'456};
+    bool timestampCaptureOverwritesSdlError{};
     std::uint32_t nextBackendWindowId{100};
     std::uint32_t defaultWindowDisplayId{1};
     float defaultWindowPixelDensity{1.0F};
@@ -884,6 +885,10 @@ void FakeQuit(void* context)
     FakeRuntimeBackend& fake = GetFake(context);
     ++fake.tickCalls;
     fake.calls.emplace_back("ticks");
+    if (fake.timestampCaptureOverwritesSdlError)
+    {
+        static_cast<void>(SDL_SetError("timestamp capture overwrote the dialog error"));
+    }
     return fake.ticks;
 }
 
@@ -1801,87 +1806,93 @@ void FakeDestroyMetalView(void* context, void* metalView)
 
 [[nodiscard]] PlatformRuntimeBackend MakeBackend(FakeRuntimeBackend& fake)
 {
-    return PlatformRuntimeBackend{&fake,
-                                  FakeIsMainThread,
-                                  FakeHasInitializedSubsystems,
-                                  FakeHasExpectedRuntimeSubsystems,
-                                  FakeGetAppMetadataProperty,
-                                  FakeSetAppMetadataProperty,
-                                  FakeGetHint,
-                                  FakeSetHintOverride,
-                                  FakeResetHint,
-                                  FakeInitializeVideo,
-                                  FakeQuit,
-                                  FakeGetTicksNanoseconds,
-                                  FakePollEvent,
-                                  FakeSupportsGlobalMouse,
-                                  FakeGetGlobalMousePosition,
-                                  FakeSetMouseCapture,
-                                  FakeCreateSystemCursor,
-                                  FakeSetCursor,
-                                  FakeDestroyCursor,
-                                  FakeShowCursor,
-                                  FakeHideCursor,
-                                  FakeIsCursorVisible,
-                                  FakeSupportsClipboardText,
-                                  FakeGetClipboardText,
-                                  FakeFreeClipboardText,
-                                  FakeSetClipboardText,
-                                  FakeOpenExternalUri,
-                                  FakeShowDialog};
+    return PlatformRuntimeBackend{
+        .context = &fake,
+        .isMainThread = FakeIsMainThread,
+        .hasInitializedSubsystems = FakeHasInitializedSubsystems,
+        .hasExpectedRuntimeSubsystems = FakeHasExpectedRuntimeSubsystems,
+        .getAppMetadataProperty = FakeGetAppMetadataProperty,
+        .setAppMetadataProperty = FakeSetAppMetadataProperty,
+        .getHint = FakeGetHint,
+        .setHintOverride = FakeSetHintOverride,
+        .resetHint = FakeResetHint,
+        .initializeVideo = FakeInitializeVideo,
+        .quit = FakeQuit,
+        .getTicksNanoseconds = FakeGetTicksNanoseconds,
+        .pollEvent = FakePollEvent,
+        .supportsGlobalMouse = FakeSupportsGlobalMouse,
+        .getGlobalMousePosition = FakeGetGlobalMousePosition,
+        .setMouseCapture = FakeSetMouseCapture,
+        .createSystemCursor = FakeCreateSystemCursor,
+        .setCursor = FakeSetCursor,
+        .destroyCursor = FakeDestroyCursor,
+        .showCursor = FakeShowCursor,
+        .hideCursor = FakeHideCursor,
+        .isCursorVisible = FakeIsCursorVisible,
+        .supportsClipboardText = FakeSupportsClipboardText,
+        .getClipboardText = FakeGetClipboardText,
+        .freeClipboardText = FakeFreeClipboardText,
+        .setClipboardText = FakeSetClipboardText,
+        .openExternalUri = FakeOpenExternalUri,
+        .showDialog = FakeShowDialog,
+    };
 }
 
 [[nodiscard]] PlatformWindowBackend MakeWindowBackend(FakeRuntimeBackend& fake)
 {
-    return PlatformWindowBackend{&fake,
-                                 FakeCreateWindow,
-                                 FakeDestroyWindow,
-                                 FakeGetWindowId,
-                                 FakeGetWindowTitle,
-                                 FakeSetWindowTitle,
-                                 FakeGetWindowPosition,
-                                 FakeSetWindowPosition,
-                                 FakeGetWindowSize,
-                                 FakeGetWindowSizeInPixels,
-                                 FakeSetWindowSize,
-                                 FakeSetWindowMinimumSize,
-                                 FakeShowWindow,
-                                 FakeHideWindow,
-                                 FakeGetWindowProperties,
-                                 FakeSetFullscreenModeToDesktop,
-                                 FakeSetWindowFullscreen,
-                                 FakeSetWindowBordered,
-                                 FakeSetWindowResizable,
-                                 FakeSetWindowAlwaysOnTop,
-                                 FakeMinimizeWindow,
-                                 FakeMaximizeWindow,
-                                 FakeRestoreWindow,
-                                 FakeStartWindowTextInput,
-                                 FakeStopWindowTextInput,
-                                 FakeIsWindowTextInputActive,
-                                 FakeClearWindowTextComposition,
-                                 FakeSetWindowTextInputArea,
-                                 FakeSetWindowMouseGrab,
-                                 FakeIsWindowMouseGrabbed,
-                                 FakeSetWindowRelativeMouseMode,
-                                 FakeIsWindowRelativeMouseModeEnabled,
-                                 FakeGetNativeWindowHandle,
-                                 FakeDestroyMetalView};
+    return PlatformWindowBackend{
+        .context = &fake,
+        .create = FakeCreateWindow,
+        .destroy = FakeDestroyWindow,
+        .getId = FakeGetWindowId,
+        .getTitle = FakeGetWindowTitle,
+        .setTitle = FakeSetWindowTitle,
+        .getPosition = FakeGetWindowPosition,
+        .setPosition = FakeSetWindowPosition,
+        .getSize = FakeGetWindowSize,
+        .getSizeInPixels = FakeGetWindowSizeInPixels,
+        .setSize = FakeSetWindowSize,
+        .setMinimumSize = FakeSetWindowMinimumSize,
+        .show = FakeShowWindow,
+        .hide = FakeHideWindow,
+        .getProperties = FakeGetWindowProperties,
+        .setFullscreenModeToDesktop = FakeSetFullscreenModeToDesktop,
+        .setFullscreen = FakeSetWindowFullscreen,
+        .setBordered = FakeSetWindowBordered,
+        .setResizable = FakeSetWindowResizable,
+        .setAlwaysOnTop = FakeSetWindowAlwaysOnTop,
+        .minimize = FakeMinimizeWindow,
+        .maximize = FakeMaximizeWindow,
+        .restore = FakeRestoreWindow,
+        .startTextInput = FakeStartWindowTextInput,
+        .stopTextInput = FakeStopWindowTextInput,
+        .isTextInputActive = FakeIsWindowTextInputActive,
+        .clearTextComposition = FakeClearWindowTextComposition,
+        .setTextInputArea = FakeSetWindowTextInputArea,
+        .setMouseGrab = FakeSetWindowMouseGrab,
+        .isMouseGrabbed = FakeIsWindowMouseGrabbed,
+        .setRelativeMouseMode = FakeSetWindowRelativeMouseMode,
+        .isRelativeMouseModeEnabled = FakeIsWindowRelativeMouseModeEnabled,
+        .getNativeHandle = FakeGetNativeWindowHandle,
+        .destroyMetalView = FakeDestroyMetalView,
+    };
 }
 
 [[nodiscard]] PlatformDisplayBackend MakeDisplayBackend(FakeRuntimeBackend& fake)
 {
-    return PlatformDisplayBackend{&fake,
-                                  FakeEnumerateDisplays,
-                                  FakeGetDisplayName,
-                                  FakeGetDisplayBounds,
-                                  FakeGetDisplayUsableBounds,
-                                  FakeGetCurrentDisplayRefreshRate,
-                                  FakeGetCurrentDisplayOrientation,
-                                  FakeGetDisplayContentScale,
-                                  FakeGetDisplayForWindow,
-                                  FakeGetWindowPixelDensity,
-                                  FakeGetWindowDisplayScale};
+    return PlatformDisplayBackend{
+        .context = &fake,
+        .enumerate = FakeEnumerateDisplays,
+        .getName = FakeGetDisplayName,
+        .getBounds = FakeGetDisplayBounds,
+        .getUsableBounds = FakeGetDisplayUsableBounds,
+        .getCurrentRefreshRate = FakeGetCurrentDisplayRefreshRate,
+        .getCurrentOrientation = FakeGetCurrentDisplayOrientation,
+        .getContentScale = FakeGetDisplayContentScale,
+        .getForWindow = FakeGetDisplayForWindow,
+        .getWindowPixelDensity = FakeGetWindowPixelDensity,
+        .getWindowDisplayScale = FakeGetWindowDisplayScale,
+    };
 }
 
 class PlatformRuntimeBackendTests : public testing::Test
@@ -2921,6 +2932,59 @@ TEST_F(PlatformRuntimeBackendTests, SuccessfulRequestsDoNotOptimisticallyChangeO
     EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
 }
 
+TEST_F(PlatformRuntimeBackendTests, ForwardsImmediateReversalsOfAcceptedAsyncWindowRequests)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    ASSERT_TRUE(window.Show().HasValue());
+    m_fake.applyWindowOperationEffects = false;
+
+    const auto countCalls = [this](std::string_view operation)
+    {
+        return std::ranges::count(m_fake.calls, operation);
+    };
+
+    ASSERT_TRUE(
+        window.SetPresentation(pond::platform::WindowPresentation::DesktopFullscreen).HasValue());
+    ASSERT_TRUE(
+        window.SetPresentation(pond::platform::WindowPresentation::DesktopFullscreen).HasValue());
+    EXPECT_EQ(countCalls("set-window-fullscreen"), 1);
+    ASSERT_TRUE(window.SetPresentation(pond::platform::WindowPresentation::Windowed).HasValue());
+    ASSERT_TRUE(window.SetPresentation(pond::platform::WindowPresentation::Windowed).HasValue());
+    EXPECT_EQ(countCalls("set-window-fullscreen"), 2);
+
+    ASSERT_TRUE(window.Minimize().HasValue());
+    ASSERT_TRUE(window.Minimize().HasValue());
+    EXPECT_EQ(countCalls("minimize-window"), 1);
+    ASSERT_TRUE(window.Restore().HasValue());
+    ASSERT_TRUE(window.Restore().HasValue());
+    EXPECT_EQ(countCalls("minimize-window"), 1);
+    EXPECT_EQ(countCalls("restore-window"), 1);
+
+    ASSERT_TRUE(window.Minimize().HasValue());
+    EXPECT_EQ(countCalls("minimize-window"), 2);
+    ASSERT_TRUE(window.Restore().HasValue());
+    EXPECT_EQ(countCalls("restore-window"), 2);
+
+    ASSERT_TRUE(window.Maximize().HasValue());
+    EXPECT_EQ(countCalls("maximize-window"), 1);
+    ASSERT_TRUE(window.Maximize().HasValue());
+    EXPECT_EQ(countCalls("maximize-window"), 1);
+    ASSERT_TRUE(window.Restore().HasValue());
+    ASSERT_TRUE(window.Restore().HasValue());
+    EXPECT_EQ(countCalls("restore-window"), 3);
+    ASSERT_TRUE(window.Maximize().HasValue());
+    EXPECT_EQ(countCalls("maximize-window"), 2);
+}
+
 TEST_F(PlatformRuntimeBackendTests, RejectsForgedWindowPropertyEnumsWithoutBackendCalls)
 {
     auto runtimeResult =
@@ -3384,6 +3448,54 @@ TEST_F(PlatformRuntimeBackendTests, PreservesDisplayIdsAcrossReorderRemovalAndRe
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::NotFound));
 }
 
+TEST_F(PlatformRuntimeBackendTests, RejectsMalformedRefreshWithoutChangingDisplayIdentityState)
+{
+    m_fake.connectedDisplayIds = {10};
+    m_fake.displays.emplace(10, FakeDisplay{10,
+                                            "Original",
+                                            {0, 0, 800, 600},
+                                            {0, 0, 800, 560},
+                                            60.0F,
+                                            BackendDisplayOrientation::Landscape,
+                                            1.0F});
+    m_fake.displays.emplace(20, FakeDisplay{20,
+                                            "Added",
+                                            {800, 0, 1024, 768},
+                                            {800, 0, 1024, 728},
+                                            75.0F,
+                                            BackendDisplayOrientation::Landscape,
+                                            1.5F});
+
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto initial = runtime.EnumerateDisplays();
+    ASSERT_TRUE(initial.HasValue());
+    ASSERT_EQ(initial.GetValue().size(), 1U);
+    const pond::platform::DisplayId originalId = initial.GetValue().front().id;
+    EXPECT_EQ(originalId, pond::platform::DisplayId{1});
+
+    m_fake.connectedDisplayIds = {20, 20};
+    auto malformed = runtime.EnumerateDisplays();
+    ASSERT_FALSE(malformed.HasValue());
+    EXPECT_EQ(malformed.GetError().GetCode(),
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
+
+    m_fake.connectedDisplayIds = {10};
+    auto unchanged = runtime.EnumerateDisplays();
+    ASSERT_TRUE(unchanged.HasValue());
+    ASSERT_EQ(unchanged.GetValue().size(), 1U);
+    EXPECT_EQ(unchanged.GetValue().front().id, originalId);
+
+    m_fake.connectedDisplayIds = {10, 20};
+    auto validAddition = runtime.EnumerateDisplays();
+    ASSERT_TRUE(validAddition.HasValue());
+    ASSERT_EQ(validAddition.GetValue().size(), 2U);
+    EXPECT_EQ(validAddition.GetValue()[0].id, originalId);
+    EXPECT_EQ(validAddition.GetValue()[1].id, pond::platform::DisplayId{2});
+}
 TEST_F(PlatformRuntimeBackendTests, RestartsProjectDisplayIdsForANewRuntime)
 {
     m_fake.connectedDisplayIds = {81};
@@ -4112,6 +4224,81 @@ TEST_F(PlatformRuntimeBackendTests, PollingShownInvalidatesTheHiddenStateDisambi
     backendWindow.maximized = false;
     auto state = window.GetState();
     ASSERT_TRUE(state.HasValue());
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+}
+
+TEST_F(PlatformRuntimeBackendTests, DelayedShownEventPreservesNewerHiddenStateRequest)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    FakeWindow& backendWindow = m_fake.windows.front();
+    const std::uint32_t backendWindowId = backendWindow.backendId;
+
+    ASSERT_TRUE(window.Show().HasValue());
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(SDL_EVENT_WINDOW_SHOWN, backendWindowId, 0, 0, 100)});
+    ASSERT_TRUE(window.Maximize().HasValue());
+    ASSERT_TRUE(window.Hide().HasValue());
+    ASSERT_TRUE(window.Minimize().HasValue());
+    ASSERT_TRUE(backendWindow.maximized);
+    ASSERT_TRUE(backendWindow.pendingMinimized);
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowVisibilityChangedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .windowId = window.GetId(),
+            .visible = true});
+
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
+    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Minimized);
+}
+
+TEST_F(PlatformRuntimeBackendTests, DelayedShownEventDoesNotOverwriteNewerVisibleStateRequest)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+    auto windowResult = runtime.CreateWindow(desc);
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+    FakeWindow& backendWindow = m_fake.windows.front();
+    const std::uint32_t backendWindowId = backendWindow.backendId;
+
+    ASSERT_TRUE(window.Maximize().HasValue());
+    ASSERT_TRUE(backendWindow.pendingMaximized);
+
+    backendWindow.visible = true;
+    backendWindow.maximized = true;
+    backendWindow.pendingMaximized = false;
+    ASSERT_TRUE(window.Restore().HasValue());
+    ASSERT_FALSE(backendWindow.pendingMaximized);
+    m_fake.eventQueue.push_back(
+        {.event = MakeQueuedWindowEvent(SDL_EVENT_WINDOW_SHOWN, backendWindowId, 0, 0, 100)});
+
+    ExpectPolledEvent(
+        runtime.PollEvent(),
+        pond::platform::WindowVisibilityChangedEvent{
+            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .windowId = window.GetId(),
+            .visible = true});
+
+    ASSERT_TRUE(window.Hide().HasValue());
+    auto state = window.GetState();
+    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
     EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
 }
 
@@ -5048,7 +5235,8 @@ TEST_F(PlatformRuntimeBackendTests, LaunchesAsynchronousDialogsWithOwnedDescript
     pond::platform::OpenFileDialogDesc openDesc{
         .parentWindowId = window.GetId(),
         .defaultLocation = std::filesystem::path{"C:/tmp/input.sdf"},
-        .filters = {{.name = "Molecules", .pattern = "sdf;mol"}, {.name = "All", .pattern = "*"}},
+        .filters = {{.name = "Molecules", .pattern = "SDF-2_x.foo;mol"},
+                    {.name = "All", .pattern = "*"}},
         .allowMultipleSelection = true};
     auto openId = runtime.ShowOpenFileDialog(openDesc);
     ASSERT_TRUE(openId.HasValue()) << openId.GetError().GetMessage();
@@ -5076,7 +5264,7 @@ TEST_F(PlatformRuntimeBackendTests, LaunchesAsynchronousDialogsWithOwnedDescript
     EXPECT_EQ(m_fake.dialogLaunches[0].parentWindow, &m_fake.windows.front());
     ASSERT_EQ(m_fake.dialogLaunches[0].filters.size(), 2U);
     EXPECT_EQ(m_fake.dialogLaunches[0].filters[0].name, "Molecules");
-    EXPECT_EQ(m_fake.dialogLaunches[0].filters[0].pattern, "sdf;mol");
+    EXPECT_EQ(m_fake.dialogLaunches[0].filters[0].pattern, "SDF-2_x.foo;mol");
     EXPECT_EQ(m_fake.dialogLaunches[0].defaultLocation, "C:/tmp/input.sdf");
     EXPECT_TRUE(m_fake.dialogLaunches[0].allowMultipleSelection);
 
@@ -5097,6 +5285,59 @@ TEST_F(PlatformRuntimeBackendTests, LaunchesAsynchronousDialogsWithOwnedDescript
     EXPECT_TRUE(runtime.PollEvent().has_value());
     EXPECT_TRUE(runtime.PollEvent().has_value());
 }
+
+#if GTEST_HAS_DEATH_TEST
+TEST_F(PlatformRuntimeBackendTests, RejectsDestroyingParentWindowWithPendingDialog)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto windowResult = runtime.CreateWindow(pond::platform::WindowDesc{});
+    ASSERT_TRUE(windowResult.HasValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
+
+    pond::platform::OpenFileDialogDesc desc{.parentWindowId = window.GetId()};
+    auto request = runtime.ShowOpenFileDialog(desc);
+    ASSERT_TRUE(request.HasValue()) << request.GetError().GetMessage();
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 1U);
+
+    EXPECT_DEATH(
+        {
+            std::optional<pond::platform::Window> doomedWindow;
+            doomedWindow.emplace(std::move(window));
+            doomedWindow.reset();
+        },
+        "Cannot destroy a platform window");
+
+    CompleteDialogCancellation(m_fake.dialogLaunches.front());
+    EXPECT_TRUE(runtime.PollEvent().has_value());
+}
+
+TEST_F(PlatformRuntimeBackendTests, RejectsDestroyingRuntimeWithUnconsumedDialogCompletion)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto request = runtime.ShowOpenFolderDialog(pond::platform::OpenFolderDialogDesc{});
+    ASSERT_TRUE(request.HasValue()) << request.GetError().GetMessage();
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 1U);
+    CompleteDialogCancellation(m_fake.dialogLaunches.front());
+
+    EXPECT_DEATH(
+        {
+            std::optional<pond::platform::PlatformRuntime> doomedRuntime;
+            doomedRuntime.emplace(std::move(runtime));
+            doomedRuntime.reset();
+        },
+        "Cannot destroy PlatformRuntime");
+
+    EXPECT_TRUE(runtime.PollEvent().has_value());
+}
+#endif
 
 TEST_F(PlatformRuntimeBackendTests, RejectsInvalidDialogDescriptorsAndParentsBeforeBackendLaunch)
 {
@@ -5142,6 +5383,14 @@ TEST_F(PlatformRuntimeBackendTests, RejectsInvalidDialogDescriptorsAndParentsBef
     EXPECT_EQ(invalidFilterPatternResult.GetError().GetCode(),
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::InvalidArgument));
 
+    pond::platform::OpenFileDialogDesc nonAsciiFilterPattern;
+    nonAsciiFilterPattern.filters.push_back(
+        pond::platform::DialogFileFilter{.name = "Molecules", .pattern = "sdf;\xC3\xA9"});
+    auto nonAsciiFilterPatternResult = runtime.ShowOpenFileDialog(nonAsciiFilterPattern);
+    ASSERT_FALSE(nonAsciiFilterPatternResult.HasValue());
+    EXPECT_EQ(nonAsciiFilterPatternResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::InvalidArgument));
+
     const std::string invalidUtf8{static_cast<char>(0xC0), static_cast<char>(0xAF)};
     pond::platform::OpenFileDialogDesc invalidUtf8Filter;
     invalidUtf8Filter.filters.push_back(
@@ -5171,15 +5420,20 @@ TEST_F(PlatformRuntimeBackendTests, DeliversDialogCompletionsInCallbackFifoOrder
     ASSERT_TRUE(thirdId.HasValue());
     ASSERT_EQ(m_fake.dialogLaunches.size(), 3U);
 
+    m_fake.ticks = 10'000;
     CompleteDialogCancellation(m_fake.dialogLaunches[1]);
     const std::vector<std::string> selectedPaths{"C:/tmp/a.sdf", "C:/tmp/b.mol"};
+    m_fake.ticks = 20'000;
     CompleteDialogSelection(m_fake.dialogLaunches[0], selectedPaths, 0);
+    m_fake.ticks = 30'000;
     CompleteDialogFailure(m_fake.dialogLaunches[2], "synthetic dialog failure");
+    m_fake.ticks = 40'000;
 
     std::optional<pond::platform::PlatformEvent> event = runtime.PollEvent();
     ASSERT_TRUE(event.has_value());
     const auto* completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
     ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->timestamp.GetTimeSinceEpoch(), std::chrono::nanoseconds{10'000});
     EXPECT_EQ(completed->requestId, secondId.GetValue());
     EXPECT_TRUE(std::holds_alternative<pond::platform::DialogCancellation>(completed->outcome));
 
@@ -5187,6 +5441,7 @@ TEST_F(PlatformRuntimeBackendTests, DeliversDialogCompletionsInCallbackFifoOrder
     ASSERT_TRUE(event.has_value());
     completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
     ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->timestamp.GetTimeSinceEpoch(), std::chrono::nanoseconds{20'000});
     EXPECT_EQ(completed->requestId, firstId.GetValue());
     const auto& selection = std::get<pond::platform::DialogSelection>(completed->outcome);
     ASSERT_EQ(selection.paths.size(), 2U);
@@ -5199,6 +5454,7 @@ TEST_F(PlatformRuntimeBackendTests, DeliversDialogCompletionsInCallbackFifoOrder
     ASSERT_TRUE(event.has_value());
     completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
     ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->timestamp.GetTimeSinceEpoch(), std::chrono::nanoseconds{30'000});
     EXPECT_EQ(completed->requestId, thirdId.GetValue());
     const auto& failure = std::get<pond::platform::DialogFailure>(completed->outcome);
     EXPECT_EQ(failure.error.GetCode(),
@@ -5206,6 +5462,35 @@ TEST_F(PlatformRuntimeBackendTests, DeliversDialogCompletionsInCallbackFifoOrder
     EXPECT_NE(failure.error.GetMessage().find("synthetic dialog failure"), std::string_view::npos);
 
     EXPECT_FALSE(runtime.PollEvent().has_value());
+    EXPECT_EQ(m_fake.tickCalls, 3);
+}
+
+TEST_F(PlatformRuntimeBackendTests, CapturesDialogFailureBeforeSamplingCompletionTimestamp)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto requestId = runtime.ShowOpenFileDialog(pond::platform::OpenFileDialogDesc{});
+    ASSERT_TRUE(requestId.HasValue());
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 1U);
+
+    m_fake.ticks = 41'000;
+    m_fake.timestampCaptureOverwritesSdlError = true;
+    CompleteDialogFailure(m_fake.dialogLaunches.front(), "original dialog failure");
+
+    const std::optional<pond::platform::PlatformEvent> event = runtime.PollEvent();
+    ASSERT_TRUE(event.has_value());
+    const auto* completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
+    ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->timestamp.GetTimeSinceEpoch(), std::chrono::nanoseconds{41'000});
+    EXPECT_EQ(completed->requestId, requestId.GetValue());
+    const auto* failure = std::get_if<pond::platform::DialogFailure>(&completed->outcome);
+    ASSERT_NE(failure, nullptr);
+    EXPECT_NE(failure->error.GetMessage().find("original dialog failure"), std::string_view::npos);
+    EXPECT_EQ(failure->error.GetMessage().find("timestamp capture overwrote"),
+              std::string_view::npos);
 }
 
 TEST_F(PlatformRuntimeBackendTests, CopiesDialogCallbackPayloadsAndAcceptsCrossThreadCompletion)
@@ -5261,6 +5546,37 @@ TEST_F(PlatformRuntimeBackendTests, DeliversDialogCompletionExactlyOnceForDuplic
     EXPECT_TRUE(std::holds_alternative<pond::platform::DialogCancellation>(completed->outcome));
     EXPECT_FALSE(runtime.PollEvent().has_value());
 }
+
+TEST_F(PlatformRuntimeBackendTests, ConvertsDialogCallbackExceptionsToPrebuiltFailureCompletion)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    auto requestId = runtime.ShowOpenFileDialog(pond::platform::OpenFileDialogDesc{});
+    ASSERT_TRUE(requestId.HasValue());
+    ASSERT_EQ(m_fake.dialogLaunches.size(), 1U);
+
+    m_fake.ticks = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1U;
+    CompleteDialogCancellation(m_fake.dialogLaunches.front());
+
+    std::optional<pond::platform::PlatformEvent> event = runtime.PollEvent();
+    ASSERT_TRUE(event.has_value());
+    const auto* completed = std::get_if<pond::platform::DialogCompletedEvent>(&*event);
+    ASSERT_NE(completed, nullptr);
+    EXPECT_EQ(completed->timestamp.GetTimeSinceEpoch(), std::chrono::nanoseconds{0});
+    EXPECT_EQ(completed->requestId, requestId.GetValue());
+    const auto* failure = std::get_if<pond::platform::DialogFailure>(&completed->outcome);
+    ASSERT_NE(failure, nullptr);
+    EXPECT_EQ(failure->error.GetCode(),
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(failure->error.GetMessage().find(
+                  "Dialog callback failed before a completion could be safely enqueued"),
+              std::string_view::npos);
+    EXPECT_FALSE(runtime.PollEvent().has_value());
+}
+
 TEST_F(PlatformRuntimeBackendTests, GetsClipboardTextAndDistinguishesEmptyTextFromFailure)
 {
     auto runtimeResult =

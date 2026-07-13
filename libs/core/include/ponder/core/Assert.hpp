@@ -142,7 +142,7 @@ void DebugBreak() noexcept;
 #define PONDER_ASSERT(expression)                                                                  \
     do                                                                                             \
     {                                                                                              \
-        if (!(expression))                                                                         \
+        if (!(expression)) [[unlikely]]                                                            \
         {                                                                                          \
             ::pond::core::HandleAssertionFailure(#expression, std::string{},                       \
                                                  std::source_location::current());                 \
@@ -152,7 +152,7 @@ void DebugBreak() noexcept;
 #define PONDER_ASSERT_MESSAGE(expression, ...)                                                     \
     do                                                                                             \
     {                                                                                              \
-        if (!(expression))                                                                         \
+        if (!(expression)) [[unlikely]]                                                            \
         {                                                                                          \
             ::pond::core::HandleAssertionFailureFormatted(                                         \
                 #expression, std::source_location::current(), __VA_ARGS__);                        \
@@ -163,7 +163,7 @@ void DebugBreak() noexcept;
 #define PONDER_VERIFY(expression, ...)                                                             \
     do                                                                                             \
     {                                                                                              \
-        if (!(expression))                                                                         \
+        if (!(expression)) [[unlikely]]                                                            \
         {                                                                                          \
             ::pond::core::HandleVerifyFailureFormatted(                                            \
                 #expression, std::source_location::current(), __VA_ARGS__);                        \

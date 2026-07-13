@@ -164,15 +164,21 @@ struct PickResult final
         return core::Result<std::optional<PickResult>>::FromError(screenTarget.GetError());
     }
 
-    auto nearPoint = Unproject(camera->viewProjection, viewport.GetValue(),
-                               Vector3{screenTarget->x, screenTarget->y, 1.0F});
+    auto clipToWorld = Inverse(camera->viewProjection);
+    if (!clipToWorld.HasValue())
+    {
+        return core::Result<std::optional<PickResult>>::FromError(clipToWorld.GetError());
+    }
+
+    auto nearPoint = UnprojectFromClipToWorld(clipToWorld.GetValue(), viewport.GetValue(),
+                                              Vector3{screenTarget->x, screenTarget->y, 1.0F});
     if (!nearPoint.HasValue())
     {
         return core::Result<std::optional<PickResult>>::FromError(nearPoint.GetError());
     }
 
-    auto farPoint = Unproject(camera->viewProjection, viewport.GetValue(),
-                              Vector3{screenTarget->x, screenTarget->y, 0.0F});
+    auto farPoint = UnprojectFromClipToWorld(clipToWorld.GetValue(), viewport.GetValue(),
+                                             Vector3{screenTarget->x, screenTarget->y, 0.0F});
     if (!farPoint.HasValue())
     {
         return core::Result<std::optional<PickResult>>::FromError(farPoint.GetError());

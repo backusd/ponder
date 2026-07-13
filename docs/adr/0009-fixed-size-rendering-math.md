@@ -21,21 +21,22 @@ Build the first `ponder_math` implementation as a fixed-size, concrete `float` l
 
 ### Scope And Dependencies
 
-`ponder_math` owns scalar helpers, strong angle values, fixed-size vectors, fixed-size matrices,
-quaternions, transform helpers, camera/projection helpers, viewport mapping, project/unproject, and
-the selected collision queries. It does not own renderer resources, backend types, UI concepts,
-project persistence, file formats, or chemistry operations.
+`ponder_math` owns strong angle values, fixed-size vectors, fixed-size matrices, quaternions,
+transform helpers, camera/projection helpers, viewport mapping, project/unproject, and the selected
+collision queries. Project-wide scalar constants and helpers for finite checks, tolerances,
+clamping, interpolation, and near comparison belong to `ponder_core`. Math does not own renderer
+resources, backend types, UI concepts, project persistence, file formats, or chemistry operations.
 
 Public code uses `pond::math`, public headers live under `include/ponder/math/`, and consumers
 include them as `<ponder/math/...>`. The target is `ponder_math` with alias `ponder::math`.
 
-The library may publicly depend on `ponder::core` for `pond::core::Result<T>` and stable error
-codes. It must not depend on renderer, platform, UI, chemistry, Vulkan, SDL, DirectX, or public
-instruction-set-specific headers.
+The library may publicly depend on `ponder::core` for `pond::core::Result<T>`, stable error codes,
+and the project-wide helpers in `ponder/core/Numbers.hpp`. It must not depend on renderer,
+platform, UI, chemistry, Vulkan, SDL, DirectX, or public instruction-set-specific headers.
 
 DirectXMath and DirectXCollision are Windows-only unit/reference-test inputs. They are capability,
-correctness, and performance references only. They are not production dependencies and do not create
-a source, naming, layout, or numerical-compatibility promise.
+correctness, and performance references only. They are not production dependencies and do not
+create a source, naming, layout, or numerical-compatibility promise.
 
 ### Public Vocabulary And Type Policy
 
@@ -63,17 +64,17 @@ Transforms are active transforms applied to column vectors. Values are multiplie
 `matrix * vector`; `B * A` applies A first and B second. Quaternion multiplication follows the same
 reading order. Matrix translation occupies the final column.
 
-Matrices use column-major contiguous storage. The algebra convention and storage convention are both
-explicit parts of the public contract.
+Matrices use column-major contiguous storage. The algebra convention and storage convention are
+both explicit parts of the public contract.
 
 ### Layout And Interchange
 
 `Vector2`, `Vector3`, and `Vector4` are standard-layout, trivially copyable, naturally aligned, and
 compact 8-, 12-, and 16-byte values with public named components and checked indexed access.
 
-`Matrix3x3` and `Matrix4x4` have contiguous `float` scalars in column-major order with exact 36- and
-64-byte natural layouts. `Quaternion` is a 16-byte trivially copyable unit-rotation value with
-invariant-preserving accessors.
+`Matrix3x3` and `Matrix4x4` have contiguous `float` scalars in column-major order with exact
+36- and 64-byte natural layouts. `Quaternion` is a 16-byte trivially copyable unit-rotation value
+with invariant-preserving accessors.
 
 These CPU layout guarantees do not promise GPU packing compatibility. Renderer-owned packing values
 and conversions handle vertex attributes, storage buffers, uniform buffers, push constants, and
@@ -108,7 +109,7 @@ are deferred until a consumer selects an explicit axis order and intrinsic or ex
 
 Vectors and matrices default to zero. Quaternions default to identity. Exact `operator==` means
 exact component or representation equality. Near comparisons require a caller-provided validated
-absolute-and-relative `Tolerance`; the library provides no universal epsilon. Quaternion
+absolute-and-relative `pond::core::Tolerance`; the library provides no universal epsilon. Quaternion
 same-rotation comparison is separate because `q` and `-q` represent the same rotation.
 
 Recoverable invalid input and mathematically unavailable results use `pond::core::Result<T>` with
@@ -118,8 +119,8 @@ Ordinary unchecked scalar arithmetic follows IEEE behavior.
 Default algorithms favor accuracy and documented tolerance stability on supported hosts. The
 contract does not promise bit-identical cross-compiler or cross-architecture results. Fast-math,
 reassociation, reciprocal and square-root estimates, and accuracy-reducing shortcuts are not
-default behavior. Intentional `std::fma` is allowed only when documented as part of an algorithm and
-kept within the tolerance contract.
+default behavior. Intentional `std::fma` is allowed only when documented as part of an algorithm
+and kept within the tolerance contract.
 
 ### Collision
 
@@ -140,6 +141,10 @@ finite nonzero ray directions and plane normals are normalized during checked co
 Visibility culling conservatively retains boundary or numerically uncertain objects rather than
 falsely rejecting them.
 
+Picking queries support hits only when every returned world distance and barycentric is finite and
+representable by the concrete `float` result. A caller requiring a larger coordinate or distance
+domain needs a separately designed scalar or result contract.
+
 ## Consequences
 
 Renderer and import/export code can cite one unambiguous math convention without introducing a
@@ -147,7 +152,7 @@ global convention switch.
 
 Adding another coordinate convention, scalar family, public bulk API, handwritten SIMD path,
 unchecked operation family, GPU packing representation, or collision pair requires a concrete
-consumer and an update to the roadmap or a later ADR.
+consumer and an update to the durable boundary or a later ADR.
 
 Tests must include independent expectations for project semantics. Windows DirectX reference tests
 are useful differential checks, but they never replace project-owned tests and never define

@@ -6,14 +6,20 @@
 
 #include <SDL3/SDL_process.h>
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
-#include <limits>
 #include <memory>
+#include <mutex>
+#include <new>
 #include <source_location>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -47,19 +53,47 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
     return core::Error{kUnsupportedCode, std::move(message), location};
 }
 
-[[nodiscard]] ProcessExitStatus MakeProcessExitStatus(int exitCode)
+[[nodiscard]] detail::BackendProcessExitStatus MakeSdlProcessExitStatus(int exitCode) noexcept
 {
+#if defined(_WIN32)
+    return detail::BackendProcessExitStatus{.kind = detail::BackendProcessExitKind::Normal,
+                                            .value = static_cast<std::uint32_t>(exitCode)};
+#else
     if (exitCode == kSdlUnknownExitCode)
     {
-        return ProcessUnknownTermination{};
+        return detail::BackendProcessExitStatus{.kind = detail::BackendProcessExitKind::Unknown};
     }
 
     if (exitCode < 0)
     {
-        return ProcessSignalTermination{.signal = -exitCode};
+        return detail::BackendProcessExitStatus{
+            .kind = detail::BackendProcessExitKind::Signal,
+            .value = static_cast<std::uint32_t>(-static_cast<long long>(exitCode))};
     }
 
-    return ProcessNormalExit{.exitCode = exitCode};
+    return detail::BackendProcessExitStatus{.kind = detail::BackendProcessExitKind::Normal,
+                                            .value = static_cast<std::uint32_t>(exitCode)};
+#endif
+}
+
+[[nodiscard]] ProcessExitStatus MakeProcessExitStatus(
+    detail::BackendProcessExitStatus status) noexcept
+{
+    switch (status.kind)
+    {
+    case detail::BackendProcessExitKind::Normal:
+        return ProcessNormalExit{.exitCode = status.value};
+    case detail::BackendProcessExitKind::Signal:
+        if (!std::in_range<int>(status.value))
+        {
+            return ProcessUnknownTermination{};
+        }
+        return ProcessSignalTermination{.signal = static_cast<int>(status.value)};
+    case detail::BackendProcessExitKind::Unknown:
+        return ProcessUnknownTermination{};
+    }
+
+    return ProcessUnknownTermination{};
 }
 
 [[nodiscard]] core::Result<std::string> ValidateExecutablePath(
@@ -134,14 +168,32 @@ void VerifyBackend(const detail::PlatformProcessBackend& backend)
     PONDER_VERIFY(backend.destroy != nullptr, "Platform process backend is missing destroy");
 }
 
+void VerifyReaperBackend(const detail::PlatformProcessReaperBackend& backend)
+{
+    PONDER_VERIFY(backend.ensureStarted != nullptr,
+                  "Platform process reaper backend is missing ensureStarted");
+    PONDER_VERIFY(backend.enqueue != nullptr, "Platform process reaper backend is missing enqueue");
+}
+
 [[nodiscard]] void* SdlCreateProcess(void*, const char* const* arguments)
 {
     return SDL_CreateProcess(arguments, false);
 }
 
-[[nodiscard]] bool SdlWaitProcess(void*, void* process, bool block, int* exitCode)
+[[nodiscard]] bool SdlWaitProcess(void*, void* process, bool block,
+                                  detail::BackendProcessExitStatus* status)
 {
-    return SDL_WaitProcess(static_cast<SDL_Process*>(process), block, exitCode);
+    int exitCode = kSdlUnknownExitCode;
+    if (!SDL_WaitProcess(static_cast<SDL_Process*>(process), block, &exitCode))
+    {
+        return false;
+    }
+
+    if (status != nullptr)
+    {
+        *status = MakeSdlProcessExitStatus(exitCode);
+    }
+    return true;
 }
 
 [[nodiscard]] detail::BackendProcessKillResult SdlKillProcess(void*, void* process, bool force)
@@ -156,11 +208,124 @@ void SdlDestroyProcess(void*, void* process) noexcept
     SDL_DestroyProcess(static_cast<SDL_Process*>(process));
 }
 
+class AbandonedProcessReaper final
+{
+public:
+    AbandonedProcessReaper()
+        : m_worker(
+              [this]() noexcept
+              {
+                  Run();
+              })
+    {
+    }
+
+    void Enqueue(detail::AbandonedProcessEntry* entry) noexcept
+    {
+        PONDER_VERIFY(entry != nullptr, "Cannot enqueue a null abandoned process");
+        PONDER_VERIFY(entry->process != nullptr, "Cannot enqueue an empty abandoned process");
+
+        detail::AbandonedProcessEntry* head = m_pending.load(std::memory_order_relaxed);
+        do
+        {
+            entry->next = head;
+        } while (!m_pending.compare_exchange_weak(head, entry, std::memory_order_release,
+                                                  std::memory_order_relaxed));
+        m_pending.notify_one();
+    }
+
+private:
+    void Run() noexcept
+    {
+        detail::AbandonedProcessEntry* active{};
+        while (true)
+        {
+            detail::AbandonedProcessEntry* incoming =
+                m_pending.exchange(nullptr, std::memory_order_acquire);
+            while (incoming != nullptr)
+            {
+                detail::AbandonedProcessEntry* const next = incoming->next;
+                incoming->next = active;
+                active = incoming;
+                incoming = next;
+            }
+
+            detail::AbandonedProcessEntry** current = &active;
+            while (*current != nullptr)
+            {
+                detail::AbandonedProcessEntry* const entry = *current;
+                detail::BackendProcessExitStatus status;
+                if (!entry->backend.wait(entry->backend.context, entry->process, false, &status))
+                {
+                    current = &entry->next;
+                    continue;
+                }
+
+                *current = entry->next;
+                entry->backend.destroy(entry->backend.context, entry->process);
+                std::unique_ptr<detail::AbandonedProcessEntry> completed{entry};
+            }
+
+            if (active != nullptr)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds{10});
+            }
+            else
+            {
+                m_pending.wait(nullptr, std::memory_order_acquire);
+            }
+        }
+    }
+
+    std::atomic<detail::AbandonedProcessEntry*> m_pending{};
+    std::jthread m_worker;
+};
+
+struct ProcessLifetimeReaperStorage final
+{
+    alignas(AbandonedProcessReaper) std::byte bytes[sizeof(AbandonedProcessReaper)]{};
+    std::once_flag initialize;
+};
+
+// The reaper is intentionally constructed in constant-initialized storage and
+// never destroyed by C++ static teardown. This keeps late/static Process
+// destruction non-blocking and leaves final thread teardown to process exit.
+static_assert(std::is_trivially_destructible_v<ProcessLifetimeReaperStorage>);
+constinit ProcessLifetimeReaperStorage processLifetimeReaperStorage;
+
+[[nodiscard]] AbandonedProcessReaper& GetAbandonedProcessReaper()
+{
+    auto* const reaper =
+        reinterpret_cast<AbandonedProcessReaper*>(processLifetimeReaperStorage.bytes);
+    std::call_once(processLifetimeReaperStorage.initialize,
+                   [reaper]()
+                   {
+                       static_cast<void>(std::construct_at(reaper));
+                   });
+    return *std::launder(reaper);
+}
+
+[[nodiscard]] bool EnsureAbandonedProcessReaper(void* context) noexcept
+{
+    return context != nullptr;
+}
+
+void EnqueueAbandonedProcess(void* context, detail::AbandonedProcessEntry* entry) noexcept
+{
+    PONDER_VERIFY(context != nullptr, "Abandoned-process cleanup service is unavailable");
+    static_cast<AbandonedProcessReaper*>(context)->Enqueue(entry);
+}
+
 const detail::PlatformProcessBackend kSdlProcessBackend{.context = nullptr,
                                                         .create = SdlCreateProcess,
                                                         .wait = SdlWaitProcess,
                                                         .kill = SdlKillProcess,
                                                         .destroy = SdlDestroyProcess};
+const detail::PlatformProcessReaperBackend kSdlProcessReaperBackend{
+    .context = nullptr,
+    .ensureStarted = EnsureAbandonedProcessReaper,
+    .enqueue = EnqueueAbandonedProcess,
+};
 } // namespace
 
 namespace detail
@@ -168,8 +333,11 @@ namespace detail
 class ProcessState final
 {
 public:
-    ProcessState(PlatformProcessBackend backend, void* process) noexcept
-        : m_backend(backend), m_process(process), m_launchingThread(std::this_thread::get_id())
+    ProcessState(PlatformProcessBackend backend, PlatformProcessReaperBackend reaperBackend)
+        : m_backend(backend), m_reaperBackend(reaperBackend),
+          m_abandonedProcess(
+              std::make_unique<AbandonedProcessEntry>(AbandonedProcessEntry{.backend = backend})),
+          m_launchingThread(std::this_thread::get_id())
     {
     }
 
@@ -178,7 +346,7 @@ public:
         VerifyLaunchingThread("destruction");
         if (m_process != nullptr)
         {
-            m_backend.destroy(m_backend.context, m_process);
+            ReleaseProcess();
         }
     }
 
@@ -187,23 +355,45 @@ public:
     ProcessState(ProcessState&&) = delete;
     ProcessState& operator=(ProcessState&&) = delete;
 
+    void AttachProcess(void* process) noexcept
+    {
+        PONDER_VERIFY(process != nullptr, "Cannot attach a null process");
+        PONDER_VERIFY(m_process == nullptr, "Process state already has a process");
+        PONDER_VERIFY(m_abandonedProcess != nullptr,
+                      "Process state has no preallocated cleanup entry");
+        m_process = process;
+        m_abandonedProcess->process = process;
+    }
+
     [[nodiscard]] core::Result<ProcessExitStatus> Wait()
     {
         VerifyLaunchingThread("wait");
-        int exitCode = kSdlUnknownExitCode;
-        if (!m_backend.wait(m_backend.context, m_process, true, &exitCode))
+        detail::BackendProcessExitStatus status;
+        if (!m_backend.wait(m_backend.context, m_process, true, &status))
         {
             return core::Result<ProcessExitStatus>::FromError(
                 CaptureSdlFailure(kBackendFailureCode, "SDL_WaitProcess", "process"));
         }
 
-        return MakeProcessExitStatus(exitCode);
+        return MakeProcessExitStatus(status);
     }
 
     [[nodiscard]] core::VoidResult Terminate(ProcessTerminationMode mode)
     {
         VerifyLaunchingThread("termination");
-        const bool force = mode == ProcessTerminationMode::Force;
+        bool force{};
+        switch (mode)
+        {
+        case ProcessTerminationMode::GracefulPreferred:
+            break;
+        case ProcessTerminationMode::Force:
+            force = true;
+            break;
+        default:
+            return core::VoidResult::FromError(
+                MakeInvalidArgumentError("Process termination mode is invalid."));
+        }
+
         const BackendProcessKillResult result = m_backend.kill(m_backend.context, m_process, force);
         if (result == BackendProcessKillResult::Succeeded)
         {
@@ -223,6 +413,21 @@ public:
     }
 
 private:
+    void ReleaseProcess() noexcept
+    {
+        void* const process = std::exchange(m_process, nullptr);
+        detail::BackendProcessExitStatus status;
+        if (m_backend.wait(m_backend.context, process, false, &status))
+        {
+            m_backend.destroy(m_backend.context, process);
+            return;
+        }
+
+        PONDER_VERIFY(m_abandonedProcess != nullptr,
+                      "Running process has no preallocated cleanup entry");
+        m_reaperBackend.enqueue(m_reaperBackend.context, m_abandonedProcess.release());
+    }
+
     void VerifyLaunchingThread(std::string_view operation) const
     {
         PONDER_VERIFY(std::this_thread::get_id() == m_launchingThread,
@@ -230,6 +435,8 @@ private:
     }
 
     PlatformProcessBackend m_backend;
+    PlatformProcessReaperBackend m_reaperBackend;
+    std::unique_ptr<AbandonedProcessEntry> m_abandonedProcess;
     void* m_process{};
     std::thread::id m_launchingThread;
 };
@@ -247,6 +454,36 @@ PlatformProcessBackend GetPlatformProcessBackend() noexcept
     return kSdlProcessBackend;
 }
 
+PlatformProcessReaperBackend GetPlatformProcessReaperBackend()
+{
+    PlatformProcessReaperBackend backend = kSdlProcessReaperBackend;
+    backend.context = &GetAbandonedProcessReaper();
+    return backend;
+}
+
+[[nodiscard]] core::Result<Process> LaunchProcessWithArguments(
+    std::vector<std::string> argumentStorage, PlatformProcessBackend backend,
+    PlatformProcessReaperBackend reaperBackend)
+{
+    if (!reaperBackend.ensureStarted(reaperBackend.context))
+    {
+        return core::Result<Process>::FromError(core::Error{
+            kBackendFailureCode, "Failed to start the asynchronous process cleanup service."});
+    }
+
+    auto state = std::make_unique<ProcessState>(backend, reaperBackend);
+    const std::vector<const char*> arguments = MakeArgumentPointers(argumentStorage);
+    void* const process = backend.create(backend.context, arguments.data());
+    if (process == nullptr)
+    {
+        return core::Result<Process>::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_CreateProcess", "process"));
+    }
+
+    state->AttachProcess(process);
+    return ProcessFactory::Create(std::move(state));
+}
+
 core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBackend backend)
 {
     VerifyBackend(backend);
@@ -256,15 +493,35 @@ core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBack
         return core::Result<Process>::FromError(std::move(argumentStorage).GetError());
     }
 
-    const std::vector<const char*> arguments = MakeArgumentPointers(argumentStorage.GetValue());
-    void* const process = backend.create(backend.context, arguments.data());
-    if (process == nullptr)
+    PlatformProcessReaperBackend reaperBackend;
+    try
     {
-        return core::Result<Process>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_CreateProcess", "process"));
+        reaperBackend = GetPlatformProcessReaperBackend();
+    }
+    catch (...)
+    {
+        return core::Result<Process>::FromError(core::Error{
+            kBackendFailureCode, "Failed to start the asynchronous process cleanup service."});
     }
 
-    return ProcessFactory::Create(std::make_unique<ProcessState>(backend, process));
+    VerifyReaperBackend(reaperBackend);
+    return LaunchProcessWithArguments(std::move(argumentStorage).GetValue(), backend,
+                                      reaperBackend);
+}
+
+core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBackend backend,
+                                    PlatformProcessReaperBackend reaperBackend)
+{
+    VerifyBackend(backend);
+    VerifyReaperBackend(reaperBackend);
+    core::Result<std::vector<std::string>> argumentStorage = BuildArgumentStorage(desc);
+    if (!argumentStorage.HasValue())
+    {
+        return core::Result<Process>::FromError(std::move(argumentStorage).GetError());
+    }
+
+    return LaunchProcessWithArguments(std::move(argumentStorage).GetValue(), backend,
+                                      reaperBackend);
 }
 } // namespace detail
 

@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/AxisAlignedBox.hpp>
 #include <ponder/math/Frustum.hpp>
 #include <ponder/math/Ray.hpp>
@@ -227,7 +228,7 @@ TEST(CollisionValueTests, RejectsInvalidTriangles)
 TEST(CollisionValueTests, BuildsFrustumFromForwardPerspectiveMatrix)
 {
     auto projection =
-        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi}, 1.0F, 1.0F,
+        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi}, 1.0F, 1.0F,
                                            10.0F, pond::math::ProjectionDepth::ForwardZ);
     ASSERT_TRUE(projection.HasValue());
 
@@ -251,7 +252,7 @@ TEST(CollisionValueTests, BuildsFrustumFromForwardPerspectiveMatrix)
 TEST(CollisionValueTests, BuildsFrustumFromReversePerspectiveMatrix)
 {
     auto projection =
-        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi}, 1.0F, 1.0F,
+        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi}, 1.0F, 1.0F,
                                            10.0F, pond::math::ProjectionDepth::ReverseZ);
     ASSERT_TRUE(projection.HasValue());
 
@@ -268,10 +269,10 @@ TEST(CollisionValueTests, BuildsFrustumFromReversePerspectiveMatrix)
 TEST(CollisionValueTests, BuildsFrustumFromInfiniteFarPerspectiveMatrices)
 {
     auto forward =
-        pond::math::Matrix4x4::InfinitePerspective(pond::math::Radians{pond::math::kHalfPi}, 1.0F,
+        pond::math::Matrix4x4::InfinitePerspective(pond::math::Radians{pond::core::kHalfPi}, 1.0F,
                                                    1.0F, pond::math::ProjectionDepth::ForwardZ);
     auto reverse =
-        pond::math::Matrix4x4::InfinitePerspective(pond::math::Radians{pond::math::kHalfPi}, 1.0F,
+        pond::math::Matrix4x4::InfinitePerspective(pond::math::Radians{pond::core::kHalfPi}, 1.0F,
                                                    1.0F, pond::math::ProjectionDepth::ReverseZ);
     ASSERT_TRUE(forward.HasValue());
     ASSERT_TRUE(reverse.HasValue());
@@ -307,6 +308,36 @@ TEST(CollisionValueTests, BuildsFrustumFromOrthographicMatrix)
     ExpectPlaneNear(*frustum->GetMaximumDepthPlane(), pond::math::Vector3{0.0F, 0.0F, 1.0F}, 11.0F);
 }
 
+TEST(CollisionValueTests, ExtractsAllPlanesWhenFloatRowCombinationsWouldOverflow)
+{
+    const float scale = std::numeric_limits<float>::max() * 0.75F;
+    ASSERT_GT(static_cast<double>(scale) + static_cast<double>(scale),
+              static_cast<double>(std::numeric_limits<float>::max()));
+
+    const pond::math::Matrix4x4 worldToClip{scale, scale, 0.0F,  scale, 0.0F,  scale, scale, scale,
+                                            0.0F,  0.0F,  scale, scale, scale, 0.0F,  0.0F,  scale};
+    const auto frustum = pond::math::Frustum::FromWorldToClip(worldToClip);
+    ASSERT_TRUE(frustum.HasValue());
+
+    const float inverseSqrt2 = 1.0F / std::sqrt(2.0F);
+    const float inverseSqrt3 = 1.0F / std::sqrt(3.0F);
+    const float inverseSqrt5 = 1.0F / std::sqrt(5.0F);
+    ExpectPlaneNear(frustum->GetLeftPlane(),
+                    pond::math::Vector3{2.0F * inverseSqrt5, inverseSqrt5, 0.0F},
+                    2.0F * inverseSqrt5);
+    ExpectPlaneNear(frustum->GetRightPlane(), pond::math::Vector3{0.0F, -1.0F, 0.0F}, 0.0F);
+    ExpectPlaneNear(frustum->GetBottomPlane(),
+                    pond::math::Vector3{inverseSqrt3, inverseSqrt3, inverseSqrt3},
+                    2.0F * inverseSqrt3);
+    ExpectPlaneNear(frustum->GetTopPlane(),
+                    pond::math::Vector3{inverseSqrt3, -inverseSqrt3, -inverseSqrt3}, 0.0F);
+    ASSERT_TRUE(frustum->GetMinimumDepthPlane().has_value());
+    ASSERT_TRUE(frustum->GetMaximumDepthPlane().has_value());
+    ExpectPlaneNear(*frustum->GetMinimumDepthPlane(), pond::math::Vector3{0.0F, 0.0F, 1.0F}, 1.0F);
+    ExpectPlaneNear(*frustum->GetMaximumDepthPlane(),
+                    pond::math::Vector3{inverseSqrt2, 0.0F, -inverseSqrt2}, 0.0F);
+}
+
 TEST(CollisionValueTests, RejectsInvalidFrustumMatrices)
 {
     constexpr float infinity = std::numeric_limits<float>::infinity();
@@ -315,12 +346,31 @@ TEST(CollisionValueTests, RejectsInvalidFrustumMatrices)
     const pond::math::Matrix4x4 unsatisfiableDepth{1.0F, 0.0F, 0.0F,  0.0F, 0.0F, 1.0F,
                                                    0.0F, 0.0F, 0.0F,  0.0F, 0.0F, -1.0F,
                                                    0.0F, 0.0F, -1.0F, 0.0F};
+    const pond::math::Matrix4x4 unrepresentableNormalizedOffset{
+        std::numeric_limits<float>::denorm_min(),
+        0.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        1.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        1.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        std::numeric_limits<float>::max()};
 
     ExpectFrustumFailure(pond::math::Frustum::FromWorldToClip(nonFinite),
                          pond::math::MathErrorCode::NonFiniteInput);
     ExpectFrustumFailure(pond::math::Frustum::FromWorldToClip(pond::math::Matrix4x4::Zero()),
                          pond::math::MathErrorCode::DegenerateInput);
     ExpectFrustumFailure(pond::math::Frustum::FromWorldToClip(unsatisfiableDepth),
+                         pond::math::MathErrorCode::DegenerateInput);
+    ExpectFrustumFailure(pond::math::Frustum::FromWorldToClip(unrepresentableNormalizedOffset),
                          pond::math::MathErrorCode::DegenerateInput);
 }
 } // namespace

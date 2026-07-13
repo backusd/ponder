@@ -40,10 +40,10 @@ Use SDL3 as the private backend for the initial `ponder_platform` library.
 
 ### Dependency And Public Boundary
 
-`ponder_platform` has a public dependency on `ponder_core` and a private
-dependency on SDL3. Public platform headers expose only project-owned types and
-standard-library types. SDL headers, SDL types, and direct OS-specific types
-remain in implementation files or private headers.
+`ponder_platform` has a public dependency on `ponder_core` and private
+dependencies on `ponder_io` and SDL3. Public platform headers expose only
+project-owned types and standard-library types. SDL headers, SDL types, and
+direct OS-specific types remain in implementation files or private headers.
 
 `ponder_platform` must not depend on `ponder_render`, `ponder_ui`, project or
 domain libraries, or `ponder-desktop`. The desktop executable owns application
@@ -167,8 +167,13 @@ The initial process API is shell-free and intentionally small. Process creation
 does not require `PlatformRuntime`. A `Process` is bound to its launching thread;
 all operations and destruction occur on that thread without concurrent
 access. This is the documented exception to the runtime-owner-thread rule.
-Destroying a process handle releases SDL tracking state but does not implicitly
-wait for, kill, or terminate the child process. Compute scheduling, process
+Destroying a process releases public ownership but does not wait for, kill, or
+terminate the child. A still-running handle transfers to a prestarted private
+cleanup worker, which retains and polls it until the child can be reaped without
+blocking the caller. The worker uses deliberately process-lifetime storage, so
+late or static-storage destruction never re-enters an already destroyed singleton
+or joins a worker. The OS owns its final process-exit teardown. Explicit `Wait()` remains
+blocking and must not run on an event-pumping thread. Compute scheduling, process
 supervision, streaming IO, cancellation trees, and remote execution remain
 outside platform.
 

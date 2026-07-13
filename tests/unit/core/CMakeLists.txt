@@ -6,6 +6,7 @@ ponder_add_project_test(ponder_core_tests
         HeaderSelfContainment/AssertHeader.cpp
         HeaderSelfContainment/BuildInfoHeader.cpp
         HeaderSelfContainment/HashHeader.cpp
+        HeaderSelfContainment/IdentifierHeader.cpp
         HeaderSelfContainment/LogHeader.cpp
         HeaderSelfContainment/NumbersHeader.cpp
         HeaderSelfContainment/PonderExceptionHeader.cpp
@@ -15,6 +16,7 @@ ponder_add_project_test(ponder_core_tests
         HeaderSelfContainment/StringHeader.cpp
         HeaderSelfContainment/UuidHeader.cpp
         HashTests.cpp
+        IdentifierTests.cpp
         LogTests.cpp
         NumbersTests.cpp
         PonderExceptionTests.cpp

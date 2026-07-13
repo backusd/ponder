@@ -154,11 +154,19 @@ privately by SDL3.
   focus and hidden state as the inverse of visibility; do not infer either from
   minimization, presentation, or another property.
 - Make window-state mutators idempotent and do not cache visible asynchronous
-  requests as observed state. SDL merges current and pending flags for hidden
-  windows, so retain only the last successful hidden state request until
-  `Show()` to disambiguate a stale current bit from the new pending bit. Reject
-  simultaneous minimized/maximized flags without that marker as
-  `BackendFailure`.
+  requests as observed state. Retain the last accepted visible request only as
+  private mutator-routing metadata: if live flags still show the old target, an
+  immediate opposite request must still reach SDL. SDL merges current and
+  pending flags for hidden windows, so retain the last successful hidden state
+  request until `Show()` to disambiguate a stale current bit from the new pending
+  bit. Before each state mutation, synchronize private request markers to the
+  live hidden/visible flag and clear a visible marker once observation catches
+  up. Use the marker before observed state when deciding idempotence so an
+  accepted duplicate is suppressed and an immediate opposite still reaches SDL.
+  Transfer markers across successful show/hide requests, and process a `SHOWN`
+  event only after live flags confirm the window is currently visible without
+  overwriting newer visible intent. Reject simultaneous minimized/maximized
+  flags without the hidden marker as `BackendFailure`.
 - Select the null SDL fullscreen mode before entering desktop fullscreen. Keep
   exclusive fullscreen absent until platform owns display-mode selection.
 - Classify known unavailable state transitions as `Unsupported` without parsing
@@ -197,12 +205,31 @@ privately by SDL3.
   caller-enforced because the platform registry cannot observe render resources.
 - Copy all asynchronous dialog inputs and callback outputs. Marshal completion
   to the runtime owner thread and distinguish selection, cancellation, and
-  failure.
-- Keep process launch shell-free. Do not make process destruction implicitly
-  wait for or terminate a child.
+  failure. Keep callback fallback storage and FIFO links request-owned so the C
+  callback can enqueue without allocating after a failure and owner-thread
+  polling can test/pop completions in O(1) without scanning every request.
+- Keep process launch shell-free. Process destruction must not terminate the
+  child or block the caller; abandoned live process handles stay privately
+  waitable until cleanup can reap them.
+- Start the shared abandoned-process cleanup worker before creating a child and
+  preallocate its cleanup entry before launch. Destruction may enqueue that
+  entry but must not create a thread or allocate. Poll every abandoned handle
+  fairly and retain it across every inconclusive or failed nonblocking wait;
+  destroy backend tracking only after exit is confirmed. Keep the worker in
+  constant-initialized, deliberately process-lifetime storage so late or
+  static-storage `Process` destruction cannot re-enter a destroyed singleton or
+  synchronously join a worker. Block the worker on its atomic queue while idle;
+  poll at the short cadence only while abandoned handles remain active.
+- Treat process exit translation as host-aware backend work. Preserve normal exit
+  statuses as unsigned 32-bit values, and translate POSIX signal/unknown
+  conventions only in the host-specific backend adapter.
 - Process creation does not require `PlatformRuntime`. Bind each `Process` to its
-  launching thread and require its operations and destruction on that thread
-  without concurrent access.
+  launching thread and require its operations and public destruction on that
+  thread without concurrent access. The internal abandoned-process reaper may
+  wait and destroy after public ownership has ended.
+- Treat `Process::Wait()` as a blocking operation. Do not call it from the
+  desktop event loop or any UI/platform/render pumping thread; use a worker or a
+  higher-level orchestration point when waiting for long-running children.
 - Add tests with every implementation task. Late roadmap test tasks are coverage
   audits, not a substitute for incremental tests.
 

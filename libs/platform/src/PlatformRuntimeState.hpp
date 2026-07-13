@@ -9,7 +9,7 @@
 #include <ponder/platform/Timing.hpp>
 
 #include <array>
-#include <deque>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -31,6 +31,7 @@ struct DialogRequestState;
 
 struct DialogCompletionRecord final
 {
+    PlatformTimestamp timestamp{};
     DialogRequestId requestId;
     DialogOutcome outcome;
 };
@@ -99,15 +100,16 @@ public:
         std::uint32_t backendDisplayId) const;
 
     [[nodiscard]] PlatformTimestamp Now() const;
+    [[nodiscard]] PlatformTimestamp CaptureBackendTimestamp() const;
     [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
     [[nodiscard]] core::Result<DisplayInfo> GetDisplayInfo(DisplayId id);
     [[nodiscard]] core::Result<DisplayId> GetDisplayIdForWindow(void* nativeWindow,
-                                                                WindowId windowId);
-    [[nodiscard]] core::Result<float> GetPixelDensityForWindow(void* nativeWindow,
-                                                               WindowId windowId) const;
-    [[nodiscard]] core::Result<float> GetDisplayScaleForWindow(void* nativeWindow,
-                                                               WindowId windowId) const;
+                                                                std::string_view windowContext);
+    [[nodiscard]] core::Result<float> GetPixelDensityForWindow(
+        void* nativeWindow, std::string_view windowContext) const;
+    [[nodiscard]] core::Result<float> GetDisplayScaleForWindow(
+        void* nativeWindow, std::string_view windowContext) const;
     [[nodiscard]] core::VoidResult SetMouseCapture(bool enabled);
     [[nodiscard]] core::Result<LogicalPoint> GetGlobalMousePosition() const;
     [[nodiscard]] core::VoidResult SetSystemCursor(SystemCursorShape shape);
@@ -121,9 +123,10 @@ public:
     [[nodiscard]] core::Result<DialogRequestId> ShowSaveFileDialog(const SaveFileDialogDesc& desc);
     [[nodiscard]] core::Result<DialogRequestId> ShowOpenFolderDialog(
         const OpenFolderDialogDesc& desc);
-    [[nodiscard]] std::shared_ptr<DialogRequestState> AcquireDialogRequest(
-        DialogRequestId id) noexcept;
-    void EnqueueDialogCompletion(DialogRequestId id, DialogOutcome outcome) noexcept;
+    [[nodiscard]] std::shared_ptr<DialogRequestState> AcquireDialogRequest(DialogRequestId id);
+    void EnqueueDialogCompletion(DialogRequestId id, PlatformTimestamp timestamp,
+                                 DialogOutcome outcome);
+    void MarkDialogCallbackFailure(DialogRequestId id, PlatformTimestamp timestamp) noexcept;
 
 private:
     friend class WindowImpl;
@@ -155,11 +158,13 @@ private:
     WindowId::ValueType m_nextWindowId{1};
     std::unordered_map<std::uint32_t, RuntimeDisplayRecord> m_displaysByBackendId;
     std::unordered_map<DisplayId, RuntimeBackendDisplayRecord> m_displaysById;
+    std::vector<std::uint32_t> m_connectedBackendDisplayIds;
     DisplayId::ValueType m_nextDisplayId{1};
     DialogRequestId::ValueType m_nextDialogRequestId{1};
     std::mutex m_dialogMutex;
     std::unordered_map<DialogRequestId, std::shared_ptr<DialogRequestState>> m_dialogRequests;
-    std::deque<DialogCompletionRecord> m_dialogCompletions;
+    DialogRequestState* m_firstCompletedDialogRequest{};
+    DialogRequestState* m_lastCompletedDialogRequest{};
     std::array<void*, kSystemCursorShapeCount> m_systemCursors{};
 };
 } // namespace pond::platform::detail

@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/Angle.hpp>
 
 #include <array>
@@ -17,10 +18,10 @@ static_assert(!std::is_convertible_v<pond::math::Degrees, float>);
 static_assert(!std::is_convertible_v<pond::math::Degrees, pond::math::Radians>);
 static_assert(!std::is_convertible_v<pond::math::Radians, pond::math::Degrees>);
 
-[[nodiscard]] pond::math::Tolerance RequireTolerance(float absoluteTolerance,
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
                                                      float relativeTolerance)
 {
-    auto result = pond::math::Tolerance::Create(absoluteTolerance, relativeTolerance);
+    auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
     return result.GetValue();
 }
@@ -38,17 +39,17 @@ TEST(AngleTests, ProvidesExplicitScalarConstructionAndValueAccess)
 
 TEST(AngleTests, ConvertsBetweenDegreesAndRadians)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-6F);
+    const pond::core::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-6F);
 
-    EXPECT_TRUE(pond::math::IsNear(pond::math::ToRadians(pond::math::Degrees{180.0F}).GetValue(),
-                                   pond::math::kPi, tolerance));
-    EXPECT_TRUE(pond::math::IsNear(
-        pond::math::ToDegrees(pond::math::Radians{pond::math::kPi}).GetValue(), 180.0F, tolerance));
+    EXPECT_TRUE(pond::core::IsNear(pond::math::ToRadians(pond::math::Degrees{180.0F}).GetValue(),
+                                   pond::core::kPi, tolerance));
+    EXPECT_TRUE(pond::core::IsNear(
+        pond::math::ToDegrees(pond::math::Radians{pond::core::kPi}).GetValue(), 180.0F, tolerance));
 }
 
 TEST(AngleTests, RoundTripsRepresentativeAngles)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(1.0e-4F, 1.0e-6F);
+    const pond::core::Tolerance tolerance = RequireTolerance(1.0e-4F, 1.0e-6F);
     constexpr std::array kDegreeValues{-720.0F, -90.0F, 0.0F, 45.0F, 180.0F, 360.0F};
 
     for (const float degreeValue : kDegreeValues)
@@ -57,7 +58,7 @@ TEST(AngleTests, RoundTripsRepresentativeAngles)
         const pond::math::Degrees roundTripped =
             pond::math::ToDegrees(pond::math::ToRadians(degrees));
 
-        EXPECT_TRUE(pond::math::IsNear(roundTripped.GetValue(), degreeValue, tolerance));
+        EXPECT_TRUE(pond::core::IsNear(roundTripped.GetValue(), degreeValue, tolerance));
     }
 }
 } // namespace

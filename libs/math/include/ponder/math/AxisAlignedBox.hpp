@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Vector3.hpp>
 
 namespace pond::math
@@ -8,16 +9,16 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteAxisAlignedBoxVector(Vector3 value) noexcept
 {
-    return ::pond::math::IsFinite(value.x) && ::pond::math::IsFinite(value.y) &&
-           ::pond::math::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
+           ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
 class AxisAlignedBox final
 {
 public:
-    [[nodiscard]] static inline core::Result<AxisAlignedBox> Create(Vector3 minimum,
-                                                                    Vector3 maximum)
+    [[nodiscard]] static constexpr core::Result<AxisAlignedBox> Create(Vector3 minimum,
+                                                                       Vector3 maximum)
     {
         if (!detail::IsFiniteAxisAlignedBoxVector(minimum) ||
             !detail::IsFiniteAxisAlignedBoxVector(maximum)) [[unlikely]]

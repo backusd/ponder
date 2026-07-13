@@ -5,8 +5,9 @@
 #include <ponder/platform/PlatformRuntime.hpp>
 #include <ponder/platform/Window.hpp>
 
+#include <algorithm>
+#include <charconv>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,10 +29,8 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
 
 [[nodiscard]] core::VoidResult ValidatePositiveSize(LogicalSize size, std::string_view context)
 {
-    constexpr auto kMaximumBackendDimension =
-        static_cast<std::uint32_t>(std::numeric_limits<int>::max());
-    if (size.width == 0 || size.height == 0 || size.width > kMaximumBackendDimension ||
-        size.height > kMaximumBackendDimension)
+    if (size.width == 0 || size.height == 0 || !std::in_range<int>(size.width) ||
+        !std::in_range<int>(size.height))
     {
         return core::VoidResult::FromError(
             core::Error{kInvalidArgumentCode,
@@ -226,11 +225,58 @@ void WindowImpl::CommitRegistration(WindowId id) noexcept
     PONDER_VERIFY(id.IsValid(), "Cannot commit an invalid platform window ID");
     PONDER_VERIFY(!m_registered, "Platform window is already registered");
     m_id = id;
+
+    constexpr std::string_view kPrefix{"window "};
+    std::copy(kPrefix.begin(), kPrefix.end(), m_errorContext.begin());
+    const auto [end, error] =
+        std::to_chars(m_errorContext.data() + kPrefix.size(),
+                      m_errorContext.data() + m_errorContext.size(), id.GetValue());
+    PONDER_VERIFY(error == std::errc{}, "Cannot format a platform window error context");
+    m_errorContextLength = static_cast<std::size_t>(end - m_errorContext.data());
     m_registered = true;
 }
 
 void WindowImpl::ObserveShownEvent() noexcept
 {
+    BackendWindowProperties properties;
+    if (!m_backend.getProperties(m_backend.context, m_nativeWindow, &properties) ||
+        properties.hidden)
+    {
+        return;
+    }
+
+    SynchronizeStateRequestVisibility(false);
+}
+
+void WindowImpl::SynchronizeStateRequestVisibility(bool hidden) noexcept
+{
+    if (hidden)
+    {
+        if (!m_hiddenStateRequest.has_value() && m_pendingVisibleStateRequest.has_value())
+        {
+            m_hiddenStateRequest = m_pendingVisibleStateRequest;
+        }
+        m_pendingVisibleStateRequest.reset();
+        return;
+    }
+
+    if (!m_pendingVisibleStateRequest.has_value() && m_hiddenStateRequest.has_value())
+    {
+        m_pendingVisibleStateRequest = m_hiddenStateRequest;
+    }
+    m_hiddenStateRequest.reset();
+}
+
+void WindowImpl::RecordStateRequest(::pond::platform::WindowState state, bool hidden) noexcept
+{
+    if (hidden)
+    {
+        m_hiddenStateRequest = state;
+        m_pendingVisibleStateRequest.reset();
+        return;
+    }
+
+    m_pendingVisibleStateRequest = state;
     m_hiddenStateRequest.reset();
 }
 
@@ -254,9 +300,10 @@ void WindowImpl::VerifyUsable(std::string_view operation) const
     m_runtime->VerifyOwnerThread(operation);
 }
 
-std::string WindowImpl::GetErrorContext() const
+std::string_view WindowImpl::GetErrorContext() const
 {
-    return "window " + std::to_string(m_id.GetValue());
+    PONDER_VERIFY(m_errorContextLength != 0, "Platform window error context is not initialized");
+    return std::string_view{m_errorContext.data(), m_errorContextLength};
 }
 
 WindowId WindowImpl::GetId() const
@@ -289,7 +336,7 @@ core::VoidResult WindowImpl::SetTitle(std::string_view title)
     }
 
     const std::string ownedTitle{title};
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.setTitle(m_backend.context, m_nativeWindow, ownedTitle.c_str()))
     {
         return core::VoidResult::FromError(
@@ -304,23 +351,18 @@ core::Result<ScreenPosition> WindowImpl::GetPosition() const
     VerifyUsable("position query");
     int x{};
     int y{};
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.getPosition(m_backend.context, m_nativeWindow, &x, &y))
     {
         return core::Result<ScreenPosition>::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowPosition", context));
     }
 
-    constexpr int kMinimumProjectPosition =
-        static_cast<int>(std::numeric_limits<std::int32_t>::min());
-    constexpr int kMaximumProjectPosition =
-        static_cast<int>(std::numeric_limits<std::int32_t>::max());
-    if (x < kMinimumProjectPosition || x > kMaximumProjectPosition || y < kMinimumProjectPosition ||
-        y > kMaximumProjectPosition)
+    if (!std::in_range<std::int32_t>(x) || !std::in_range<std::int32_t>(y))
     {
         return core::Result<ScreenPosition>::FromError(core::Error{
-            kBackendFailureCode,
-            "SDL_GetWindowPosition returned an out-of-range value for " + context + "."});
+            kBackendFailureCode, "SDL_GetWindowPosition returned an out-of-range value for " +
+                                     std::string{context} + "."});
     }
 
     return ScreenPosition{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
@@ -335,7 +377,7 @@ core::VoidResult WindowImpl::SetPosition(ScreenPosition position)
         return validation;
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.setPosition(m_backend.context, m_nativeWindow, static_cast<int>(position.x),
                                static_cast<int>(position.y)))
     {
@@ -351,7 +393,7 @@ core::Result<LogicalSize> WindowImpl::GetLogicalSize() const
     VerifyUsable("logical size query");
     int width{};
     int height{};
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.getSize(m_backend.context, m_nativeWindow, &width, &height))
     {
         return core::Result<LogicalSize>::FromError(
@@ -371,7 +413,7 @@ core::Result<PixelSize> WindowImpl::GetPixelSize() const
     VerifyUsable("pixel size query");
     int width{};
     int height{};
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.getSizeInPixels(m_backend.context, m_nativeWindow, &width, &height))
     {
         return core::Result<PixelSize>::FromError(
@@ -395,7 +437,7 @@ core::VoidResult WindowImpl::SetLogicalSize(LogicalSize size)
         return validation;
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.setSize(m_backend.context, m_nativeWindow, static_cast<int>(size.width),
                            static_cast<int>(size.height)))
     {
@@ -409,27 +451,28 @@ core::VoidResult WindowImpl::SetLogicalSize(LogicalSize size)
 core::VoidResult WindowImpl::Show()
 {
     VerifyUsable("show");
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.show(m_backend.context, m_nativeWindow))
     {
         return core::VoidResult::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_ShowWindow", context));
     }
 
-    m_hiddenStateRequest.reset();
+    SynchronizeStateRequestVisibility(false);
     return core::VoidResult::Success();
 }
 
 core::VoidResult WindowImpl::Hide()
 {
     VerifyUsable("hide");
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.hide(m_backend.context, m_nativeWindow))
     {
         return core::VoidResult::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_HideWindow", context));
     }
 
+    SynchronizeStateRequestVisibility(true);
     return core::VoidResult::Success();
 }
 } // namespace detail

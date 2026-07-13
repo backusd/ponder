@@ -2,10 +2,13 @@
 
 #include <ponder/math/AxisAlignedBox.hpp>
 #include <ponder/math/CollisionClassification.hpp>
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Matrix4x4.hpp>
 #include <ponder/math/Plane.hpp>
 #include <ponder/math/Sphere.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <limits>
 #include <optional>
 
@@ -40,14 +43,40 @@ inline constexpr double kFrustumPlaneTestErrorMultiplier{8.0};
     return Vector4{matrix.row3Column0, matrix.row3Column1, matrix.row3Column2, matrix.row3Column3};
 }
 
-[[nodiscard]] constexpr Vector3 FrustumNormal(Vector4 coefficients) noexcept
+struct FrustumPlaneCoefficients final
 {
-    return Vector3{coefficients.x, coefficients.y, coefficients.z};
+    double x{0.0};
+    double y{0.0};
+    double z{0.0};
+    double w{0.0};
+};
+
+[[nodiscard]] constexpr FrustumPlaneCoefficients WidenFrustumRow(Vector4 row) noexcept
+{
+    return FrustumPlaneCoefficients{static_cast<double>(row.x), static_cast<double>(row.y),
+                                    static_cast<double>(row.z), static_cast<double>(row.w)};
 }
 
-[[nodiscard]] constexpr bool HasZeroFrustumNormal(Vector4 coefficients) noexcept
+[[nodiscard]] constexpr FrustumPlaneCoefficients AddFrustumRows(Vector4 lhs, Vector4 rhs) noexcept
 {
-    return coefficients.x == 0.0F && coefficients.y == 0.0F && coefficients.z == 0.0F;
+    return FrustumPlaneCoefficients{static_cast<double>(lhs.x) + static_cast<double>(rhs.x),
+                                    static_cast<double>(lhs.y) + static_cast<double>(rhs.y),
+                                    static_cast<double>(lhs.z) + static_cast<double>(rhs.z),
+                                    static_cast<double>(lhs.w) + static_cast<double>(rhs.w)};
+}
+
+[[nodiscard]] constexpr FrustumPlaneCoefficients SubtractFrustumRows(Vector4 lhs,
+                                                                     Vector4 rhs) noexcept
+{
+    return FrustumPlaneCoefficients{static_cast<double>(lhs.x) - static_cast<double>(rhs.x),
+                                    static_cast<double>(lhs.y) - static_cast<double>(rhs.y),
+                                    static_cast<double>(lhs.z) - static_cast<double>(rhs.z),
+                                    static_cast<double>(lhs.w) - static_cast<double>(rhs.w)};
+}
+
+[[nodiscard]] constexpr bool HasZeroFrustumNormal(FrustumPlaneCoefficients coefficients) noexcept
+{
+    return coefficients.x == 0.0 && coefficients.y == 0.0 && coefficients.z == 0.0;
 }
 
 struct FrustumPlaneTest final
@@ -136,25 +165,21 @@ struct FrustumPlaneTest final
     return CollisionClassification::Contains;
 }
 
-[[nodiscard]] constexpr CollisionClassification MergeFrustumPlaneClassification(
-    CollisionClassification current, CollisionClassification plane) noexcept
+[[nodiscard]] constexpr bool AccumulateFrustumPlaneClassification(
+    CollisionClassification& current, CollisionClassification plane) noexcept
 {
-    if (plane == CollisionClassification::Disjoint)
+    if (current == CollisionClassification::Disjoint || plane == CollisionClassification::Disjoint)
     {
-        return CollisionClassification::Disjoint;
+        current = CollisionClassification::Disjoint;
+        return false;
     }
 
     if (plane == CollisionClassification::Intersects)
     {
-        return CollisionClassification::Intersects;
+        current = CollisionClassification::Intersects;
     }
 
-    return current;
-}
-
-[[nodiscard]] inline core::Result<Plane> CreateRequiredFrustumPlane(Vector4 coefficients)
-{
-    return Plane::Create(FrustumNormal(coefficients), coefficients.w);
+    return true;
 }
 
 [[nodiscard]] inline core::Error MakeFrustumPlaneConstructionError(core::ErrorCode code)
@@ -162,12 +187,57 @@ struct FrustumPlaneTest final
     return core::Error{code, "Frustum construction requires finite, non-degenerate clip planes."};
 }
 
-[[nodiscard]] inline core::Result<std::optional<Plane>> CreateOptionalFrustumPlane(
-    Vector4 coefficients)
+[[nodiscard]] inline core::Result<Plane> CreateFrustumPlane(FrustumPlaneCoefficients coefficients)
+{
+    const double maximumNormalComponent =
+        std::max(std::max(AbsFrustumTestValue(coefficients.x), AbsFrustumTestValue(coefficients.y)),
+                 AbsFrustumTestValue(coefficients.z));
+    if (maximumNormalComponent == 0.0 || !core::IsFinite(maximumNormalComponent)) [[unlikely]]
+    {
+        return core::Result<Plane>::FromError(
+            MakeFrustumPlaneConstructionError(ToErrorCode(MathErrorCode::DegenerateInput)));
+    }
+
+    const double scaledX = coefficients.x / maximumNormalComponent;
+    const double scaledY = coefficients.y / maximumNormalComponent;
+    const double scaledZ = coefficients.z / maximumNormalComponent;
+    const double normalMagnitude =
+        maximumNormalComponent *
+        std::sqrt(scaledX * scaledX + scaledY * scaledY + scaledZ * scaledZ);
+    if (normalMagnitude <= 0.0 || !core::IsFinite(normalMagnitude)) [[unlikely]]
+    {
+        return core::Result<Plane>::FromError(
+            MakeFrustumPlaneConstructionError(ToErrorCode(MathErrorCode::DegenerateInput)));
+    }
+
+    float normalX = 0.0F;
+    float normalY = 0.0F;
+    float normalZ = 0.0F;
+    float offset = 0.0F;
+    if (!TryConvertFiniteFloat(coefficients.x / normalMagnitude, normalX) ||
+        !TryConvertFiniteFloat(coefficients.y / normalMagnitude, normalY) ||
+        !TryConvertFiniteFloat(coefficients.z / normalMagnitude, normalZ) ||
+        !TryConvertFiniteFloat(coefficients.w / normalMagnitude, offset)) [[unlikely]]
+    {
+        return core::Result<Plane>::FromError(
+            MakeFrustumPlaneConstructionError(ToErrorCode(MathErrorCode::DegenerateInput)));
+    }
+
+    return Plane::Create(Vector3{normalX, normalY, normalZ}, offset);
+}
+
+[[nodiscard]] inline core::Result<Plane> CreateRequiredFrustumPlane(
+    FrustumPlaneCoefficients coefficients)
+{
+    return CreateFrustumPlane(coefficients);
+}
+
+[[nodiscard]] inline constexpr core::Result<std::optional<Plane>> CreateOptionalFrustumPlane(
+    FrustumPlaneCoefficients coefficients)
 {
     if (HasZeroFrustumNormal(coefficients))
     {
-        if (coefficients.w < 0.0F) [[unlikely]]
+        if (coefficients.w < 0.0) [[unlikely]]
         {
             return core::Result<std::optional<Plane>>::FromError(
                 core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
@@ -177,7 +247,7 @@ struct FrustumPlaneTest final
         return std::optional<Plane>{};
     }
 
-    auto plane = Plane::Create(FrustumNormal(coefficients), coefficients.w);
+    auto plane = CreateFrustumPlane(coefficients);
     if (!plane.HasValue()) [[unlikely]]
     {
         return core::Result<std::optional<Plane>>::FromError(
@@ -205,12 +275,13 @@ public:
         const Vector4 row2 = detail::FrustumRow2(worldToClip);
         const Vector4 row3 = detail::FrustumRow3(worldToClip);
 
-        auto left = detail::CreateRequiredFrustumPlane(row3 + row0);
-        auto right = detail::CreateRequiredFrustumPlane(row3 - row0);
-        auto bottom = detail::CreateRequiredFrustumPlane(row3 + row1);
-        auto top = detail::CreateRequiredFrustumPlane(row3 - row1);
-        auto minimumDepth = detail::CreateOptionalFrustumPlane(row2);
-        auto maximumDepth = detail::CreateOptionalFrustumPlane(row3 - row2);
+        auto left = detail::CreateRequiredFrustumPlane(detail::AddFrustumRows(row3, row0));
+        auto right = detail::CreateRequiredFrustumPlane(detail::SubtractFrustumRows(row3, row0));
+        auto bottom = detail::CreateRequiredFrustumPlane(detail::AddFrustumRows(row3, row1));
+        auto top = detail::CreateRequiredFrustumPlane(detail::SubtractFrustumRows(row3, row1));
+        auto minimumDepth = detail::CreateOptionalFrustumPlane(detail::WidenFrustumRow(row2));
+        auto maximumDepth =
+            detail::CreateOptionalFrustumPlane(detail::SubtractFrustumRows(row3, row2));
 
         if (!left.HasValue()) [[unlikely]]
         {
@@ -250,24 +321,29 @@ public:
     {
         CollisionClassification result = CollisionClassification::Contains;
 
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifyBoxAgainstFrustumPlane(m_left, box));
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifyBoxAgainstFrustumPlane(m_right, box));
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifyBoxAgainstFrustumPlane(m_bottom, box));
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifyBoxAgainstFrustumPlane(m_top, box));
-
-        if (m_minimumDepth.has_value())
+        if (!detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifyBoxAgainstFrustumPlane(m_left, box)) ||
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifyBoxAgainstFrustumPlane(m_right, box)) ||
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifyBoxAgainstFrustumPlane(m_bottom, box)) ||
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifyBoxAgainstFrustumPlane(m_top, box)))
         {
-            result = detail::MergeFrustumPlaneClassification(
-                result, detail::ClassifyBoxAgainstFrustumPlane(*m_minimumDepth, box));
+            return CollisionClassification::Disjoint;
         }
-        if (m_maximumDepth.has_value())
+
+        if (m_minimumDepth.has_value() &&
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifyBoxAgainstFrustumPlane(*m_minimumDepth, box)))
         {
-            result = detail::MergeFrustumPlaneClassification(
-                result, detail::ClassifyBoxAgainstFrustumPlane(*m_maximumDepth, box));
+            return CollisionClassification::Disjoint;
+        }
+        if (m_maximumDepth.has_value() &&
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifyBoxAgainstFrustumPlane(*m_maximumDepth, box)))
+        {
+            return CollisionClassification::Disjoint;
         }
 
         return result;
@@ -277,24 +353,29 @@ public:
     {
         CollisionClassification result = CollisionClassification::Contains;
 
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifySphereAgainstFrustumPlane(m_left, sphere));
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifySphereAgainstFrustumPlane(m_right, sphere));
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifySphereAgainstFrustumPlane(m_bottom, sphere));
-        result = detail::MergeFrustumPlaneClassification(
-            result, detail::ClassifySphereAgainstFrustumPlane(m_top, sphere));
-
-        if (m_minimumDepth.has_value())
+        if (!detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifySphereAgainstFrustumPlane(m_left, sphere)) ||
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifySphereAgainstFrustumPlane(m_right, sphere)) ||
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifySphereAgainstFrustumPlane(m_bottom, sphere)) ||
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifySphereAgainstFrustumPlane(m_top, sphere)))
         {
-            result = detail::MergeFrustumPlaneClassification(
-                result, detail::ClassifySphereAgainstFrustumPlane(*m_minimumDepth, sphere));
+            return CollisionClassification::Disjoint;
         }
-        if (m_maximumDepth.has_value())
+
+        if (m_minimumDepth.has_value() &&
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifySphereAgainstFrustumPlane(*m_minimumDepth, sphere)))
         {
-            result = detail::MergeFrustumPlaneClassification(
-                result, detail::ClassifySphereAgainstFrustumPlane(*m_maximumDepth, sphere));
+            return CollisionClassification::Disjoint;
+        }
+        if (m_maximumDepth.has_value() &&
+            !detail::AccumulateFrustumPlaneClassification(
+                result, detail::ClassifySphereAgainstFrustumPlane(*m_maximumDepth, sphere)))
+        {
+            return CollisionClassification::Disjoint;
         }
 
         return result;

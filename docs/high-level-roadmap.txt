@@ -332,8 +332,8 @@ Step 3: Review cross-library dependency direction (documented)
 Before adding real desktop behavior, lock in the dependency direction for the
 libraries that the desktop shell will touch:
 
-- `ponder_platform` may depend on `ponder_core` and SDL3, but not on renderer,
-  UI, project, chemistry, workflow, or compute.
+- `ponder_platform` may depend on `ponder_core`, `ponder_io`, and SDL3, but not
+  on renderer, UI, project, chemistry, workflow, or compute.
 - `ponder_render` publicly depends on `ponder_core` and `ponder_platform`.
   Vulkan/loader/allocator/MoltenVK/OS dependencies stay private, as does
   `ponder::imgui` for the renderer-owned draw bridge. Render has no direct SDL

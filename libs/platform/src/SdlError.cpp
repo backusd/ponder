@@ -40,6 +40,14 @@ core::Error CaptureSdlFailure(core::ErrorCode code, std::string_view operation,
                                       ? std::string{rawError}
                                       : std::string{kMissingSdlError};
 
+    return CaptureSdlFailure(code, operation, objectContext, errorText, location);
+}
+
+core::Error CaptureSdlFailure(core::ErrorCode code, std::string_view operation,
+                              std::string_view objectContext, std::string_view capturedError,
+                              std::source_location location)
+{
+    const std::string_view errorText = !capturedError.empty() ? capturedError : kMissingSdlError;
     return core::Error{code, BuildFailureMessage(operation, objectContext, errorText), location};
 }
 } // namespace pond::platform::detail

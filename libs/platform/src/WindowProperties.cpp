@@ -86,7 +86,7 @@ core::Result<BackendWindowProperties> WindowImpl::GetProperties(std::string_view
 {
     VerifyUsable(operation);
     BackendWindowProperties properties;
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (!m_backend.getProperties(m_backend.context, m_nativeWindow, &properties))
     {
         return core::Result<BackendWindowProperties>::FromError(
@@ -128,12 +128,20 @@ core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
     {
         return core::VoidResult::FromError(std::move(properties).GetError());
     }
-    if (properties.GetValue().desktopFullscreen == fullscreen)
+    const WindowPresentation observedPresentation = properties.GetValue().desktopFullscreen
+                                                        ? WindowPresentation::DesktopFullscreen
+                                                        : WindowPresentation::Windowed;
+    if (m_pendingPresentationRequest == observedPresentation)
+    {
+        m_pendingPresentationRequest.reset();
+    }
+    if (m_pendingPresentationRequest.has_value() ? *m_pendingPresentationRequest == presentation
+                                                 : observedPresentation == presentation)
     {
         return core::VoidResult::Success();
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (fullscreen)
     {
         core::VoidResult modeResult = ConvertOperationResult(
@@ -145,9 +153,14 @@ core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
         }
     }
 
-    return ConvertOperationResult(
+    core::VoidResult presentationResult = ConvertOperationResult(
         m_backend.setFullscreen(m_backend.context, m_nativeWindow, fullscreen),
         "SDL_SetWindowFullscreen", context, false);
+    if (presentationResult.HasValue())
+    {
+        m_pendingPresentationRequest = presentation;
+    }
+    return presentationResult;
 }
 
 core::Result<WindowDecoration> WindowImpl::GetDecoration() const
@@ -194,7 +207,7 @@ core::VoidResult WindowImpl::SetDecoration(WindowDecoration decoration)
                                  std::to_string(m_id.GetValue()) + " is fullscreen."));
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     return ConvertOperationResult(
         m_backend.setBordered(m_backend.context, m_nativeWindow, !borderless),
         "SDL_SetWindowBordered", context, false);
@@ -218,17 +231,25 @@ core::VoidResult WindowImpl::Minimize()
     {
         return core::VoidResult::FromError(std::move(properties).GetError());
     }
+    SynchronizeStateRequestVisibility(properties.GetValue().hidden);
     auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
     if (!state.HasValue())
     {
         return core::VoidResult::FromError(std::move(state).GetError());
     }
-    if (state.GetValue() == ::pond::platform::WindowState::Minimized)
+    if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
+    {
+        m_pendingVisibleStateRequest.reset();
+    }
+    const std::optional<::pond::platform::WindowState>& pendingState =
+        properties.GetValue().hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
+    if (pendingState.has_value() ? *pendingState == ::pond::platform::WindowState::Minimized
+                                 : state.GetValue() == ::pond::platform::WindowState::Minimized)
     {
         return core::VoidResult::Success();
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (properties.GetValue().hidden &&
         state.GetValue() == ::pond::platform::WindowState::Maximized)
     {
@@ -239,13 +260,13 @@ core::VoidResult WindowImpl::Minimize()
         {
             return restoreResult;
         }
-        m_hiddenStateRequest = ::pond::platform::WindowState::Normal;
+        RecordStateRequest(::pond::platform::WindowState::Normal, true);
     }
     core::VoidResult minimizeResult = ConvertOperationResult(
         m_backend.minimize(m_backend.context, m_nativeWindow), "SDL_MinimizeWindow", context, true);
-    if (minimizeResult.HasValue() && properties.GetValue().hidden)
+    if (minimizeResult.HasValue())
     {
-        m_hiddenStateRequest = ::pond::platform::WindowState::Minimized;
+        RecordStateRequest(::pond::platform::WindowState::Minimized, properties.GetValue().hidden);
     }
     return minimizeResult;
 }
@@ -257,12 +278,20 @@ core::VoidResult WindowImpl::Maximize()
     {
         return core::VoidResult::FromError(std::move(properties).GetError());
     }
+    SynchronizeStateRequestVisibility(properties.GetValue().hidden);
     auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
     if (!state.HasValue())
     {
         return core::VoidResult::FromError(std::move(state).GetError());
     }
-    if (state.GetValue() == ::pond::platform::WindowState::Maximized)
+    if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
+    {
+        m_pendingVisibleStateRequest.reset();
+    }
+    const std::optional<::pond::platform::WindowState>& pendingState =
+        properties.GetValue().hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
+    if (pendingState.has_value() ? *pendingState == ::pond::platform::WindowState::Maximized
+                                 : state.GetValue() == ::pond::platform::WindowState::Maximized)
     {
         return core::VoidResult::Success();
     }
@@ -272,7 +301,7 @@ core::VoidResult WindowImpl::Maximize()
             MakeUnsupportedError("A non-resizable window cannot be maximized."));
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     if (properties.GetValue().hidden &&
         state.GetValue() == ::pond::platform::WindowState::Minimized)
     {
@@ -283,13 +312,13 @@ core::VoidResult WindowImpl::Maximize()
         {
             return restoreResult;
         }
-        m_hiddenStateRequest = ::pond::platform::WindowState::Normal;
+        RecordStateRequest(::pond::platform::WindowState::Normal, true);
     }
     core::VoidResult maximizeResult = ConvertOperationResult(
         m_backend.maximize(m_backend.context, m_nativeWindow), "SDL_MaximizeWindow", context, true);
-    if (maximizeResult.HasValue() && properties.GetValue().hidden)
+    if (maximizeResult.HasValue())
     {
-        m_hiddenStateRequest = ::pond::platform::WindowState::Maximized;
+        RecordStateRequest(::pond::platform::WindowState::Maximized, properties.GetValue().hidden);
     }
     return maximizeResult;
 }
@@ -301,22 +330,30 @@ core::VoidResult WindowImpl::Restore()
     {
         return core::VoidResult::FromError(std::move(properties).GetError());
     }
+    SynchronizeStateRequestVisibility(properties.GetValue().hidden);
     auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
     if (!state.HasValue())
     {
         return core::VoidResult::FromError(std::move(state).GetError());
     }
-    if (state.GetValue() == ::pond::platform::WindowState::Normal)
+    if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
+    {
+        m_pendingVisibleStateRequest.reset();
+    }
+    const std::optional<::pond::platform::WindowState>& pendingState =
+        properties.GetValue().hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
+    if (pendingState.has_value() ? *pendingState == ::pond::platform::WindowState::Normal
+                                 : state.GetValue() == ::pond::platform::WindowState::Normal)
     {
         return core::VoidResult::Success();
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     core::VoidResult restoreResult = ConvertOperationResult(
         m_backend.restore(m_backend.context, m_nativeWindow), "SDL_RestoreWindow", context, true);
-    if (restoreResult.HasValue() && properties.GetValue().hidden)
+    if (restoreResult.HasValue())
     {
-        m_hiddenStateRequest = ::pond::platform::WindowState::Normal;
+        RecordStateRequest(::pond::platform::WindowState::Normal, properties.GetValue().hidden);
     }
     return restoreResult;
 }
@@ -359,7 +396,7 @@ core::VoidResult WindowImpl::SetResizable(bool resizable)
                                  std::to_string(m_id.GetValue()) + " is fullscreen."));
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     return ConvertOperationResult(
         m_backend.setResizable(m_backend.context, m_nativeWindow, resizable),
         "SDL_SetWindowResizable", context, false);
@@ -397,7 +434,7 @@ core::VoidResult WindowImpl::SetAlwaysOnTop(bool alwaysOnTop)
         return core::VoidResult::Success();
     }
 
-    const std::string context = GetErrorContext();
+    const std::string_view context = GetErrorContext();
     return ConvertOperationResult(
         m_backend.setAlwaysOnTop(m_backend.context, m_nativeWindow, alwaysOnTop),
         "SDL_SetWindowAlwaysOnTop", context, false);

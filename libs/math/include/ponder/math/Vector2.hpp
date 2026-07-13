@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ponder/core/Assert.hpp>
-#include <ponder/math/Scalar.hpp>
+#include <ponder/core/Numbers.hpp>
+#include <ponder/math/MathError.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -24,19 +24,7 @@ struct Vector2 final
         return Vector2{};
     }
 
-    [[nodiscard]] float& operator[](std::size_t index)
-    {
-        PONDER_VERIFY(index < 2, "Vector2 index {} is out of range.", index);
-        return index == 0 ? x : y;
-    }
-
-    [[nodiscard]] const float& operator[](std::size_t index) const
-    {
-        PONDER_VERIFY(index < 2, "Vector2 index {} is out of range.", index);
-        return index == 0 ? x : y;
-    }
-
-    [[nodiscard]] core::Result<std::reference_wrapper<float>> At(std::size_t index)
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<float>> At(std::size_t index)
     {
         switch (index)
         {
@@ -44,13 +32,14 @@ struct Vector2 final
             return std::ref(x);
         case 1:
             return std::ref(y);
-        default: [[unlikely]]
-            return core::Result<std::reference_wrapper<float>>::FromError(core::Error{
+        default:
+            [[unlikely]] return core::Result<std::reference_wrapper<float>>::FromError(core::Error{
                 ToErrorCode(MathErrorCode::InvalidArgument), "Vector2 index is out of range."});
         }
     }
 
-    [[nodiscard]] core::Result<std::reference_wrapper<const float>> At(std::size_t index) const
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(
+        std::size_t index) const
     {
         switch (index)
         {
@@ -58,9 +47,10 @@ struct Vector2 final
             return std::cref(x);
         case 1:
             return std::cref(y);
-        default: [[unlikely]]
-            return core::Result<std::reference_wrapper<const float>>::FromError(core::Error{
-                ToErrorCode(MathErrorCode::InvalidArgument), "Vector2 index is out of range."});
+        default:
+            [[unlikely]] return core::Result<std::reference_wrapper<const float>>::FromError(
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
+                            "Vector2 index is out of range."});
         }
     }
 
@@ -120,7 +110,7 @@ struct Vector2 final
 
 [[nodiscard]] inline float Length(Vector2 vector) noexcept
 {
-    return std::sqrt(SquaredLength(vector));
+    return std::hypot(vector.x, vector.y);
 }
 
 [[nodiscard]] constexpr float SquaredDistance(Vector2 lhs, Vector2 rhs) noexcept
@@ -130,7 +120,7 @@ struct Vector2 final
 
 [[nodiscard]] inline float Distance(Vector2 lhs, Vector2 rhs) noexcept
 {
-    return Length(lhs - rhs);
+    return std::hypot(lhs.x - rhs.x, lhs.y - rhs.y);
 }
 
 [[nodiscard]] constexpr Vector2 ComponentMin(Vector2 lhs, Vector2 rhs) noexcept
@@ -145,17 +135,17 @@ struct Vector2 final
 
 [[nodiscard]] constexpr Vector2 Lerp(Vector2 start, Vector2 end, float amount) noexcept
 {
-    return Vector2{Lerp(start.x, end.x, amount), Lerp(start.y, end.y, amount)};
+    return Vector2{core::Lerp(start.x, end.x, amount), core::Lerp(start.y, end.y, amount)};
 }
 
-[[nodiscard]] constexpr bool IsNear(Vector2 lhs, Vector2 rhs, Tolerance tolerance) noexcept
+[[nodiscard]] constexpr bool IsNear(Vector2 lhs, Vector2 rhs, core::Tolerance tolerance) noexcept
 {
-    return IsNear(lhs.x, rhs.x, tolerance) && IsNear(lhs.y, rhs.y, tolerance);
+    return core::IsNear(lhs.x, rhs.x, tolerance) && core::IsNear(lhs.y, rhs.y, tolerance);
 }
 
 [[nodiscard]] inline core::Result<Vector2> Normalize(Vector2 vector)
 {
-    if (!IsFinite(vector.x) || !IsFinite(vector.y)) [[unlikely]]
+    if (!core::IsFinite(vector.x) || !core::IsFinite(vector.y)) [[unlikely]]
     {
         return core::Result<Vector2>::FromError(
             core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
@@ -172,7 +162,7 @@ struct Vector2 final
 
     const Vector2 scaled = vector / maxMagnitude;
     const float scaledLength = Length(scaled);
-    if (!IsFinite(scaledLength) || scaledLength == 0.0F) [[unlikely]]
+    if (!core::IsFinite(scaledLength) || scaledLength == 0.0F) [[unlikely]]
     {
         return core::Result<Vector2>::FromError(
             core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
@@ -180,7 +170,7 @@ struct Vector2 final
     }
 
     const Vector2 normalized = scaled / scaledLength;
-    if (!IsFinite(normalized.x) || !IsFinite(normalized.y)) [[unlikely]]
+    if (!core::IsFinite(normalized.x) || !core::IsFinite(normalized.y)) [[unlikely]]
     {
         return core::Result<Vector2>::FromError(
             core::Error{ToErrorCode(MathErrorCode::DegenerateInput),

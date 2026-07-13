@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Vector3.hpp>
 
 namespace pond::math
@@ -8,16 +9,16 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteTriangleVector(Vector3 value) noexcept
 {
-    return ::pond::math::IsFinite(value.x) && ::pond::math::IsFinite(value.y) &&
-           ::pond::math::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
+           ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
 class Triangle final
 {
 public:
-    [[nodiscard]] static inline core::Result<Triangle> Create(Vector3 vertex0, Vector3 vertex1,
-                                                              Vector3 vertex2)
+    [[nodiscard]] static constexpr core::Result<Triangle> Create(Vector3 vertex0, Vector3 vertex1,
+                                                                 Vector3 vertex2)
     {
         if (!detail::IsFiniteTriangleVector(vertex0) || !detail::IsFiniteTriangleVector(vertex1) ||
             !detail::IsFiniteTriangleVector(vertex2)) [[unlikely]]

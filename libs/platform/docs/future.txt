@@ -20,7 +20,9 @@ Work:
   build first and run `ctest --test-dir build/<preset> --output-on-failure`
   directly; add `-C` for a multi-configuration generator.
 - Run hidden-window, display/scale, input, native-handle, process, and clipboard
-  integration coverage wherever the host and driver support it.
+  integration coverage wherever the host and driver support it. On POSIX hosts,
+  explicitly verify abandoned-child reaping without zombies plus signal exit
+  translation; on Windows, preserve high-bit unsigned normal exit statuses.
 - Compile `NativeWin32Window` on Windows, `NativeX11Window` and
   `NativeWaylandWindow` on Linux, and `NativeCocoaWindow` on macOS.
 - Record capability-based skips rather than treating them as passes.

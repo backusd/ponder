@@ -1,5 +1,3 @@
-#include <ponder/core/Assert.hpp>
-#include <ponder/core/PonderException.hpp>
 #include <ponder/math/Vector2.hpp>
 #include <ponder/math/Vector3.hpp>
 #include <ponder/math/Vector4.hpp>
@@ -16,6 +14,41 @@ concept HasVectorMultiply = requires(Vector lhs, Vector rhs) { lhs * rhs; };
 
 template <typename Vector>
 concept HasVectorDivide = requires(Vector lhs, Vector rhs) { lhs / rhs; };
+
+template <typename Vector>
+concept HasVectorSubscript = requires(Vector vector, const Vector constVector, std::size_t index) {
+    vector[index];
+    constVector[index];
+};
+
+[[nodiscard]] constexpr bool SupportsCompileTimeCheckedVectorAccess()
+{
+    pond::math::Vector2 vector2{1.0F, 2.0F};
+    pond::math::Vector3 vector3{3.0F, 4.0F, 5.0F};
+    pond::math::Vector4 vector4{6.0F, 7.0F, 8.0F, 9.0F};
+
+    auto vector2Element = vector2.At(1);
+    auto vector3Element = vector3.At(2);
+    auto vector4Element = vector4.At(3);
+    if (!vector2Element.HasValue() || !vector3Element.HasValue() || !vector4Element.HasValue())
+    {
+        return false;
+    }
+
+    vector2Element->get() = 20.0F;
+    vector3Element->get() = 50.0F;
+    vector4Element->get() = 90.0F;
+
+    const pond::math::Vector2 constVector2 = vector2;
+    const pond::math::Vector3 constVector3 = vector3;
+    const pond::math::Vector4 constVector4 = vector4;
+    const auto constVector2Element = constVector2.At(1);
+    const auto constVector3Element = constVector3.At(2);
+    const auto constVector4Element = constVector4.At(3);
+    return constVector2Element.HasValue() && constVector2Element->get() == 20.0F &&
+           constVector3Element.HasValue() && constVector3Element->get() == 50.0F &&
+           constVector4Element.HasValue() && constVector4Element->get() == 90.0F;
+}
 
 static_assert(sizeof(pond::math::Vector2) == 8);
 static_assert(sizeof(pond::math::Vector3) == 12);
@@ -44,16 +77,16 @@ static_assert(!HasVectorMultiply<pond::math::Vector4>);
 static_assert(!HasVectorDivide<pond::math::Vector2>);
 static_assert(!HasVectorDivide<pond::math::Vector3>);
 static_assert(!HasVectorDivide<pond::math::Vector4>);
+static_assert(!HasVectorSubscript<pond::math::Vector2>);
+static_assert(!HasVectorSubscript<pond::math::Vector3>);
+static_assert(!HasVectorSubscript<pond::math::Vector4>);
+static_assert(SupportsCompileTimeCheckedVectorAccess());
 
 void ExpectInvalidIndex(auto result)
 {
     ASSERT_FALSE(result.HasValue());
     EXPECT_EQ(result.GetError().GetCode(),
               pond::math::ToErrorCode(pond::math::MathErrorCode::InvalidArgument));
-}
-
-void IgnoreExpectedVerifyFailure(const pond::core::AssertionFailure&)
-{
 }
 
 TEST(Vector2Tests, DefaultsToZeroAndConstructsFromComponents)
@@ -82,17 +115,10 @@ TEST(Vector2Tests, SupportsPublicMutationAndCheckedIndexing)
     x->get() = 5.0F;
     y->get() = 6.0F;
 
-    EXPECT_EQ(vector[0], 5.0F);
-    EXPECT_EQ(vector[1], 6.0F);
-
-    vector[0] = 7.0F;
-    vector[1] = 8.0F;
-
-    EXPECT_EQ(vector, (pond::math::Vector2{7.0F, 8.0F}));
+    EXPECT_EQ(vector, (pond::math::Vector2{5.0F, 6.0F}));
 }
 
-
-TEST(Vector2Tests, ProvidesConstIndexingAndRejectsInvalidIndices)
+TEST(Vector2Tests, ProvidesConstCheckedIndexingAndRejectsInvalidIndices)
 {
     const pond::math::Vector2 vector{1.0F, 2.0F};
     auto x = vector.At(0);
@@ -102,11 +128,7 @@ TEST(Vector2Tests, ProvidesConstIndexingAndRejectsInvalidIndices)
 
     EXPECT_EQ(x->get(), 1.0F);
     EXPECT_EQ(y->get(), 2.0F);
-    EXPECT_EQ(vector[0], 1.0F);
-    EXPECT_EQ(vector[1], 2.0F);
     ExpectInvalidIndex(vector.At(2));
-    const pond::core::ScopedVerifyFailureHandler verifyHandler{IgnoreExpectedVerifyFailure};
-    EXPECT_THROW((void)vector[2], pond::core::PonderException);
 }
 
 TEST(Vector3Tests, DefaultsToZeroAndConstructsFromComponents)
@@ -141,18 +163,10 @@ TEST(Vector3Tests, SupportsPublicMutationAndCheckedIndexing)
     y->get() = 8.0F;
     z->get() = 9.0F;
 
-    EXPECT_EQ(vector[0], 7.0F);
-    EXPECT_EQ(vector[1], 8.0F);
-    EXPECT_EQ(vector[2], 9.0F);
-
-    vector[0] = 10.0F;
-    vector[1] = 11.0F;
-    vector[2] = 12.0F;
-
-    EXPECT_EQ(vector, (pond::math::Vector3{10.0F, 11.0F, 12.0F}));
+    EXPECT_EQ(vector, (pond::math::Vector3{7.0F, 8.0F, 9.0F}));
 }
 
-TEST(Vector3Tests, ProvidesConstIndexingAndRejectsInvalidIndices)
+TEST(Vector3Tests, ProvidesConstCheckedIndexingAndRejectsInvalidIndices)
 {
     const pond::math::Vector3 vector{1.0F, 2.0F, 3.0F};
     auto x = vector.At(0);
@@ -165,12 +179,7 @@ TEST(Vector3Tests, ProvidesConstIndexingAndRejectsInvalidIndices)
     EXPECT_EQ(x->get(), 1.0F);
     EXPECT_EQ(y->get(), 2.0F);
     EXPECT_EQ(z->get(), 3.0F);
-    EXPECT_EQ(vector[0], 1.0F);
-    EXPECT_EQ(vector[1], 2.0F);
-    EXPECT_EQ(vector[2], 3.0F);
     ExpectInvalidIndex(vector.At(3));
-    const pond::core::ScopedVerifyFailureHandler verifyHandler{IgnoreExpectedVerifyFailure};
-    EXPECT_THROW((void)vector[3], pond::core::PonderException);
 }
 
 TEST(Vector4Tests, DefaultsToZeroAndConstructsFromComponents)
@@ -211,20 +220,10 @@ TEST(Vector4Tests, SupportsPublicMutationAndCheckedIndexing)
     z->get() = 11.0F;
     w->get() = 12.0F;
 
-    EXPECT_EQ(vector[0], 9.0F);
-    EXPECT_EQ(vector[1], 10.0F);
-    EXPECT_EQ(vector[2], 11.0F);
-    EXPECT_EQ(vector[3], 12.0F);
-
-    vector[0] = 13.0F;
-    vector[1] = 14.0F;
-    vector[2] = 15.0F;
-    vector[3] = 16.0F;
-
-    EXPECT_EQ(vector, (pond::math::Vector4{13.0F, 14.0F, 15.0F, 16.0F}));
+    EXPECT_EQ(vector, (pond::math::Vector4{9.0F, 10.0F, 11.0F, 12.0F}));
 }
 
-TEST(Vector4Tests, ProvidesConstIndexingAndRejectsInvalidIndices)
+TEST(Vector4Tests, ProvidesConstCheckedIndexingAndRejectsInvalidIndices)
 {
     const pond::math::Vector4 vector{1.0F, 2.0F, 3.0F, 4.0F};
     auto x = vector.At(0);
@@ -240,12 +239,6 @@ TEST(Vector4Tests, ProvidesConstIndexingAndRejectsInvalidIndices)
     EXPECT_EQ(y->get(), 2.0F);
     EXPECT_EQ(z->get(), 3.0F);
     EXPECT_EQ(w->get(), 4.0F);
-    EXPECT_EQ(vector[0], 1.0F);
-    EXPECT_EQ(vector[1], 2.0F);
-    EXPECT_EQ(vector[2], 3.0F);
-    EXPECT_EQ(vector[3], 4.0F);
     ExpectInvalidIndex(vector.At(4));
-    const pond::core::ScopedVerifyFailureHandler verifyHandler{IgnoreExpectedVerifyFailure};
-    EXPECT_THROW((void)vector[4], pond::core::PonderException);
 }
 } // namespace

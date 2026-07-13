@@ -1,0 +1,635 @@
+# ponder Math Library Audit
+
+Date: 2026-07-10
+
+Audit target: the current working tree in `C:\dev\ponder`.
+
+Completion status: renderer-ready completion pass finished on 2026-07-10.
+
+Roadmap baseline: `libs/math/docs/roadmap.txt` was deleted intentionally after implementation. Its
+last committed version (`HEAD:libs/math/docs/roadmap.txt`) is the requirements baseline. This file
+is now the durable completion record for that roadmap.
+
+## Executive Conclusion
+
+The renderer-ready scope through MATH-024 is implemented and verified on the primary Windows host.
+Every blocker, major finding, documentation mismatch, constexpr gap, and completion-gate omission
+found by the initial audit has been resolved. MATH-025 remains intentionally deferred: this record
+does not claim Linux, macOS, sanitizer, or non-x86 portability evidence.
+
+The completed library has checked and unchecked behavior with explicit contracts, robust finite
+arithmetic at the supported float boundaries, independent collision oracles, compile-time contract
+coverage, a renderer-oriented cached unprojection path, and clean Debug and Release validation.
+
+Direct answers to the requested questions:
+
+1. Yes, for the renderer-ready MATH-000 through MATH-024 scope. MATH-025 is the roadmap's explicit
+   portability follow-up and remains deferred.
+2. Yes, for useful and portable success paths under the supported C++23/MSVC toolchain. Operations
+   that require non-constexpr square root, trigonometry, or runtime diagnostics remain runtime.
+3. Yes. `[[unlikely]]` is limited to defensible cold validation/error paths. No `[[likely]]` hint is
+   justified without renderer profiles, and duplicate hints were removed.
+4. No remaining issue blocks renderer work. Cross-platform validation, profile-guided tuning, SIMD,
+   bulk APIs, and additional collision pairs remain deliberate post-renderer work.
+
+## Completion Summary
+
+- Frustum classification now preserves `Disjoint` dominance and exits early. Independent AABB and
+  sphere oracles plus cross-plane regressions prevent the original copied-oracle defect.
+- Scalar comparison/interpolation, vector norms, view/projection construction, viewport mapping,
+  homogeneous transforms, frustum extraction, and normal transformation use stable wide
+  intermediates with checked float narrowing where the API promises checked behavior.
+- Vector caller-controlled indexing is recoverable through `At`; the assertion-based subscript
+  operators were removed.
+- Checked normal transformation rejects non-finite inputs/results. Picking intersections document
+  their finite-float distance domain.
+- Eligible access, inverse, transform, viewport, collision, and partial Slerp success paths are
+  constexpr and protected by compile-time tests. Runtime-only math is documented.
+- Scalar helper ownership is ratified in core. Collision uncertainty, subnormal homogeneous W,
+  Slerp extrapolation, matrix extraction, layout, and support-domain policies are documented.
+- Exact layout assertions are limited to the durable vector, matrix, and quaternion promises.
+  Collision values retain only the properties required by their public contracts.
+- A cached clip-to-world unprojection API avoids repeated matrix inversion in renderer picking.
+- Formatting, static analysis, fresh Debug/Release builds, header isolation, examples, unit tests,
+  and DirectX reference tests were completed successfully.
+
+## Initial Audit Record
+
+The detailed findings below preserve the state observed before the completion pass. Their source
+line references and validation counts are historical; every listed required action is resolved by
+the implementation and current evidence recorded at the end of this file.
+
+## Scope And Method
+
+The audit read all requested files:
+
+- root `AGENTS.md`;
+- every file under `docs/adr/`;
+- every current file under `libs/math/docs/`;
+- every current public header under `libs/math/include/`;
+- every current source under `libs/math/src/`;
+- the last committed, currently deleted math roadmap.
+
+The audit also inspected the math CMake target, every math test target and test source, the
+relevant core `Result`, assertion, and numeric facilities, and the current build presets. This
+additional scope was required because the roadmap defines test, dependency, layout, and validation
+gates.
+
+Findings are ordered by severity. A blocker invalidates renderer-facing behavior. Major findings
+violate a documented checked/numerical contract. Moderate findings weaken API consistency,
+compile-time usability, documentation, or completion evidence. Minor findings are worthwhile
+cleanup or future profiling work.
+
+## Initial Blocking Finding (Resolved)
+
+### B1. Frustum classification can lose a `Disjoint` result
+
+`detail::MergeFrustumPlaneClassification` in `Frustum.hpp:141-155` considers only the newly tested
+plane. Both `Frustum::Classify` overloads then repeatedly overwrite the accumulated result in
+`Frustum.hpp:250-303`.
+
+If an object is outside one plane and intersects a later plane, the later `Intersects` overwrites
+the earlier `Disjoint`. For an orthographic frustum spanning `[-2, +2]` in X and Y, an AABB with
+`x=[-4,-3]`, `y=[2,2]`, and `z=[-5,-4]` is outside the left plane and touches the top plane. The
+current implementation returns `Intersects`; the correct result is `Disjoint`.
+
+The higher-precision milestone oracle duplicates the same merge algorithm in
+`CollisionMilestoneTests.cpp:129-142,186-204`. Its seeded test at lines 318-355 only prevents false
+rejection of visible objects; it does not require truly disjoint objects to remain disjoint.
+
+Required correction:
+
+- make `Disjoint` dominate every later result, or return immediately after the first definitive
+  disjoint plane;
+- make `Intersects` dominate only when neither accumulated nor new state is `Disjoint`;
+- add AABB and sphere regressions that are outside one plane while crossing or touching another;
+- correct the independent oracle rather than copying the production aggregation logic;
+- rerun the seeded corpus and DirectX comparisons.
+
+This leaves MATH-017, MATH-020, MATH-021, and MATH-022 incomplete.
+
+## Initial Numerical, API, And Policy Findings (Resolved)
+
+### M1. Checked view construction can succeed with a non-finite matrix
+
+`Matrix4x4::LookTo` checks that its inputs are finite in `Matrix4x4.hpp:141-161`, but computes the
+translation dot products in `float` and returns the matrix without validating it at lines 164-169.
+
+For example, finite values equivalent to:
+
+```text
+eye       = {FLT_MAX, FLT_MAX, 0}
+direction = {1, -1, 0}
+up        = {0, 0, 1}
+```
+
+can overflow a translation dot product to infinity. The checked factory then returns a successful
+`Result<Matrix4x4>` containing a non-finite matrix.
+
+Compute the sensitive dot products in `double`, verify the final float matrix, and return a stable
+error when the result is not representable. Add maximum-range finite-input tests for both `LookTo`
+and `LookAt`.
+
+### M2. Projection factories have avoidable float intermediate overflow
+
+Finite perspective construction calculates `nearDistance * farDistance` in float at
+`Matrix4x4.hpp:196-205`. With near `1e20` and far `2e20`, the mathematically final coefficient is
+representable, but the product overflows first and the checked factory rejects the input.
+
+Orthographic construction calculates `right - left` and `top - bottom` in float at lines 260-277.
+With `left=-FLT_MAX` and `right=FLT_MAX`, the width becomes infinity. The factory can accept a
+finite matrix with a zero X scale even though the correct nonzero subnormal scale is representable.
+That accepted projection is degenerate.
+
+Use double intermediates, perform checked float conversion, and reject any unrepresentable or
+degenerate result. Add tests where intermediate float arithmetic overflows but the final matrix
+coefficients are representable.
+
+### M3. Viewport mapping fails representable extreme mappings
+
+`NdcToViewport` uses `(ndc.x + 1) * width * 0.5` and a float depth span in
+`Viewport.hpp:114-121`. A valid viewport with origin zero and width `FLT_MAX` cannot map NDC X `+1`
+to the representable result `FLT_MAX`, because `2 * FLT_MAX` overflows first. An ordered depth
+interval `[-FLT_MAX,+FLT_MAX]` similarly fails to map NDC Z `0.5` to the representable result zero.
+
+`ViewportToNdc` has analogous subtract/divide intermediate risks at lines 134-141.
+
+Use a stable operation order and/or double intermediates with checked conversion. Test canonical
+edges, centers, large origins, maximum finite dimensions, and maximum finite depth intervals.
+
+### M4. Vector length and distance are not scale-safe
+
+All vector lengths use `sqrt(Dot(v,v))`, for example `Vector3.hpp:150-167`. This returns infinity
+for `{FLT_MAX,0,0}` and zero for `{denorm_min,0,0}`, although both true lengths are representable
+as float. `Distance` inherits the same problem.
+
+Use a scaled norm or robust `hypot`-style calculation, and add large, normal, subnormal,
+signed-zero, and mixed-scale tests for every vector dimension. The robust implementation already
+used by `Normalize` does not make `Length` or `Distance` correct.
+
+### M5. Scalar near comparison and interpolation overflow unnecessarily
+
+The current public math comparison and interpolation behavior depends on
+`libs/core/include/ponder/core/Numbers.hpp`.
+
+`core::IsNear` performs subtraction and relative scaling in float at `Numbers.hpp:101-108`.
+Opposite `FLT_MAX` values with a relative tolerance between 1 and 2 can compare near because both
+the difference and tolerance product overflow to infinity.
+
+`core::Lerp` uses `start + (end - start) * amount` at `Numbers.hpp:89-92`.
+`Lerp(-FLT_MAX, FLT_MAX, 0.5)` overflows instead of returning zero. Every vector `Lerp` delegates
+to this helper.
+
+Use wider/stable intermediates or a conforming robust `std::lerp` equivalent. Add regression cases
+for signed zero, subnormals, large finite values, infinity, NaN, endpoints, and midpoints. These
+exercise the scalar edge and interpolation behavior required by MATH-002 and MATH-004.
+
+### M6. Public vector indexing violates the recoverable-caller-error contract
+
+`Vector2`, `Vector3`, and `Vector4` expose `operator[]` implementations that call `PONDER_VERIFY`
+for an out-of-range caller index:
+
+- `Vector2.hpp:29-38`;
+- `Vector3.hpp:33-61`;
+- `Vector4.hpp:34-66`.
+
+`VectorTests.cpp:108-109,172-173,248-249` explicitly expects a `PonderException`. This conflicts
+with ADR 0009 and `Usage.md:128-129`, which reserve assertions for internal invariants and require
+recoverable caller failures. It also adds a caller-reachable throwing/verification path outside
+MATH-003's specified `At` API and pulls the heavy assertion/formatting dependency into every vector
+header.
+
+The preferred resolution under the current contract is to remove `operator[]` and retain `At` for
+caller-controlled indexing. If a throwing or preconditioned operator is intentionally adopted,
+update ADR 0009, `Boundary.md`, and `Usage.md`, document its failure contract, and do not describe
+all indexed access as recoverable.
+
+### M7. Non-finite normal behavior should be explicit
+
+`TransformNormal` in `Matrix4x4.hpp:740-752` checks only whether the linear matrix can be inverted.
+An identity matrix and a NaN normal produce a successful result containing NaN.
+
+This can be consistent with the documented IEEE propagation of ordinary vector arithmetic, and
+MATH-011 requires only singular-linear-part failure from this operation. However, returning
+`Result` while accepting non-finite normal input may lead callers to assume the entire operation is
+checked.
+
+Choose and document the intended policy. Validate finite input/output if checked behavior is
+desired; otherwise explicitly document IEEE propagation. Count this under MATH-021/MATH-023, not
+as a missing MATH-011 requirement.
+
+### M8. The intersection distance support domain is undocumented
+
+Ray/AABB and ray/triangle calculations use double internally, cast the distance to float, and
+return `std::nullopt` if the cast is non-finite:
+
+- `RayBoxHit.hpp:115-120`;
+- `RayTriangleHit.hpp:224-231`.
+
+Finite float input geometry can produce a real forward hit whose world distance exceeds the float
+range, such as a ray from `-FLT_MAX` to geometry at `+FLT_MAX`. The selected optional-float result
+cannot distinguish that unrepresentable distance from a geometric miss.
+
+MATH-018 explicitly selected `std::optional<RayBoxHit>` in a concrete-float library, and the
+implementation satisfies its tested representable-distance domain. The unresolved issue is the
+support-domain and caller-expectation contract tracked by MATH-020/MATH-023.
+
+Before renderer picking depends on this API, document a coordinate/distance domain that excludes
+the case. If the renderer must support it, update ADR 0009 and the roadmap before changing the
+result type or distance representation.
+
+## Initial Constexpr Audit (Resolved)
+
+The constexpr audit is not complete in the implementation.
+
+### Declared constexpr but not effectively constant-evaluable
+
+`Matrix3x3::At` and `Matrix4x4::At` are declared `constexpr`, but their successful paths call
+non-constexpr `AtUnchecked` overloads:
+
+- `Matrix3x3.hpp:88-107` calls lines 122 and 159;
+- `Matrix4x4.hpp:317-336` calls lines 405 and 460.
+
+Mark all four `AtUnchecked` overloads `constexpr`. Invalid-index error construction should remain
+runtime-only.
+
+All math `IsNear` overloads delegate to `core::IsNear`. Its `std::abs` calls at
+`Numbers.hpp:101,107` are not constexpr in the current MSVC 14.51 standard library. A direct
+`/std:c++latest` compile probe failed constant evaluation for `std::abs`, `std::isfinite`, and
+`core::IsNear`. This affects vector, matrix, and quaternion near comparisons even though their
+declarations say `constexpr`.
+
+Use a small comparison-based constexpr absolute-value helper instead of the unsupported library
+call, then protect every public near comparison with `static_assert` tests.
+
+### Immediately eligible public functions missing constexpr
+
+- `TransformNormal` at `Matrix4x4.hpp:740-752` has a constant-evaluable success path through the
+  already-constexpr 3x3 inverse.
+- `Project` at `Viewport.hpp:147-157` has a constant-evaluable success path.
+- If vector `operator[]` is retained, both const and mutable overloads can be constexpr for valid
+  indices; the runtime verification handler need only remain unavailable on the invalid path.
+
+### Eligible after a small helper correction
+
+`detail::IsFinite(Matrix4x4AugmentedRows)` at `Matrix4x4.hpp:627-641` uses `std::isfinite`, which
+the current MSVC 14.51 toolchain cannot constant-evaluate. Change it to use `core::IsFinite` and
+make the helper constexpr. Independently, accept the rows by `const&` to avoid the semantic copy.
+The following can then be marked constexpr on successful inputs:
+
+- `Inverse(Matrix4x4)` at `Matrix4x4.hpp:754-850`;
+- `Unproject` at `Viewport.hpp:159-175`.
+
+The loops, `std::array`, arithmetic, and `std::swap` used by the inverse are C++23
+constant-evaluation-compatible.
+
+### Low-value but valid partial constexpr paths
+
+- Both ray intersection algorithms are arithmetic-only and can be constexpr consistently across
+  their declaration, friend declaration, and definition. Their current compile-time usefulness is
+  limited because valid `Ray` construction requires a runtime square root.
+- `Slerp` can be constexpr for its exact amount-zero and amount-one paths even though its general
+  path still uses runtime trigonometry.
+- Internal rotation-matrix validation can be constexpr after fixing `core::IsNear`.
+- The empty-plane path of `CreateOptionalFrustumPlane` can be constexpr; nonzero plane creation
+  still requires a square root.
+
+### Correctly not constexpr under the present C++23/toolchain contract
+
+The following require square root or trigonometric standard-library functions that are not
+portably constexpr on the supported C++23 toolchain:
+
+- vector `Length`, `Distance`, and `Normalize`;
+- plane and ray checked construction;
+- quaternion normalized construction, multiplication, general Slerp, and matrix-to-quaternion
+  conversion;
+- principal-axis matrix rotations;
+- view construction;
+- finite and infinite perspective construction;
+- nonempty frustum construction.
+
+No public math API should be `consteval`; all of these operations are also required at runtime.
+
+`core::Error` is deliberately runtime-only, so a constexpr `Result`-returning function supports
+constant evaluation only on successful paths. `Result.hpp:107-110,155-162` explicitly rejects
+compile-time error construction. This is intentional and should not be worked around.
+
+### Missing compile-time tests
+
+Add success-path `static_assert` coverage for:
+
+- vector `At` and, only if retained, `operator[]`, including mutation;
+- matrix `Row`, `Column`, `At`, and both inverses;
+- every vector, matrix, and quaternion `IsNear` family;
+- `Sphere`, `AxisAlignedBox`, `Triangle`, and `Viewport` checked factories;
+- orthographic projection, perspective division, and world-to-NDC;
+- normal transform, viewport mappings, project, and unproject;
+- Slerp endpoints if partial constexpr support is adopted.
+
+## Initial Branch Prediction Audit (Resolved)
+
+The math headers contain about 94 `[[unlikely]]` annotations and no `[[likely]]` annotations. Most
+annotations are on invalid input, impossible enum values, unrepresentable results, or failed
+checked sub-operations. These are appropriate static hints when valid inputs are the normal API
+use.
+
+These attributes guide compiler optimization and code layout; they do not directly program the
+hardware branch predictor and are not a substitute for measurements.
+
+No further blanket annotation is recommended:
+
+- annotating an error arm `[[unlikely]]` already makes its sibling path relatively likely;
+- ray hits versus misses are workload-dependent;
+- triangle degeneracy and back/forward cases are data-dependent;
+- frustum `Contains`, `Intersects`, and `Disjoint` frequencies depend on the scene and camera;
+- Slerp path selection depends on animation data;
+- inverse pivot swaps and zero factors depend on matrix structure;
+- optional frustum depth planes depend on projection choice.
+
+Those branches should be guided by representative renderer profiles or PGO, not guesses made
+before the renderer exists.
+
+Remove redundant annotations where an `if (...) [[unlikely]]` and its sole return statement are
+both marked `[[unlikely]]`, including the projection paths near `Matrix4x4.hpp:184-188,220-224,
+255-258,395-400`. One annotation on the branch is sufficient.
+
+After fixing B1, returning early on the first definitive frustum `Disjoint` will matter more than
+adding more attributes. Profile the renderer before adding further hints.
+
+## Initial Documentation And Contract Findings (Resolved)
+
+### D1. Scalar ownership disagrees with the durable architecture
+
+ADR 0009 at lines 24-26 and `Boundary.md:16-20` assign scalar helpers to `ponder_math`. The current
+implementation deletes `Scalar.hpp` and places constants, finite checks, tolerance, clamp, lerp,
+and scalar near comparison in `pond::core::Numbers`.
+
+The relocation may be a sound project-wide design, but the accepted ADR and boundary must agree
+with it. Either restore math ownership or amend ADR 0009, `Boundary.md`, `Usage.md`, the roadmap
+history, and the core boundary to ratify core ownership. Do not leave target ownership implicit
+through the public dependency.
+
+### D2. The roadmap is absent while other guidance still relies on its task names
+
+`roadmap.txt` is deleted, but `Codex.md` and `deferred.md` still refer to MATH-020 through MATH-025
+and to final roadmap gates. Either retain the roadmap as completed history with status/evidence, or
+replace those references with another durable completion record. Deleting the only definition of
+those tasks makes future audits ambiguous.
+
+### D3. The documented collision uncertainty region is not documented
+
+`Usage.md:219-220` refers to a documented floating-point uncertainty region. The actual constants
+and formulas exist only in implementation details:
+
+- `Frustum.hpp:18,61-75`;
+- `RayTriangleHit.hpp:18,74-102`.
+
+MATH-017 and MATH-019 require documented scale-aware uncertainty policies. MATH-020 asks the seeded
+corpora to span finite coordinate scales documented as supported by the tests. Current tests encode
+selected small and large cases, but the public guide explains neither the policy nor a
+caller-usable support domain.
+
+For a usable public contract, document the conservative intent, boundary behavior, tested scale
+domain, and what callers may expect near the uncertainty boundary. Do not expose internal
+multipliers as a permanent ABI unless that is intentional.
+
+### D4. Several important edge policies are ambiguous
+
+- `PerspectiveDivide` rejects `abs(w) < numeric_limits<float>::min()` in
+  `Matrix4x4.hpp:702-715`, including every subnormal W. `Usage.md:125-126` calls W merely
+  "unusable" without specifying this threshold or rationale.
+- Slerp accepts every finite amount, including extrapolation, but the amount domain is
+  undocumented.
+- `ToQuaternion(Matrix4x4)` intentionally validates only the upper-left 3x3 and ignores
+  translation and the bottom row. The roadmap permits conversion from the linear part, but the
+  public usage guide should say this explicitly.
+- The intersection distance support domain is undocumented, as described in M8.
+
+### D5. Layout assertions exceed the durable public promises
+
+ADR 0009 and `Boundary.md:78-85` make exact size/layout promises for vectors, matrices, and
+quaternion. `ApiContractTests.cpp:58-78` also freezes float-sized layouts for angles, tolerance,
+viewport, collision values, and hit values. `Usage.md:70-74` advertises some standard-layout and
+trivial-copy properties but does not consistently promise all exact sizes.
+
+Either ratify these additional layouts in the durable contract because consumers need them, or
+relax assertions that freeze accidental implementation detail. GPU packing must remain
+renderer-owned in either case.
+
+## Initial Roadmap Assessment
+
+The last committed roadmap is not fully complete against the current working tree.
+
+- MATH-000 — Partial. Most durable decisions exist, but scalar ownership disagrees and the roadmap
+  itself is deleted.
+- MATH-001 — Complete. Core dependency, stable errors, explicit sources, header tests, unit tests,
+  Windows reference tests, and consumer linkage are present.
+- MATH-002 — Partial. Facilities exist in core and angles exist in math, but ownership, extreme
+  numeric behavior, and the required edge tests are incomplete.
+- MATH-003 — Partial. Vector values, layouts, fields, equality, and `At` exist, but the extra
+  throwing `operator[]` conflicts with the approved recoverable-failure contract.
+- MATH-004 — Partial. Algebra, normalization, property tests, and references exist, but length,
+  distance, lerp, and large/subnormal coverage are incomplete.
+- MATH-005 — Complete. Matrix values, layout, construction, access, comparison, and tests exist.
+- MATH-006 — Complete. Matrix3x3 algebra and checked inversion are implemented and independently
+  tested.
+- MATH-007 — Complete as runtime algebra. Matrix4x4 algebra/inversion and independent tests exist;
+  its missed constexpr opportunity is counted under MATH-021.
+- MATH-008 — Complete. Quaternion representation, invariants, factories, layout, and tests exist.
+- MATH-009 — Complete as runtime behavior. Composition, inverse, rotation, Slerp, comparison, and
+  reference tests exist.
+- MATH-010 — Complete. Quaternion/matrix conversions and proper-rotation validation exist.
+- MATH-011 — Complete. Transform factories, semantic behavior, singular-normal failure, and focused
+  tests exist. The non-finite normal policy is a MATH-021/MATH-023 hardening decision rather than a
+  missing MATH-011 requirement.
+- MATH-012 — Partial. View construction and ordinary tests exist, but finite inputs can produce a
+  successful non-finite matrix.
+- MATH-013 — Partial. All required projection forms exist, but checked extreme finite inputs can be
+  rejected incorrectly or accepted as degenerate because of intermediate overflow.
+- MATH-014 — Complete as implemented behavior. Clip/NDC helpers and failure tests exist; the exact
+  unusable-W threshold still needs MATH-023 documentation.
+- MATH-015 — Partial. Viewport, project, and unproject exist, but extreme representable mappings
+  fail because of avoidable intermediate overflow.
+- MATH-016 — Complete. Required validated collision values and finite/infinite frustum construction
+  exist with focused tests.
+- MATH-017 — Partial and incorrect. The two query rows exist, but B1 breaks classification.
+- MATH-018 — Complete for tested distances representable by the concrete-float result. Ordinary
+  behavior and oracle tests are strong. The broader support-domain question belongs to
+  MATH-020/MATH-023.
+- MATH-019 — Partial. Ordinary ray/triangle behavior and oracle tests are strong, but the
+  roadmap-required near-parallel/near-degenerate uncertainty policy is not publicly documented.
+  The broader distance support domain belongs to MATH-020/MATH-023.
+- MATH-020 — Partial. Query surface and seeded corpora exist, but the frustum oracle copies B1 and
+  the tested finite domain is not documented.
+- MATH-021 — Partial. Header, layout, dependency, and API tests are extensive, but they did not
+  catch B1, the public failure mismatch, numerical extremes, or the constexpr gaps.
+- MATH-022 — Partial. Renderer-shaped tests exist and this audit records current Debug/Release host
+  evidence, but B1 invalidates renderer readiness and the record is not a clean-build completion
+  record.
+- MATH-023 — Partial. Usage documentation and compiled examples are strong, but ownership,
+  uncertainty, threshold, extrapolation, and representability policies remain incomplete.
+- MATH-024 — Incomplete. Current builds/tests pass, but formatting fails, clang-tidy is not
+  evidenced, no clean-build completion record exists, and the defects above remain.
+
+## Initial Validation Performed During The Audit
+
+CMake reported Windows 10.0.26200 on x86-64. The compiler was MSVC 14.51 and the selected Windows
+SDK was 10.0.26100.0.
+
+Successful validation:
+
+- reconfigured the existing `windows-msvc-debug` and `windows-msvc-release` build trees;
+- built `ponder_math`, all 18 PCH-free header translation units, `ponder_math_tests`,
+  `ponder_math_examples`, and `ponder_math_reference_tests` in both configurations;
+- ran all math-labelled tests in both configurations;
+- Debug: 137/137 unit tests and 15/15 DirectX reference tests passed;
+- Release: 137/137 unit tests and 15/15 DirectX reference tests passed;
+- repository tool discovery found CMake, CTest, MSBuild, Ninja, clang-format 22.1.3,
+  clang-tidy 22.1.3, clang++, and clang-cl;
+- `git diff HEAD --check` returned no whitespace errors, only line-ending conversion warnings.
+
+The exact configure, build, test, tool-discovery, and whitespace commands were:
+
+```powershell
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug `
+    --target ponder_math_header_tests ponder_math_tests ponder_math_examples `
+    ponder_math_reference_tests -- /m
+ctest --preset windows-msvc-debug -L math
+cmake --preset windows-msvc-release
+cmake --build --preset windows-msvc-release `
+    --target ponder_math_header_tests ponder_math_tests ponder_math_examples `
+    ponder_math_reference_tests -- /m
+ctest --preset windows-msvc-release -L math
+pwsh -NoProfile -File scripts/check-tools.ps1
+git diff HEAD --check
+```
+
+The format check used the discovered Visual Studio `clang-format.exe` with `--dry-run --Werror`
+over every math production header/source and the compiled example.
+
+Failed or incomplete validation:
+
+- clang-format 22.1.3 dry-run failed on 15 of the 18 production headers, including long lines and
+  inconsistent formatting; this confirms the MATH-024 format gate is not met;
+- clang-tidy was not completed/evidenced;
+- the Debug and Release trees were reconfigured but were not deleted and recreated, so this audit
+  does not claim the roadmap's clean-build requirement;
+- no Linux sanitizer or cross-platform matrix was run; MATH-025 explicitly leaves that work
+  deferred;
+- a same-toolchain constexpr probe failed for floating `std::abs`, `std::isfinite`, and
+  `core::IsNear`, confirming the effective constexpr finding.
+
+Green tests do not negate B1: the relevant oracle duplicates the implementation error. They also do
+not cover the extreme finite cases identified above.
+
+## What Is Already Solid
+
+- Coordinate, handedness, active column-vector, composition, storage, projection, NDC, and ordinary
+  viewport conventions are coherent across ADR 0009, `Boundary.md`, `Usage.md`, code, and tests.
+- Every public math header has a dedicated PCH-free self-containment translation unit.
+- The production dependency is public core only.
+- Production math and ordinary tests expose no DirectX, Vulkan, SDL, renderer, platform, UI,
+  chemistry, or ISA-specific dependency.
+- DirectXMath and DirectXCollision are isolated to the Windows reference target.
+- Exact vector/matrix storage layout is well asserted.
+- Checked normalization, matrix inversion, quaternion invariants, projection variants, and
+  project/unproject have broad ordinary-case coverage.
+- The public collision query surface contains exactly the four approved rows.
+- Deferred feature coverage is comprehensive and appropriately resists speculative SIMD, bulk,
+  and pairwise-query expansion.
+
+## Initial Completion Checklist (Now Resolved)
+
+At initial audit time, completion required:
+
+1. Fix B1 and replace the copied classification oracle with independent dominance checks.
+2. Correct the checked view, projection, viewport, vector norm, near-comparison, and interpolation
+   extreme-value behavior and add regression tests.
+3. Decide and enforce the vector indexing contract.
+4. Define and document the supported intersection distance/coordinate domain; change the result
+   representation only if renderer requirements exceed it.
+5. Reconcile scalar ownership and retain a durable roadmap/completion record.
+6. Complete the constexpr corrections and add compile-time contract tests.
+7. Document uncertainty, homogeneous-W, Slerp amount, matrix extraction, and layout policies.
+8. Run clang-format, clang-tidy, clean Debug/Release builds, all unit/reference/example/header
+   targets, and record the MATH-024 host evidence.
+
+Do not add more static branch hints before renderer profiling. Once the correctness work is done,
+representative renderer workloads and PGO should drive any further branch or hot-path decisions.
+
+## Initial Non-Blocking Follow-Ups (Resolved Or Deferred)
+
+- `Unproject` inverts the same world-to-clip matrix on every call. Picking constructs near and far
+  points with two inversions. When renderer integration provides representative use, consider a
+  clearly named path that accepts a pre-inverted clip-to-world matrix so callers can cache it.
+- Pass `detail::Matrix4x4AugmentedRows` by `const&` to avoid a semantic 256-byte copy during
+  inverse validation.
+- Mark quaternion multiplication `noexcept`; its unit-input invariant and implementation provide a
+  stable no-throw contract.
+- Keep public bulk APIs, handwritten SIMD, estimate variants, and extra collision pairs deferred
+  until a measured renderer workload establishes a need.
+
+## Final Roadmap Assessment
+
+- MATH-000 and MATH-001 are complete. Architecture, conventions, dependencies, target structure,
+  diagnostics, headers, tests, references, and consumer linkage are durable and consistent.
+- MATH-002 through MATH-010 are complete. Scalars, angles, vectors, matrices, quaternions, algebra,
+  inversion, interpolation, and conversion satisfy their numerical, layout, and test contracts.
+- MATH-011 through MATH-015 are complete. Transform, view, projection, clip/NDC, viewport, project,
+  regular unproject, and cached-inverse unproject behavior is checked and documented.
+- MATH-016 through MATH-020 are complete. Collision values and the four approved query rows have
+  independent oracles, deterministic uncertainty policies, seeded coverage, and extreme tests.
+- MATH-021 through MATH-024 are complete. API contracts, compile-time behavior, renderer scenarios,
+  documentation, examples, formatting, analysis, fresh builds, and final host evidence are present.
+- MATH-025 remains intentionally deferred. Cross-platform builds, sanitizer configurations, and
+  additional architecture/compiler evidence belong to the portability phase after renderer work
+  establishes representative workloads.
+
+## Final Validation Evidence
+
+The final completion pass used Windows 10.0.26200 on x86-64, Windows SDK 10.0.26100.0, Visual
+Studio 18.7.8, MSVC 19.51.36248.0, and LLVM clang tools 22.1.3.
+
+Fresh build trees were configured from nonexistent directories:
+
+```text
+build/math-audit-final-debug-20260710
+build/math-audit-final-release-20260710
+build/math-audit-final-analysis-20260710
+```
+
+Both Visual Studio configurations built `ponder_core_tests`, `ponder_math`, all 18 PCH-free math
+header translation units, `ponder_math_tests`, `ponder_math_examples`, and
+`ponder_math_reference_tests` with warnings-as-errors enabled for project code.
+
+- Debug: 154/154 math unit tests, 15/15 DirectX reference tests, and 92/92 core tests passed.
+- Release: 154/154 math unit tests, 15/15 DirectX reference tests, and 92/92 core tests passed.
+- The example target compiled in both configurations.
+- clang-format 22.1.3 passed in `--dry-run --Werror` mode over all 58 changed production, example,
+  and test C++ files.
+- A PCH-disabled Ninja analysis build compiled successfully and supplied 40 project translation
+  units to clang-tidy 22.1.3. The run had zero failed checks and zero errors.
+- clang-tidy emitted 168 non-fatal advisories under the repository configuration. They were
+  reviewed and consist of broad style/performance preferences and test-idiom diagnostics, such as
+  redundant in-class `inline`, enum-size preferences, designated-initializer suggestions,
+  deterministic seeded-test RNG warnings, and assertion-aware optional-access warnings. None is a
+  correctness, safety, dependency, public-contract, or renderer-readiness failure.
+- Production dependency scans found no DirectX, Vulkan, SDL, renderer, chemistry, or ISA-specific
+  include/reference in `libs/math/include` or `libs/math/src`.
+- `git diff HEAD --check` passed with no whitespace errors; Git reported only expected working-tree
+  line-ending conversion warnings. Separate scans found no trailing whitespace or overlong lines in
+  the new audit and edited durable documentation.
+- The final branch-hint inventory contains only cold `[[unlikely]]` paths and no `[[likely]]` hints.
+  Workload-dependent branches remain intentionally unannotated pending renderer profiles or PGO.
+- No generated object, executable, debug database, log, or shader artifact exists under
+  `libs/math`.
+
+This validation is deliberately scoped to the primary Windows host. It does not stand in for the
+deferred MATH-025 portability matrix.
+
+## Final Verdict
+
+The math library is complete for its current scope and is ready to support renderer development.
+No known correctness, numerical-contract, constexpr, branch-hint, documentation, dependency, or
+validation issue remains as a prerequisite to moving on.

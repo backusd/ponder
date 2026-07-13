@@ -10,8 +10,8 @@ namespace pond::math
 {
 class RayBoxHit;
 
-[[nodiscard]] inline std::optional<RayBoxHit> Intersect(const Ray& ray,
-                                                        const AxisAlignedBox& box) noexcept;
+[[nodiscard]] inline constexpr std::optional<RayBoxHit> Intersect(
+    const Ray& ray, const AxisAlignedBox& box) noexcept;
 
 namespace detail
 {
@@ -46,6 +46,34 @@ namespace detail
 
     return entry <= exit;
 }
+
+struct RayBoxInterval final
+{
+    double entryDistance{0.0};
+    double exitDistance{0.0};
+};
+
+[[nodiscard]] constexpr std::optional<RayBoxInterval> IntersectRayBoxValues(
+    Vector3 origin, Vector3 direction, Vector3 minimum, Vector3 maximum) noexcept
+{
+    double entry = -std::numeric_limits<double>::infinity();
+    double exit = std::numeric_limits<double>::infinity();
+
+    if (!UpdateRayBoxIntervalForSlab(origin.x, direction.x, minimum.x, maximum.x, entry, exit) ||
+        !UpdateRayBoxIntervalForSlab(origin.y, direction.y, minimum.y, maximum.y, entry, exit) ||
+        !UpdateRayBoxIntervalForSlab(origin.z, direction.z, minimum.z, maximum.z, entry, exit) ||
+        exit < 0.0)
+    {
+        return std::nullopt;
+    }
+
+    if (entry < 0.0)
+    {
+        entry = 0.0;
+    }
+
+    return RayBoxInterval{entry, exit};
+}
 } // namespace detail
 
 class RayBoxHit final
@@ -65,7 +93,8 @@ public:
                                                    const RayBoxHit& rhs) noexcept = default;
 
 private:
-    friend std::optional<RayBoxHit> Intersect(const Ray& ray, const AxisAlignedBox& box) noexcept;
+    friend constexpr std::optional<RayBoxHit> Intersect(const Ray& ray,
+                                                        const AxisAlignedBox& box) noexcept;
 
     constexpr RayBoxHit(float entryDistance, float exitDistance) noexcept
         : m_entryDistance(entryDistance), m_exitDistance(exitDistance)
@@ -76,45 +105,23 @@ private:
     float m_exitDistance;
 };
 
-[[nodiscard]] inline std::optional<RayBoxHit> Intersect(const Ray& ray,
-                                                        const AxisAlignedBox& box) noexcept
+[[nodiscard]] inline constexpr std::optional<RayBoxHit> Intersect(
+    const Ray& ray, const AxisAlignedBox& box) noexcept
 {
     const Vector3 origin = ray.GetOrigin();
     const Vector3 direction = ray.GetDirection();
     const Vector3 minimum = box.GetMinimum();
     const Vector3 maximum = box.GetMaximum();
-    double entry = -std::numeric_limits<double>::infinity();
-    double exit = std::numeric_limits<double>::infinity();
-
-    if (!detail::UpdateRayBoxIntervalForSlab(origin.x, direction.x, minimum.x, maximum.x, entry,
-                                             exit))
-    {
-        return std::nullopt;
-    }
-    if (!detail::UpdateRayBoxIntervalForSlab(origin.y, direction.y, minimum.y, maximum.y, entry,
-                                             exit))
-    {
-        return std::nullopt;
-    }
-    if (!detail::UpdateRayBoxIntervalForSlab(origin.z, direction.z, minimum.z, maximum.z, entry,
-                                             exit))
+    const auto interval = detail::IntersectRayBoxValues(origin, direction, minimum, maximum);
+    if (!interval.has_value())
     {
         return std::nullopt;
     }
 
-    if (exit < 0.0)
-    {
-        return std::nullopt;
-    }
-
-    if (entry < 0.0)
-    {
-        entry = 0.0;
-    }
-
-    const float entryDistance = static_cast<float>(entry);
-    const float exitDistance = static_cast<float>(exit);
-    if (!IsFinite(entryDistance) || !IsFinite(exitDistance) || exitDistance < entryDistance)
+    const float entryDistance = static_cast<float>(interval->entryDistance);
+    const float exitDistance = static_cast<float>(interval->exitDistance);
+    if (!core::IsFinite(entryDistance) || !core::IsFinite(exitDistance) ||
+        exitDistance < entryDistance)
     {
         return std::nullopt;
     }

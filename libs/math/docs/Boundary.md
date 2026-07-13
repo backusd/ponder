@@ -13,8 +13,8 @@
 
 ## Responsibilities
 
-- Concrete `float` scalar helpers, angle types, fixed-size vectors, fixed-size matrices, and
-  quaternions.
+- Concrete `float` angle types, fixed-size vectors, fixed-size matrices, and quaternions.
+- Math-specific overloads built on the project-wide number helpers owned by `ponder_core`.
 - Named transform helpers for points, vectors, and normals.
 - View, projection, clip/NDC, viewport, project, and unproject helpers.
 - The initial renderer visibility and picking collision subset.
@@ -34,9 +34,9 @@
 
 ## Dependencies
 
-`ponder_math` may publicly depend on `ponder::core` for `pond::core::Result<T>` and stable error
-codes. It must not depend on chemistry, rendering, platform, UI, Vulkan, SDL, DirectX, or
-instruction-set-specific public headers.
+`ponder_math` may publicly depend on `ponder::core` for `pond::core::Result<T>`, stable error
+codes, and `ponder/core/Numbers.hpp`. It must not depend on chemistry, rendering, platform, UI,
+Vulkan, SDL, DirectX, or instruction-set-specific public headers.
 
 DirectXMath and DirectXCollision are Windows-only unit/reference-test inputs. They must never be
 included by production math code, public math headers, ordinary unit tests, or consumer compile
@@ -55,7 +55,7 @@ The initial public vocabulary is:
 
 The initial API uses concrete, unsuffixed `float` types only. Future `double`, integer,
 half-precision, or templated families must use distinct public names and require a concrete
-consumer before entering the roadmap.
+consumer before entering the public contract.
 
 ## Algebra And Coordinates
 
@@ -100,14 +100,18 @@ coordinates with a top-left origin and +Y down. NDC `(-1, +1)` maps to the top-l
 NDC `(+1, -1)` maps to the bottom-right viewport edge. No half-pixel or pixel-center correction is
 applied. NDC depth `[0, 1]` maps linearly into an explicit ordered viewport depth interval.
 
+`Unproject` accepts world-to-clip and performs checked inversion. Repeated callers may cache that
+inverse and use `UnprojectFromClipToWorld`, whose explicit name records the required matrix
+direction.
+
 Renderer code owns Vulkan viewport-Y adaptation and any backend-specific viewport structures.
 
 ## Numerical Contract
 
 Vectors and matrices default to zero. Quaternions default to identity. Exact `operator==` means
 exact component or representation equality. Near comparisons require a caller-provided validated
-absolute-and-relative `Tolerance`; the library provides no universal epsilon. Quaternion
-same-rotation comparison is separate because `q` and `-q` represent the same rotation.
+absolute-and-relative `pond::core::Tolerance`; the library provides no universal epsilon.
+Quaternion same-rotation comparison is separate because `q` and `-q` represent the same rotation.
 
 Recoverable invalid input and mathematically unavailable results use `pond::core::Result<T>` with
 stable math error codes. Assertions are for internal invariants, not caller-reachable failures.
@@ -136,3 +140,13 @@ Boundary contact counts as intersection, and containment is inclusive. Valid fin
 directions and plane normals are normalized during checked construction. Returned ray
 parameters are world distances. Visibility culling must conservatively retain boundary or
 numerically uncertain objects rather than falsely reject them.
+
+Frustum uncertainty is scale-aware and based on each plane-test magnitude; uncertain culling
+results are `Intersects`. Ray/triangle queries treat near-parallel or near-degenerate,
+ill-conditioned configurations as no hit while accepting and clamping boundary values inside their
+scale-aware error bounds. Internal uncertainty multipliers are algorithm details, not public
+tolerances.
+
+Picking results are supported only when every returned distance and barycentric is finite and
+representable as `float`. The optional hit APIs report `std::nullopt` when a geometric result is
+outside that representation domain.

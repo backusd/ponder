@@ -1,3 +1,4 @@
+#include <ponder/core/Numbers.hpp>
 #include <ponder/math/Matrix4x4.hpp>
 #include <ponder/math/Quaternion.hpp>
 
@@ -13,10 +14,10 @@ namespace
 using MatrixRows = std::array<std::array<double, 4>, 4>;
 using MinorRows = std::array<std::array<double, 3>, 3>;
 
-[[nodiscard]] pond::math::Tolerance RequireTolerance(float absoluteTolerance,
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
                                                      float relativeTolerance)
 {
-    auto result = pond::math::Tolerance::Create(absoluteTolerance, relativeTolerance);
+    auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
     return result.GetValue();
 }
@@ -238,7 +239,7 @@ TEST(Matrix4x4AlgebraTests, TransformsVectorsWithIdentityDiagonalAffineAndProjec
 
 TEST(Matrix4x4AlgebraTests, BuildsTranslationScaleAndAxisRotationTransforms)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
+    const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
 
     EXPECT_EQ(pond::math::Matrix4x4::Translation(pond::math::Vector3{3.0F, -2.0F, 1.5F}),
               (pond::math::Matrix4x4{1.0F, 0.0F, 0.0F, 3.0F, 0.0F, 1.0F, 0.0F, -2.0F, 0.0F, 0.0F,
@@ -247,21 +248,21 @@ TEST(Matrix4x4AlgebraTests, BuildsTranslationScaleAndAxisRotationTransforms)
               (pond::math::Matrix4x4{2.0F, 0.0F, 0.0F, 0.0F, 0.0F, -3.0F, 0.0F, 0.0F, 0.0F, 0.0F,
                                      4.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}));
 
-    ExpectMatrixNear(pond::math::Matrix4x4::RotationX(pond::math::Radians{pond::math::kHalfPi}),
+    ExpectMatrixNear(pond::math::Matrix4x4::RotationX(pond::math::Radians{pond::core::kHalfPi}),
                      pond::math::Matrix4x4{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -1.0F, 0.0F, 0.0F,
                                            1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F},
                      2.0e-5F);
-    ExpectMatrixNear(pond::math::Matrix4x4::RotationY(pond::math::Radians{pond::math::kHalfPi}),
+    ExpectMatrixNear(pond::math::Matrix4x4::RotationY(pond::math::Radians{pond::core::kHalfPi}),
                      pond::math::Matrix4x4{0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, -1.0F,
                                            0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F},
                      2.0e-5F);
-    ExpectMatrixNear(pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::math::kHalfPi}),
+    ExpectMatrixNear(pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::core::kHalfPi}),
                      pond::math::Matrix4x4{0.0F, -1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F,
                                            0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F},
                      2.0e-5F);
 
     EXPECT_TRUE(pond::math::IsNear(
-        pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::math::kHalfPi}) *
+        pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::core::kHalfPi}) *
             pond::math::Vector4{1.0F, 0.0F, 0.0F, 0.0F},
         pond::math::Vector4{0.0F, 1.0F, 0.0F, 0.0F}, tolerance));
 }
@@ -307,12 +308,71 @@ TEST(Matrix4x4AlgebraTests, RejectsSingularNormalTransforms)
                         pond::math::MathErrorCode::SingularMatrix);
 }
 
+TEST(Matrix4x4AlgebraTests, RejectsNonFiniteAndUnrepresentableNormalTransforms)
+{
+    constexpr float kInfinity = std::numeric_limits<float>::infinity();
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+
+    ExpectVectorFailure(pond::math::TransformNormal(pond::math::Matrix4x4::Identity(),
+                                                    pond::math::Vector3{kInfinity, 0.0F, 0.0F}),
+                        pond::math::MathErrorCode::NonFiniteInput);
+    ExpectVectorFailure(pond::math::TransformNormal(pond::math::Matrix4x4::Translation(
+                                                        pond::math::Vector3{kInfinity, 0.0F, 0.0F}),
+                                                    pond::math::Vector3{1.0F, 0.0F, 0.0F}),
+                        pond::math::MathErrorCode::NonFiniteInput);
+    ExpectVectorFailure(pond::math::TransformNormal(
+                            pond::math::Matrix4x4::Scale(pond::math::Vector3{1.0e-20F, 1.0F, 1.0F}),
+                            pond::math::Vector3{kFiniteMaximum, 0.0F, 0.0F}),
+                        pond::math::MathErrorCode::InvalidArgument);
+}
+
+TEST(Matrix4x4AlgebraTests, NormalTransformUsesWideProductsForRepresentableCancellation)
+{
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+    constexpr float kMinimumNormal = std::numeric_limits<float>::min();
+    const pond::math::Matrix4x4 transform{kMinimumNormal,
+                                          0.0F,
+                                          0.0F,
+                                          0.0F,
+                                          -kFiniteMaximum,
+                                          kFiniteMaximum,
+                                          0.0F,
+                                          0.0F,
+                                          0.0F,
+                                          0.0F,
+                                          1.0F,
+                                          0.0F,
+                                          0.0F,
+                                          0.0F,
+                                          0.0F,
+                                          1.0F};
+
+    auto transformed =
+        pond::math::TransformNormal(transform, pond::math::Vector3{8.0F, -8.0F, 0.0F});
+    ASSERT_TRUE(transformed.HasValue());
+    EXPECT_FLOAT_EQ(transformed->x, 0.0F);
+    EXPECT_FLOAT_EQ(transformed->y, -8.0F / kFiniteMaximum);
+    EXPECT_FLOAT_EQ(transformed->z, 0.0F);
+}
+
+TEST(Matrix4x4AlgebraTests, NormalTransformNarrowsOnlyTheFinalInverseTransposeAction)
+{
+    constexpr float kDenormal = std::numeric_limits<float>::denorm_min();
+    const pond::math::Matrix4x4 transform =
+        pond::math::Matrix4x4::Scale(pond::math::Vector3{kDenormal, 1.0F, 1.0F});
+
+    auto transformed =
+        pond::math::TransformNormal(transform, pond::math::Vector3{kDenormal, 0.0F, 0.0F});
+    ASSERT_TRUE(transformed.HasValue());
+    EXPECT_EQ(transformed.GetValue(), (pond::math::Vector3{1.0F, 0.0F, 0.0F}));
+}
+
 TEST(Matrix4x4AlgebraTests, ComposesSemanticTransformsInColumnVectorOrder)
 {
     const pond::math::Matrix4x4 scale =
         pond::math::Matrix4x4::Scale(pond::math::Vector3{2.0F, 3.0F, -1.0F});
     const pond::math::Matrix4x4 rotation =
-        pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::math::kHalfPi});
+        pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::core::kHalfPi});
     const pond::math::Matrix4x4 translation =
         pond::math::Matrix4x4::Translation(pond::math::Vector3{5.0F, -2.0F, 1.0F});
     const pond::math::Matrix4x4 composed = translation * rotation * scale;
@@ -331,26 +391,26 @@ TEST(Matrix4x4AlgebraTests, ComposesSemanticTransformsInColumnVectorOrder)
 
 TEST(Matrix4x4AlgebraTests, QuaternionAndAxisDerivedMatrixRotationsAgree)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
+    const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
     auto quarterTurnX = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{pond::math::kHalfPi});
+        pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
     auto quarterTurnY = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{pond::math::kHalfPi});
+        pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
     auto quarterTurnZ = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::math::kHalfPi});
+        pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
     ASSERT_TRUE(quarterTurnX.HasValue());
     ASSERT_TRUE(quarterTurnY.HasValue());
     ASSERT_TRUE(quarterTurnZ.HasValue());
 
     EXPECT_TRUE(pond::math::IsNear(
         pond::math::Matrix4x4::Rotation(quarterTurnX.GetValue()),
-        pond::math::Matrix4x4::RotationX(pond::math::Radians{pond::math::kHalfPi}), tolerance));
+        pond::math::Matrix4x4::RotationX(pond::math::Radians{pond::core::kHalfPi}), tolerance));
     EXPECT_TRUE(pond::math::IsNear(
         pond::math::Matrix4x4::Rotation(quarterTurnY.GetValue()),
-        pond::math::Matrix4x4::RotationY(pond::math::Radians{pond::math::kHalfPi}), tolerance));
+        pond::math::Matrix4x4::RotationY(pond::math::Radians{pond::core::kHalfPi}), tolerance));
     EXPECT_TRUE(pond::math::IsNear(
         pond::math::Matrix4x4::Rotation(quarterTurnZ.GetValue()),
-        pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::math::kHalfPi}), tolerance));
+        pond::math::Matrix4x4::RotationZ(pond::math::Radians{pond::core::kHalfPi}), tolerance));
 }
 
 TEST(Matrix4x4AlgebraTests, BuildsCanonicalOriginViewAsIdentity)
@@ -373,7 +433,7 @@ TEST(Matrix4x4AlgebraTests, BuildsCanonicalOriginViewAsIdentity)
 
 TEST(Matrix4x4AlgebraTests, BuildsTranslatedViewsAndRecoversWorldPoints)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
+    const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
     const pond::math::Vector3 eye{3.0F, -2.0F, 5.0F};
     auto view = pond::math::Matrix4x4::LookAt(eye, pond::math::Vector3{3.0F, -2.0F, 4.0F},
                                               pond::math::Vector3{0.0F, 1.0F, 0.0F});
@@ -426,7 +486,7 @@ TEST(Matrix4x4AlgebraTests, BuildsRotatedViewsUnderActiveWorldToViewConvention)
 
 TEST(Matrix4x4AlgebraTests, AcceptsArbitraryValidUpVectorsAndMatchesLookDirection)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
+    const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
     const pond::math::Vector3 eye{2.0F, 3.0F, -4.0F};
     const pond::math::Vector3 direction{1.0F, -2.0F, -3.0F};
     const pond::math::Vector3 target = eye + direction;
@@ -486,6 +546,31 @@ TEST(Matrix4x4AlgebraTests, RejectsInvalidViewConstructionInputs)
                         pond::math::MathErrorCode::DegenerateInput);
 }
 
+TEST(Matrix4x4AlgebraTests, HandlesExtremeFiniteViewInputsWithoutIntermediateOverflow)
+{
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+
+    auto lookAt = pond::math::Matrix4x4::LookAt(pond::math::Vector3{kFiniteMaximum, 0.0F, 0.0F},
+                                                pond::math::Vector3{-kFiniteMaximum, 0.0F, 0.0F},
+                                                pond::math::Vector3{0.0F, 1.0F, 0.0F});
+    ASSERT_TRUE(lookAt.HasValue());
+    EXPECT_TRUE(pond::math::IsFinite(lookAt.GetValue()));
+    EXPECT_FLOAT_EQ(lookAt->row0Column2, -1.0F);
+    EXPECT_FLOAT_EQ(lookAt->row1Column1, 1.0F);
+    EXPECT_FLOAT_EQ(lookAt->row2Column0, 1.0F);
+    EXPECT_FLOAT_EQ(lookAt->row2Column3, -kFiniteMaximum);
+
+    ExpectMatrixFailure(
+        pond::math::Matrix4x4::LookTo(pond::math::Vector3{kFiniteMaximum, kFiniteMaximum, 0.0F},
+                                      pond::math::Vector3{1.0F, -1.0F, 0.0F},
+                                      pond::math::Vector3{0.0F, 0.0F, 1.0F}),
+        pond::math::MathErrorCode::InvalidArgument);
+    ExpectMatrixFailure(pond::math::Matrix4x4::LookAt(
+                            pond::math::Vector3{kFiniteMaximum, kFiniteMaximum, 0.0F},
+                            pond::math::Vector3::Zero(), pond::math::Vector3{0.0F, 0.0F, 1.0F}),
+                        pond::math::MathErrorCode::InvalidArgument);
+}
+
 TEST(Matrix4x4AlgebraTests, TransformsPointsToClipCoordinates)
 {
     const pond::math::Matrix4x4 worldToClip{1.0F, 2.0F, 3.0F,  4.0F, -1.0F, 0.5F, 0.0F,  2.0F,
@@ -517,6 +602,11 @@ TEST(Matrix4x4AlgebraTests, PerspectiveDivideRejectsUndefinedAndNonFiniteCoordin
     constexpr float finiteMaximum = std::numeric_limits<float>::max();
     constexpr float minimumNormal = std::numeric_limits<float>::min();
 
+    auto subnormal = pond::math::PerspectiveDivide(
+        pond::math::Vector4{denormal, denormal * 2.0F, 0.0F, denormal});
+    ASSERT_TRUE(subnormal.HasValue());
+    EXPECT_EQ(subnormal.GetValue(), (pond::math::Vector3{1.0F, 2.0F, 0.0F}));
+
     ExpectVectorFailure(pond::math::PerspectiveDivide(pond::math::Vector4{1.0F, 2.0F, 3.0F, 0.0F}),
                         pond::math::MathErrorCode::UndefinedHomogeneousCoordinate);
     ExpectVectorFailure(
@@ -536,13 +626,25 @@ TEST(Matrix4x4AlgebraTests, PerspectiveDivideRejectsUndefinedAndNonFiniteCoordin
         pond::math::MathErrorCode::NonFiniteInput);
 }
 
+TEST(Matrix4x4AlgebraTests, CheckedNdcTransformUsesWideProductsForRepresentableCancellation)
+{
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+    const pond::math::Matrix4x4 worldToClip{kFiniteMaximum, kFiniteMaximum, 0.0F, 0.0F, 0.0F, 1.0F,
+                                            0.0F,           0.0F,           0.0F, 0.0F, 1.0F, 0.0F,
+                                            0.0F,           0.0F,           0.0F, 1.0F};
+
+    auto ndc = pond::math::TransformPointToNdc(worldToClip, pond::math::Vector3{2.0F, -2.0F, 0.0F});
+    ASSERT_TRUE(ndc.HasValue());
+    EXPECT_EQ(ndc.GetValue(), (pond::math::Vector3{0.0F, -2.0F, 0.0F}));
+}
+
 TEST(Matrix4x4AlgebraTests, TransformPointToNdcCoversFrustumInteriorExteriorAndComposition)
 {
     auto forward =
-        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi}, 1.0F, 1.0F,
+        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi}, 1.0F, 1.0F,
                                            11.0F, pond::math::ProjectionDepth::ForwardZ);
     auto reverse =
-        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi}, 1.0F, 1.0F,
+        pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi}, 1.0F, 1.0F,
                                            11.0F, pond::math::ProjectionDepth::ReverseZ);
     ASSERT_TRUE(forward.HasValue());
     ASSERT_TRUE(reverse.HasValue());
@@ -575,10 +677,10 @@ TEST(Matrix4x4AlgebraTests, PerspectiveMapsFiniteForwardAndReverseDepth)
 {
     constexpr float nearDistance{0.5F};
     constexpr float farDistance{10.0F};
-    auto forward = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi},
+    auto forward = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi},
                                                       2.0F, nearDistance, farDistance,
                                                       pond::math::ProjectionDepth::ForwardZ);
-    auto reverse = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi},
+    auto reverse = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi},
                                                       2.0F, nearDistance, farDistance,
                                                       pond::math::ProjectionDepth::ReverseZ);
     ASSERT_TRUE(forward.HasValue());
@@ -602,7 +704,7 @@ TEST(Matrix4x4AlgebraTests, PerspectiveMapsFrustumEdgesWithNdcYUp)
 {
     constexpr float nearDistance{2.0F};
     constexpr float aspectRatio{2.0F};
-    auto projection = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kHalfPi},
+    auto projection = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi},
                                                          aspectRatio, nearDistance, 32.0F,
                                                          pond::math::ProjectionDepth::ForwardZ);
     ASSERT_TRUE(projection.HasValue());
@@ -622,10 +724,10 @@ TEST(Matrix4x4AlgebraTests, InfinitePerspectiveMatchesDepthLimits)
     constexpr float nearDistance{0.25F};
     constexpr float sampleDistance{1000.0F};
     auto forward = pond::math::Matrix4x4::InfinitePerspective(
-        pond::math::Radians{pond::math::kHalfPi}, 1.0F, nearDistance,
+        pond::math::Radians{pond::core::kHalfPi}, 1.0F, nearDistance,
         pond::math::ProjectionDepth::ForwardZ);
     auto reverse = pond::math::Matrix4x4::InfinitePerspective(
-        pond::math::Radians{pond::math::kHalfPi}, 1.0F, nearDistance,
+        pond::math::Radians{pond::core::kHalfPi}, 1.0F, nearDistance,
         pond::math::ProjectionDepth::ReverseZ);
     ASSERT_TRUE(forward.HasValue());
     ASSERT_TRUE(reverse.HasValue());
@@ -675,6 +777,37 @@ TEST(Matrix4x4AlgebraTests, OrthographicMapsExtentsAndFiniteDepth)
                      pond::math::Vector3{0.0F, 0.0F, 0.5F});
 }
 
+TEST(Matrix4x4AlgebraTests, BuildsExtremeFiniteProjectionsWithoutIntermediateOverflow)
+{
+    constexpr float kFiniteMaximum = std::numeric_limits<float>::max();
+    constexpr float kNearDistance = 1.0e20F;
+    constexpr float kFarDistance = 2.0e20F;
+
+    auto forward = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi},
+                                                      1.0F, kNearDistance, kFarDistance,
+                                                      pond::math::ProjectionDepth::ForwardZ);
+    auto reverse = pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kHalfPi},
+                                                      1.0F, kNearDistance, kFarDistance,
+                                                      pond::math::ProjectionDepth::ReverseZ);
+    ASSERT_TRUE(forward.HasValue());
+    ASSERT_TRUE(reverse.HasValue());
+    EXPECT_FLOAT_EQ(forward->row2Column2, -2.0F);
+    EXPECT_FLOAT_EQ(forward->row2Column3, -kFarDistance);
+    EXPECT_FLOAT_EQ(reverse->row2Column2, 1.0F);
+    EXPECT_FLOAT_EQ(reverse->row2Column3, kFarDistance);
+
+    auto orthographic = pond::math::Matrix4x4::Orthographic(
+        -kFiniteMaximum, kFiniteMaximum, -kFiniteMaximum, kFiniteMaximum, 1.0F, kFiniteMaximum,
+        pond::math::ProjectionDepth::ForwardZ);
+    ASSERT_TRUE(orthographic.HasValue());
+    EXPECT_TRUE(pond::math::IsFinite(orthographic.GetValue()));
+    EXPECT_GT(orthographic->row0Column0, 0.0F);
+    EXPECT_GT(orthographic->row1Column1, 0.0F);
+    EXPECT_LT(orthographic->row2Column2, 0.0F);
+    EXPECT_FLOAT_EQ(orthographic->row0Column3, 0.0F);
+    EXPECT_FLOAT_EQ(orthographic->row1Column3, 0.0F);
+}
+
 TEST(Matrix4x4AlgebraTests, RejectsInvalidProjectionConstructionInputs)
 {
     constexpr float infinity = std::numeric_limits<float>::infinity();
@@ -697,7 +830,7 @@ TEST(Matrix4x4AlgebraTests, RejectsInvalidProjectionConstructionInputs)
     ExpectMatrixFailure(
         pond::math::Matrix4x4::Perspective(pond::math::Radians{0.0F}, 1.0F, 1.0F, 2.0F, forward),
         pond::math::MathErrorCode::InvalidArgument);
-    ExpectMatrixFailure(pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::math::kPi},
+    ExpectMatrixFailure(pond::math::Matrix4x4::Perspective(pond::math::Radians{pond::core::kPi},
                                                            1.0F, 1.0F, 2.0F, forward),
                         pond::math::MathErrorCode::InvalidArgument);
     ExpectMatrixFailure(
@@ -724,7 +857,12 @@ TEST(Matrix4x4AlgebraTests, RejectsInvalidProjectionConstructionInputs)
     ExpectMatrixFailure(
         pond::math::Matrix4x4::Orthographic(-1.0F, 1.0F, -1.0F, 1.0F, 2.0F, 2.0F, forward),
         pond::math::MathErrorCode::InvalidArgument);
+    ExpectMatrixFailure(pond::math::Matrix4x4::Orthographic(
+                            -1.0F, 1.0F, -1.0F, 1.0F, std::numeric_limits<float>::denorm_min(),
+                            std::numeric_limits<float>::max(), forward),
+                        pond::math::MathErrorCode::InvalidArgument);
 }
+
 TEST(Matrix4x4AlgebraTests, TransposesAndComputesDeterminants)
 {
     const pond::math::Matrix4x4 matrix{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F,
@@ -766,7 +904,7 @@ TEST(Matrix4x4AlgebraTests, ComposesInColumnVectorOrderAndPreservesTranslation)
 
 TEST(Matrix4x4AlgebraTests, InvertsRepresentativeMatrices)
 {
-    const pond::math::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
+    const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
     const pond::math::Matrix4x4 matrix{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F,
                                        2.0F, 6.0F, 4.0F, 8.0F, 3.0F, 1.0F, 1.0F, 2.0F};
     const pond::math::Matrix4x4 affine{2.0F, 0.0F, 0.0F, 5.0F, 0.0F, 4.0F, 0.0F, -3.0F,

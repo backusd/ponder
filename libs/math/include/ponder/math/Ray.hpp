@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/math/MathError.hpp>
 #include <ponder/math/Vector3.hpp>
 
 namespace pond::math
@@ -8,8 +9,8 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteRayVector(Vector3 value) noexcept
 {
-    return ::pond::math::IsFinite(value.x) && ::pond::math::IsFinite(value.y) &&
-           ::pond::math::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
+           ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
@@ -18,7 +19,8 @@ class Ray final
 public:
     [[nodiscard]] static inline core::Result<Ray> Create(Vector3 origin, Vector3 direction)
     {
-        if (!detail::IsFiniteRayVector(origin) || !detail::IsFiniteRayVector(direction)) [[unlikely]]
+        if (!detail::IsFiniteRayVector(origin) || !detail::IsFiniteRayVector(direction))
+            [[unlikely]]
         {
             return core::Result<Ray>::FromError(
                 core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),

@@ -3,6 +3,7 @@
 #include <ponder/core/Result.hpp>
 #include <ponder/platform/Window.hpp>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -80,10 +81,14 @@ private:
         std::string_view operation) const;
     void CommitRegistration(WindowId id) noexcept;
     void ObserveShownEvent() noexcept;
+    void SynchronizeStateRequestVisibility(bool hidden) noexcept;
+    void RecordStateRequest(::pond::platform::WindowState state, bool hidden) noexcept;
     void IncrementPendingDialogRequestCount() noexcept;
     void DecrementPendingDialogRequestCount() noexcept;
     void VerifyUsable(std::string_view operation) const;
-    [[nodiscard]] std::string GetErrorContext() const;
+    [[nodiscard]] std::string_view GetErrorContext() const;
+
+    static constexpr std::size_t kErrorContextCapacity = 32;
 
     PlatformRuntimeState* m_runtime{};
     PlatformWindowBackend m_backend;
@@ -92,7 +97,11 @@ private:
     WindowId m_id;
     WindowGraphicsCompatibility m_graphicsCompatibility{WindowGraphicsCompatibility::Default};
     mutable void* m_cocoaMetalView{};
+    std::optional<WindowPresentation> m_pendingPresentationRequest;
+    std::optional<::pond::platform::WindowState> m_pendingVisibleStateRequest;
     std::optional<::pond::platform::WindowState> m_hiddenStateRequest;
+    std::array<char, kErrorContextCapacity> m_errorContext{};
+    std::size_t m_errorContextLength{};
     std::size_t m_pendingDialogRequestCount{};
     bool m_registered{};
 };

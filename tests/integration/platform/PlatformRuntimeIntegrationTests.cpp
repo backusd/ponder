@@ -428,7 +428,7 @@ TEST_F(PlatformRuntimeIntegrationTests, LaunchesHelperProcessWithoutShell)
     auto waitResult = process.Wait();
     ASSERT_TRUE(waitResult.HasValue()) << waitResult.GetError().GetMessage();
     ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(*waitResult));
-    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*waitResult).exitCode, 23);
+    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*waitResult).exitCode, 23U);
     EXPECT_EQ(ReadLines(argumentsPath), (std::vector<std::string>{"alpha beta", nonAsciiArgument}));
 }
 
@@ -436,11 +436,7 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveClipboardTextAndRestoresPrev
 {
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    if (!runtimeResult.HasValue())
-    {
-        GTEST_SKIP() << "Live clipboard requires an available SDL video driver: "
-                     << runtimeResult.GetError().GetMessage();
-    }
+    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
 
     pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
     auto previousTextResult = runtime.GetClipboardText();
@@ -460,6 +456,13 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveClipboardTextAndRestoresPrev
     auto textResult = runtime.GetClipboardText();
     ASSERT_TRUE(textResult.HasValue()) << textResult.GetError().GetMessage();
     EXPECT_EQ(textResult.GetValue(), kClipboardText);
+
+    const pond::core::VoidResult restoreResult = runtime.SetClipboardText(previousText);
+    ASSERT_TRUE(restoreResult.HasValue()) << restoreResult.GetError().GetMessage();
+    auto restoredTextResult = runtime.GetClipboardText();
+    ASSERT_TRUE(restoredTextResult.HasValue()) << restoredTextResult.GetError().GetMessage();
+    ASSERT_EQ(restoredTextResult.GetValue(), previousText);
+    restoreClipboard.Dismiss();
 }
 
 TEST_F(PlatformRuntimeIntegrationTests, PollsAndRoutesSyntheticEventsForMultipleLiveWindows)
@@ -633,14 +636,20 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsOrthogonalStateForALiveHiddenWin
     EXPECT_FALSE(visible.GetValue());
 
     ASSERT_TRUE(window.Restore().HasValue());
+    const auto expectBackendFailure = [](const pond::core::VoidResult& result)
+    {
+        ASSERT_FALSE(result.HasValue());
+        EXPECT_EQ(result.GetError().GetCode(),
+                  pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
+    };
     const auto expectUnsupported = [](const pond::core::VoidResult& result)
     {
         ASSERT_FALSE(result.HasValue());
         EXPECT_EQ(result.GetError().GetCode(),
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
     };
-    expectUnsupported(window.Minimize());
-    expectUnsupported(window.Maximize());
+    expectBackendFailure(window.Minimize());
+    expectBackendFailure(window.Maximize());
     state = window.GetState();
     ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
     EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
