@@ -1,0 +1,678 @@
+# Platform Examples Roadmap
+
+Status: proposed on 2026-07-13.
+
+This roadmap defines runnable, user-facing examples for the complete public
+`ponder_platform` API. The examples are teaching programs, not test fixtures.
+They complement the contract-oriented platform documentation by showing safe
+lifetime management, event routing, capability handling, and realistic groups
+of related operations.
+
+## Goals
+
+- Cover every public platform feature in at least one executable.
+- Teach several related features in each example instead of creating one
+  executable per function.
+- Keep the first examples useful before rendering and Dear ImGui exist.
+- Make every example small enough to read from `main()` outward.
+- Put a short `README.md` beside every executable describing its purpose,
+  controls, exercised features, observable side effects, and build/run steps.
+- Use only project-owned public APIs. Example code must not include SDL or OS
+  headers and must not depend on platform private implementation details.
+
+## Non-Goals
+
+- Examples are not substitutes for unit, backend, or integration tests.
+- Examples do not add frame pacing, event-wait, application-policy, rendering,
+  or workflow abstractions to `ponder_platform`.
+- Examples do not demonstrate deferred features such as custom cursors, rich
+  clipboard data, outbound drag-and-drop, process pipes/environment/working
+  directories, pointer warping, gamepads, touch/pen source discrimination, or
+  secondary Dear ImGui OS viewports.
+- Examples must not invent provisional renderer or UI APIs merely to compile.
+
+## Readiness Summary
+
+“Immediately buildable” means the example can be implemented and linked using
+APIs that exist now. The source and CMake targets described here do not exist
+until their roadmap tasks are implemented.
+
+| Example | Readiness | Production dependencies | Why |
+| --- | --- | --- | --- |
+| `1-window-display-lab` | Immediately buildable | `ponder::core`, `ponder::platform` | Native windows, display queries, state control, events, and console/window-title feedback need no renderer. |
+| `2-input-drop-monitor` | Immediately buildable | `ponder::core`, `ponder::io`, `ponder::platform` | Input, IME, mouse, cursor, and inbound-drop behavior can be observed through console output and window titles. |
+| `3-desktop-services-workbench` | Immediately buildable | `ponder::core`, `ponder::io`, `ponder::platform` | Clipboard, URI, and asynchronous native dialogs are host services rather than rendered UI. |
+| `4-responsive-process-runner` | Immediately buildable | `ponder::core`, `ponder::platform` | Process launch is independent of the renderer; a simple window proves that blocking work stays off the event pump. |
+| `5-renderer-window-bootstrap` | Deferred until renderer bootstrap exists | `ponder::core`, `ponder::platform`, `ponder::render` | A native handle is only a meaningful example when a renderer consumes it and presents real frames. Dear ImGui is not required. |
+| `6-imgui-platform-workbench` | Deferred until renderer and UI adapter exist | At least `ponder::core`, `ponder::platform`, `ponder::render`, `ponder::ui`; finalize direct ImGui usage with the UI API | This is the polished interactive tour and must use the project UI adapter, not the bundled SDL ImGui backend. |
+
+The first four examples should be implemented now. The renderer example starts
+only after `ponder_render` can create, resize, and present a window surface. The
+ImGui example starts only after the renderer can draw ImGui data and
+`ponder_ui` has its project-owned platform adapter. Deferred targets must not be
+added to CMake as non-building placeholders.
+
+## Repository And Build Layout
+
+Use this layout:
+
+```text
+examples/
+    CMakeLists.txt
+    platform/
+        CMakeLists.txt
+        README.md
+        1-window-display-lab/
+            CMakeLists.txt
+            Main.cpp
+            README.md
+        2-input-drop-monitor/
+            CMakeLists.txt
+            Main.cpp
+            README.md
+        3-desktop-services-workbench/
+            CMakeLists.txt
+            Main.cpp
+            README.md
+        4-responsive-process-runner/
+            CMakeLists.txt
+            Main.cpp
+            README.md
+        5-renderer-window-bootstrap/       # add when its prerequisites exist
+            CMakeLists.txt
+            Main.cpp
+            README.md
+        6-imgui-platform-workbench/         # add when its prerequisites exist
+            CMakeLists.txt
+            Main.cpp
+            README.md
+```
+
+Add a `PONDER_BUILD_EXAMPLES` option and conditionally add `examples/` after
+the libraries in the root build. Enable it by default for normal developer
+builds so examples remain compile-clean. Example targets should use
+`ponder_add_project_executable`, CMake target names such as
+`ponder_platform_1_window_display_lab`, hyphenated output names such as
+`ponder-platform-1-window-display-lab`, and the IDE folder
+`examples/platform`.
+
+Define the option in `ponder_define_project_options()`, append it to the
+`PONDER_CONFIGURED_OPTIONS` global property in `cmake/ProjectOptions.cmake`,
+and update the existing `examples/README.md` to link to the platform example
+index.
+
+Examples are product documentation, not installed applications. Extend the
+project executable helper with a narrow `NO_INSTALL` option if necessary and
+use it for every example target. Each target declares the dependencies whose
+headers it includes directly; an example that includes core diagnostics should
+name `ponder::core` even though platform already exposes core publicly.
+
+Keep example logic local at first. Do not hide the API being taught behind a
+shared example framework. A tiny shared formatting helper may be introduced
+later only if repetition obscures rather than reinforces public API usage.
+
+## Cross-Cutting Example Rules
+
+### Lifetime And Threading
+
+- Create the sole `PlatformRuntime` directly from process-entry `main()` and
+  keep every SDL-backed call on its owner thread.
+- Keep windows in explicit application-owned storage keyed by `WindowId`.
+  Receiving `WindowCloseRequestedEvent` does not destroy a window; the example
+  deliberately erases the corresponding owner.
+- Consume every pending dialog completion before destroying its parent window
+  or runtime. Destroy all windows before the runtime.
+- Treat native handles as borrowed snapshots. Renderer presentation state must
+  be destroyed before its `Window`.
+- Launch, operate on, and destroy each `Process` on one thread. A worker that
+  calls `Process::Wait()` must also launch and own that process; the UI/event
+  thread communicates with it through application-owned messages.
+
+### Errors And Capabilities
+
+- Check every `Result` and show the operation, stable error category/code, and
+  diagnostic message without parsing diagnostic text for control flow.
+- Compare project-specific failures with `ToErrorCode(PlatformErrorCode::...)`
+  when behavior depends on a documented code.
+- Treat `Unsupported` as an expected capability result where documented,
+  especially for global mouse capture/position, window-manager operations,
+  native handles, and process termination behavior.
+- Distinguish `InvalidArgument`, `RuntimeAlreadyActive`, `NotFound`,
+  `Unsupported`, and backend failure in the output rather than reducing every
+  failure to a boolean.
+- Do not deliberately crash or violate release-active lifetime/thread
+  contracts to demonstrate them. Explain those contracts in the local README.
+
+### Host Safety
+
+- Never open an external URI automatically. Require an explicit user command
+  and print the exact URI before invoking it. The example explains that
+  platform validates text shape, not application scheme/security policy.
+- Preserve the original clipboard text when possible and restore it on normal
+  exit. Clearly warn that the system clipboard is being modified.
+- Make graceful and forced process termination explicit user actions. The
+  default process path exits normally.
+- Native dialogs are user-driven and asynchronous. Cancellation is normal, not
+  an error.
+- Release mouse capture, relative mode, grab, and hidden-cursor state during
+  orderly shutdown when the owning resources are still valid.
+
+### Feedback And Event Loops
+
+- Platform-only examples use console output and window titles for feedback.
+  Blank native client areas are acceptable; they do not justify a renderer
+  dependency.
+- Dispatch typed events with `std::visit`. Preserve optional input targets and
+  route nonzero `WindowId` values through the example's window registry.
+- Display event timestamps and deltas. Explain that timestamps share a
+  monotonic domain and only differences are semantically meaningful.
+- Re-query display, scale, and window state after notification-only events.
+  A successful asynchronous presentation/state mutator means that the request
+  was accepted; events or live queries establish later observation.
+- Avoid a hot polling loop. A short standard-library sleep is acceptable as
+  example-owned idle policy and must not be presented as platform policy.
+
+### Local Documentation
+
+Every example `README.md` contains these short sections:
+
+1. Purpose.
+2. Features exercised.
+3. Controls and expected output.
+4. Lifetime and error-handling lessons.
+5. Side effects and host/headless limitations.
+6. Exact configure, build, and run commands for a supported preset.
+
+The `examples/platform/README.md` is an index using the readiness table above.
+It must state that examples are manual teaching programs and link back to this
+roadmap and the platform boundary documentation.
+
+## EXAMPLE PLAT-001: Window And Display Lab
+
+Directory: `examples/platform/1-window-display-lab/`
+
+Executable: `ponder-platform-1-window-display-lab`
+
+Readiness: immediately buildable.
+
+### Scenario
+
+Create a primary window and a secondary window. The example performs a small
+startup tour of safe window operations, offers an opt-in command-line path for
+more intrusive state changes, prints initial and updated display/window
+snapshots, and routes close requests by strong ID.
+
+### Features Exercised
+
+- Fallible runtime creation with application name, optional version, and
+  optional identifier metadata, including a safe optional demonstration of the
+  `RuntimeAlreadyActive` error.
+- Move-only runtime/window RAII, one-runtime ownership, monotonic `WindowId`,
+  multi-window storage, and deliberate close-request handling.
+- Every `WindowDesc` field: title, logical size, initial visibility,
+  resizability, high-density permission, optional minimum size, and
+  `WindowGraphicsCompatibility::Default`.
+- `GetGraphicsCompatibility()` reporting the exact default compatibility
+  selected at creation.
+- Title, signed screen position, logical size, pixel size, show, and hide.
+- Orthogonal presentation, decoration, minimized/maximized/normal state,
+  visibility, resizability, focus, and always-on-top queries and mutators.
+- Display enumeration and lookup, stable `DisplayId`, owned name, bounds,
+  usable bounds, optional refresh rate, orientation, and content scale.
+- Window display ID, pixel density, display scale, and the distinction between
+  screen, logical, and pixel geometry.
+- `PlatformRuntime::Now()`, `PlatformTimestamp` subtraction, `PollEvent()`, and
+  the quit, window, pointer-boundary, and display event families.
+- Notification-driven re-query and capability-aware `Result` handling.
+
+### Required Interactions
+
+- Create and release additional subject windows while showing that IDs are not
+  reused.
+- Move and resize a window and compare logical and pixel sizes.
+- Toggle show/hide, desktop fullscreen/windowed, system/borderless decoration,
+  resizability, always-on-top, minimize, maximize, and restore.
+- Move the subject between displays when the host has more than one and print
+  display/scale changes.
+- Preserve a missing destination display on `WindowDisplayChangedEvent` and
+  missing extents on desktop/current-mode events instead of dereferencing the
+  optional values.
+- Log focus and pointer-enter/leave observations without treating them as
+  presentation or visibility state.
+- Keep an accepted asynchronous state/presentation request distinct from the
+  value returned by a later live query.
+
+### Completion Criteria
+
+- The example builds with only core and platform production dependencies.
+- Every window/display event alternative is handled explicitly or forwarded to
+  a named exhaustive diagnostic visitor.
+- Closing one window leaves the runtime and other windows active; releasing the
+  final window exits cleanly.
+- Its README explains high-density terms, asynchronous state observation,
+  close-request ownership, and capability-dependent results.
+
+## EXAMPLE PLAT-002: Input And Drop Monitor
+
+Directory: `examples/platform/2-input-drop-monitor/`
+
+Executable: `ponder-platform-2-input-drop-monitor`
+
+Readiness: immediately buildable.
+
+### Scenario
+
+Create two windows, enable text input in the focused monitor, and print a
+structured stream of routed keyboard, text, composition, mouse, pointer, and
+drag-and-drop events. Keyboard commands change pointer/input modes and update
+the active window title with the latest committed text or drop summary.
+
+### Features Exercised
+
+- Optional versus required event targets and multi-window `WindowId` routing.
+- Physical keys, logical Unknown/Unicode/named keys, key press/release, repeat,
+  side-specific modifiers, logical-key factories/accessors, modifier bitwise
+  operations, and `HasAnyKeyModifier`/`HasAllKeyModifiers`.
+- UTF-8 committed text, composition text, optional Unicode-character selection
+  ranges, text-input start/stop/live query, composition clearing, and IME input
+  area set/clear.
+- Mouse motion with logical position and relative movement, all standard mouse
+  buttons including `Unknown`, normalized wheel axes, and pointer enter/leave.
+- Window mouse grab and relative mode plus runtime-global capture and global
+  pointer position with live `IsMouseGrabbed()` and
+  `IsRelativeMouseModeEnabled()` observations and graceful `Unsupported`
+  handling.
+- Every `SystemCursorShape`, cursor selection versus visibility, and orderly
+  restoration using `IsCursorVisible()`.
+- `DropBeginEvent`, `DroppedFileEvent`, `DroppedTextEvent`,
+  `DropPositionEvent`, and `DropCompleteEvent`, including owned paths/text,
+  optional source application, and optional targets. Begin has no position; the
+  other drop events carry positions, and every event is interpreted
+  independently without correctness-critical begin/complete sequence state.
+- Logical geometry and `IsValid` helpers when constructing an IME area.
+- Typed variant visitation, timestamps, and error reporting.
+
+### Required Interactions
+
+- Type printable and named keys, use left/right modifier combinations, hold a
+  key to generate repeats, and exercise an IME when one is installed.
+- Cycle all system cursor shapes independently of show/hide.
+- Toggle mouse grab, relative mode, and global capture; query global position
+  only when supported.
+- Where supported by the desktop and drag source, drag files and text into both
+  windows and show that copied payloads remain valid after the event visitor
+  returns. Use `pond::io::PathToUtf8()` for portable path display.
+- Start and stop text input and move/clear the fixed logical IME candidate area.
+
+### Completion Criteria
+
+- No input enum, helper, event family, cursor shape, or drop payload type is
+  omitted from the formatter/visitor.
+- Capture/global-position limitations on dummy, Wayland, or other constrained
+  drivers are reported as capabilities rather than fatal errors.
+- The example stops text input, clears its IME area, restores cursor visibility,
+  and releases modes/capture before orderly shutdown.
+- Its README explains coordinate directions, wheel normalization, optional
+  targets, Unicode-character composition ranges, inbound-only drop scope, and
+  which IME/drop/mouse-button interactions depend on host capabilities. It also
+  explains that `TextInputArea::cursorOffset` is horizontal and relative to
+  `rectangle.origin.x`.
+
+## EXAMPLE PLAT-003: Desktop Services Workbench
+
+Directory: `examples/platform/3-desktop-services-workbench/`
+
+Executable: `ponder-platform-3-desktop-services-workbench`
+
+Readiness: immediately buildable.
+
+### Scenario
+
+Use a parent window and keyboard commands to inspect/modify clipboard text,
+open an explicitly configured URI, and issue several asynchronous native dialog
+requests. Keep a request table keyed by `DialogRequestId` and correlate every
+completion through the normal platform event pump.
+
+### Features Exercised
+
+- Clipboard get/set, successful empty text, UTF-8 validation, visible warning,
+  best-effort preservation, and normal-exit restoration.
+- Explicit `OpenExternalUri()` with application-owned scheme/security policy.
+- Open-file, save-file, and open-folder descriptors with parented/unparented
+  requests, default locations, filters, and multiple selection where supported.
+  Filters demonstrate `"*"` and semicolon-separated ASCII extensions such as
+  `"sdf;mol"`, never glob spellings such as `"*.sdf"`.
+- Strong request IDs and all `DialogOutcome` alternatives: selection with
+  paths/optional filter index, cancellation, and failure.
+- Multiple outstanding requests, FIFO callback enqueue behavior, unspecified
+  ordering relative to other events, and correlation by ID rather than order.
+- Window/event lifetime management, owned filesystem paths, typed event
+  visitation, callback-completion timestamps, portable path display through
+  `ponder::io`, and differentiated platform errors.
+
+### Required Interactions
+
+- Copy supplied UTF-8 text to the clipboard and read it back, including an
+  empty-value demonstration.
+- Require both an explicit command-line URI value and a user key press before
+  launching it.
+- Open each dialog type, exercise cancellation, and print selected paths and
+  filter information.
+- Issue at least two requests concurrently and correlate their completions by
+  `DialogRequestId` rather than assuming request order.
+- Offer both parented and unparented requests and single/multiple selection.
+- On a close request, stop creating new work but continue pumping until every
+  registered dialog completion has been consumed before releasing the parent.
+
+### Completion Criteria
+
+- No URI opens and no dialog appears at executable startup.
+- Dialog cancellation is displayed as a normal outcome; failure remains an
+  error with stable code and context.
+- A successful `Show*Dialog` result is described as validation, registration,
+  and backend invocation; a later `DialogFailure` may still report launch or
+  completion failure. Completion timestamps describe callback completion, not
+  request or event-consumption time.
+- The runtime and parent cannot be destroyed by the example while a completion
+  remains pending or unconsumed.
+- Its README documents real host side effects, URI policy ownership, clipboard
+  restoration limits, native-dialog manual requirements, and headless limits.
+
+## EXAMPLE PLAT-004: Responsive Process Runner
+
+Directory: `examples/platform/4-responsive-process-runner/`
+
+Executable: `ponder-platform-4-responsive-process-runner`
+
+Readiness: immediately buildable.
+
+### Scenario
+
+Run as either an interactive parent or a deterministic `--child` mode. The
+parent keeps a native window and event/timestamp pump responsive while a worker
+thread launches and owns a child. Separate worker flows either wait for a
+bounded child, wait for an application command before terminating, or abandon
+tracking. The worker reports results back through application-owned
+synchronized messages.
+
+### Features Exercised
+
+- Runtime/window/event responsiveness alongside a blocking host service.
+- Shell-free `ProcessDesc` construction from an executable path and explicit
+  owned UTF-8 arguments, including spaces and non-ASCII text.
+- Executable insertion as `argv[0]`, verbatim argument delivery, inherited
+  environment, null stdin, inherited stdout/stderr, and the absence of shell
+  parsing or quoting.
+- Process launch without requiring `PlatformRuntime` in an explicit
+  headless-parent mode.
+- Move-only ownership, launch-thread affinity, blocking `Wait()` off the event
+  pump, and all `ProcessExitStatus` alternatives.
+- Explicit `GracefulPreferred` and `Force` termination, capability errors, and
+  destruction/abandonment that neither waits for nor terminates the child.
+- `Result` propagation from a worker and timestamped progress reporting on the
+  owner thread.
+
+### Required Interactions
+
+- Launch the same executable in child mode and echo arguments containing spaces
+  and UTF-8 text before returning a configurable normal exit code.
+- Offer a headless-parent mode that launches and waits for a child without ever
+  creating `PlatformRuntime`, in addition to the responsive windowed mode.
+- In the finite flow, have the owning worker launch a bounded child and
+  immediately enter `Wait()` while the main event pump remains responsive.
+- In the termination flow, have the owning worker launch a long-running child
+  and wait on its application command queue without calling `Wait()`. After an
+  explicit graceful or forced command, that worker calls `Terminate()` and
+  then `Wait()` to report and reap the child. Document that
+  `GracefulPreferred` may fall back to forced termination.
+- In the abandonment flow, have the owning worker destroy the live `Process`
+  without calling `Wait()`; show that the event thread does not block and
+  explain private asynchronous reaping.
+- Compile an exhaustive visitor for normal, signal, and unknown exit statuses.
+  Require live normal-exit observation and only host-supported termination
+  observations; signal/unknown may never be produced on a particular host.
+- Continue moving/resizing/closing the parent window while a wait is active.
+
+### Completion Criteria
+
+- The thread that launches a `Process` performs all its operations and destroys
+  it. The example contains no cross-thread access to a `Process` object.
+- `Wait()` never executes on the runtime owner/event-pump thread.
+- The example never presents `Wait()` as cancellable or interruptible. The
+  finite child has a strict short bound; long-running modes remain in the
+  worker's command loop until termination or abandonment is selected. A window
+  close follows those same rules before joining the worker, so shutdown cannot
+  wait indefinitely.
+- The default demonstration exits normally; termination and abandonment require
+  explicit commands.
+- Its README states the initial environment/stdio contract, missing nonblocking
+  status API, blocking-wait warning, exit-status portability, and lack of shell.
+
+## EXAMPLE PLAT-005: Renderer Window Bootstrap
+
+Directory: `examples/platform/5-renderer-window-bootstrap/`
+
+Executable: `ponder-platform-5-renderer-window-bootstrap`
+
+Readiness: deferred until the renderer has a stable surface/swapchain bootstrap,
+resize, and present API. Dear ImGui is not required.
+
+### Scenario
+
+Ask `ponder_render` for its required window graphics compatibility, create one
+compatible window, and present clear frames. Renderer-private bootstrap obtains
+and interprets the borrowed native-window variant. Rebuild presentation
+resources after relevant window/display changes and demonstrate the required
+renderer-before-window teardown order.
+
+### Features Exercised
+
+- `pond::render::GetRequiredWindowGraphicsCompatibility()` before window
+  creation, followed by `Window::GetGraphicsCompatibility()` verification. The
+  initial renderer may return `WindowGraphicsCompatibility::Vulkan`, but the
+  example never hardcodes that backend choice.
+- Renderer-private `GetNativeHandle()` use and exhaustive handling of Win32,
+  X11, Wayland, and Cocoa payload alternatives without exposing those details
+  through the example or renderer-independent API.
+- `InvalidArgument` on a default window, `Unsupported` on an unsupported video
+  driver, and complete-handle success on a supported host.
+- Borrowed-handle lifetime, re-query after show/hide, state/presentation change,
+  display migration, and renderer presentation rebuild boundaries.
+- Logical versus pixel resize, density and display-scale changes,
+  minimize/restore, and desktop fullscreen around one presentation target.
+- Explicit destruction of surfaces/swapchains/presentation before `Window`.
+
+### Completion Criteria
+
+- The example renders and presents through public render and platform APIs; its
+  source contains no direct SDL use or OS-specific surface creation. The
+  renderer owns any host-specific interpretation behind its public boundary.
+- The handoff accepts the closed `NativeWindowHandle` variant, while only the
+  active host alternative executes inside renderer-private WSI code.
+- Resize/minimize/display migration do not use stale dimensions or borrowed
+  handles.
+- Its README distinguishes platform window ownership from renderer presentation
+  ownership and lists supported host/driver prerequisites.
+
+## EXAMPLE PLAT-006: ImGui Platform Workbench
+
+Directory: `examples/platform/6-imgui-platform-workbench/`
+
+Executable: `ponder-platform-6-imgui-platform-workbench`
+
+Readiness: deferred until `ponder_render` can draw ImGui data and `ponder_ui`
+implements the custom project-owned platform adapter.
+
+Finalize this target's direct dependencies with the UI API. If `Main.cpp`
+includes Dear ImGui headers to build panels, it must also declare
+`ponder::imgui` directly; do not rely on transitive compile usage from
+`ponder::ui`.
+
+### Scenario
+
+Build a polished single-OS-viewport workbench with panels for the event stream,
+window/display state, input, host services, and process activity. It is the
+interactive capstone, not the first or only explanation of platform usage.
+
+### Features Exercised
+
+- Project event forwarding and UI capture policy without an SDL event bridge.
+- Keyboard/logical-key mapping, committed text, composition/IME placement,
+  mouse input, cursor shapes/visibility, and supported global-pointer behavior.
+- Clipboard integration, dropped files/text, explicit URI launching, and
+  asynchronous dialog outcomes in visible UI flows.
+- Live display/DPI/window controls and notification-driven re-query.
+- A process panel that delegates blocking process ownership to a worker.
+- Renderer-backed presentation and correct UI/renderer/window/runtime teardown.
+
+### Completion Criteria
+
+- `ponder_ui` has no direct SDL dependency and the example does not compile or
+  call the bundled SDL ImGui backend.
+- The example uses the initial custom single-OS-viewport contract; secondary
+  ImGui platform windows are not enabled accidentally.
+- The event/render pump handles asynchronous dialog completion without a
+  synchronous platform wait; a parented native dialog may still be intentionally
+  modal. Process waits remain off the pump, and external side effects remain
+  explicit.
+- Its README identifies what is platform behavior, UI adapter behavior,
+  renderer behavior, and application policy.
+
+## Public Feature Coverage Ledger
+
+The example named in the “Primary example” column owns the complete teaching
+path for that feature. Other examples may reuse it naturally but must link back
+to the primary README instead of duplicating the explanation.
+
+| Public feature | Primary example |
+| --- | --- |
+| Platform errors, `Result`, runtime metadata/lifecycle, `Now()`, timestamps | `1-window-display-lab` |
+| Strong window/display IDs, multi-window RAII, close routing | `1-window-display-lab` |
+| Geometry types and logical/pixel/screen distinctions | `1-window-display-lab` |
+| Complete `WindowDesc` and basic window properties | `1-window-display-lab` |
+| Presentation, decoration, state, visibility, focus, resizability, always-on-top | `1-window-display-lab` |
+| Display snapshots, identity, modes/orientation/scale, window density/display | `1-window-display-lab` |
+| Quit, window, pointer-boundary, and display events | `1-window-display-lab` |
+| Physical/logical/named keys, modifiers, repeat | `2-input-drop-monitor` |
+| Committed text, composition ranges, text-input and IME services | `2-input-drop-monitor` |
+| Mouse motion/buttons/wheel, grab, relative mode, capture/global position | `2-input-drop-monitor` |
+| All standard cursor shapes and separate cursor visibility | `2-input-drop-monitor` |
+| All inbound file/text drag-and-drop events and owned payloads | `2-input-drop-monitor` |
+| Clipboard text and explicit external URI | `3-desktop-services-workbench` |
+| All open/save/folder dialog descriptors, request IDs, and outcomes | `3-desktop-services-workbench` |
+| Shell-free launch, wait, exit variants, termination, and abandonment | `4-responsive-process-runner` |
+| Graphics compatibility and all borrowed native-handle alternatives | `5-renderer-window-bootstrap` |
+| Renderer/UI adapter integration over public platform primitives | `6-imgui-platform-workbench` |
+
+### Public Operation Checklist
+
+The implementation audit also checks concrete public operations, not only the
+feature groups above:
+
+- `1-window-display-lab`: `PlatformRuntime::Create()`, `CreateWindow()`,
+  `Now()`, `PollEvent()`, `EnumerateDisplays()`, and
+  `GetDisplayInfo()`; `Window::GetId()`, `GetGraphicsCompatibility()`,
+  `GetTitle()`, `SetTitle()`, `GetPosition()`, `SetPosition()`,
+  `GetLogicalSize()`, `GetPixelSize()`, `SetLogicalSize()`,
+  `GetDisplayId()`, `GetPixelDensity()`, `GetDisplayScale()`,
+  `GetPresentation()`, `SetPresentation()`, `GetDecoration()`,
+  `SetDecoration()`, `GetState()`, `Minimize()`, `Maximize()`,
+  `Restore()`, `IsVisible()`, `IsResizable()`, `SetResizable()`,
+  `IsFocused()`, `IsAlwaysOnTop()`, `SetAlwaysOnTop()`, `Show()`, and
+  `Hide()`.
+- `2-input-drop-monitor`: `LogicalKey::Unknown()`, `FromCharacter()`,
+  `FromNamed()`, `GetKind()`, `GetCharacter()`, and `GetNamedKey()`;
+  modifier operators and predicates; `StartTextInput()`, `StopTextInput()`,
+  `IsTextInputActive()`, `ClearTextComposition()`,
+  `SetTextInputArea()`, and `ClearTextInputArea()`; `SetMouseGrab()`,
+  `IsMouseGrabbed()`, `SetRelativeMouseMode()`, and
+  `IsRelativeMouseModeEnabled()`; `SetMouseCapture()`,
+  `GetGlobalMousePosition()`, `SetSystemCursor()`, `ShowCursor()`,
+  `HideCursor()`, and `IsCursorVisible()`.
+- `3-desktop-services-workbench`: `GetClipboardText()`,
+  `SetClipboardText()`, `OpenExternalUri()`, `ShowOpenFileDialog()`,
+  `ShowSaveFileDialog()`, and `ShowOpenFolderDialog()`.
+- `4-responsive-process-runner`: `LaunchProcess()`, `Process::Wait()`, and
+  both modes of `Process::Terminate()`.
+- `5-renderer-window-bootstrap`: `GetGraphicsCompatibility()` at the example
+  boundary and renderer-private `GetNativeHandle()` consumption.
+- Value/helper coverage across the primary examples: all logical/screen/pixel
+  geometry types and `IsValid()` overloads, every strong platform identifier,
+  `PlatformTimestamp::GetTimeSinceEpoch()` and subtraction,
+  `PlatformErrorCode` plus `ToErrorCode()`, every public platform enum, and
+  every closed variant alternative.
+
+### Typed Event Coverage
+
+The event visitors collectively cover every `PlatformEvent` alternative:
+
+- `1-window-display-lab`: `QuitRequestedEvent`,
+  `WindowCloseRequestedEvent`, `WindowMovedEvent`,
+  `WindowLogicalSizeChangedEvent`, `WindowPixelSizeChangedEvent`,
+  `WindowFocusChangedEvent`, `WindowVisibilityChangedEvent`,
+  `WindowStateChangedEvent`, `WindowPresentationChangedEvent`,
+  `WindowDisplayChangedEvent`, `WindowDisplayScaleChangedEvent`,
+  `WindowPointerEnteredEvent`, and `WindowPointerLeftEvent`.
+- `1-window-display-lab` also owns `DisplayAddedEvent`,
+  `DisplayRemovedEvent`, `DisplayMovedEvent`,
+  `DisplayDesktopModeChangedEvent`, `DisplayCurrentModeChangedEvent`,
+  `DisplayOrientationChangedEvent`, `DisplayContentScaleChangedEvent`, and
+  `DisplayUsableBoundsChangedEvent`.
+- `2-input-drop-monitor`: `KeyboardKeyEvent`, `TextInputEvent`,
+  `TextCompositionEvent`, `MouseMotionEvent`, `MouseButtonEvent`,
+  `MouseWheelEvent`, `DropBeginEvent`, `DroppedFileEvent`, `DroppedTextEvent`,
+  `DropPositionEvent`, and `DropCompleteEvent`.
+- `3-desktop-services-workbench`: `DialogCompletedEvent` and the window/quit
+  events needed to preserve dialog-parent lifetime.
+
+Before declaring the suite complete, compare this list directly with the
+`PlatformEvent` variant so a newly added alternative cannot remain undocumented.
+
+## Implementation Order
+
+1. Add examples build wiring, the platform example index, target conventions,
+   and local README template.
+2. Implement `1-window-display-lab`; it establishes the reusable style for
+   runtime creation, `Result` diagnostics, event visitation, and shutdown.
+3. Implement `2-input-drop-monitor` and audit all input/drop enum and event
+   alternatives against the public headers.
+4. Implement `3-desktop-services-workbench` with guarded side effects and manual
+   native-dialog verification.
+5. Implement `4-responsive-process-runner`, including deterministic child modes
+   and thread-affinity documentation.
+6. Perform an immediate-suite coverage audit against all installed platform
+   headers and build all four targets in supported Debug and Release presets.
+7. Add `5-renderer-window-bootstrap` only after its renderer prerequisite gate is
+   met.
+8. Add `6-imgui-platform-workbench` only after both renderer and UI prerequisite
+   gates are met.
+9. Repeat the public-header/event coverage audit and update readiness labels as
+   deferred examples become real targets.
+
+## Verification And Maintenance
+
+- Build every available example in supported Debug and Release configurations.
+- Manually run platform-only GUI examples on a normal desktop host. Record
+  capability limitations without treating a documented `Unsupported` result as
+  a build failure.
+- Exercise open/save/folder dialogs, including cancellation, on each supported
+  native GUI host when available. Dummy/headless drivers do not verify native
+  dialog presentation or native handles.
+- Verify clipboard restoration manually. Automated runs must not launch URIs,
+  present native dialogs, terminate unrelated processes, or overwrite the host
+  clipboard.
+- Keep example source formatted and warning-clean, and include it in normal
+  clang-tidy and whitespace gates once targets exist.
+- Do not register interactive examples as CTest tests. Mirror any deterministic
+  behavior that needs regression protection in the appropriate test target.
+- Treat verification as host-local until the Windows/Linux/macOS portability
+  matrix in `future.txt` has run. Renderer-native interop requires its own
+  supported-driver coverage.
+- Whenever a public platform header or `PlatformEvent` alternative changes,
+  update this roadmap, the coverage ledger, affected source, and the local
+  README in the same change.
+
+The suite is complete when all six executables run on their supported hosts,
+every coverage-ledger row has a maintained teaching path, and none of the
+examples rely on SDL, OS-specific APIs, or private platform implementation
+details.

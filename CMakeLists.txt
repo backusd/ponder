@@ -29,6 +29,10 @@ ponder_configure_dependencies()
 
 add_subdirectory(libs)
 
+if(PONDER_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()

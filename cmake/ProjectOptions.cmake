@@ -4,6 +4,7 @@ function(ponder_define_project_options)
     option(PONDER_BUILD_TESTS "Build ponder tests." ON)
     option(PONDER_BUILD_APPS "Build ponder applications." ON)
     option(PONDER_BUILD_TOOLS "Build ponder developer tools." ON)
+    option(PONDER_BUILD_EXAMPLES "Build ponder examples." ON)
     option(PONDER_BUILD_PLUGINS "Build ponder plugins." ON)
     option(PONDER_ENABLE_PCH
         "Enable explicitly opted-in target-scoped precompiled headers." ON)
@@ -17,6 +18,7 @@ function(ponder_define_project_options)
         "PONDER_BUILD_TESTS=${PONDER_BUILD_TESTS};"
         "PONDER_BUILD_APPS=${PONDER_BUILD_APPS};"
         "PONDER_BUILD_TOOLS=${PONDER_BUILD_TOOLS};"
+        "PONDER_BUILD_EXAMPLES=${PONDER_BUILD_EXAMPLES};"
         "PONDER_BUILD_PLUGINS=${PONDER_BUILD_PLUGINS};"
         "PONDER_ENABLE_PCH=${PONDER_ENABLE_PCH};"
         "PONDER_ENABLE_ASAN=${PONDER_ENABLE_ASAN};"

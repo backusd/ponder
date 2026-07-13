@@ -8,6 +8,7 @@ inputs.
 
 ## Layout
 
+- `platform/` contains runnable platform-library teaching examples.
 - `projects/` contains sample `.ponder` projects once the native project format
   exists.
 

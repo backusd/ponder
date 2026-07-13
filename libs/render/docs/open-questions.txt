@@ -45,7 +45,8 @@ These are inputs to the questions, not decisions being reopened here:
 Recommendation: Update ADR 0007, ADR 0008, the platform contract, and render planning together in
 one coherent change. Leaving mutually inconsistent accepted contracts would make every later API
 decision ambiguous and invite macOS Vulkan assumptions back into the implementation.
-Answer:
+
+Answer: Use the recommendation exactly.
 
 - **CON-02:** Should future presentation compatibility use explicit backend values such as
   `Vulkan` and `Metal`, or should `WindowGraphicsCompatibility` become a backend-neutral capability
@@ -54,7 +55,8 @@ Answer:
 Recommendation: Keep explicit project-owned `Vulkan` and `Metal` compatibility values. Window
 creation has genuinely backend-specific native requirements, and naming them is clearer and more
 extensible than a vague capability whose meaning changes by platform.
-Answer:
+
+Answer: Use the recommendation exactly.
 
 - **CON-03:** Should backend choice eventually be fixed by the target platform/build, selected at
   runtime, or support both models? This determines whether a parameterless
@@ -63,7 +65,8 @@ Answer:
 Recommendation: Choose a default backend by platform while designing creation APIs to accept an
 explicit backend selection later. Make the compatibility query take a backend value so adding
 runtime selection does not require replacing a parameterless public contract.
-Answer:
+
+Answer: Backend choice should be controlled by the build. Do not extend the API to allow selection at runtime. The goal is for the API to remain focused and not add unnecessary features.
 
 - **CON-04:** Until the Metal backend exists, should `ponder_render` on macOS build as a
   backend-neutral library whose renderer/backend creation returns `Unsupported`, be omitted
@@ -72,7 +75,8 @@ Answer:
 Recommendation: Continue building backend-neutral headers and value utilities on macOS, but have
 every GPU device/backend creation request return `UnsupportedBackend` until Metal exists. This
 keeps consumers portable without implying that headless or presenting GPU functionality works.
-Answer:
+
+Answer: ponder_render on macOS should be configured in CMake to fail to compile. Do not add unnecessary/temporary features in the API simply to enable building on macOS
 
 - **CON-05:** Should the existing `NativeCocoaWindow`/Metal-layer platform alternative remain as a
   forward-looking Metal contract, be redesigned before Metal work, or be removed until a concrete
@@ -81,7 +85,8 @@ Answer:
 Recommendation: Remove its current Vulkan-oriented semantics now, but defer the final Cocoa/Metal
 payload shape until the native Metal backend supplies concrete requirements. Prematurely freezing
 an unused native contract is more harmful than adding the right closed alternative later.
-Answer:
+
+Answer: Use the recommendation exactly.
 
 ## Initial Outcomes And Scope -- Resolve Before Choosing The API Shape
 
@@ -92,7 +97,8 @@ Answer:
 Recommendation: Make validated create/clear/present/resize/minimize/shutdown the first milestone,
 then track Dear ImGui and the first 3D visualization as separate vertical slices. This isolates the
 device and presentation contract before shader, scene, and UI concerns can hide lifecycle defects.
-Answer:
+
+Answer: Use the recommendation exactly - scope is only create/clear/present/resize/minimize/shutdown
 
 - **SCOPE-02:** What is the first real visualization vertical slice after bootstrap: atoms and
   bonds, generic meshes, points/lines/glyphs, molecular surfaces, volumetric data, or something
@@ -101,7 +107,8 @@ Answer:
 Recommendation: Use an interactive atoms-and-bonds scene as the first vertical slice, implemented
 through reusable instanced glyph primitives. It exercises cameras, depth, dynamic attributes,
 picking identity, and scientific scale while remaining representative of the product.
-Answer:
+
+Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **SCOPE-03:** Which representations must the first 3D milestone selected in SCOPE-02 support, and
   which are explicit deferrals: ball-and-stick, space-filling, wireframe, ribbons, surfaces,
@@ -112,7 +119,8 @@ Recommendation: Include ball-and-stick, space-filling, wireframe, unit-cell line
 per-frame trajectory coordinates in the first 3D milestone. Defer ribbons, generated surfaces,
 volumes, field visualization, advanced glyphs, labels, and measurements until the generic scene and
 resource-update contracts are proven.
-Answer:
+
+Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **SCOPE-04:** Is the initial product strictly an interactive windowed desktop renderer, or must
   the first architecture also support headless devices, offscreen targets, readback, screenshots,
@@ -122,7 +130,8 @@ Recommendation: Design device and render-target ownership for windowed and offsc
 start, while implementing window presentation first and basic offscreen readback next. Scientific
 automation, CI, and publication output make headless rendering a structural requirement even if it
 is not in the bootstrap milestone.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **SCOPE-05:** Is rendering to multiple platform windows required initially, required not to be
   precluded, or explicitly deferred despite platform already supporting multiple windows?
@@ -130,7 +139,8 @@ Answer:
 Recommendation: Defer multi-window behavior from the first milestone but make presentation targets
 independent children of a shared device. That keeps bootstrap small without baking one-window
 ownership into the public model.
-Answer:
+
+Answer: Rendering to multiple platform windows is required immediately.
 
 - **SCOPE-06:** Must a single scene and its GPU resources be renderable into multiple windows,
   multiple viewports, and offscreen targets without duplication?
@@ -138,7 +148,8 @@ Answer:
 Recommendation: Yes. Separate scene/resources from views and targets so immutable GPU data can be
 shared while each target owns only size-, format-, and presentation-dependent state; this is
 essential for comparison views and publication rendering.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **SCOPE-07:** What representative upper bounds should guide the design: atoms, bonds, instances,
   mesh triangles, volume dimensions, simultaneous scenes, trajectory frames per second, viewport
@@ -148,7 +159,8 @@ Recommendation: Define benchmark tiers instead of public hard limits: 100,000 at
 60 Hz coordinate streaming at 1440p on a pinned integrated-GPU system, and 1,000,000 at 30 Hz on a
 pinned midrange discrete-GPU system. Add separate 10-million-triangle/4K and volume tiers when those
 features enter scope.
-Answer:
+
+Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **SCOPE-08:** What interactive performance and latency targets define success at those scales,
   and on what reference hardware classes?
@@ -157,7 +169,8 @@ Recommendation: Pin exact integrated and discrete adapter models, driver branche
 scene fixtures for the SCOPE-07 tiers. Require p95 frame times below 16.7 ms and 33.3 ms
 respectively, visible interaction within two presented frames, and separately recorded submission,
 GPU, upload-bandwidth, and presentation latency.
-Answer:
+
+Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **SCOPE-09:** What image-quality requirements are non-negotiable for the first scientific scene,
   and which may be quality/performance settings?
@@ -166,7 +179,8 @@ Recommendation: Require correct geometry, depth, identity, linear color handling
 mapping, and readable edges. Make antialiasing level, impostor tessellation, shadows, transparency
 quality, and post-processing explicit presets so performance choices never silently change
 scientific meaning.
-Answer:
+
+Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **SCOPE-10:** What minimum Windows and Linux GPU/driver classes may be required? Must integrated
   GPUs work, or may the initial renderer require a discrete GPU?
@@ -174,7 +188,8 @@ Answer:
 Recommendation: Support conformant Vulkan 1.2 integrated and discrete GPUs without vendor-specific
 requirements, using capability checks for optional quality paths. Software Vulkan should support
 tests and headless automation, not serve as an automatic interactive fallback.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **SCOPE-11:** What verification is required before the already selected X11 and Wayland paths may
   each be described as supported rather than merely compile-covered?
@@ -182,7 +197,8 @@ Answer:
 Recommendation: Require native-host configure, build, live create/present/resize/minimize testing,
 and validation-clean shutdown for each path before calling it supported. Compile coverage alone
 should be labeled unverified, not treated as runtime evidence.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **SCOPE-12:** Which expected update pattern should dominate the first design: mostly static
   topology, per-frame coordinate changes for trajectories, frequent topology replacement,
@@ -191,7 +207,8 @@ Answer:
 Recommendation: Optimize first for stable topology with per-frame position and attribute updates,
 plus efficient sparse changes and an explicit bulk-replacement path. That matches trajectories and
 selection while leaving surface and volume streaming to later specialized resource paths.
-Answer:
+
+Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 ## Public Architecture And Library Boundary -- Foundational
 
@@ -201,7 +218,8 @@ Answer:
 Recommendation: Expose a high-level domain-neutral scene/resource API over a private
 backend-neutral GPU layer. Publishing a low-level graphics API would greatly expand the permanent
 compatibility contract without helping the first scientific milestones.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **ARCH-02:** Should scene submission be retained mode, immutable per-frame snapshots,
   immediate-mode draw packets, or a deliberate hybrid?
@@ -209,7 +227,8 @@ Answer:
 Recommendation: Use a hybrid: retain long-lived resources, topology, and scene identity; apply
 explicit batched updates; and submit immutable per-frame view/state snapshots. Reserve immediate
 packets for transient overlays and debug drawing.
-Answer:
+
+Answer: This question is not relevant to the first milestone. Move this question and recommendation into libs/render/docs/open-questions-3d.txt
 
 - **ARCH-03:** Should the public API be backend-neutral from its first revision so the future Metal
   backend consumes the same scene/resource contracts?
@@ -217,7 +236,8 @@ Answer:
 Recommendation: Yes. Vulkan and future Metal should implement identical ownership, scene, frame,
 capability, and error semantics, with native details confined to implementation and diagnostics so
 the first backend does not become the public model.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **ARCH-04:** Should device lifetime be separate from presentation lifetime, for example one
   `RenderDevice` plus one or more window/offscreen presentation targets, or should a top-level
@@ -226,7 +246,8 @@ Answer:
 Recommendation: Separate `RenderDevice` lifetime from target lifetime. One device should own
 resources and serve zero or more window/offscreen targets rather than being permanently coupled to
 a window.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **ARCH-05:** May a process create multiple render devices or renderer instances? If so, may they
   share public resources or scenes?
@@ -234,7 +255,8 @@ Answer:
 Recommendation: Permit multiple devices for explicit adapter selection, isolation, and testing.
 GPU resources and compiled scenes remain device-affine; reusable CPU descriptions may be compiled
 independently for each device rather than implicitly shared.
-Answer:
+
+Answer: Use the recommendation exactly
 
 - **ARCH-06:** Should `ponder_render` be one target with private backend implementations, or should
   backend-neutral frontend and Vulkan/Metal implementations be separate internal targets?
