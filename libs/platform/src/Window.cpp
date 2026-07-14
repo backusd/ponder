@@ -47,6 +47,7 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
     {
     case WindowGraphicsCompatibility::Default:
     case WindowGraphicsCompatibility::Vulkan:
+    case WindowGraphicsCompatibility::Metal:
         return true;
     }
 
@@ -198,12 +199,6 @@ WindowImpl::~WindowImpl() noexcept
                   "Cannot destroy a platform window with {} pending dialog requests",
                   m_pendingDialogRequestCount);
     PONDER_VERIFY(m_nativeWindow != nullptr, "Window native state is missing");
-
-    if (m_cocoaMetalView != nullptr)
-    {
-        m_backend.destroyMetalView(m_backend.context, m_cocoaMetalView);
-        m_cocoaMetalView = nullptr;
-    }
 
     if (m_registered)
     {

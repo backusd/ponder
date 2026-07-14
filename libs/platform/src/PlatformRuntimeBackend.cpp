@@ -8,7 +8,6 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keyboard.h>
-#include <SDL3/SDL_metal.h>
 #include <SDL3/SDL_misc.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_platform_defines.h>
@@ -33,7 +32,13 @@ bool IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility compatib
     case WindowGraphicsCompatibility::Default:
         return true;
     case WindowGraphicsCompatibility::Vulkan:
-#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_MACOS)
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
+        return true;
+#else
+        return false;
+#endif
+    case WindowGraphicsCompatibility::Metal:
+#if defined(SDL_PLATFORM_MACOS)
         return true;
 #else
         return false;
@@ -57,10 +62,6 @@ BackendNativeWindowDriver GetNativeWindowDriver(std::string_view driverName) noe
     {
         return BackendNativeWindowDriver::Wayland;
     }
-    if (driverName == "cocoa")
-    {
-        return BackendNativeWindowDriver::Cocoa;
-    }
 
     return BackendNativeWindowDriver::Unsupported;
 }
@@ -77,13 +78,20 @@ std::uint64_t BuildSdlWindowFlags(const BackendWindowCreateDesc& desc) noexcept
         flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
     }
 
-    if (desc.graphicsCompatibility == WindowGraphicsCompatibility::Vulkan)
+    switch (desc.graphicsCompatibility)
     {
-#if defined(SDL_PLATFORM_MACOS)
-        flags |= SDL_WINDOW_METAL;
-#else
+    case WindowGraphicsCompatibility::Default:
+        break;
+    case WindowGraphicsCompatibility::Vulkan:
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
         flags |= SDL_WINDOW_VULKAN;
 #endif
+        break;
+    case WindowGraphicsCompatibility::Metal:
+#if defined(SDL_PLATFORM_MACOS)
+        flags |= SDL_WINDOW_METAL;
+#endif
+        break;
     }
 
     return flags;
@@ -633,37 +641,8 @@ void DestroyWindow(void*, void* window) noexcept
     return NativeHandleSucceeded();
 }
 
-[[nodiscard]] BackendNativeWindowHandleResult GetCocoaNativeWindowHandle(
-    void* window, void** cachedMetalView, NativeWindowHandle* handle) noexcept
-{
-    if (cachedMetalView == nullptr)
-    {
-        return NativeHandleFailure("Cocoa Metal view storage is unavailable.");
-    }
-
-    SDL_MetalView view = static_cast<SDL_MetalView>(*cachedMetalView);
-    if (view == nullptr)
-    {
-        view = SDL_Metal_CreateView(static_cast<SDL_Window*>(window));
-        if (view == nullptr)
-        {
-            return NativeHandleSdlFailure("SDL_Metal_CreateView");
-        }
-        *cachedMetalView = view;
-    }
-
-    void* const layer = SDL_Metal_GetLayer(view);
-    if (layer == nullptr)
-    {
-        return NativeHandleSdlFailure("SDL_Metal_GetLayer");
-    }
-
-    *handle = NativeCocoaWindow{.metalLayer = layer};
-    return NativeHandleSucceeded();
-}
-
 [[nodiscard]] BackendNativeWindowHandleResult GetNativeWindowHandle(
-    void*, void* window, void** cachedMetalView, NativeWindowHandle* handle) noexcept
+    void*, void* window, NativeWindowHandle* handle) noexcept
 {
     if (handle == nullptr)
     {
@@ -677,10 +656,7 @@ void DestroyWindow(void*, void* window) noexcept
     }
 
     const BackendNativeWindowDriver driver = GetNativeWindowDriver(currentDriver);
-    if (driver == BackendNativeWindowDriver::Cocoa)
-    {
-        return GetCocoaNativeWindowHandle(window, cachedMetalView, handle);
-    }
+
     if (driver == BackendNativeWindowDriver::Unsupported)
     {
         return NativeHandleUnsupported(
@@ -701,18 +677,12 @@ void DestroyWindow(void*, void* window) noexcept
         return GetX11NativeWindowHandle(properties, handle);
     case BackendNativeWindowDriver::Wayland:
         return GetWaylandNativeWindowHandle(properties, handle);
-    case BackendNativeWindowDriver::Cocoa:
     case BackendNativeWindowDriver::Unsupported:
         break;
     }
 
     return NativeHandleUnsupported(
         "Native window handles are unsupported by this SDL video driver.");
-}
-
-void DestroyMetalView(void*, void* metalView) noexcept
-{
-    SDL_Metal_DestroyView(static_cast<SDL_MetalView>(metalView));
 }
 
 [[nodiscard]] bool EnumerateDisplays(void*, std::vector<std::uint32_t>& displayIds)
@@ -846,7 +816,6 @@ constexpr PlatformWindowBackend kSdlWindowBackend{
     .setRelativeMouseMode = SetWindowRelativeMouseMode,
     .isRelativeMouseModeEnabled = IsWindowRelativeMouseModeEnabled,
     .getNativeHandle = GetNativeWindowHandle,
-    .destroyMetalView = DestroyMetalView,
 };
 
 constexpr PlatformDisplayBackend kSdlDisplayBackend{

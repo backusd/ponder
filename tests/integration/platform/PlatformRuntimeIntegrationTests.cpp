@@ -8,6 +8,7 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_platform_defines.h>
 #include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 #include <chrono>
@@ -762,6 +763,30 @@ TEST_F(PlatformRuntimeIntegrationTests, ExposesLiveDisplaySnapshotsAndWindowDens
     EXPECT_TRUE(ownedSnapshots.front().id.IsValid());
 }
 
+TEST_F(PlatformRuntimeIntegrationTests, RejectsUnavailableGraphicsCompatibilityForCurrentHost)
+{
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.title = "Unsupported Graphics Compatibility Window";
+    desc.visible = false;
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
+    desc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Metal;
+#else
+    desc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
+#endif
+
+    auto result = runtime.CreateWindow(desc);
+    ASSERT_FALSE(result.HasValue());
+    EXPECT_EQ(result.GetError().GetCode(),
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+}
+
 TEST_F(PlatformRuntimeIntegrationTests, ReportsNativeHandleUnsupportedUnderDummyDriver)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
@@ -784,22 +809,30 @@ TEST_F(PlatformRuntimeIntegrationTests, ReportsNativeHandleUnsupportedUnderDummy
     EXPECT_EQ(invalidResult.GetError().GetCode(),
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::InvalidArgument));
 
-    pond::platform::WindowDesc vulkanDesc;
-    vulkanDesc.title = "Native Handle Vulkan Window";
-    vulkanDesc.visible = false;
-    vulkanDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
-    auto vulkanWindowResult = runtime.CreateWindow(vulkanDesc);
-    if (!vulkanWindowResult.HasValue())
-    {
-        GTEST_SKIP() << "Dummy SDL driver cannot create a Vulkan-compatible "
-                        "window on this host: "
-                     << vulkanWindowResult.GetError().GetMessage();
-    }
-    pond::platform::Window vulkanWindow = std::move(vulkanWindowResult).GetValue();
+    pond::platform::WindowDesc rendererDesc;
+    rendererDesc.visible = false;
+#if defined(SDL_PLATFORM_MACOS)
+    rendererDesc.title = "Native Handle Metal Window";
+    rendererDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Metal;
+#else
+    rendererDesc.title = "Native Handle Vulkan Window";
+    rendererDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
+#endif
 
-    auto unsupportedResult = vulkanWindow.GetNativeHandle();
+    auto rendererWindowResult = runtime.CreateWindow(rendererDesc);
+    if (!rendererWindowResult.HasValue())
+    {
+        GTEST_SKIP() << "Dummy SDL driver cannot create the host renderer-compatible window: "
+                     << rendererWindowResult.GetError().GetMessage();
+    }
+    pond::platform::Window rendererWindow = std::move(rendererWindowResult).GetValue();
+
+    auto unsupportedResult = rendererWindow.GetNativeHandle();
     ASSERT_FALSE(unsupportedResult.HasValue());
     EXPECT_EQ(unsupportedResult.GetError().GetCode(),
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+#if defined(SDL_PLATFORM_MACOS)
+    EXPECT_NE(unsupportedResult.GetError().GetMessage().find("Metal"), std::string::npos);
+#endif
 }
 } // namespace

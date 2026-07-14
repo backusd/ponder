@@ -5,6 +5,7 @@
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_platform_defines.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -166,10 +167,6 @@ struct FakeRuntimeBackend final
     std::uintptr_t nativeX11Window{0x4000};
     void* nativeWaylandDisplay{reinterpret_cast<void*>(std::uintptr_t{0x5000})};
     void* nativeWaylandSurface{reinterpret_cast<void*>(std::uintptr_t{0x6000})};
-    void* nativeCocoaMetalView{reinterpret_cast<void*>(std::uintptr_t{0x7000})};
-    void* nativeCocoaMetalLayer{reinterpret_cast<void*>(std::uintptr_t{0x8000})};
-    int createMetalViewCalls{};
-    int destroyMetalViewCalls{};
     std::optional<std::uint32_t> disconnectDisplayOnFailure;
     bool destroyOverwritesError{};
     bool globalMouseSupported{true};
@@ -213,7 +210,6 @@ struct FakeRuntimeBackend final
     std::vector<pond::platform::SystemCursorShape> createdCursorShapes;
     std::vector<pond::platform::SystemCursorShape> selectedCursorShapes;
     std::vector<pond::platform::SystemCursorShape> destroyedCursorShapes;
-    std::vector<void*> destroyedMetalViews;
     std::vector<std::string> openedExternalUris;
     std::vector<FakeDialogLaunch> dialogLaunches;
     std::vector<std::uint32_t> connectedDisplayIds;
@@ -1605,7 +1601,7 @@ void FakeDestroyWindow(void* context, void* window)
 }
 
 [[nodiscard]] BackendNativeWindowHandleResult FakeGetNativeWindowHandle(
-    void* context, void*, void** cachedMetalView, pond::platform::NativeWindowHandle* handle)
+    void* context, void*, pond::platform::NativeWindowHandle* handle)
 {
     FakeRuntimeBackend& fake = GetFake(context);
     fake.calls.emplace_back("get-native-handle");
@@ -1656,21 +1652,7 @@ void FakeDestroyWindow(void* context, void* window)
         *handle = pond::platform::NativeWaylandWindow{.display = fake.nativeWaylandDisplay,
                                                       .surface = fake.nativeWaylandSurface};
         break;
-    case BackendNativeWindowDriver::Cocoa:
-        if (cachedMetalView == nullptr)
-        {
-            return BackendNativeWindowHandleResult{.status =
-                                                       BackendNativeWindowHandleStatus::Failed,
-                                                   .message = "missing fake Cocoa cache storage"};
-        }
-        if (*cachedMetalView == nullptr)
-        {
-            ++fake.createMetalViewCalls;
-            fake.calls.emplace_back("create-metal-view");
-            *cachedMetalView = fake.nativeCocoaMetalView;
-        }
-        *handle = pond::platform::NativeCocoaWindow{.metalLayer = fake.nativeCocoaMetalLayer};
-        break;
+
     case BackendNativeWindowDriver::Unsupported:
         return BackendNativeWindowHandleResult{.status =
                                                    BackendNativeWindowHandleStatus::Unsupported,
@@ -1680,13 +1662,6 @@ void FakeDestroyWindow(void* context, void* window)
     return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Succeeded};
 }
 
-void FakeDestroyMetalView(void* context, void* metalView)
-{
-    FakeRuntimeBackend& fake = GetFake(context);
-    ++fake.destroyMetalViewCalls;
-    fake.destroyedMetalViews.push_back(metalView);
-    fake.calls.emplace_back("destroy-metal-view");
-}
 
 [[nodiscard]] bool FakeEnumerateDisplays(void* context, std::vector<std::uint32_t>& displayIds)
 {
@@ -1874,7 +1849,6 @@ void FakeDestroyMetalView(void* context, void* metalView)
         .setRelativeMouseMode = FakeSetWindowRelativeMouseMode,
         .isRelativeMouseModeEnabled = FakeIsWindowRelativeMouseModeEnabled,
         .getNativeHandle = FakeGetNativeWindowHandle,
-        .destroyMetalView = FakeDestroyMetalView,
     };
 }
 
@@ -2273,7 +2247,7 @@ TEST_F(PlatformRuntimeBackendTests, CreatesMultipleWindowsWithMonotonicIdsAndReu
         .resizable = false,
         .highPixelDensity = false,
         .minimumLogicalSize = pond::platform::LogicalSize{320, 240},
-        .graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan};
+        .graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Default};
 
     auto firstResult = runtime.CreateWindow(desc);
     ASSERT_TRUE(firstResult.HasValue());
@@ -2298,7 +2272,7 @@ TEST_F(PlatformRuntimeBackendTests, CreatesMultipleWindowsWithMonotonicIdsAndReu
     EXPECT_FALSE(firstBackendWindow.resizable);
     EXPECT_FALSE(firstBackendWindow.highPixelDensity);
     EXPECT_EQ(firstBackendWindow.graphicsCompatibility,
-              pond::platform::WindowGraphicsCompatibility::Vulkan);
+              pond::platform::WindowGraphicsCompatibility::Default);
 
     second.reset();
     EXPECT_EQ(m_fake.destroyWindowCalls, 1);
@@ -3927,6 +3901,7 @@ TEST_F(PlatformRuntimeBackendTests, GuardsNewWindowDisplayApisAfterMoveAndAcross
 
 TEST_F(PlatformRuntimeBackendTests, ExposesNativeHandlesForApprovedDrivers)
 {
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
     ASSERT_TRUE(runtimeResult.HasValue());
@@ -3937,11 +3912,10 @@ TEST_F(PlatformRuntimeBackendTests, ExposesNativeHandlesForApprovedDrivers)
     desc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
     auto windowResult = runtime.CreateWindow(desc);
     ASSERT_TRUE(windowResult.HasValue());
-    std::optional<pond::platform::Window> window;
-    window.emplace(std::move(windowResult).GetValue());
+    pond::platform::Window window = std::move(windowResult).GetValue();
 
     m_fake.nativeVideoDriver = "windows";
-    auto win32Result = window->GetNativeHandle();
+    auto win32Result = window.GetNativeHandle();
     ASSERT_TRUE(win32Result.HasValue()) << win32Result.GetError().GetMessage();
     ASSERT_TRUE(std::holds_alternative<pond::platform::NativeWin32Window>(win32Result.GetValue()));
     EXPECT_EQ(std::get<pond::platform::NativeWin32Window>(win32Result.GetValue()),
@@ -3949,7 +3923,7 @@ TEST_F(PlatformRuntimeBackendTests, ExposesNativeHandlesForApprovedDrivers)
                                                  .window = m_fake.nativeWin32Window}));
 
     m_fake.nativeVideoDriver = "x11";
-    auto x11Result = window->GetNativeHandle();
+    auto x11Result = window.GetNativeHandle();
     ASSERT_TRUE(x11Result.HasValue()) << x11Result.GetError().GetMessage();
     ASSERT_TRUE(std::holds_alternative<pond::platform::NativeX11Window>(x11Result.GetValue()));
     EXPECT_EQ(std::get<pond::platform::NativeX11Window>(x11Result.GetValue()),
@@ -3957,40 +3931,19 @@ TEST_F(PlatformRuntimeBackendTests, ExposesNativeHandlesForApprovedDrivers)
                                                .window = m_fake.nativeX11Window}));
 
     m_fake.nativeVideoDriver = "wayland";
-    auto waylandResult = window->GetNativeHandle();
+    auto waylandResult = window.GetNativeHandle();
     ASSERT_TRUE(waylandResult.HasValue()) << waylandResult.GetError().GetMessage();
     ASSERT_TRUE(
         std::holds_alternative<pond::platform::NativeWaylandWindow>(waylandResult.GetValue()));
     EXPECT_EQ(std::get<pond::platform::NativeWaylandWindow>(waylandResult.GetValue()),
               (pond::platform::NativeWaylandWindow{.display = m_fake.nativeWaylandDisplay,
                                                    .surface = m_fake.nativeWaylandSurface}));
-
-    m_fake.nativeVideoDriver = "cocoa";
-    auto cocoaResult = window->GetNativeHandle();
-    ASSERT_TRUE(cocoaResult.HasValue()) << cocoaResult.GetError().GetMessage();
-    ASSERT_TRUE(std::holds_alternative<pond::platform::NativeCocoaWindow>(cocoaResult.GetValue()));
-    EXPECT_EQ(std::get<pond::platform::NativeCocoaWindow>(cocoaResult.GetValue()),
-              (pond::platform::NativeCocoaWindow{.metalLayer = m_fake.nativeCocoaMetalLayer}));
-    EXPECT_EQ(m_fake.createMetalViewCalls, 1);
-
-    auto secondCocoaResult = window->GetNativeHandle();
-    ASSERT_TRUE(secondCocoaResult.HasValue()) << secondCocoaResult.GetError().GetMessage();
-    EXPECT_EQ(std::get<pond::platform::NativeCocoaWindow>(secondCocoaResult.GetValue()),
-              (pond::platform::NativeCocoaWindow{.metalLayer = m_fake.nativeCocoaMetalLayer}));
-    EXPECT_EQ(m_fake.createMetalViewCalls, 1);
-
-    window.reset();
-    EXPECT_EQ(m_fake.destroyMetalViewCalls, 1);
-    ASSERT_EQ(m_fake.destroyedMetalViews.size(), 1U);
-    EXPECT_EQ(m_fake.destroyedMetalViews.front(), m_fake.nativeCocoaMetalView);
-    const auto metalDestroy = std::ranges::find(m_fake.calls, "destroy-metal-view");
-    const auto windowDestroy = std::ranges::find(m_fake.calls, "destroy-window");
-    ASSERT_NE(metalDestroy, m_fake.calls.end());
-    ASSERT_NE(windowDestroy, m_fake.calls.end());
-    EXPECT_LT(metalDestroy, windowDestroy);
+#else
+    GTEST_SKIP() << "Vulkan native-window payloads are supported only on Windows and Linux.";
+#endif
 }
 
-TEST_F(PlatformRuntimeBackendTests, RejectsNativeHandlesForDefaultWindowsAndUnsupportedDrivers)
+TEST_F(PlatformRuntimeBackendTests, RejectsNativeHandlesForDefaultAndUnsupportedDrivers)
 {
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -4010,6 +3963,7 @@ TEST_F(PlatformRuntimeBackendTests, RejectsNativeHandlesForDefaultWindowsAndUnsu
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::InvalidArgument));
     EXPECT_EQ(m_fake.calls.size(), callCount);
 
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
     pond::platform::WindowDesc vulkanDesc;
     vulkanDesc.visible = false;
     vulkanDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
@@ -4022,10 +3976,49 @@ TEST_F(PlatformRuntimeBackendTests, RejectsNativeHandlesForDefaultWindowsAndUnsu
     ASSERT_FALSE(unsupportedResult.HasValue());
     EXPECT_EQ(unsupportedResult.GetError().GetCode(),
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+#elif defined(SDL_PLATFORM_MACOS)
+    pond::platform::WindowDesc metalDesc;
+    metalDesc.visible = false;
+    metalDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Metal;
+    auto metalWindowResult = runtime.CreateWindow(metalDesc);
+    ASSERT_TRUE(metalWindowResult.HasValue());
+    pond::platform::Window metalWindow = std::move(metalWindowResult).GetValue();
+
+    auto unsupportedResult = metalWindow.GetNativeHandle();
+    ASSERT_FALSE(unsupportedResult.HasValue());
+    EXPECT_EQ(unsupportedResult.GetError().GetCode(),
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_NE(unsupportedResult.GetError().GetMessage().find("Metal"), std::string::npos);
+    EXPECT_EQ(std::ranges::count(m_fake.calls, "get-native-handle"), 0);
+#endif
+}
+
+TEST_F(PlatformRuntimeBackendTests, RejectsGraphicsCompatibilityUnavailableOnCurrentHost)
+{
+    auto runtimeResult =
+        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    ASSERT_TRUE(runtimeResult.HasValue());
+    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+
+    pond::platform::WindowDesc desc;
+    desc.visible = false;
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
+    desc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Metal;
+#else
+    desc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
+#endif
+
+    const int createWindowCalls = m_fake.createWindowCalls;
+    auto result = runtime.CreateWindow(desc);
+    ASSERT_FALSE(result.HasValue());
+    EXPECT_EQ(result.GetError().GetCode(),
+              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_EQ(m_fake.createWindowCalls, createWindowCalls);
 }
 
 TEST_F(PlatformRuntimeBackendTests, ReportsNativeHandleBackendFailures)
 {
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
     auto runtimeResult =
         pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
     ASSERT_TRUE(runtimeResult.HasValue());
@@ -4052,7 +4045,11 @@ TEST_F(PlatformRuntimeBackendTests, ReportsNativeHandleBackendFailures)
     EXPECT_EQ(missingResult.GetError().GetCode(),
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
     EXPECT_NE(missingResult.GetError().GetMessage().find("missing fake Win32"), std::string::npos);
+#else
+    GTEST_SKIP() << "Vulkan native-window payloads are supported only on Windows and Linux.";
+#endif
 }
+
 TEST_F(PlatformRuntimeBackendTests, PollingContinuesPastIgnoredEventsUntilAProjectEventIsAvailable)
 {
     auto runtimeResult =

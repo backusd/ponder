@@ -188,8 +188,6 @@ void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
                   "Platform window backend is missing isRelativeMouseModeEnabled");
     PONDER_VERIFY(backend.getNativeHandle != nullptr,
                   "Platform window backend is missing getNativeHandle");
-    PONDER_VERIFY(backend.destroyMetalView != nullptr,
-                  "Platform window backend is missing destroyMetalView");
 }
 
 void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)

@@ -70,6 +70,55 @@ Dependencies are pinned as Git submodules. Floating branches are not allowed.
 - Notes: keep SDL usage out of core libraries. Review bundled notices before
   binary releases.
 
+### Vulkan-Headers
+
+- Purpose: unified Vulkan API header definitions for the render Vulkan backend.
+- Usage: private compile-time dependency for `ponder_render` when Vulkan render
+  support is enabled.
+- Upstream URL: https://github.com/KhronosGroup/Vulkan-Headers.git
+- License: Apache-2.0 OR MIT.
+- License file: `third_party/Vulkan-Headers/LICENSE.md`; full texts are under
+  `third_party/Vulkan-Headers/LICENSES/`.
+- Pinned commit: `8d6039a455a7ecc7d2a592ff97f62db4e59b70bf`.
+- Local CMake options: `VULKAN_HEADERS_ENABLE_TESTS=OFF`,
+  `VULKAN_HEADERS_ENABLE_INSTALL=OFF`, and
+  `VULKAN_HEADERS_ENABLE_MODULE=OFF`.
+- Notes: compile against the pinned current unified headers while keeping Vulkan
+  1.2 as the runtime floor through renderer capability checks.
+
+### Volk
+
+- Purpose: dynamic Vulkan loader and dispatch table support for the render
+  Vulkan backend.
+- Usage: private runtime dependency for `ponder_render` when Vulkan render
+  support is enabled.
+- Upstream URL: https://github.com/zeux/volk.git
+- License: MIT.
+- License file: `third_party/volk/LICENSE.md`.
+- Pinned commit: `3b00554371e801bf4f708ec6f0fc78d4274b5720`.
+- Local CMake options: `VULKAN_HEADERS_INSTALL_DIR` points at the repository
+  `third_party/Vulkan-Headers` checkout, `VOLK_PULL_IN_VULKAN=ON`,
+  `VOLK_INSTALL=OFF`, `VOLK_HEADERS_ONLY=OFF`, and `VOLK_NAMESPACE=OFF`.
+- Notes: keep Volk private to the render backend. Do not require
+  `find_package(Vulkan)`, a Vulkan SDK import library, or a statically linked
+  Vulkan loader.
+
+### Vulkan Memory Allocator
+
+- Purpose: Vulkan memory allocation helper for the render Vulkan backend.
+- Usage: private runtime dependency behind project-owned render RAII and
+  `Result`-based error handling.
+- Upstream URL: https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+- License: MIT.
+- License file: `third_party/VulkanMemoryAllocator/LICENSE.txt`.
+- Pinned commit: `3aa921224c154a0d2c43912bc88e1c42ce1f7607`.
+- Local CMake options: `VMA_ENABLE_INSTALL=OFF`,
+  `VMA_BUILD_DOCUMENTATION=OFF`, and `VMA_BUILD_SAMPLES=OFF`. The project VMA
+  target also carries `VMA_VULKAN_VERSION=1002000`,
+  `VMA_STATIC_VULKAN_FUNCTIONS=0`, and `VMA_DYNAMIC_VULKAN_FUNCTIONS=1` for the
+  Vulkan C API and Volk-owned dynamic dispatch.
+- Notes: do not expose VMA declarations or allocator handles through public
+  render headers.
 ### Dear ImGui
 
 - Purpose: immediate-mode UI for early desktop tooling.

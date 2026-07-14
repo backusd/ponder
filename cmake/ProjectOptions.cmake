@@ -6,6 +6,57 @@ function(ponder_define_project_options)
     option(PONDER_BUILD_TOOLS "Build ponder developer tools." ON)
     option(PONDER_BUILD_EXAMPLES "Build ponder examples." ON)
     option(PONDER_BUILD_PLUGINS "Build ponder plugins." ON)
+    option(PONDER_BUILD_RENDER "Build the ponder render library." ON)
+
+    set(ponder_render_vulkan_default OFF)
+    if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(ponder_render_vulkan_default ON)
+    endif()
+
+    option(PONDER_RENDER_ENABLE_VULKAN
+        "Enable the Vulkan render backend on Windows and Linux."
+        "${ponder_render_vulkan_default}")
+    option(PONDER_RENDER_ENABLE_VALIDATION
+        "Enable Vulkan validation support in the render backend."
+        "${PONDER_RENDER_ENABLE_VULKAN}")
+    option(PONDER_BUILD_RENDER_INTEGRATION_TESTS
+        "Build live render integration tests."
+        "${PONDER_BUILD_TESTS}")
+
+    if(NOT PONDER_BUILD_RENDER)
+        set(PONDER_RENDER_ENABLE_VULKAN OFF CACHE BOOL
+            "Enable the Vulkan render backend on Windows and Linux." FORCE)
+        set(PONDER_RENDER_ENABLE_VALIDATION OFF CACHE BOOL
+            "Enable Vulkan validation support in the render backend." FORCE)
+        set(PONDER_BUILD_RENDER_INTEGRATION_TESTS OFF CACHE BOOL
+            "Build live render integration tests." FORCE)
+    else()
+        if(APPLE)
+            message(FATAL_ERROR
+                "ponder_render does not have a macOS backend yet. Configure with "
+                "-DPONDER_BUILD_RENDER=OFF until the native Metal backend is implemented.")
+        endif()
+
+        if(PONDER_RENDER_ENABLE_VULKAN AND NOT ponder_render_vulkan_default)
+            message(FATAL_ERROR
+                "PONDER_RENDER_ENABLE_VULKAN is supported only on Windows and Linux. "
+                "Disable render with -DPONDER_BUILD_RENDER=OFF on this platform.")
+        endif()
+
+        if(NOT PONDER_RENDER_ENABLE_VULKAN)
+            set(PONDER_RENDER_ENABLE_VALIDATION OFF CACHE BOOL
+                "Enable Vulkan validation support in the render backend." FORCE)
+            message(FATAL_ERROR
+                "PONDER_BUILD_RENDER requires the build-selected Vulkan backend on Windows "
+                "and Linux. Set -DPONDER_RENDER_ENABLE_VULKAN=ON or disable render with "
+                "-DPONDER_BUILD_RENDER=OFF.")
+        endif()
+
+        if(NOT PONDER_BUILD_TESTS)
+            set(PONDER_BUILD_RENDER_INTEGRATION_TESTS OFF CACHE BOOL
+                "Build live render integration tests." FORCE)
+        endif()
+    endif()
     option(PONDER_ENABLE_PCH
         "Enable explicitly opted-in target-scoped precompiled headers." ON)
     option(PONDER_ENABLE_ASAN "Enable AddressSanitizer for supported compilers." OFF)
@@ -20,6 +71,10 @@ function(ponder_define_project_options)
         "PONDER_BUILD_TOOLS=${PONDER_BUILD_TOOLS};"
         "PONDER_BUILD_EXAMPLES=${PONDER_BUILD_EXAMPLES};"
         "PONDER_BUILD_PLUGINS=${PONDER_BUILD_PLUGINS};"
+        "PONDER_BUILD_RENDER=${PONDER_BUILD_RENDER};"
+        "PONDER_RENDER_ENABLE_VULKAN=${PONDER_RENDER_ENABLE_VULKAN};"
+        "PONDER_RENDER_ENABLE_VALIDATION=${PONDER_RENDER_ENABLE_VALIDATION};"
+        "PONDER_BUILD_RENDER_INTEGRATION_TESTS=${PONDER_BUILD_RENDER_INTEGRATION_TESTS};"
         "PONDER_ENABLE_PCH=${PONDER_ENABLE_PCH};"
         "PONDER_ENABLE_ASAN=${PONDER_ENABLE_ASAN};"
         "PONDER_ENABLE_UBSAN=${PONDER_ENABLE_UBSAN};"

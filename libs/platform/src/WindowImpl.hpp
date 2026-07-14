@@ -96,7 +96,6 @@ private:
     std::uint32_t m_backendWindowId{};
     WindowId m_id;
     WindowGraphicsCompatibility m_graphicsCompatibility{WindowGraphicsCompatibility::Default};
-    mutable void* m_cocoaMetalView{};
     std::optional<WindowPresentation> m_pendingPresentationRequest;
     std::optional<::pond::platform::WindowState> m_pendingVisibleStateRequest;
     std::optional<::pond::platform::WindowState> m_hiddenStateRequest;

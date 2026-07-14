@@ -15,7 +15,9 @@ engine requirements.
 - `ponder_workflow_tests`
 - `ponder_compute_tests`
 - `ponder_io_tests`
-- `ponder_render_tests`
 - `ponder_platform_tests`
 - `ponder_ui_tests`
 - `ponder_plugin_sdk_tests`
+
+`ponder_render_tests` is intentionally absent until REND-004 introduces
+substantive public render behavior to test.

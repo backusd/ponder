@@ -1,0 +1,12 @@
+ponder_add_project_test(ponder_render_integration_tests
+    SOURCES
+        OwnerThreadSurfaceIntegrationTests.cpp
+    PRIVATE_DEPS
+        ponder::platform
+        ponder::render
+    RESOURCE_LOCK
+        ponder_platform_sdl
+    LABELS
+        render
+        integration
+        live)

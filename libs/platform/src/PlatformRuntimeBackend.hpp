@@ -65,8 +65,7 @@ enum class BackendNativeWindowDriver : std::uint8_t
     Unsupported,
     Win32,
     X11,
-    Wayland,
-    Cocoa
+    Wayland
 };
 
 enum class BackendNativeWindowHandleStatus : std::uint8_t
@@ -144,9 +143,7 @@ struct PlatformWindowBackend final
     bool (*setRelativeMouseMode)(void* context, void* window, bool enabled){};
     bool (*isRelativeMouseModeEnabled)(void* context, void* window){};
     BackendNativeWindowHandleResult (*getNativeHandle)(void* context, void* window,
-                                                       void** cachedMetalView,
                                                        NativeWindowHandle* handle){};
-    void (*destroyMetalView)(void* context, void* metalView){};
 };
 
 enum class BackendDisplayOrientation : std::uint8_t

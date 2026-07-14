@@ -165,6 +165,8 @@ Done when:
 TASK REND-001: Reconcile Platform Graphics Interop
 --------------------------------------------------
 
+Status: completed on 2026-07-13.
+
 Implement the platform half of the revised Vulkan/Metal boundary as a prerequisite.
 
 Work:
@@ -191,6 +193,8 @@ Done when:
 
 TASK REND-002: Add Conditional Render Build And Test Topology
 -------------------------------------------------------------
+
+Status: completed on 2026-07-13.
 
 Make the render subsystem a coherent optional build before adding Vulkan inputs.
 
@@ -222,6 +226,8 @@ Done when:
 TASK REND-003: Pin Vulkan Build Dependencies
 --------------------------------------------
 
+Status: completed on 2026-07-13.
+
 Add the repository-managed Vulkan inputs approved by the owner.
 
 Work:
@@ -251,6 +257,8 @@ Done when:
 
 TASK REND-004: Define Bootstrap Public Values And Errors
 --------------------------------------------------------
+
+Status: completed on 2026-07-13.
 
 Introduce only the backend-neutral vocabulary needed by this milestone.
 
@@ -288,6 +296,8 @@ Done when:
 
 TASK REND-005: Define Threading, Lifetime, And Window-State Handoff
 -------------------------------------------------------------------
+
+Status: completed on 2026-07-13.
 
 Define the two-thread contract without extending the lifetime of borrowed native data.
 
@@ -329,6 +339,8 @@ Done when:
 TASK REND-006: Implement Dynamic Loading And Instance Bootstrap
 ---------------------------------------------------------------
 
+Status: completed on 2026-07-13.
+
 Establish transactional Vulkan process/instance state behind a narrow dispatch seam.
 
 Work:
@@ -358,6 +370,8 @@ Done when:
 TASK REND-007: Add Validation And Debug Instrumentation
 -------------------------------------------------------
 
+Status: completed on 2026-07-13.
+
 Layer optional diagnostics onto the tested instance bootstrap.
 
 Work:
@@ -384,6 +398,8 @@ Done when:
 
 TASK REND-008: Create Owner-Thread Vulkan Surfaces
 --------------------------------------------------
+
+Status: completed on 2026-07-13.
 
 Consume the borrowed platform native handle entirely inside its valid owner-thread call.
 
@@ -418,6 +434,8 @@ Done when:
 TASK REND-009: Enumerate And Select Adapters
 -------------------------------------------
 
+Status: completed on 2026-07-13.
+
 Select a physical device against a completed first surface without creating the logical device.
 
 Work:
@@ -447,6 +465,8 @@ Done when:
 
 TASK REND-010: Create The Logical Device And Queues
 ---------------------------------------------------
+
+Status: completed on 2026-07-13.
 
 Create the render-affine root after adapter selection.
 
@@ -872,3 +892,4 @@ Decision Coverage
 | UI-01 | REND-013, REND-020 |
 | TEST-02, TEST-03, TEST-10, TEST-11, TEST-13 | REND-007, REND-017, REND-018 |
 | BUILD-01, BUILD-03, BUILD-06, BUILD-07 | REND-002, REND-003, REND-018 |
+

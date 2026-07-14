@@ -34,6 +34,10 @@ core::Result<NativeWindowHandle> WindowImpl::GetNativeHandle() const
     {
     case WindowGraphicsCompatibility::Vulkan:
         break;
+    case WindowGraphicsCompatibility::Metal:
+        return core::Result<NativeWindowHandle>::FromError(core::Error{
+            kUnsupportedCode,
+            "Native window handles are not defined for Metal window graphics compatibility."});
     case WindowGraphicsCompatibility::Default:
         return core::Result<NativeWindowHandle>::FromError(
             core::Error{kInvalidArgumentCode,
@@ -45,7 +49,7 @@ core::Result<NativeWindowHandle> WindowImpl::GetNativeHandle() const
 
     NativeWindowHandle handle;
     const BackendNativeWindowHandleResult result =
-        m_backend.getNativeHandle(m_backend.context, m_nativeWindow, &m_cocoaMetalView, &handle);
+        m_backend.getNativeHandle(m_backend.context, m_nativeWindow, &handle);
     switch (result.status)
     {
     case BackendNativeWindowHandleStatus::Succeeded:

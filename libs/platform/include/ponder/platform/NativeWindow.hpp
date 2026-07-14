@@ -29,13 +29,6 @@ struct NativeWaylandWindow final
     friend constexpr bool operator==(NativeWaylandWindow, NativeWaylandWindow) noexcept = default;
 };
 
-struct NativeCocoaWindow final
-{
-    void* metalLayer{};
-
-    friend constexpr bool operator==(NativeCocoaWindow, NativeCocoaWindow) noexcept = default;
-};
-
 using NativeWindowHandle =
-    std::variant<NativeWin32Window, NativeX11Window, NativeWaylandWindow, NativeCocoaWindow>;
+    std::variant<NativeWin32Window, NativeX11Window, NativeWaylandWindow>;
 } // namespace pond::platform

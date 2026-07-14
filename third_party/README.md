@@ -57,6 +57,21 @@ kept separate from the core platform and are not linked into project libraries.
   - Path: `third_party/SDL3`
   - License: Zlib; see bundled third-party notices
   - Commit: `e0b323890be80097a7ec094117c278c8217590b2`
+- Vulkan-Headers
+  - Path: `third_party/Vulkan-Headers`
+  - Upstream URL: https://github.com/KhronosGroup/Vulkan-Headers.git
+  - License: Apache-2.0 OR MIT
+  - Commit: `8d6039a455a7ecc7d2a592ff97f62db4e59b70bf`
+- Volk
+  - Path: `third_party/volk`
+  - Upstream URL: https://github.com/zeux/volk.git
+  - License: MIT
+  - Commit: `3b00554371e801bf4f708ec6f0fc78d4274b5720`
+- Vulkan Memory Allocator
+  - Path: `third_party/VulkanMemoryAllocator`
+  - Upstream URL: https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+  - License: MIT
+  - Commit: `3aa921224c154a0d2c43912bc88e1c42ce1f7607`
 - Dear ImGui
   - Path: `third_party/imgui`
   - License: MIT
@@ -74,6 +89,12 @@ third-party target names directly:
 - `ponder::moodycamel`
 - `ponder::SDL3`
 - `ponder::imgui`
+- `ponder::vulkan_headers`
+- `ponder::volk`
+- `ponder::vma`
+
+The Vulkan aliases are configured only when `PONDER_BUILD_RENDER=ON` and
+`PONDER_RENDER_ENABLE_VULKAN=ON`.
 
 See `third_party/licenses.md` for the dependency/license inventory.
 

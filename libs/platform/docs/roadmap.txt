@@ -249,8 +249,8 @@ Work:
 - Add a strong `PlatformTimestamp` backed by `std::chrono::nanoseconds` in SDL's
   monotonic tick domain with the same epoch as `SDL_GetTicksNS()`. Only
   timestamp differences are semantically meaningful.
-- Add `WindowGraphicsCompatibility` with exactly `Default` and `Vulkan`.
-  Exactly one alternative is selected per window.
+- Add `WindowGraphicsCompatibility`. Its closed set is now `Default`, `Vulkan`,
+  and `Metal` after REND-001. Exactly one alternative is selected per window.
 - Reserve numeric block `0x0001'0000` through `0x0001'FFFF` for platform errors.
   Add stable `PlatformErrorCode` values `InvalidArgument`,
   `RuntimeAlreadyActive`, `BackendFailure`, `NotFound`, and `Unsupported`, plus
@@ -364,7 +364,8 @@ Work:
 - Store the exact project `WindowGraphicsCompatibility` selected at creation;
   never reconstruct it from host-dependent SDL window flags.
 - Map `WindowGraphicsCompatibility::Vulkan` to `SDL_WINDOW_VULKAN` on
-  Windows/Linux and `SDL_WINDOW_METAL` on macOS. `Default` adds neither flag.
+  Windows/Linux and `WindowGraphicsCompatibility::Metal` to `SDL_WINDOW_METAL`
+  on macOS. `Default` adds neither flag.
 - Allocate monotonically increasing `WindowId` values and never reuse them
   during a runtime lifetime.
 - Maintain a private SDL-window-ID to `WindowId` registry for routing.

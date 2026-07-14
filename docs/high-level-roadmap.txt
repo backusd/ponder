@@ -223,7 +223,7 @@ ponder-server
 
 CTest and GoogleTest are implemented.
 
-The scaffold starts with one test executable per library:
+The scaffold originally started with one test executable per library:
 
     ponder_core_tests
     ponder_math_tests
@@ -233,10 +233,12 @@ The scaffold starts with one test executable per library:
     ponder_workflow_tests
     ponder_compute_tests
     ponder_io_tests
-    ponder_render_tests
     ponder_platform_tests
     ponder_ui_tests
     ponder_plugin_sdk_tests
+
+REND-002 removed the library-name-only `ponder_render_tests` scaffold. REND-004
+adds substantive render value and header tests with the first real public API.
 
 Unit tests live under `tests/unit/{library}/`. Each initial library has a smoke
 test proving that its public header can be included and linked.

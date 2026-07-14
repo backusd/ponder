@@ -35,6 +35,9 @@
       "name": "macos-base",
       "hidden": true,
       "inherits": "base",
+      "cacheVariables": {
+        "PONDER_BUILD_RENDER": false
+      },
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",

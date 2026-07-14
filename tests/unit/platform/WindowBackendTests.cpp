@@ -30,19 +30,52 @@ TEST(WindowBackendFlagTests, StagesEveryWindowHiddenAndKeepsPropertiesOrthogonal
     EXPECT_EQ(minimalFlags & SDL_WINDOW_HIGH_PIXEL_DENSITY, 0U);
 }
 
-TEST(WindowBackendFlagTests, MapsVulkanCompatibilityForTheCurrentHost)
+TEST(WindowBackendFlagTests, SupportsOnlyApprovedGraphicsCompatibilityForTheCurrentHost)
 {
-    const pond::platform::detail::BackendWindowCreateDesc desc{
-        "ponder", 1280, 800, true, true, pond::platform::WindowGraphicsCompatibility::Vulkan};
+    using pond::platform::WindowGraphicsCompatibility;
+    using pond::platform::detail::IsWindowGraphicsCompatibilitySupported;
 
-    const std::uint64_t flags = pond::platform::detail::BuildSdlWindowFlags(desc);
-#if defined(SDL_PLATFORM_MACOS)
-    EXPECT_NE(flags & SDL_WINDOW_METAL, 0U);
-    EXPECT_EQ(flags & SDL_WINDOW_VULKAN, 0U);
+    EXPECT_TRUE(IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility::Default));
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
+    EXPECT_TRUE(IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility::Vulkan));
+    EXPECT_FALSE(IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility::Metal));
+#elif defined(SDL_PLATFORM_MACOS)
+    EXPECT_FALSE(IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility::Vulkan));
+    EXPECT_TRUE(IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility::Metal));
 #else
-    EXPECT_NE(flags & SDL_WINDOW_VULKAN, 0U);
-    EXPECT_EQ(flags & SDL_WINDOW_METAL, 0U);
+    EXPECT_FALSE(IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility::Vulkan));
+    EXPECT_FALSE(IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility::Metal));
 #endif
+    EXPECT_FALSE(IsWindowGraphicsCompatibilitySupported(
+        static_cast<WindowGraphicsCompatibility>(0xFF)));
+}
+
+TEST(WindowBackendFlagTests, MapsRendererCompatibilityOnlyOnSupportedHosts)
+{
+    using pond::platform::WindowGraphicsCompatibility;
+    using pond::platform::detail::BackendWindowCreateDesc;
+    using pond::platform::detail::BuildSdlWindowFlags;
+
+    const BackendWindowCreateDesc vulkanDesc{
+        "ponder", 1280, 800, true, true, WindowGraphicsCompatibility::Vulkan};
+    const BackendWindowCreateDesc metalDesc{
+        "ponder", 1280, 800, true, true, WindowGraphicsCompatibility::Metal};
+
+    const std::uint64_t vulkanFlags = BuildSdlWindowFlags(vulkanDesc);
+#if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
+    EXPECT_NE(vulkanFlags & SDL_WINDOW_VULKAN, 0U);
+#else
+    EXPECT_EQ(vulkanFlags & SDL_WINDOW_VULKAN, 0U);
+#endif
+    EXPECT_EQ(vulkanFlags & SDL_WINDOW_METAL, 0U);
+
+    const std::uint64_t metalFlags = BuildSdlWindowFlags(metalDesc);
+#if defined(SDL_PLATFORM_MACOS)
+    EXPECT_NE(metalFlags & SDL_WINDOW_METAL, 0U);
+#else
+    EXPECT_EQ(metalFlags & SDL_WINDOW_METAL, 0U);
+#endif
+    EXPECT_EQ(metalFlags & SDL_WINDOW_VULKAN, 0U);
 }
 
 TEST(WindowBackendFlagTests, IdentifiesBackendReservedPositionEncodings)
@@ -65,7 +98,7 @@ TEST(WindowBackendFlagTests, ClassifiesApprovedNativeWindowDrivers)
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("wayland"),
               BackendNativeWindowDriver::Wayland);
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("cocoa"),
-              BackendNativeWindowDriver::Cocoa);
+              BackendNativeWindowDriver::Unsupported);
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver("dummy"),
               BackendNativeWindowDriver::Unsupported);
     EXPECT_EQ(pond::platform::detail::GetNativeWindowDriver(""),
