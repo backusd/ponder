@@ -1,0 +1,1000 @@
+# UI Rectangle Rendering Foundation Roadmap
+
+Status: implementation plan for Milestone 1 of the project-owned `ponder_ui` stack.
+
+This roadmap implements the rectangle foundation described by
+[open-questions.txt](open-questions.txt) and the first entry in
+[milestones.txt](milestones.txt). The visible result is intentionally small, but the path is the
+same durable boundary intended for later retained UI:
+
+`temporary rectangle facade -> UI paint list -> UI paint compiler -> generic 2D draw packet ->`
+`render-owned GPU consumer -> active render frame`
+
+The resolved answers in `open-questions.txt` are binding inputs. UI-000 first verifies that the
+renderer foundation is genuinely closed; it must not duplicate renderer fixes that already exist
+or hide unfinished renderer work inside `ponder_ui`. The 2026-07-14 source audit reconfirmed the
+release-active lifetime checks, owner-local dispatch, exact-queue locking, strict opaque SDR sRGB
+selection, real presentation completion, transactional recovery, distinct stale/surface/device-loss
+states, and ordered private post-clear seam. The canonical clear-window example is also
+implemented. UI-000 nevertheless remains open because REND-018 through REND-020 lack required
+validation-clean and complete closeout evidence. This is a verification/provisioning gap, not a
+missing renderer architecture or a reason to add a UI workaround.
+
+The renderer-wide shader toolchain, real generic 2D consumer, copied metrics rendezvous, and
+rectangle GPU path remain work for this roadmap.
+
+Every production task adds the focused tests needed to protect its behavior. Ordinary tasks perform
+only narrow builds, tests, validation, and formatting. UI-016 through UI-021 own the comprehensive
+CPU, fake-backend, package, static-analysis, and live Windows/Vulkan gates.
+
+## Guiding Decisions
+
+- Dear ImGui is not part of the architecture, dependency graph, build, tests, examples, or dormant
+  compatibility plan.
+- `ponder_ui` is the future home of a durable retained-mode scientific desktop UI. This milestone
+  defines only its rectangle paint foundation and does not freeze the retained API.
+- UI owns logical paint semantics, coordinate and color rules, clipping, and CPU tessellation.
+  Render owns generic packet validation, shaders, pipelines, GPU memory, recording, submission,
+  presentation, and completion-based retirement.
+- Render never depends on UI. The generic `Draw2DPacket` contract is producer-neutral,
+  project-private, non-installed, and independently testable by render.
+- UI core remains buildable, testable, installable, and consumable when render is disabled. The
+  temporary GPU join lives in a separate render-enabled integration component.
+- No Vulkan, Metal, SDL, native-window, allocator, descriptor, render-pass, command-buffer, raw
+  pointer, callback, or borrowed producer storage crosses the UI/render boundary.
+- The paint list contains closed `FillRectangle`, `PushClipRectangle`, and `PopClip` operations in
+  painter order. It is owning, immutable after sealing, target-independent, and reusable.
+- Geometry is authored in logical units with top-left origin, positive X to the right, and positive
+  Y down. Compilation uses exact independent logical-to-pixel extent ratios and preserves
+  fractional coordinates.
+- Rectangles and clips use finite half-open bounds. Reversed bounds are invalid; zero-area and
+  fully transparent fills are successful no-ops after validation.
+- Authoring color is bounded sRGB straight alpha. UI converts it to higher-precision linear
+  premultiplied color; the first packet stores packed linear-premultiplied RGBA8.
+- The packet owns framebuffer-pixel vertices, 32-bit indices, ordered draw records, integer
+  scissors, exact pixel extent, and a schema/shader fingerprint. It has no texture, descriptor,
+  material, target, native handle, or speculative extension fields.
+- One move-only `Draw2DLayer` belongs to one render device and serves compatible targets
+  sequentially on the render thread. CPU paint recording and compilation may run elsewhere through
+  exclusively owned instances.
+- One sealed 2D packet may be recorded after `RenderFrame::Clear()` and before
+  `FinishAndPresent()`. It shares the existing render pass, command buffer, submission, and
+  presentation path; a second packet is rejected in this milestone.
+- All fallible pipeline, validation, allocation, and upload preflight completes before the first 2D
+  GPU command. Recoverable failure leaves a clear-only frame that can be finished or abandoned.
+- Shader source and semantics are render-owned and portable. Compilation, validation, reflection,
+  embedding, and fingerprinting occur offline into the build tree with pinned tools.
+- The first Vulkan path stays on the accepted Vulkan 1.2/classic render-pass/sample-count-one
+  contract. It uses dynamic viewport/scissor, no depth or culling, and premultiplied-alpha
+  blending.
+- Upload memory is persistently mapped, bounded, completion-owned, and isolated by target and frame
+  slot. Ordinary rendering, resize, and minimization do not use device-wide idle.
+- The temporary API is explicitly experimental, move-only, and replaceable. It reports
+  `Recorded`, `SkippedSuspended`, or `SkippedEmpty`; submission and presentation remain
+  `FinishAndPresent()` responsibilities.
+- All milestone testing is Windows-only, per the explicit `UIR-TEST-29` answer. Backend-neutral
+  contracts remain portable by design, but no non-Windows compile or runtime support claim follows
+  from this milestone.
+- Completion requires deterministic, injected-failure, shader, dependency, package, structural
+  steady-state, and validation-clean live evidence. An example or screenshot is not an acceptance
+  test.
+
+## Scope Exclusions
+
+This roadmap does not implement the retained element tree, stable widget construction API, styles,
+themes, layout, text, fonts, images, input, hit testing, focus, controls, scrolling, docking,
+accessibility, animation, public offscreen targets, screenshot/readback APIs, a render graph,
+arbitrary application shaders, or a general GPU command encoder. It does not add Metal or another
+runtime backend.
+
+The first packet has no textures, samplers, descriptors, paths, borders, rounded corners,
+gradients, shadows, transforms, non-rectangular clipping, multisampling, or antialiasing. It is not
+a public canvas. Deliberate extension points and reconsideration triggers are recorded in
+[future.txt](future.txt).
+
+## Milestones
+
+| Milestone | Tasks | Result |
+| --- | --- | --- |
+| Prerequisites and cleanup | UI-000 through UI-002 | Renderer gate, no ImGui, recorded architecture |
+| Build and tool foundation | UI-003 through UI-005 | Target topology, shader tooling, core values |
+| CPU paint path | UI-006 through UI-008 | Sealed paint lists, generic packets, deterministic compiler |
+| Render integration | UI-009 through UI-014 | Metrics, frame stage, shaders, pipeline, uploads, recording |
+| Temporary join | UI-015 | Experimental end-to-end rectangle facade |
+| Comprehensive verification | UI-016 through UI-018 | CPU, backend, package, and dependency evidence |
+| Workbench and closure | UI-019 through UI-022 | Example, static analysis, live proof, final audit |
+
+## Verification Cadence
+
+Use one configured supported Windows/MSVC Debug developer tree for ordinary implementation tasks.
+Reconfigure only when CMake inputs, dependency wiring, generated-file rules, or source lists change.
+Tests accompany the production behavior they protect, but intermediate verification stays focused:
+
+- Format only handwritten C/C++ files touched by the task. Do not perform repository-wide format
+  cleanup.
+- Build only the directly affected production, header, and focused test targets.
+- Run only the exact relevant test executable or named GoogleTest filter. When CTest labels are
+  used, pass `--no-tests=error`.
+- A changed public header gets a PCH-free self-containment translation unit and focused header build
+  in the same task.
+- A changed shader contract runs its focused generation, validation, reflection, fingerprint, and
+  stale-artifact checks.
+- A private Vulkan task uses deterministic fake-dispatch or fake-allocator tests. Run the live WSI
+  suite only when the task explicitly requires live behavior.
+- Documentation-only tasks run link/terminology searches and `git diff --check`; they do not build
+  unless commands, generated contracts, or CMake behavior changed.
+- Do not run an all-target build, full CTest suite, Debug/Release matrix, install matrix,
+  subsystem-wide clang-tidy, or comprehensive live validation during an ordinary intermediate
+  task. UI-016 through UI-021 own those gates.
+
+If a comprehensive gate finds a defect, make the smallest in-scope repair and rerun the focused
+test first, then rerun the complete gate. Do not use a late gate to postpone obvious focused tests
+from the task that introduced the behavior.
+
+## Task List
+
+TASK UI-000: Verify The Renderer Prerequisite Gate
+-------------------------------------------------
+
+Status: blocked on REND-020 as of 2026-07-14.
+
+Audit the renderer immediately before UI implementation and prove that the existing device,
+target, frame, presentation, and example foundation is safe to extend. This task is a gate, not
+permission to duplicate completed renderer work in UI.
+
+Audit result:
+
+| Prerequisite | Disposition | Evidence or owner |
+| --- | --- | --- |
+| Release-active parent/child lifetime and destruction-thread enforcement | Implemented and evidenced | Deterministic public-lifecycle and subprocess death tests. |
+| Owner-local Volk dispatch, exact-queue locking, and VMA owner dispatch | Implemented and evidenced | Private owner tables plus deterministic multi-owner and queue-synchronization tests. |
+| Strict opaque SDR sRGB selection, real presentation completion, transactional recreation, and distinct stale/surface/device-loss states | Implemented and evidenced | Fake-dispatch selection, retirement, rollback, recovery, and loss-state matrices. |
+| Acquire, clear, private post-clear stage, finish, submit, and present ordering | Implemented and evidenced | The deterministic frame-ordering test observes each stage exactly once in order. |
+| Public contract, structured diagnostics, and exhaustive injected failure handling | Implemented and evidenced | Public/value tests, public lifecycle injection, rollback matrices, and clean-report assertions. |
+| Canonical clear-window example | Implemented and build-smoke evidenced by REND-019 | A validation-clean interactive acceptance run remains owned by REND-019/REND-020. |
+| Deterministic matrix, installed consumer, and default live scenarios | Implemented and evidenced | Re-run on 2026-07-14: 147/147 deterministic, 1/1 install consumer, and 3/3 default live. |
+| Required Standard and strongest-supported validation runs | Blocked in REND-018/REND-020 | All three required Standard scenarios fail explicitly because `VK_LAYER_KHRONOS_validation` is not installed; they do not skip. |
+| Clean Debug/Release render-on/off, Clang-cl, formatting/static analysis, and repeated manual closeout evidence | Still owned by REND-020 | No UI-local workaround or substitute evidence is accepted. |
+| Copied metrics rendezvous and active-frame metrics | Intentionally owned by UI-009 | This is the next narrow renderer/platform contract extension, not a UI-000 blocker. |
+| Generic owning 2D packets and shader/pipeline/upload integration | Intentionally owned by UI-010 and later tasks | These remain project-private rendering facilities rather than a public GPU API. |
+
+No renderer correctness or public-API defect was found that should be patched under `libs/ui`.
+However, the required validation and closeout evidence above prevents this gate from completing, so
+UI-001 must not begin until REND-020 is closed and the status is re-audited.
+
+Work:
+
+- Compare current source, tests, `libs/render/docs/roadmap.txt`, and
+  `libs/render/docs/Verification.md` against the `UIR-SCOPE-11` prerequisites.
+- Revalidate release-active parent/child and destruction-thread enforcement, owner-local Volk
+  dispatch, exact-queue locking, strict opaque SDR sRGB negotiation, real presentation completion,
+  transactional recreation, and distinct stale/surface/device-loss states.
+- Prove the acquire, clear, private post-clear stage, finish, submit, and present ordering with the
+  existing deterministic renderer tests.
+- Audit the remaining renderer public-contract, failure-injection, live-validation, package, and
+  diagnostic findings rather than assuming the nine resolved correctness blockers closed the
+  milestone.
+- Require the independent canonical clear-window example and the REND-020 closeout gate to be
+  accepted before marking UI-000 complete or beginning UI-001.
+- Classify every item as implemented and evidenced, still owned by a specific REND task, or
+  intentionally owned by this roadmap. The latter category is limited to metrics rendezvous,
+  generic 2D packets, shader/pipeline/upload work, and their UI integration.
+- If a renderer-owned requirement is missing, stop this task and complete or split the owning REND
+  task. Do not add a private workaround under `libs/ui`.
+
+Done when:
+
+- The renderer roadmap and implementation agree on the status of every prerequisite, including
+  REND-019 and REND-020.
+- Focused renderer tests revalidate the already implemented invariants without reimplementing them.
+- No unresolved renderer lifetime, frame, presentation, public-contract, install, or live-gate
+  defect is silently carried into UI-001.
+- The only new render capabilities expected from later UI tasks are explicitly listed above.
+
+TASK UI-001: Remove Dear ImGui Completely
+-----------------------------------------
+
+Status: completed on 2026-07-14 by explicit user direction while UI-000 remains blocked on
+REND-020.
+
+Implementation evidence:
+
+- Removed the active third-party target construction, dependency requirement, `.gitmodules` entry,`r`n  and checkout.
+- Added `ponder_removed_ui_dependency_absence_check` to scan configured target properties and`r`n  active source/config files while ignoring design-document exclusion statements.
+- Verified clean configure, full Debug build, focused UI tests, source/config scans, clean`r`n  build-tree scans, and installed package/export scans through the Visual Studio Developer`r`n  Command Prompt.
+
+Remove the obsolete third-party UI path before creating its replacement so no compatibility target
+or accidental dependency shapes the new architecture.
+
+Work:
+
+- Remove Dear ImGui target construction, unconditional dependency checks, include propagation,
+  link interfaces, cache variables, generated package references, and allowed-target entries.
+- Remove its `.gitmodules` entry and checkout, backend adapters, compatibility sources, flags,
+  examples, tests, and dormant stubs. Version control remains the history.
+- Remove dependency-only license and provenance notices while preserving notices for dependencies
+  still used by the repository.
+- Reconcile active project-tree, bootstrap, platform, render, and UI documentation. Keep only
+  intentional architectural statements that Dear ImGui is excluded.
+- Add a deterministic dependency-absence check that scans configured targets, exports, include
+  paths, link interfaces, and source references without rejecting the explicit negative statements
+  in design documentation.
+- Add no replacement `PONDER_*_IMGUI` option or compatibility switch.
+
+Done when:
+
+- A clean configure does not inspect or require `third_party/imgui`.
+- No source, target, package, installed export, adapter, test, option, or transitive include/link
+  path refers to Dear ImGui.
+- The focused configuration and dependency-absence checks pass.
+- License, provenance, and active architecture documentation describe only dependencies that exist.
+
+TASK UI-002: Record The UI Rendering Architecture
+-------------------------------------------------
+
+Record the accepted ownership and dependency boundary before implementation names and private
+headers become difficult to change.
+
+Work:
+
+- Add an ADR explaining project-owned semantic paint data and tessellation, the producer-neutral
+  render packet boundary, dynamic indexed geometry, and removal of third-party UI integration.
+- Update UI and render boundary/Codex documentation with the exact dependency direction, owner of
+  every lowering stage, forbidden boundary data, lifetime, threading, and diagnostic vocabulary.
+- Document why the generic packet contract is project-private and non-installed, and why the
+  temporary facade is not the future retained API.
+- Establish design-document locations for the paint/compiler contract and the private packet
+  contract without copying the full questionnaire.
+- Link `open-questions.txt`, this roadmap, `milestones.txt`, and `future.txt` as decision
+  provenance, implementation order, long-range sequence, and deliberate deferral ledger.
+- Update inbound links and delete or rewrite contradictory active UI planning material.
+
+Done when:
+
+- The ADR and boundary documents agree on UI, render, platform, and application ownership.
+- No active document describes Dear ImGui integration, a public generic canvas, or triangles as the
+  only UI representation.
+- Every moved-document link resolves and one authoritative roadmap exists for this milestone.
+- Documentation-only link, terminology, and whitespace checks pass.
+
+TASK UI-003: Establish UI And Private 2D Build Topology
+------------------------------------------------------
+
+Create explicit CMake boundaries for CPU-only UI, render-owned generic 2D code, and the temporary
+join before adding behavior.
+
+Work:
+
+- Keep `ponder_ui` and `ponder::ui` as the render-independent CPU library.
+- Add a clearly named render-owned private interface target for the non-installed 2D packet header;
+  expose only that deliberate include boundary to render, UI integration, and render tests.
+- Add a separate UI-render integration implementation target that depends on UI and render without
+  introducing a render-to-UI edge.
+- Build the generic 2D layer whenever render is enabled, independent of UI and the example.
+- Gate the integration target and workbench on existing render/example options where possible.
+  Add a new `PONDER_*` capability option only if no existing option represents the behavior.
+- Create focused UI header/unit, render packet/backend, integration, install-consumer, and live-test
+  target topology. Tests remain enabled by default.
+- Preserve static-library link requirements explicitly, warnings-as-errors, C++23, PCH-free public
+  header checks, and normal project folder/alias conventions.
+- Ensure `PONDER_BUILD_RENDER=OFF` does not probe Vulkan or shader tools and still configures,
+  builds, tests, installs, and consumes UI core without fake render stubs.
+
+Done when:
+
+- UI core builds and its focused header/unit tests run with render disabled.
+- Render and its packet-test target build without linking UI.
+- The integration target is the sole UI-to-render implementation edge, and render has no UI edge.
+- The private packet header is reachable only through its internal target and is absent from the
+  install/export surface.
+- Only the new topology's smallest configure/build/header smoke checks have been run; exhaustive
+  package combinations remain assigned to UI-018.
+
+TASK UI-004: Establish The Renderer Shader Toolchain
+---------------------------------------------------
+
+Select and implement one repository-wide offline shader compiler, validator, reflection, and
+embedding strategy before rectangle shaders or 3D shaders make incompatible local choices.
+
+Work:
+
+- Evaluate the accepted portable renderer-owned source approaches against SPIR-V generation,
+  validation, reflection, deterministic debug information, and a credible future Metal artifact
+  path. This prototype does not add a Metal runtime backend.
+- Record the selected source language and toolchain in a focused renderer ADR or dependency
+  decision, including rejected alternatives and portability constraints.
+- Pin compiler, SPIR-V validator, reflection mechanism, target environment, command-line options,
+  versions, acquisition policy, and license/provenance data.
+- Add reusable CMake helpers that discover tools only when render shaders are built or verified.
+- Generate SPIR-V, embedded C++ data, reflection metadata, and source/tool/options/schema
+  fingerprints into the build tree with explicit dependencies and byproducts.
+- Add one tiny sentinel shader that proves compilation, validation, reflection, embedding, and
+  stale-artifact detection without defining the rectangle interface yet.
+- Keep generated blobs isolated from normal PCH/unity/warning policy without weakening warnings for
+  handwritten project code. Do not compile shaders at runtime or check opaque generated binaries
+  into the source tree.
+
+Done when:
+
+- The recorded toolchain can express the accepted Vulkan shader contract without making source
+  semantics Vulkan-specific and has a documented future Metal translation path.
+- A clean shader-enabled build reproducibly generates, validates, reflects, embeds, and fingerprints
+  the sentinel artifact in the build tree.
+- Source, tool version, options, target, or schema changes invalidate the artifact; an unchanged
+  build does not regenerate it.
+- UI-core/render-disabled configure succeeds without discovering shader tools.
+- Only the sentinel shader target and focused staleness/interface tests have been run.
+
+TASK UI-005: Define Foundation Values, Errors, And Limits
+--------------------------------------------------------
+
+Define the lightweight project-owned values used by paint recording, compilation, diagnostics, and
+the temporary facade before private containers or GPU code depend on their representation.
+
+Work:
+
+- Reserve the UI error-code range and add stable errors for invalid paint values, unbalanced paint
+  state, metrics mismatch, compilation failure, and hard-limit exhaustion.
+- Keep producer-neutral packet, pipeline, upload, frame-state, and device failures in the render
+  error domain. Preserve structured native context only in render diagnostics.
+- Add strong logical point, size, and half-open rectangle types with explicit finite validation.
+  Distinguish logical values from framebuffer pixels in names and types.
+- Add immutable copied UI target metrics containing target identity, logical extent, pixel extent,
+  independent exact X/Y ratios, and the accepted metrics/target revision. Do not borrow a window or
+  substitute nominal display scale for the observed extent ratio.
+- Add explicitly tagged bounded sRGB straight-alpha authoring color and finite higher-precision
+  linear-premultiplied semantic color.
+- Define checked hard limits for command count, command payload bytes, clip depth, compiler scratch,
+  vertices, indices, draw records, packet bytes, and upload bytes. Keep backend allocation policy
+  private.
+- Define the experimental `Recorded`, `SkippedSuspended`, and `SkippedEmpty` outcomes, plus
+  producer-neutral counters and high-water diagnostics. Do not add callbacks or a cross-frame
+  receipt.
+- Add independent reference vectors for sRGB transfer, premultiplication, RGBA8 packing/decoding,
+  premultiplied blending, and final sRGB encoding.
+- Give every public value header a PCH-free self-containment translation unit and direct value
+  validation tests.
+
+Done when:
+
+- Invalid, non-finite, reversed, out-of-range, zero-area, and transparent cases have the specified
+  typed behavior without undefined arithmetic or exceptions.
+- Color reference tests do not call the production conversion implementation to derive expected
+  values.
+- Error, limit, metrics, color, and outcome types expose no backend or third-party declarations.
+- Only the UI header/value targets and focused value tests have been built and run.
+
+TASK UI-006: Implement The Paint Recorder And Sealed Paint List
+--------------------------------------------------------------
+
+Make an owning semantic paint list the canonical CPU input even though the temporary facade emits
+only one rectangle.
+
+Work:
+
+- Implement private, type-safe tagged `FillRectangle`, `PushClipRectangle`, and `PopClip`
+  commands; do not use a byte stream, raw union, public variant, or virtual hierarchy.
+- Store commands and payloads in deterministic owned contiguous storage with stable command-index
+  diagnostics and insertion order.
+- Model explicit open and sealed states. Mutation after sealing fails, and sealing is
+  transactional: failure leaves the recorder valid and reusable.
+- Begin with an unpoppable unbounded clip sentinel, reject clip underflow immediately, and reject
+  an unbalanced stack at finalization. The compiler will inject the target root clip.
+- Validate paint values at the recording boundary, while leaving target-dependent clipping and
+  logical-to-pixel work to compilation.
+- Enforce checked command, payload, and clip-depth limits before growth.
+- Support move-only ownership, capacity-preserving reset, and reuse after successful compilation or
+  failed compilation. Add no global recorder or allocator state.
+- Permit exclusively owned recorder/list/compiler instances to move across threads without
+  promising concurrent mutation.
+
+Done when:
+
+- Focused tests cover ordered mixed commands, invalid fills, zero/transparent fills, nested clips,
+  underflow, final imbalance, mutation after seal, every limit boundary, move behavior, reset, and
+  deterministic inspection.
+- A sealed list is immutable, owning, target-independent, device-independent, and reusable after
+  compiler failure.
+- No retained-element identity, widget semantics, serialization contract, or public ABI promise is
+  introduced.
+- Only the UI paint-list target and its focused recorder tests have been built and run.
+
+TASK UI-007: Define And Validate The Generic Draw2D Packet
+---------------------------------------------------------
+
+Create the narrow producer-neutral contract that render can validate and test without linking UI.
+
+Work:
+
+- Define a standard-layout vertex containing two framebuffer-pixel floats and one packed
+  linear-premultiplied RGBA8 color.
+- Define owning 32-bit index storage and ordered draw records containing checked index range, base
+  vertex if required, and a clamped integer half-open scissor. Add no UV, texture, sampler,
+  descriptor, material, target, or dummy white-image field.
+- Store the exact packet pixel extent and compile-time schema/shader-interface fingerprint.
+- Provide a move-only, exclusive, reusable open/sealed builder. The sealed packet exposes only
+  immutable synchronous borrows; render never retains those borrows after the record call.
+- Support many draw records sharing vertex/index ranges while preserving their total order.
+- Validate extent, counts, byte-size arithmetic, vertex finiteness, index ranges, draw ranges,
+  scissors, fingerprints, and every configured budget before any command is recorded.
+- Reject empty or malformed ranges consistently, and define one canonical valid empty packet.
+- Add a render-owned test factory or builder usage that constructs valid and hostile packets
+  without including or linking UI.
+- Keep the packet header behind the private CMake interface from UI-003 and out of installation,
+  serialization, and runtime schema negotiation.
+
+Done when:
+
+- Render-only tests cover every field invariant, arithmetic overflow, fingerprint mismatch,
+  malformed index/draw/scissor range, empty packet, reset, move, and sealed-state rule.
+- Compile-time assertions lock the intended vertex representation without exposing a public ABI.
+- Render validates the entire packet before consulting Vulkan or an allocator.
+- Only the private packet/header and focused render packet tests have been built and run.
+
+TASK UI-008: Implement The Deterministic UI Paint Compiler
+---------------------------------------------------------
+
+Compile immutable semantic paint into a sealed packet through a pure CPU transaction that is
+independent of Vulkan and native windows.
+
+Work:
+
+- Accept only a sealed paint list, immutable matched metrics, and an exclusive reusable packet
+  builder/compiler workspace.
+- Derive independent X/Y scale from logical and exact framebuffer extents. Reject invalid or zero
+  denominators before arithmetic and keep generated positions as top-left framebuffer-pixel
+  floats; add no implicit snapping or half-pixel offset.
+- Inject a fractional root-target clip, intersect nested fractional clips exactly, clip geometry
+  to the current result, and derive conservative integer scissors with floor/ceil and clamping.
+- Emit four vertices and six 32-bit indices per visible rectangle with a documented/tested winding,
+  triangle-list topology, and painter order.
+- Convert straight sRGB authoring color to linear premultiplied color, then quantize to the accepted
+  packed packet representation with explicit rounding.
+- Elide validated zero-area, fully clipped, and fully transparent fills without disturbing command
+  indices or later order.
+- Merge only adjacent draw records with identical effective state and scissor when their contiguous
+  ranges can be represented safely. Never reorder geometry for batching.
+- Check all command, scratch, vertex, index, draw, and byte budgets before growth or writes.
+- Make compilation transactional. On failure, the input list and last sealed packet remain valid;
+  the exclusive workspace can be reset and reused.
+- Expose deterministic private inspection sufficient to diagnose command index, clip depth, bounds,
+  output counts, and rejected limit without preserving internal container layout.
+
+Done when:
+
+- Hand-authored tests cover identity and asymmetric scale, fractional coordinates, root/nested
+  clips, empty intersections, off-target geometry, scissor rounding/clamping, winding, ordering,
+  color vectors, elision, merging, overflow, and every limit boundary.
+- Repeated compilation of identical input produces identical semantic packet content.
+- Compilation uses no GPU, platform window, render target, backend type, or global mutable state.
+- Only the UI compiler and focused packet-validation targets and their exact tests have run; broad
+  property/fuzz coverage remains assigned to UI-016.
+
+TASK UI-009: Complete The Platform-To-Frame Metrics Rendezvous
+-------------------------------------------------------------
+
+Carry one authoritative copied metrics snapshot from the platform owner thread to the acquired
+frame so UI cannot combine geometry with stale swapchain state.
+
+Work:
+
+- Extend the project-owned platform window-state snapshot with logical extent and the metrics or
+  presentation-environment revision needed to distinguish scale/display changes at equal pixel
+  size.
+- Capture metrics on the platform owner thread and transfer them through the same copied
+  target-preparation/update rendezvous as resize. Never retain a `Window` borrow.
+- Define revision ownership and monotonicity, including an immediate prepared-surface transfer with
+  the same valid snapshot, rejection of older/conflicting snapshots, and acceptance of a genuinely
+  newer coalesced snapshot.
+- Replace ambiguous minimized/restored combinations with the accepted faithful state needed by the
+  rendezvous where renderer closeout has not already done so.
+- Expose from an active frame only the project-owned target identity, exact pixel extent, and
+  accepted metrics/target revision required by the private UI integration.
+- Keep nominal display scale available for later style/text policy but separate from exact geometry
+  lowering ratios.
+- Update resize, display-scale, suspension, restoration, recreation, and surface-recovery paths
+  transactionally.
+
+Done when:
+
+- Focused platform/render tests cover same-snapshot handoff, newer coalesced updates,
+  stale/conflicting revisions, equal-pixel scale changes, resize, suspension, recreation, and
+  recovery.
+- A frame and copied UI metrics can be matched by closed project values without a window/native
+  borrow or pointer identity.
+- Wrong target, revision, or extent is rejected before compilation or GPU work.
+- Only the affected platform/render value, header, and focused handoff tests have been run.
+
+TASK UI-010: Promote The Intermediate Seam To A Generic 2D Stage
+---------------------------------------------------------------
+
+Replace the test-only post-clear marker with one real producer-neutral packet-recording phase while
+preserving the renderer's acquired-frame ownership and single submission path.
+
+Work:
+
+- Define a move-only device-scoped `Draw2DLayer` created from one `RenderDevice`. It serves
+  compatible targets sequentially, remains render-thread-affine and non-concurrent, and cannot
+  outlive its device.
+- Select the destination only through an explicit active `RenderFrame`; validate device, target
+  state, packet extent, and frame phase without putting target identity in the packet.
+- Require clear before 2D recording and recording before finish. Reject draw-before-clear,
+  draw-after-finish, wrong device/thread, and a second packet in the same frame.
+- Preserve a valid clear-only frame and allow zero packets. Suspended or recreation-pending frames
+  skip without consuming the one-stage allowance.
+- Record inside the clear-opened render pass and existing command buffer; create no separate pass,
+  command buffer, submit, nested frame, or present.
+- Represent the order as an internal composition phase that can later grow into explicit content
+  and overlay stages without exposing the historical term `intermediate`.
+- Require every stage to bind all state it consumes. Expose no callback, native encoder, render
+  pass, command buffer, or arbitrary GPU-state escape hatch.
+- Add producer-neutral diagnostics for packet, stage, target, and frame-state failures.
+
+Done when:
+
+- Deterministic state tests prove acquire, clear, generic 2D stage, finish, submit, and present
+  ordering, plus every invalid transition and clear-only recovery.
+- Two targets can use the same draw-layer owner sequentially without ambient target state.
+- Render still builds and tests the stage contract without UI.
+- Only the affected frame/Draw2D targets and focused state/order tests have been built and run.
+
+TASK UI-011: Add Rectangle Shaders And Generated Interfaces
+-----------------------------------------------------------
+
+Add the smallest render-owned shader pair that implements the accepted packet semantics through the
+offline toolchain rather than introducing UI-specific GPU behavior.
+
+Work:
+
+- Add portable renderer-owned vertex and fragment shader source under the shared shader policy from
+  UI-004.
+- Map top-left framebuffer-pixel positions to backend clip space using the exact packet/frame extent
+  supplied through a small explicitly laid-out constant block. Preserve positive-Y-down UI
+  semantics without changing packet geometry.
+- Pass packed linear-premultiplied color through the vertex interface and return it from the
+  fragment shader for blending into the strict opaque SDR sRGB attachment.
+- Use no descriptors, textures, samplers, runtime files, UI conditionals, target handles, or
+  runtime compilation.
+- Generate validated SPIR-V, reflection metadata, embedded C++ data, source/tool/options
+  fingerprints, and the shared packet/schema fingerprint through UI-004's build rules.
+- Add generated/static interface assertions for entry points, target environment, vertex
+  locations/formats/offsets, constant layout/range/stages, descriptor absence, and expected outputs.
+- Add stale-artifact tests that independently modify each source/tool/options/schema input in a
+  scratch build without writing generated files into the source tree.
+
+Done when:
+
+- The focused shader target produces validation-clean, reflected, embedded artifacts from a clean
+  build and detects every tested stale-input change.
+- Reflected interfaces exactly match the private packet vertex and constant schemas.
+- The shader source is producer-neutral and contains no UI, Vulkan-handle, or descriptor-resource
+  concept.
+- Only the rectangle shader generation/interface/staleness targets have been built and run.
+
+TASK UI-012: Implement The Device-Scoped Vulkan 2D Pipeline
+----------------------------------------------------------
+
+Create reusable device-owned Vulkan pipeline state for the fixed generic 2D contract with
+transactional creation and deterministic fake-dispatch evidence.
+
+Work:
+
+- Extend owner-local device dispatch and fake dispatch with shader-module, pipeline-layout,
+  graphics-pipeline, VMA buffer/mapping/flush, and every bind/state/push/draw operation required by
+  the full path. Capture void command calls in an ordered trace.
+- Add RAII owners for shader modules, pipeline layout, and graphics pipelines with checked
+  parent/child lifetime, owner-thread destruction, and rollback after every fallible prefix.
+- Use a descriptor-free pipeline layout with only the reflected extent constants.
+- Configure triangle lists, no primitive restart, no culling, the tested front-face convention, no
+  depth/stencil, sample count one, dynamic viewport/scissor, and
+  `One / OneMinusSrcAlpha` blending for color and alpha.
+- Key pipeline compatibility by semantic attachment format/color contract, sample count,
+  render-pass/subpass compatibility signature, shader/schema fingerprint, and fixed state. Do not
+  key public behavior by raw native-handle identity.
+- Create lazily or prewarm through a fallible preflight operation. Publish a pipeline only after
+  all dependent objects succeed.
+- Reuse a compatible pipeline across extent-only resize; build an incompatible successor
+  transactionally without invalidating the prior usable entry.
+- Add generic debug labels and creation diagnostics. Keep native values confined to structured
+  render context.
+- Do not add an on-disk Vulkan pipeline cache or expose cache/allocation tuning.
+
+Done when:
+
+- Focused fake-dispatch tests cover exact create/destroy order, every partial-creation failure,
+  compatibility-key equality/inequality, cache hit, extent-only reuse, incompatible replacement,
+  move, wrong-thread destruction, and shutdown.
+- Reflection/schema mismatch fails before pipeline creation.
+- The pipeline binds every fixed and dynamic state required by the packet contract and relies on no
+  prior producer's bindings.
+- Only the pipeline/dispatch targets and their focused deterministic tests have been built and run.
+
+TASK UI-013: Implement Completion-Owned Upload Arenas
+-----------------------------------------------------
+
+Add bounded renderer-owned upload storage whose lifetime follows the exact target frame slot and
+GPU completion rather than producer memory or frame count guesses.
+
+Work:
+
+- Use VMA to allocate host-visible persistently mapped vertex and index streams for each target
+  completion slot. Prefer coherent memory, but support non-coherent memory correctly.
+- Keep allocation, mapped pointer, capacity, generation, reservation, and retirement ownership
+  inside render. Expose no Vulkan/VMA handle or producer allocation knob.
+- Compute alignment, offsets, sizes, and whole-packet capacity with checked arithmetic. One aligned
+  allocation split into vertex/index regions is acceptable when it keeps ownership simplest.
+- Copy a sealed packet synchronously into an exclusive reservation; never retain packet spans or
+  ask UI to write directly into mapped renderer memory.
+- Expand non-coherent flush ranges to atom boundaries, clamp them to the allocation, and flush every
+  written range before command recording.
+- Grow geometrically within hard byte limits by constructing a complete successor first. Retire old
+  generations only after every completion that can reference them has finished.
+- Release unsubmitted reservations immediately on abandonment or pre-submit failure. Retain
+  submitted generations across presentation failure until the submission fence completes.
+- Let targets and frame slots progress independently, including out-of-order completion. Use no
+  ordinary device-wide idle or overwrite of incomplete ranges.
+- Track current/reserved/uploaded bytes, growth count, allocation count, generations, flushes,
+  retirements, and high-water marks without introducing steady-state avoidable allocation.
+
+Done when:
+
+- Focused fake-VMA tests cover coherent/non-coherent memory, alignment, atom-range expansion,
+  allocation/map/flush failures, exact fit, every overflow/limit, growth rollback, old-generation
+  retention, out-of-order completion, abandonment, and shutdown.
+- Two targets and several incomplete slots cannot alias or overwrite one another.
+- After warm-up, an unchanged packet performs no allocation, mapping, growth, or avoidable host
+  allocation.
+- Only the upload/allocator targets and focused deterministic tests have been built and run.
+
+TASK UI-014: Record Draw2D Packets Transactionally
+-------------------------------------------------
+
+Connect the validated packet, pipeline, upload arena, and acquired frame so one generic 2D stage is
+recorded through the existing clear/submit/present lifecycle.
+
+Work:
+
+- Reject wrong device/thread/frame phase, stale or suspended target state, extent mismatch,
+  duplicate stage use, invalid fingerprint, malformed packet, and limit overflow before GPU
+  recording.
+- Complete packet validation, pipeline acquisition, upload-capacity growth, reservation, copy,
+  non-coherent flush, and all other fallible preflight before the first 2D Vulkan command.
+- Bind the compatible pipeline, viewport, vertex/index streams, extent constants, and each
+  draw-record scissor; issue indexed draws strictly in packet order.
+- Capture and test every void bind/state/push/draw operation through owner-local fake dispatch.
+- Commit the frame's one 2D-stage marker only after recording succeeds. A recoverable preflight
+  failure leaves the clear-opened frame valid for clear-only finish or abandonment.
+- If command recording becomes unusable, follow the existing poisoned-frame/generation policy
+  rather than pretending the frame can continue.
+- Associate upload and pipeline generations with exact submission completion. Abandonment releases
+  unsubmitted work; submit failure follows renderer rollback; present failure after submission
+  retains resources until completion.
+- Skip suspension, recreation-pending, and a valid empty packet without pipeline creation, upload,
+  counter advancement, or stage consumption.
+- Preserve target-local resize/recreation behavior, compatible pipeline reuse, device-loss
+  terminality, and explicit shutdown order.
+
+Done when:
+
+- Focused render tests assert the complete post-clear command trace, draw/scissor order, exact
+  copied bytes, completion registration, and every invalid state.
+- Failure after every successful preflight prefix causes no leak, double destroy, partial 2D
+  command sequence, or invalid next-frame behavior.
+- Resize, suspension, restoration, abandonment, submit failure, present failure, device loss, and
+  two sequential targets have deterministic focused coverage.
+- Only the Draw2D/backend targets and their focused test filters have been built and run.
+
+TASK UI-015: Add The Experimental Rectangle Facade
+--------------------------------------------------
+
+Expose one intentionally temporary UI-owned join that exercises every durable layer without making
+the generic packet or GPU backend application-facing.
+
+Work:
+
+- Add an opt-in header under `pond::ui::experimental` with an explicit no-source-or-ABI-stability
+  notice.
+- Implement a move-only `RectangleRenderer` or equivalently focused context created from one
+  `RenderDevice`. It owns the `Draw2DLayer`, paint compiler, packet builder, and reusable capacity.
+- Accept one active `RenderFrame`, one matched immutable UI metrics snapshot, and one strongly typed
+  rectangle paint value. Accept no window, target lookup, native handle, command encoder, callback,
+  packet, or backend type.
+- Follow the complete semantic paint-list, compiler, sealed packet, and generic render-stage path;
+  do not special-case a Vulkan rectangle or bypass the paint list.
+- Return `Result<RectangleRecordOutcome>` with `Recorded`, `SkippedSuspended`, and `SkippedEmpty`.
+  Submission and presentation results continue to come only from `FinishAndPresent()`.
+- Validate rectangle, metrics, target/revision/extent match, device, frame, thread, limits,
+  allocation, pipeline, and device-loss cases with the accepted UI/render error ownership.
+- Perform suspended skip before target-dependent compilation and empty skip before GPU work; neither
+  consumes the frame's 2D stage.
+- Keep every temporary rectangle, metrics, renderer-owner, and packet spelling out of proposed
+  retained-tree/widget interfaces.
+- Install/export the experimental facade because the accepted install-consumer gate exercises it,
+  but never install private paint/compiler or generic packet headers.
+
+Done when:
+
+- Focused fake integration tests prove all three successful outcomes and each typed failure,
+  including wrong thread/device/frame, stale metrics, suspension, and reuse after failure.
+- A recorded rectangle travels through all six required layers and can be followed by the ordinary
+  finish/present path.
+- UI core still builds with render disabled and does not compile the facade in that configuration.
+- The focused source-tree and install-link smoke targets extract the required static archives
+  without exposing the private packet contract; the full package matrix remains UI-018.
+
+TASK UI-016: Complete CPU And Packet Verification
+-------------------------------------------------
+
+Turn the focused paint, compiler, and packet tests accumulated by earlier tasks into one
+comprehensive deterministic Windows gate.
+
+Work:
+
+- Audit every paint recorder, geometry, metrics, color, clip, compiler, packet, error, limit,
+  outcome, move, reset, and type-trait contract against the accepted questions.
+- Add table-driven adversarial cases at and around every numeric, byte, count, clip-depth, scissor,
+  extent, index, and payload boundary.
+- Add deterministic bounded property/fuzz tests for valid and invalid recorder state sequences,
+  fractional clip intersections, scale/rounding arithmetic, compiler invariants, packet
+  validation, and reset/reuse cycles.
+- Preserve and print reproducible seeds and the smallest failing input. Keep fuzz bounds suitable
+  for ordinary required tests.
+- Use hand-authored expected geometry and independent high-precision color/blend reference vectors;
+  do not approve results by round-tripping through production code.
+- Verify deterministic diagnostic projections without freezing private container layout.
+- Compile all stable and experimental public UI headers PCH-free and assert intended
+  copy/move/noexcept/standard-layout traits.
+- Run this tier without a native window, Vulkan loader, GPU, or UI-to-render live integration.
+
+Done when:
+
+- The complete Windows CPU/header/packet test executables pass with zero disabled or accidentally
+  filtered tests.
+- Every accepted PAINT, GEOM, COLOR, PACKET, and CPU-side ERR/TEST decision has direct evidence or
+  a documented reason that its evidence belongs to a later gate.
+- Property/fuzz runs are deterministic, bounded, and reproducible.
+- No test derives expected output from the code path it is intended to verify.
+
+TASK UI-017: Complete Backend, Failure, And Lifecycle Verification
+-----------------------------------------------------------------
+
+Build an exhaustive deterministic fake-Vulkan/VMA transaction gate for the GPU path before relying
+on a real driver to reveal ownership mistakes.
+
+Work:
+
+- Capture the exact successful sequence for shader/pipeline creation, upload allocation/map/flush,
+  acquire, clear, 2D state and indexed draws, finish, submit, present, completion, retirement, and
+  destruction.
+- Inject failure after every successful prefix of every fallible shader, layout, pipeline,
+  allocation, map, growth, copy, flush, frame, acquire, submit, present, recreation, retirement, and
+  destruction operation.
+- Assert stable errors and structured diagnostics, frame disposition, exact live-child/resource
+  counts, rollback, prior-state usability, terminal-state stickiness, no leaks/double destroy, and
+  safe shutdown for each case.
+- Exercise invalid packet/state calls, duplicate stage use, clear-only recovery, abandonment,
+  submit failure, present failure after submit, and successful next-frame recovery where allowed.
+- Interleave two targets with different extents, keep several frame slots incomplete, grow buffers,
+  complete out of order, resize/suspend/restore one target, change pipeline compatibility, destroy
+  one target asymmetrically, and continue the other.
+- Cover release-active lifetime and owner-thread enforcement, device loss with a reusable CPU paint
+  list, shutdown with work in flight, and move-assignment release behavior.
+- Assert structural steady state after warm-up: no shader compile, pipeline/object creation, upload
+  growth, device-wide idle, avoidable host allocation, or cross-target wait.
+- Run rectangle shader interface, descriptor-absence, and stale-artifact checks as part of this
+  complete render tier.
+
+Done when:
+
+- Every successful fake operation has a corresponding injected-failure prefix case and expected
+  transaction result.
+- Exact command traces prove painter order, scissors, state self-containment, and one submission.
+- Multi-frame, multi-target, recreation, completion, device-loss, and shutdown tests pass without
+  resource-count drift.
+- The complete deterministic render/UI-integration test labels pass on Windows with
+  `--no-tests=error` and no real Vulkan capability requirement.
+
+TASK UI-018: Complete Build, Header, Package, And Dependency Verification
+------------------------------------------------------------------------
+
+Prove the accepted static-library and optional-feature topology from clean Windows configurations,
+including cases that source-tree linking can accidentally conceal.
+
+Work:
+
+- Configure, build, test, install, and consume UI core with `PONDER_BUILD_RENDER=OFF`. Assert no
+  Vulkan or shader-tool discovery and no integration facade target.
+- Configure and build render with generic Draw2D packet/backend tests while UI integration is
+  absent; inspect the link graph to prove render does not link UI.
+- Configure and test the full UI-render integration with tests enabled by default.
+- Exercise supported MSVC Debug and Release configurations from clean build trees.
+- Build and run install-tree consumers for stable UI core and the experimental facade. Make them
+  call out-of-line core/platform/render/UI functions so every required archive must be extracted.
+- Compile every public and experimental header in a PCH-free consumer, and verify installed headers
+  do not reference private include paths.
+- Inspect configured target properties, compile commands, source/include paths, installed exports,
+  package configuration, and clean consumer link lines for dependency cycles, missing static link
+  requirements, backend leakage, and test/helper exports.
+- Run the Dear ImGui negative scan across source, configured targets, exports, packages, and
+  dependency/license metadata.
+- Add `--no-tests=error` to every label-based CTest command and serialize/isolate any nested build
+  tests that share a build directory.
+- Keep this matrix Windows-only. Record non-Windows CPU/fake/package coverage in `future.txt`
+  rather than treating `UIR-BUILD-16` as an active cross-platform gate.
+
+Done when:
+
+- All clean Windows configurations and consumers build and run in both required build modes.
+- UI core is independently useful with render disabled; render generic 2D is independently useful
+  without UI; the full integration edge is explicit and one-way.
+- Installed exports contain every required public static-link dependency and no private packet,
+  Vulkan helper, generated tool, workbench, or test target.
+- Target, compile-command, export, link-line, and Dear ImGui scans pass with durable commands.
+
+TASK UI-019: Add The Rectangle Workbench
+----------------------------------------
+
+Create the requested non-installed contributor example at `examples/ui/1-rectangle` using the same
+lifecycle and documentation conventions as `examples/platform/1-window-display-lab`.
+
+Work:
+
+- Add a normally named project target under the UI examples hierarchy with `NO_INSTALL` and the
+  established folder/output-name conventions.
+- Use only normal platform/render APIs and the experimental UI rectangle facade. Do not include
+  private paint, packet, compiler, Vulkan, SDL, or native-window headers.
+- Clear to a contrasting color and draw opaque and overlapping translucent rectangles so ordering
+  and premultiplied blending are visible.
+- Pump platform events and handle live resize, target snapshot updates, swapchain recreation,
+  minimize/zero-pixel suspension, wait-while-suspended, restore, and continued rendering.
+- Check every `Result` and typed skip outcome, report structured failures, return nonzero on error,
+  and destroy frame/target/device/bootstrap/window/runtime in the accepted order.
+- Add a bounded `--auto-close-ms` or `--smoke` mode suitable for capability-gated automation while
+  preserving an interactive default.
+- Optionally print concise extent, X/Y scale, packet/draw counts, upload bytes, pipeline/cache
+  reuse, skip reasons, validation count, and final resource counts without logging each frame.
+- Add a README covering features, controls/output, lifetime/error behavior, side effects/host
+  limits, build/run commands, bounded mode, and the temporary API warning.
+- Keep the independent renderer clear-window example intact; do not merge its support claim into
+  this workbench.
+
+Done when:
+
+- The example target alone builds and its bounded mode exits successfully on a capable local
+  Windows/Vulkan environment.
+- Manual interaction demonstrates opaque/translucent ordering, resize, minimize/wait, restore, and
+  clean shutdown through project APIs.
+- Source and README prominently state that the facade is not the future retained UI API.
+- The example is supporting evidence only and is not registered as a substitute for deterministic
+  or live acceptance tests.
+
+TASK UI-020: Run Formatting And Static-Analysis Gates
+-----------------------------------------------------
+
+Run the milestone-wide code-quality work explicitly after the implementation and example exist,
+rather than repeatedly applying expensive analysis to every intermediate task.
+
+Work:
+
+- Apply the repository clang-format policy to every handwritten C/C++ file added or changed for
+  the UI rectangle milestone and verify no formatting drift remains.
+- Run clang-tidy with the real compile database over all new UI core, UI-render integration,
+  private Draw2D contract, render 2D backend, shader-interface, and changed metrics/frame code.
+- Build the complete affected target set under supported MSVC Debug and Release with
+  warnings-as-errors.
+- Run the supported Windows Clang/clang-cl compile and analysis configuration when the repository
+  provides it; do not claim unavailable sanitizer or compiler coverage.
+- Re-run generated-shader stale/interface checks, dependency scans, public-header
+  self-containment, and `git diff --check`.
+- Fix milestone-owned findings and add focused regression tests where a finding exposes behavior.
+  Report unrelated pre-existing findings instead of formatting or refactoring unrelated code.
+- After each repair, run the smallest failing target/test first and then rerun this complete gate.
+
+Done when:
+
+- All milestone-owned handwritten C/C++ passes clang-format and the complete affected compile
+  database passes clang-tidy.
+- Debug and Release affected-target builds are warning-free under warnings-as-errors.
+- Generated artifacts, dependency boundaries, public headers, and whitespace checks remain clean.
+- The recorded command log distinguishes executed coverage from unavailable or deferred tooling.
+
+TASK UI-021: Run The Live Windows/Vulkan Validation Gate
+-------------------------------------------------------
+
+Prove the exact production path on the supported host after deterministic and package gates have
+removed ordinary logic and ownership defects.
+
+Work:
+
+- Run in a required validation-capable Windows environment using the existing SDL integration-test
+  resource lock, finite CTest timeouts, and `--no-tests=error`.
+- Create a real runtime, window, Vulkan bootstrap/device/target, experimental rectangle renderer,
+  and active frames through public project APIs.
+- Exercise contrasting clear, opaque rectangle, overlapping translucent rectangle, steady frames,
+  real resize/event coalescing, minimize with bounded event wait, restore using current copied
+  metrics, render again, and orderly shutdown.
+- Include two-target interleaving and asymmetric teardown if the renderer closeout test does not
+  already exercise the final Draw2D path under those conditions.
+- Assert zero unexpected validation warnings/errors after child resources are destroyed but before
+  the instance is destroyed; retain bounded message ID/name/context for the first failure.
+- Run required Standard validation and the strongest supported additional validation mode by
+  building and running each candidate rather than accepting configure success.
+- For a required lane, treat missing loader/layer/adapter/device/display capability as a failure.
+  An optional local lane may skip only after positively identifying the exact missing capability;
+  generic backend failure is never a skip reason.
+- Assert post-warm-up counters, upload/pipeline reuse, no ordinary device-wide idle, bounded waits,
+  target isolation, and final resource baselines.
+- Add a private production-path pixel probe only if exact blend evidence is otherwise insufficient
+  and it can reuse the same pipeline without expanding the public renderer. Do not add screenshot
+  goldens as the primary oracle.
+
+Done when:
+
+- The complete production rectangle path passes every mandatory lifecycle transition with no
+  validation warning/error or unexpected project diagnostic.
+- Standard and strongest-supported validation evidence records tool, loader, layer, GPU, driver,
+  build mode, and exact commands.
+- Structural steady-state and final resource counters match their deterministic expectations.
+- The example and live test make only the narrow Windows/Vulkan rectangle support claim.
+
+TASK UI-022: Close The Rectangle Foundation Milestone
+-----------------------------------------------------
+
+Reconcile implementation, documentation, and evidence, then close the milestone only if the whole
+accepted decision set is demonstrably true.
+
+Work:
+
+- Update the UI/render architecture ADR, boundary and Codex guidance, paint/compiler design,
+  private packet contract, shader/toolchain decision, verification guide, example index, and
+  package documentation to match implemented behavior exactly.
+- Record coordinate, color, clipping, packet, frame-order, error, threading, lifetime, resource,
+  limit, diagnostic, and steady-state contracts without presenting private layout as stable API.
+- Reconcile this roadmap's statuses, `open-questions.txt` provenance, `milestones.txt` links, and
+  `future.txt` deferrals. Delete or rewrite contradictory active planning material.
+- Document contributor commands and capability gates for focused tests, comprehensive CPU/backend
+  tiers, clean package matrices, clang-format, clang-tidy, shader checks, and live validation.
+- From clean trees, run the documented deterministic, package, dependency, Debug/Release,
+  formatting, clang-tidy, shader, live-validation, resource-count, and structural steady-state
+  gates. Use zero-test protection.
+- Record exact executed evidence and any unavailable coverage. Do not convert intent, an example,
+  or a screenshot into completion evidence.
+- State the support claim narrowly: a tested project-owned rectangle paint path on the documented
+  Windows/Vulkan configuration, with backend-neutral CPU/packet contracts. Make no retained-widget,
+  general-canvas, Metal, non-Windows, or durable scientific UI completion claim.
+
+Done when:
+
+- Every resolved questionnaire group maps to implemented behavior and passing evidence in the table
+  below.
+- All comprehensive gates pass from clean configurations with no hidden skips, stale artifacts,
+  validation messages, dependency leakage, or resource-count drift.
+- Documentation describes only current behavior and clearly points later UI work to
+  `milestones.txt` and deliberate reconsiderations to `future.txt`.
+- The roadmap records the milestone complete only after all required work above is finished.
+
+Decision Coverage
+-----------------
+
+| Resolved questions | Primary roadmap tasks |
+| --- | --- |
+| UIR-SCOPE-01 through UIR-SCOPE-12 | UI-000, UI-006 through UI-008, UI-014 through UI-022 |
+| UIR-ARCH-01 through UIR-ARCH-14 | UI-002, UI-003, UI-007, UI-010, UI-012 through UI-015 |
+| UIR-API-01 through UIR-API-10 | UI-005, UI-009, UI-015, UI-018, UI-019 |
+| UIR-PAINT-01 through UIR-PAINT-19 | UI-005, UI-006, UI-008, UI-016 |
+| UIR-GEOM-01 through UIR-GEOM-20 | UI-005, UI-008, UI-009, UI-011, UI-016 |
+| UIR-COLOR-01 through UIR-COLOR-12 | UI-005, UI-008, UI-011, UI-012, UI-016, UI-021 |
+| UIR-PACKET-01 through UIR-PACKET-18 | UI-003, UI-007, UI-008, UI-010, UI-014, UI-016 |
+| UIR-FRAME-01 through UIR-FRAME-18 | UI-000, UI-009, UI-010, UI-013 through UI-017 |
+| UIR-VK-01 through UIR-VK-20 | UI-000, UI-004, UI-010 through UI-014, UI-017, UI-021 |
+| UIR-RES-01 through UIR-RES-18 | UI-012 through UI-014, UI-017, UI-021 |
+| UIR-ERR-01 through UIR-ERR-12 | UI-005 through UI-010, UI-012 through UI-017 |
+| UIR-TEST-01 through UIR-TEST-30 | UI-005 through UI-021 |
+| UIR-BUILD-01 through UIR-BUILD-18 | UI-001, UI-003, UI-004, UI-015, UI-018, UI-020 |
+| UIR-EX-01 through UIR-EX-10 | UI-000, UI-019, UI-021 |
+| UIR-DOC-01 through UIR-DOC-10 | UI-002, UI-019, UI-022 |
+
+The fixed UIR-BUILD-01 through UIR-BUILD-03 cleanup decisions are implemented by UI-001 and
+reverified by UI-018. The explicit Windows-only answer to UIR-TEST-29 overrides the non-Windows
+clause accepted in UIR-BUILD-16 for this milestone; that possible expansion is recorded in
+`future.txt`.

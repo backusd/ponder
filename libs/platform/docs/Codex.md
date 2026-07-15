@@ -174,11 +174,10 @@ privately by SDL3.
   always-on-top setters by comparing the project-relevant backend flag before
   and after the successful synchronous SDL setter.
 - Keep frame-delta calculation, fixed timestep, frame limiting, event-wait idle
-  policy, rendering, Dear ImGui behavior, project policy, chemistry, IO,
+  policy, rendering, UI behavior, project policy, chemistry, IO,
   workflow, compute, plugins, and desktop application policy out of platform.
 - Provide project-owned primitives for `ponder_ui`; UI must not declare a direct
-  SDL dependency, inherit SDL compile usage, or compile the bundled SDL ImGui
-  backend.
+  SDL dependency, inherit SDL compile usage, or consume SDL types.
 - `WindowGraphicsCompatibility` contains `Default`, `Vulkan`, and `Metal`.
   Map `Vulkan` to SDL's Vulkan flag on Windows/Linux only. Map `Metal` to SDL's
   Metal flag only for the later native macOS backend. Store the exact project

@@ -24,38 +24,19 @@ function(ponder_add_third_party_subdirectory source_dir binary_dir)
             "Third-party dependency is missing a CMakeLists.txt: ${source_dir}")
     endif()
 
-    add_subdirectory("${source_dir}" "${binary_dir}" EXCLUDE_FROM_ALL SYSTEM)
+    if(PONDER_ENABLE_INSTALL_RULES)
+        # Dependency-owned package rules must participate in the top-level install so exported
+        # static targets can resolve their link-only implementation requirements.
+        add_subdirectory("${source_dir}" "${binary_dir}" SYSTEM)
+    else()
+        add_subdirectory("${source_dir}" "${binary_dir}" EXCLUDE_FROM_ALL SYSTEM)
+    endif()
 endfunction()
 
 function(ponder_require_dependency_target target_name)
     if(NOT TARGET "${target_name}")
         message(FATAL_ERROR "Required dependency target is missing: ${target_name}")
     endif()
-endfunction()
-
-function(ponder_add_imgui_target)
-    set(imgui_dir "${PROJECT_SOURCE_DIR}/third_party/imgui")
-
-    if(NOT EXISTS "${imgui_dir}/imgui.cpp")
-        message(FATAL_ERROR "Dear ImGui submodule is missing: ${imgui_dir}")
-    endif()
-
-    if(NOT TARGET ponder_imgui)
-        add_library(ponder_imgui STATIC EXCLUDE_FROM_ALL
-            "${imgui_dir}/imgui.cpp"
-            "${imgui_dir}/imgui_draw.cpp"
-            "${imgui_dir}/imgui_tables.cpp"
-            "${imgui_dir}/imgui_widgets.cpp")
-
-        target_include_directories(ponder_imgui SYSTEM PUBLIC
-            "${imgui_dir}"
-            "${imgui_dir}/backends")
-
-        set_target_properties(ponder_imgui PROPERTIES
-            FOLDER "third_party")
-    endif()
-
-    ponder_add_alias(ponder::imgui ponder_imgui)
 endfunction()
 
 function(ponder_configure_vulkan_dependencies)
@@ -121,7 +102,8 @@ function(ponder_configure_dependencies)
     ponder_set_dependency_option(SPDLOG_BUILD_TESTS OFF BOOL "Disable spdlog tests.")
     ponder_set_dependency_option(SPDLOG_BUILD_TESTS_HO OFF BOOL "Disable spdlog header-only tests.")
     ponder_set_dependency_option(SPDLOG_BUILD_BENCH OFF BOOL "Disable spdlog benchmarks.")
-    ponder_set_dependency_option(SPDLOG_INSTALL OFF BOOL "Disable spdlog install rules.")
+    ponder_set_dependency_option(SPDLOG_INSTALL "${PONDER_ENABLE_INSTALL_RULES}" BOOL
+        "Install spdlog when ponder package rules are enabled.")
     ponder_set_dependency_option(SPDLOG_BUILD_SHARED OFF BOOL "Build spdlog as a static library.")
 
     ponder_set_dependency_option(BUILD_GMOCK ON BOOL "Build GoogleMock with GoogleTest.")
@@ -137,7 +119,8 @@ function(ponder_configure_dependencies)
     ponder_set_dependency_option(SDL_TEST_LIBRARY OFF BOOL "Disable the SDL3 test library.")
     ponder_set_dependency_option(SDL_TESTS OFF BOOL "Disable SDL3 tests.")
     ponder_set_dependency_option(SDL_EXAMPLES OFF BOOL "Disable SDL3 examples.")
-    ponder_set_dependency_option(SDL_INSTALL OFF BOOL "Disable SDL3 install rules.")
+    ponder_set_dependency_option(SDL_INSTALL "${PONDER_ENABLE_INSTALL_RULES}" BOOL
+        "Install SDL3 when ponder package rules are enabled.")
     ponder_set_dependency_option(SDL_INSTALL_TESTS OFF BOOL "Disable SDL3 test installation.")
 
     ponder_add_third_party_subdirectory(third_party/spdlog third_party/spdlog)
@@ -145,7 +128,6 @@ function(ponder_configure_dependencies)
     ponder_add_third_party_subdirectory(third_party/nlohmann_json third_party/nlohmann_json)
     ponder_add_third_party_subdirectory(third_party/moodycamel third_party/moodycamel)
     ponder_add_third_party_subdirectory(third_party/SDL3 third_party/SDL3)
-    ponder_add_imgui_target()
     ponder_configure_vulkan_dependencies()
 
     ponder_require_dependency_target(spdlog)
@@ -153,7 +135,6 @@ function(ponder_configure_dependencies)
     ponder_require_dependency_target(nlohmann_json)
     ponder_require_dependency_target(concurrentqueue)
     ponder_require_dependency_target(SDL3-static)
-    ponder_require_dependency_target(ponder_imgui)
     if(PONDER_BUILD_RENDER AND PONDER_RENDER_ENABLE_VULKAN)
         ponder_require_dependency_target(Vulkan-Headers)
         ponder_require_dependency_target(volk)

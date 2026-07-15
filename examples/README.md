@@ -9,8 +9,14 @@ inputs.
 ## Layout
 
 - `platform/` contains runnable platform-library teaching examples.
+- `render/` contains runnable renderer/platform integration teaching examples.
 - `projects/` contains sample `.ponder` projects once the native project format
   exists.
+
+## Example Indexes
+
+- [Platform examples](platform/README.md)
+- [Render examples](render/README.md)
 
 ## Rules
 

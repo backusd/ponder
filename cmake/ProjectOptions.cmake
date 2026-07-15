@@ -22,6 +22,19 @@ function(ponder_define_project_options)
     option(PONDER_BUILD_RENDER_INTEGRATION_TESTS
         "Build live render integration tests."
         "${PONDER_BUILD_TESTS}")
+    option(PONDER_RENDER_REQUIRE_LIVE_TESTS
+        "Fail render live integration tests instead of skipping when live Vulkan support is absent."
+        OFF)
+    set(PONDER_RENDER_LIVE_VALIDATION_MODE "Default" CACHE STRING
+        "Validation mode requested by live render integration tests.")
+    set_property(CACHE PONDER_RENDER_LIVE_VALIDATION_MODE PROPERTY STRINGS
+        Default Disabled Standard Synchronization BestPractices GpuAssisted)
+    if(NOT PONDER_RENDER_LIVE_VALIDATION_MODE MATCHES
+       "^(Default|Disabled|Standard|Synchronization|BestPractices|GpuAssisted)$")
+        message(FATAL_ERROR
+            "PONDER_RENDER_LIVE_VALIDATION_MODE must be one of Default, Disabled, "
+            "Standard, Synchronization, BestPractices, or GpuAssisted.")
+    endif()
 
     if(NOT PONDER_BUILD_RENDER)
         set(PONDER_RENDER_ENABLE_VULKAN OFF CACHE BOOL
@@ -55,6 +68,9 @@ function(ponder_define_project_options)
         if(NOT PONDER_BUILD_TESTS)
             set(PONDER_BUILD_RENDER_INTEGRATION_TESTS OFF CACHE BOOL
                 "Build live render integration tests." FORCE)
+            set(PONDER_RENDER_REQUIRE_LIVE_TESTS OFF CACHE BOOL
+                "Fail render live integration tests instead of skipping when live Vulkan support is absent."
+                FORCE)
         endif()
     endif()
     option(PONDER_ENABLE_PCH
@@ -75,6 +91,8 @@ function(ponder_define_project_options)
         "PONDER_RENDER_ENABLE_VULKAN=${PONDER_RENDER_ENABLE_VULKAN};"
         "PONDER_RENDER_ENABLE_VALIDATION=${PONDER_RENDER_ENABLE_VALIDATION};"
         "PONDER_BUILD_RENDER_INTEGRATION_TESTS=${PONDER_BUILD_RENDER_INTEGRATION_TESTS};"
+        "PONDER_RENDER_REQUIRE_LIVE_TESTS=${PONDER_RENDER_REQUIRE_LIVE_TESTS};"
+        "PONDER_RENDER_LIVE_VALIDATION_MODE=${PONDER_RENDER_LIVE_VALIDATION_MODE};"
         "PONDER_ENABLE_PCH=${PONDER_ENABLE_PCH};"
         "PONDER_ENABLE_ASAN=${PONDER_ENABLE_ASAN};"
         "PONDER_ENABLE_UBSAN=${PONDER_ENABLE_UBSAN};"

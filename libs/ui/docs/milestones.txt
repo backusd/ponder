@@ -1,0 +1,197 @@
+# UI Library Milestones
+
+This milestone sequence targets a durable scientific desktop UI: a retained-mode system suitable for
+long-lived tools, data-dense panels, docking, property editing, and large scientific data sets. It
+does not aim to become a browser engine, mobile toolkit, or general-purpose replacement for every
+native UI framework. Dear ImGui is not part of this architecture. Public APIs remain provisional
+through the early milestones; each milestone establishes durable internal contracts and tests
+without prematurely freezing the eventual widget API.
+
+`ponder_ui` owns UI feature and semantic decisions. `ponder_render` owns only the producer-neutral
+2D packet, GPU resources, command recording, submission, presentation, and completion lifetime.
+
+## Milestone 1: Rectangle Rendering Foundation
+
+Render one opaque or translucent rectangle in a real window through the same production-shaped
+path that later widgets will use. Establish project-owned paint data, coordinate and color
+semantics, deterministic ordering, clipping representation, CPU-to-GPU data ownership, frame
+lifetime, synchronization, diagnostics, and backend-neutral submission to `ponder_render`. Include
+CPU contract tests, renderer failure-injection tests, and a bounded live Vulkan test. The temporary
+rectangle entry point is only a development harness: this milestone deliberately excludes Dear
+ImGui, retained widget design, layout, text, and input behavior.
+
+## Milestone 2: Paint And Composition Primitives
+
+Expand the rectangle path into a focused UI paint system supporting filled and bordered rectangles,
+rounded corners, images, opacity, nested clips, transforms, gradients, focus rings, a limited vector
+path/icon vocabulary, shadows, and explicit layer ordering. Define image/resource ownership,
+caching, color, antialiasing, and effect budgets while preserving backend independence and
+predictable composition. Add batching and upload reuse only behind stable paint semantics, plus a
+private deterministic raster probe where it adds evidence without creating public readback. This
+milestone provides the visual vocabulary needed by later widgets without becoming an unrestricted
+vector graphics or general GPU-command API.
+
+## Milestone 3: Retained Tree, Invalidation, And Inspection
+
+Introduce the private retained tree that owns element identity, parent-child relationships,
+lifetime, traversal order, mutation rules, and the early semantic identity needed by accessibility.
+Distinguish changes that invalidate style, measurement, placement, painting, hit testing, or
+semantics so later work recomputes only what is necessary. Define UI-thread mutation and safe
+marshaling of background-produced application snapshots, including removal or mutation during
+callbacks, and produce immutable render/semantic snapshots that cannot observe partial updates.
+Keep the public construction API provisional while providing a basic debug tree dump and testing
+ownership, dirty propagation, deterministic traversal, and complete cleanup.
+
+## Milestone 4: Styling, Metrics, And Themes
+
+Add project-owned style values and theme tokens for colors, spacing, borders, typography, control
+states, motion preferences, high contrast, and scale-independent dimensions. Specify which
+properties inherit, how local overrides and interaction/accessibility states are resolved, and how
+computed styles are cached and invalidated. Theme, user-scale, contrast, and DPI changes must update
+affected elements deterministically without rebuilding unrelated state. Favor a small, strongly
+typed model suited to a desktop scientific application rather than recreating CSS, and retain enough
+provenance for the inspector to explain every computed value.
+
+## Milestone 5: Layout
+
+Implement a deterministic, direction-aware measure-and-arrange engine with minimum, preferred,
+maximum, fixed, and intrinsic sizes. Prove the intrinsic-measurement protocol first with synthetic
+non-text leaves so later text can supply measurements without redesigning layout. Provide the
+foundational containers needed by the application--stacks, overlays, grids, split regions, padding,
+alignment, and proportional sizing--together with stable pixel rounding and correct invalidation.
+Layout must compose with transforms, clips, DPI changes, and left-to-right or right-to-left
+direction, and diagnose impossible or cyclic constraints without attempting every web layout model.
+
+## Milestone 6: Input Routing, Hit Testing, And Focus
+
+Translate project platform events into UI-owned pointer, keyboard, and navigation events, then route
+them through the retained tree using geometry, transforms, clips, visibility, and enabled state.
+Establish hover and pressed state, pointer capture, propagation and consumption, keyboard focus,
+focus scopes, tab traversal, and command or shortcut routing with keyboard-only parity. Focus and
+capture must remain valid when elements are hidden, disabled, reparented, or destroyed. Tests replay
+normalized event sequences without a native window and verify ordering, hit testing, semantic focus,
+state transitions, cancellation, and teardown races.
+
+## Milestone 7: Text Display
+
+Integrate established font rasterization, Unicode shaping, bidirectional-text, and line-breaking
+libraries behind ponder-owned interfaces rather than implementing those algorithms from scratch.
+Add font selection and fallback, shaped-run caching, glyph atlas management, wrapping, alignment,
+elision, direction-aware measurement, and DPI-aware painting. Font or text changes participate in
+style and layout invalidation, while atlas growth and eviction obey renderer completion lifetimes.
+The milestone exits with robust semantic labels and read-only formatted text across representative
+Unicode, localization, and bidirectional fixtures; editable text remains separate.
+
+## Milestone 8: Core Controls, Model Observation, And Change Transactions
+
+Build labels, buttons, toggles, radio choices, sliders, numeric controls, images, progress
+indicators, and simple containers on retained state, layout, input, style, paint, and semantic
+contracts. Define enabled, read-only, selected, checked, indeterminate, invalid, and activated
+states without embedding application policy. Model adapters marshal observable changes onto the
+UI thread, coalesce invalidation, and disconnect safely during teardown; they do not copy or own
+domain models. Define
+application-owned change-transaction boundaries so controls can participate in global undo/redo
+without UI owning the history, and test each control's pointer, keyboard, semantic, cancellation,
+background-update, and disabled state machines.
+
+## Milestone 9: Scrolling, Collections, And Virtualization
+
+Introduce reusable scroll models, scrollbars, wheel and keyboard navigation, nested scrolling,
+clipping, overscroll policy, and focus/caret-driven reveal behavior before editable text depends on
+them. Build virtualized list and tree foundations that instantiate and lay out only visible content
+while preserving stable item identity, selection, focus, and accessibility semantics. Measurement
+caches tolerate heterogeneous item sizes and incremental data changes without viewport jumps.
+Performance gates cover data sets representative of atom lists, result collections, and logs, with
+bounded per-frame work, allocation, retained memory, and background-update coalescing.
+
+## Milestone 10: Text Editing And IME
+
+Add single-line and multiline editing using the established scrolling foundation, with
+grapheme-aware cursor movement, selection, word navigation, clipboard operations, editor-local undo
+and redo, validation hooks, and visible caret management. Integrate platform text input and IME
+composition, including composition ranges and candidate-window placement, without confusing
+physical key events with committed text. Editing preserves valid Unicode and behaves predictably
+when external model changes race with local edits or application transactions. Use mature Unicode
+services and test international input, selection, deletion, clipboard, scrolling, focus transfer,
+composition cancellation, and teardown extensively.
+
+## Milestone 11: Overlays, Commands, Menus, And Drag And Drop
+
+Add the transient-layer infrastructure required for tooltips, popovers, context menus, menu bars,
+combo boxes, modal dialogs, and drag-and-drop feedback. Define stacking, placement, dismissal,
+pointer capture, focus restoration, nested focus scopes, keyboard navigation, and shortcut
+precedence so overlays behave consistently rather than being reimplemented by each widget. Provide
+a reusable command model for labels, enabled state, shortcuts, invocation, and routing into
+application-owned undo/history transactions while leaving application actions outside `ponder_ui`.
+Drag payloads use application-owned typed data or identifiers and never grant UI ownership of
+domain objects.
+
+## Milestone 12: Docking And Persistent Workspaces
+
+Implement tab groups, split panes, docking targets, panel movement, and versioned workspace
+persistence for the multi-panel scientific desktop. The dock model must be independent of widget
+addresses, recover from missing or newly added panels, enforce minimum sizes, and restore a usable
+layout after monitor or DPI changes. Start with docking inside one native window while designing
+stable panel identities and factories that a later multi-window milestone can reuse. Application
+code supplies panel identities/content, while UI owns only generic arrangement, interaction,
+serialization shape, migration, and recovery rules.
+
+## Milestone 13: Scientific Content Hosting
+
+Define a first-class retained host for plots, molecular viewports, and other application-owned
+rendered content without moving scientific models or 3D policy into UI. Specify renderer composition
+phases, target/frame ownership, resize and DPI snapshots, clipping, UI overlays, visibility-driven
+scheduling, input/focus/gesture arbitration, failure isolation, and shutdown; hosted content must
+never run a nested submit or present. Provide deterministic fake-host tests and a representative
+live viewport fixture so the eventual stable API is exercised by more than ordinary controls before
+it freezes.
+
+## Milestone 14: Scientific Data Controls
+
+Build the data-dense controls that distinguish the target toolkit: virtualized tables, hierarchical
+trees, property grids, and reusable editors for numeric values, units, enumerations, vectors,
+colors, paths, and read-only results. Tables support column sizing and reordering, sorting,
+filtering, selection, keyboard navigation, and editable cells without copying full data sets into
+widget-owned storage. Property editors define validation, precision, commit/cancel, mixed values,
+background model updates, and application-owned undo transaction boundaries. Performance and
+accessibility tests use representative large scientific data, not toy lists.
+
+## Milestone 15: Native Multi-Window UI
+
+Extend docking and overlays to floating panels and multiple native windows only after single-window
+workspace behavior is stable. Define window/target ownership, panel transfer, focus and pointer
+capture across windows, modal scope, close negotiation, monitor placement, per-window DPI/theme
+updates, renderer sharing, recovery when displays disappear, and versioned persistence. Interleave
+independent targets in lifecycle tests so resize, suspension, device loss, or slow presentation in
+one window does not corrupt another; keep platform/native handles behind project abstractions.
+
+## Milestone 16: Animation And Deterministic Time
+
+Add a bounded animation system for control transitions, overlay movement, progress feedback, and
+other UI-owned visual state. Use an injected monotonic clock, explicit invalidation and frame
+scheduling, deterministic sampling, cancellation on removal or style change, and strict work/memory
+budgets. Honor the motion-preference hook established by themes and provide an immediate reduced-
+motion path with equivalent semantics. Do not turn this into a general physics, timeline-authoring,
+or application simulation system.
+
+## Milestone 17: Accessibility And Internationalization Completion
+
+Complete the platform bridges for the semantic roles, names, values, relationships, actions,
+selection, direction, and focus introduced throughout earlier milestones. Verify keyboard-only use,
+screen-reader notifications, high contrast, user scaling, reduced motion, accessible virtualized
+collections, localization hooks, right-to-left layout, and locale-aware presentation boundaries
+without moving domain formatting into UI. This milestone is end-to-end platform completion and
+audit, not a retrofit: earlier tree, style, layout, input, text, and control milestones cannot close
+without their specified semantic and internationalization hooks.
+
+## Milestone 18: Tooling, Performance, And API Stabilization
+
+Complete the live inspector begun with retained-tree diagnostics, covering computed styles, layout
+bounds, clips, focus, semantic state, dirty reasons, paint operations, events, resources, and hosted
+content. Consolidate event replay, diagnostic captures, deterministic layout/paint tests, widget
+state machines, private raster evidence, accessibility snapshots, fuzzing, failure injection, and
+bounded live tests established by earlier milestones. Enforce cumulative budgets for frame work,
+allocations, retained memory, paint/font/image caches, animations, and very large virtualized data
+sets. Stabilize the public API only after representative application panels, scientific viewports,
+multi-window workspaces, international input, and accessibility have exercised the complete stack,
+and document explicit non-goals that keep `ponder_ui` focused.

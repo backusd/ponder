@@ -24,10 +24,10 @@ visualization data flow.
   current unified Vulkan headers, query loader and device versions separately,
   and opt into Vulkan 1.3 or 1.4 functionality only through explicit capability
   checks and fallbacks.
-- During the desktop foundation phase, focus on backend/device lifetime,
-  presentable surface and swapchain lifetime, frame begin/end, clear pass,
-  resize/minimize handling, presentation policy, and multiple independent
-  windows.
+- The desktop bootstrap boundary supports create, clear, present, resize,
+  minimize/restore, multiple independent windows, and orderly shutdown. Do not
+  broaden that support claim with drawing, UI, scene, or visualization features
+  until their own milestones are implemented and verified.
 - Consume only the closed `ponder_platform` native-window variants needed for
   Vulkan on Windows/Linux: Win32, X11, and Wayland. Create and own
   `VkSurfaceKHR`; never consume `SDL_Window` or call `SDL_Vulkan_CreateSurface`.
@@ -51,19 +51,26 @@ visualization data flow.
   parameterless build-selected query. A Vulkan build returns
   `WindowGraphicsCompatibility::Vulkan`; do not add runtime backend selection.
 - Declare `ponder::core` and `ponder::platform` as public target dependencies.
-  Keep Vulkan/loader/allocator/OS dependencies private. A future ImGui draw
-  bridge may privately depend on `ponder::imgui`, but render must not depend on
-  `ponder_ui`.
+  Keep Vulkan/loader/allocator/OS dependencies private. No UI implementation
+  library is a render dependency, and render must not depend on `ponder_ui`.
 - Do not declare a direct SDL dependency or inherit SDL compile usage. Do not
   depend on `ponder-desktop`, project/domain libraries, workflow, compute, or
   plugins.
-- Dear ImGui is not implemented in the bootstrap milestone. Leave a documented
-  frame insertion point for the later renderer-owned ImGui bridge, but do not add
-  UI widgets, an ImGui context, or a generalized drawing API here.
-- Do not put chemistry-specific drawing, project loading, ImGui widgets, or
+- A later narrow generic 2D contract accepts only owning project-defined packets;
+  UI owns semantic paint commands and tessellation before crossing that boundary.
+  Do not add retained UI types, logical UI units, producer callbacks, native
+  command escapes, UI widgets, or arbitrary GPU commands.
+- Dear ImGui is not part of the planned architecture, dependency boundary, or
+  compatibility surface. The UI roadmap owns the project-defined paint compiler,
+  while render will own only its producer-neutral 2D packet consumer.
+- Do not put chemistry-specific drawing, project loading, UI widgets, or
   application main-loop ownership in this library.
 
 ## Verification
 
 - Configure and build a supported CMake preset.
-- When tests exist for this library, run the matching render test executable.
+- Follow `libs/render/docs/Verification.md` for the render verification matrix, including deterministic labels, live labels, install-consumer coverage, and validation-mode commands.
+- For normal deterministic checks, run CTest with `-L render -LE live`. For live Windows render presentation checks, run `-L live` with the `ponder_platform_sdl` resource lock and an explicit timeout.
+- Do not call the bootstrap milestone validation-clean when the required Khronos
+  validation layer is absent. Optional Default-mode success is not a substitute
+  for a passing required Standard-validation run.

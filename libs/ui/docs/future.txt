@@ -1,0 +1,479 @@
+# Deferred UI Architecture Decisions
+
+Status: deferred-design ledger for the project-owned UI stack.
+
+This document records complexity intentionally omitted from the rectangle foundation even though a
+future requirement may justify it. It is not an implementation roadmap and does not promise to add
+every item. Feature sequencing belongs in [milestones.txt](milestones.txt); the current milestone's
+implementation order belongs in [roadmap.txt](roadmap.txt).
+
+The decisions below remain binding until a stated trigger occurs and a focused design task updates
+the relevant UI and render contracts. A trigger authorizes reconsideration, not automatic
+implementation.
+
+## Ordered Frame Composition Phases
+
+Source: `UIR-FRAME-03`.
+
+### Current decision
+
+The rectangle milestone records one producer-neutral 2D packet after `RenderFrame::Clear()` and
+before `FinishAndPresent()`. The packet is recorded inside the render pass already opened by clear.
+The current exactly-one post-clear stage is not a permanent general composition model.
+
+Every render stage establishes all GPU state it consumes. No stage relies on bindings left by a
+previous stage, and the frame API accepts neither producer callbacks nor native command recording.
+
+### Why this is deferred
+
+The first milestone has no 3D content or other producer requiring an independently ordered stage.
+Designing depth, attachments, transitions, load/store behavior, and partial failure for hypothetical
+stages would add contracts without a real consumer.
+
+### Reconsider when
+
+Reconsider this when ponder needs 3D scientific content before the final UI overlay, another
+producer-neutral overlay or post-processing stage, or a feature that cannot be represented by the
+single clear-then-2D sequence.
+
+### Future constraints
+
+Use explicit ordered composition phases rather than UI-specific stage names. Define total order,
+attachment compatibility, load/store behavior, depth ownership, state isolation, preflight and
+partial-failure behavior, abandonment, submission lifetime, and backend-neutral extension rules.
+UI should remain a final overlay by default. Producers must not receive Vulkan command buffers,
+render passes, arbitrary callbacks, or native state.
+
+## Several UI Packets In One Frame
+
+Source: `UIR-FRAME-04`.
+
+### Current decision
+
+One sealed packet can contain many ordered draws. Exactly one 2D UI-stage packet may be recorded in
+a frame, and a second recording is rejected. This avoids repeated state setup, fragmented upload
+reservations, ambiguous painter ordering, and unclear all-or-nothing failure behavior.
+
+### Why this is deferred
+
+The rectangle path has one producer and can aggregate all visual output into one packet. Multiple
+packets solve no current requirement.
+
+### Reconsider when
+
+Reconsider this when independently owned producers cannot reasonably aggregate their work, such as
+application UI, developer tooling, diagnostics, plug-in overlays, or separately compiled subtrees
+with materially different completion times.
+
+### Future constraints
+
+First determine whether aggregation before recording is still sufficient. If multiple packets are
+necessary, define their total order, whether clip or paint state crosses packet boundaries,
+packet-wide and frame-wide budgets, upload reservations, and whether every packet must be
+preflighted before the first draw. Preserve one frame submission/presentation path unless a
+separate renderer requirement proves otherwise. Never infer order from thread completion or
+pointer identity.
+
+## Concurrent Draw-Layer Use
+
+Source: `UIR-FRAME-07`.
+
+### Current decision
+
+A device-scoped draw-layer owner is move-only, render-thread-affine, and non-concurrent. It may
+serve multiple targets sequentially on its owner thread. Pure paint recording and compilation may
+already run on other threads when every recorder and compiler instance has exclusive ownership.
+
+### Why this is deferred
+
+Concurrent use would require synchronization around pipeline creation, upload growth, completion
+retirement, diagnostics, and frame mutation. The rectangle milestone has no demonstrated
+render-thread bottleneck that justifies those semantics.
+
+### Reconsider when
+
+Reconsider this when the renderer supports parallel command-buffer recording, several active
+windows need concurrent GPU preparation, or profiling shows serialized draw-layer preflight and
+recording materially limits frame performance.
+
+### Future constraints
+
+Prefer separating immutable or synchronized device resources from exclusive per-frame recording
+contexts instead of placing one coarse lock around the current owner. Never mutate one active
+`RenderFrame` concurrently. Upload slices and retirement remain target-, slot-, and
+completion-specific. Pipeline-cache publication remains transactional. Add deterministic race,
+failure-injection, shutdown, and out-of-order-completion tests before changing the contract.
+
+## External Images, Glyph Atlases, And Resource Completion
+
+Sources: `UIR-API-06`, `UIR-PACKET-05`, `UIR-PACKET-06`, `UIR-VK-13`, and
+`UIR-RES-12`.
+
+### Current decision
+
+The first packet is descriptor-free and contains no texture coordinates, image handles, samplers,
+resource tables, descriptor references, material variants, or dummy white texture. It needs no
+cross-frame receipt or producer callback. Frame and fence bookkeeping alone owns completion.
+
+### Why this is deferred
+
+Solid rectangles have no external GPU resource lifetime. Introducing a resource protocol now would
+guess at requirements for images, fonts, atlases, replacement, streaming, and device loss.
+
+### Reconsider when
+
+Reconsider this for the image or text-rendering milestones, or when another real paint primitive
+requires a renderer-owned resource that outlives one synchronous packet-recording call.
+
+### Future constraints
+
+Add closed material/pipeline variants and typed renderer-owned resource references only after their
+semantics are known. Define upload ownership, update visibility, descriptor lifetime, sampler and
+color-space behavior, atlas replacement, device-loss recovery, and completion observation. Add a
+typed receipt only if the resource protocol proves one necessary. Render must never retain borrowed
+producer storage or invoke producer callbacks.
+
+## Public Generic 2D Rendering API
+
+Source: `UIR-ARCH-05`.
+
+### Current decision
+
+The producer-neutral 2D packet is a project-private, non-installed cross-library interface. The
+temporary UI facade hides it. Render tests may construct packets without UI, but applications do
+not receive a general canvas or draw-packet API.
+
+### Why this is deferred
+
+A public API would require long-term compatibility, packaging, resource, validation, security, and
+versioning commitments before a second producer has demonstrated a stable common abstraction.
+
+### Reconsider when
+
+Reconsider this only after real non-UI producers repeatedly need the same contract and cannot be
+served by a narrower renderer-owned API.
+
+### Future constraints
+
+Promotion requires a separate API and packaging review. The interface remains producer-neutral,
+owning, backend-independent, validated, and free of UI semantics/native handles. Do not promote
+private packet layout merely to avoid maintaining a deliberate internal target boundary, and do
+not turn it into an arbitrary GPU encoder.
+
+## Paint And Packet Persistence
+
+Sources: `UIR-PAINT-16`, `UIR-PACKET-10`, and `UIR-PACKET-15`.
+
+### Current decision
+
+Paint lists and draw packets are evolvable in-process implementation data. They are not file or
+wire formats, use no runtime schema negotiation, and carry no persistence, replay, or cross-device
+portability promise. Tests may inspect stable diagnostic projections without freezing storage
+layout.
+
+### Why this is deferred
+
+Persistence requires compatibility, migration, hostile-input validation, endianness, numeric
+reproducibility, resource-reference, and invalidation rules that local frame rendering does not
+need.
+
+### Reconsider when
+
+Reconsider this for cross-process capture/replay, remote rendering, persisted paint caches,
+deterministic bug artifacts, or protocol-level UI streaming.
+
+### Future constraints
+
+Design a versioned external schema independently from private C++ layout. Specify compatibility,
+limits, hostile-input handling, resource identity, color/coordinate representation, and migration.
+Never serialize raw pointers, backend handles, internal variants, or device-specific packets.
+
+## Retained-Element Provenance And Incremental Paint
+
+Source: `UIR-PAINT-15`.
+
+### Current decision
+
+Paint commands use deterministic command indices for diagnostics. They contain no retained-element
+IDs or node references, and the compiler does not map packet output back to retained elements.
+
+### Why this is deferred
+
+Identity, mutation, invalidation, snapshots, inspection, accessibility, and partial recompilation
+depend on the retained-tree design, which is outside the rectangle foundation.
+
+### Reconsider when
+
+Reconsider this during the retained-tree and invalidation milestone, especially when diagnostics,
+inspection, accessibility, or incremental paint needs stable provenance.
+
+### Future constraints
+
+Retained identity stays in UI and never crosses into render as widget/element semantics. Any
+provenance attached to paint output is closed, bounded, deterministic, and optional in production
+where appropriate. Incremental compilation preserves immutable snapshots and painter order.
+
+## Advanced Paint, Clipping, And Edge Coverage
+
+Sources: `UIR-SCOPE-05`, `UIR-SCOPE-06`, and `UIR-COLOR-10`.
+
+### Current decision
+
+The foundation supports finite axis-aligned solid rectangles, painter ordering, opacity, and nested
+rectangular clipping. Edges are hard rasterized. Borders, rounded corners, gradients, shadows,
+paths, transforms, non-rectangular clips, multisampling, and animation are omitted.
+
+### Why this is deferred
+
+Those features require distinct semantic, tessellation, coverage, caching, and resource contracts.
+Adding empty fields or a generic path abstraction now would make the rectangle foundation less
+precise.
+
+### Reconsider when
+
+Reconsider each capability in the paint-and-composition milestone that owns its real use cases.
+Non-rectangular clipping waits until a required shape cannot be represented by exact geometry
+intersection and rectangular scissors.
+
+### Future constraints
+
+Define each semantic paint operation before extending packet or GPU state. Preserve deterministic
+painter order, premultiplied-alpha composition, backend-neutral output, bounded tessellation, and
+independent CPU tests. Antialiasing needs an explicit coverage contract rather than silently
+expanding geometry or modifying alpha.
+
+## Pixel Snapping, Transforms, And Display Scale
+
+Sources: `UIR-GEOM-05`, `UIR-GEOM-07`, and `UIR-GEOM-10`.
+
+### Current decision
+
+UI geometry uses logical units and exact independent logical-to-pixel extent ratios. Fractional
+coordinates survive into framebuffer-pixel floats. There is no implicit pixel snapping, half-pixel
+offset, transform stack, or use of nominal display scale as a substitute for observed extents.
+
+### Why this is deferred
+
+Correct snapping depends on the visual primitive. Borders, glyph baselines, images, and general
+layout do not necessarily use the same rule.
+
+### Reconsider when
+
+Reconsider this while designing borders, text, transforms, or style metrics that require deliberate
+device-pixel alignment.
+
+### Future constraints
+
+Keep logical and framebuffer spaces strongly distinguished. Snapping is opt-in and defined per
+primitive or layout policy, with deterministic behavior under fractional and independent X/Y
+scale. Display scale may affect style or text policy later but remains distinct from exact geometry
+lowering ratios.
+
+## HDR, Wide Gamut, And Higher-Precision Packet Color
+
+Sources: `UIR-COLOR-03`, `UIR-COLOR-05`, and `UIR-COLOR-07`.
+
+### Current decision
+
+The temporary API authors bounded sRGB straight-alpha color. Semantic paint retains
+higher-precision linear-premultiplied color, while the first packet uses packed
+linear-premultiplied RGBA8 and renders to the strict opaque SDR sRGB target.
+
+### Why this is deferred
+
+HDR and wide-gamut output require an end-to-end target, composition, transfer, blending, and
+presentation contract. Allowing out-of-range values now would create accidental behavior rather
+than future support.
+
+### Reconsider when
+
+Reconsider this when render/platform add a supported HDR or wide-gamut target, or scientific
+visualization demonstrates a precision requirement that RGBA8 packet color cannot meet.
+
+### Future constraints
+
+Introduce explicit color-space/range types, a deliberate higher-precision packet format, compatible
+shader interfaces, pipeline compatibility keys, target negotiation, and independent
+conversion/blending reference tests. Do not silently clamp, reinterpret, or double-encode existing
+SDR values.
+
+## Measured Rendering Optimizations
+
+Sources: `UIR-PAINT-18`, `UIR-COLOR-11`, `UIR-RES-01`, `UIR-RES-17`, and
+`UIR-VK-19`.
+
+### Current decision
+
+Compilation preserves painter order and only merges adjacent draw records with identical state.
+Render performs one bounded copy from an owning packet to persistently mapped host-visible memory.
+There is no zero-copy producer arena, mandatory staging to device-local memory, speculative
+geometry reordering, or persistent on-disk Vulkan pipeline cache.
+
+### Why this is deferred
+
+The accepted path has simple ownership and exact completion semantics. More complicated paths have
+no measured benefit for the rectangle milestone and increase synchronization, invalidation, and
+failure-recovery risk.
+
+### Reconsider when
+
+Reconsider one optimization only after representative UI workloads and profiling identify a
+specific CPU, bandwidth, allocation, or pipeline-startup bottleneck.
+
+### Future constraints
+
+Preserve visual ordering and diagnostic determinism unless equivalence is proven. Producer storage
+must not be borrowed across submission. Any direct arena needs exclusive completion-safe ownership.
+Device-local staging requires workload-specific benchmarks. Persistent pipeline caches need
+versioning, driver/device compatibility, corruption handling, security limits, and clean fallback.
+Every optimized path needs parity, failure-injection, and lifecycle tests.
+
+## Offscreen Rendering, Readback, And Screenshot APIs
+
+Sources: `UIR-SCOPE-09`, `UIR-TEST-20`, and `UIR-EX-08`.
+
+### Current decision
+
+There is no public offscreen target, pixel-readback, or screenshot API. A test-only GPU pixel probe
+is allowed only if it reuses the exact production path without expanding the public renderer.
+Screenshot goldens do not replace deterministic CPU, packet, command, shader, lifecycle, or
+validation tests.
+
+### Why this is deferred
+
+A public readback path requires synchronization, image layout, format, row-pitch, color, memory,
+ownership, and performance contracts unrelated to displaying the first rectangle.
+
+### Reconsider when
+
+Reconsider this for headless rendering, export, visual-regression infrastructure, automated image
+analysis, or another concrete renderer-wide requirement.
+
+### Future constraints
+
+Keep the capability render-owned and producer-neutral. Define exact completion, format/color
+semantics, bounds, memory limits, and synchronous/asynchronous behavior. Tests must use the
+production pipeline and retain deterministic non-image gates.
+
+## Platform, Backend, And Test-Matrix Expansion
+
+Sources: `UIR-ARCH-11`, `UIR-VK-01`, the accepted `UIR-BUILD-16` recommendation, and
+the project-owner answer to `UIR-TEST-29`.
+
+### Current decision
+
+All rectangle-milestone testing is Windows-only, and the only live claim is the documented Vulkan
+1.2 configuration. CPU and packet contracts remain backend-neutral, but design intent or
+compile-only evidence is not a runtime support claim. The rectangle path does not raise the Vulkan
+feature floor.
+
+The explicit Windows-only `UIR-TEST-29` answer overrides `UIR-BUILD-16`'s otherwise accepted
+non-Windows CPU/fake coverage for this milestone.
+
+### Why this is deferred
+
+No second supported platform or backend currently exists for this UI path, and an unsupported
+matrix would not prove live integration.
+
+### Reconsider when
+
+Reconsider this when ponder begins a Metal or other backend, adopts another desktop platform, or
+adds a supported compiler/runtime configuration that needs an explicit CI claim.
+
+### Future constraints
+
+Prove the same ownership, coordinate, color, packet, frame, failure, and completion contracts on
+the new backend. Add deterministic and live capability-gated tests before claiming support. Do not
+raise Vulkan requirements or introduce dynamic rendering, descriptor indexing, or timeline
+semaphores solely for UI; those require renderer-wide decisions.
+
+## Public Allocation, Budget, And Cache Tuning
+
+Sources: `UIR-RES-14` and `UIR-RES-18`.
+
+### Current decision
+
+VMA choices, memory types, initial capacities, growth factors, retirement, and pipeline caching are
+private render policy. The temporary UI API exposes checked limits, counters, and high-water
+diagnostics, not backend tuning knobs or a frame-time performance guarantee.
+
+### Why this is deferred
+
+Public tuning would freeze backend-specific policy before representative retained UI workloads
+establish which controls are meaningful.
+
+### Reconsider when
+
+Reconsider this only if diverse supported hosts cannot meet documented budgets through one
+internal adaptive policy and profiling identifies a stable producer-facing requirement.
+
+### Future constraints
+
+Prefer semantic budgets or workload hints over native allocator controls. Never expose VMA, Vulkan
+memory types, buffer handles, growth factors, or completion internals through UI. Defaults remain
+safe, bounded, and fully usable without application tuning.
+
+## General-Purpose GPU Facilities
+
+Source: the explicitly deferred decisions in `open-questions.txt`.
+
+### Current decision
+
+The generic 2D packet is not a render graph, arbitrary shader interface, general canvas, native
+command encoder, or application-facing GPU command stream. UI cannot be used to bypass render
+ownership.
+
+### Why this is deferred
+
+Those facilities have different safety, lifetime, synchronization, compatibility, and API
+requirements and are unnecessary for retained desktop UI.
+
+### Reconsider when
+
+Reconsider one only for a separate renderer-owned use case with its own design questionnaire and
+ADR. A UI feature request alone is insufficient reason to expose arbitrary GPU behavior.
+
+### Future constraints
+
+Any such API remains outside UI, preserves render ownership of backend work, and receives its own
+resource, synchronization, validation, packaging, and backend-portability contracts.
+
+## Stable Retained UI API
+
+Source: the explicitly deferred decisions in `open-questions.txt`.
+
+### Current decision
+
+The experimental rectangle facade has no source or ABI stability promise and is isolated from the
+future retained-mode API. Retained tree identity, styling, layout, text, input, controls, data
+binding, scrolling, docking, accessibility, localization, multi-window behavior, and application
+integration are owned by later milestones.
+
+### Why this is deferred
+
+Stabilizing construction or widget APIs before representative scientific panels exercise the full
+system would preserve accidental constraints from a renderer workbench.
+
+### Reconsider when
+
+Design each feature in the sequence in [milestones.txt](milestones.txt). Stabilize the
+application-facing API only after representative retained controls, scientific views, workspaces,
+international text/input, and accessibility have exercised it.
+
+### Future constraints
+
+Keep application command policy, domain data, desktop-specific workflows, compute, and plug-in
+behavior outside `ponder_ui`. Reuse the durable paint/render ownership contracts without preserving
+temporary rectangle types or exposing private packet structures.
+
+## Decisions That Are Not Deferred
+
+Dear ImGui is not a dormant compatibility path or backlog item. Reintroducing any third-party UI
+implementation requires a new architecture decision, dependency review, and replacement analysis.
+
+The experimental rectangle facade is not the future retained-mode API; removing or replacing it is
+planned work, not a compatibility debt to preserve.
+
+Backend handles, arbitrary callbacks, borrowed producer storage, and a render-to-UI dependency are
+not future extension points. Any proposal requiring them must replace the current boundary through
+a focused architecture decision rather than treating them as routine additions.

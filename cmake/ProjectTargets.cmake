@@ -9,7 +9,13 @@ include(Sanitizers)
 function(ponder_add_project_library library_name)
     set(options)
     set(one_value_args PCH_HEADER)
-    set(multi_value_args PUBLIC_HEADERS PRIVATE_HEADERS SOURCES PUBLIC_DEPS PRIVATE_DEPS)
+    set(multi_value_args
+        PUBLIC_HEADERS
+        PRIVATE_HEADERS
+        SOURCES
+        PUBLIC_DEPS
+        PRIVATE_DEPS
+        INSTALL_PRIVATE_DEPS)
 
     cmake_parse_arguments(
         PONDER_LIBRARY
@@ -48,10 +54,19 @@ function(ponder_add_project_library library_name)
     endif()
 
     if(PONDER_LIBRARY_PRIVATE_DEPS)
-        target_link_libraries("${target_name}" PRIVATE ${PONDER_LIBRARY_PRIVATE_DEPS})
+        foreach(private_dep IN LISTS PONDER_LIBRARY_PRIVATE_DEPS)
+            target_link_libraries("${target_name}" PRIVATE "$<BUILD_INTERFACE:${private_dep}>")
+        endforeach()
+    endif()
+
+    if(PONDER_LIBRARY_INSTALL_PRIVATE_DEPS)
+        foreach(private_dep IN LISTS PONDER_LIBRARY_INSTALL_PRIVATE_DEPS)
+            target_link_libraries("${target_name}" PRIVATE "$<INSTALL_INTERFACE:${private_dep}>")
+        endforeach()
     endif()
 
     set_target_properties("${target_name}" PROPERTIES
+        EXPORT_NAME "${library_name}"
         FOLDER "libs"
         POSITION_INDEPENDENT_CODE ON)
 
@@ -124,7 +139,7 @@ function(ponder_add_project_executable target_name)
 endfunction()
 function(ponder_add_project_test target_name)
     set(options)
-    set(one_value_args RESOURCE_LOCK)
+    set(one_value_args RESOURCE_LOCK TIMEOUT)
     set(multi_value_args SOURCES PRIVATE_DEPS LABELS)
 
     cmake_parse_arguments(
@@ -154,6 +169,9 @@ function(ponder_add_project_test target_name)
     set(test_properties)
     if(PONDER_TEST_RESOURCE_LOCK)
         list(APPEND test_properties RESOURCE_LOCK "${PONDER_TEST_RESOURCE_LOCK}")
+    endif()
+    if(PONDER_TEST_TIMEOUT)
+        list(APPEND test_properties TIMEOUT "${PONDER_TEST_TIMEOUT}")
     endif()
     if(test_properties)
         list(APPEND discovery_arguments PROPERTIES ${test_properties})

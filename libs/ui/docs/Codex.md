@@ -4,37 +4,33 @@ Read the root `AGENTS.md` before this file.
 
 ## Scope
 
-Work here on reusable user-interface models, widgets, and presentation logic.
+Work here on reusable retained-mode UI, project-owned paint semantics, and the UI side of the
+backend-neutral rendering boundary.
 
-## Local Rules
+## Rules
 
-- Keep public headers under `include/ponder/ui/`.
-- Use the `pond::ui` namespace.
-- Keep UI implementation details out of domain libraries.
-- Prefer wrappers around ImGui-facing code when crossing subsystem boundaries.
-- During the desktop foundation phase, own ImGui context lifetime, frame
-  helpers, project `PlatformEvent` translation, renderer draw-data hookup,
-  style, fonts, dockspace/menu/status/log-panel primitives, and small testable
-  UI state helpers.
-- Follow [PlatformAdapter.md](PlatformAdapter.md). Do not declare a direct SDL
-  dependency, include SDL headers, expose SDL types, or compile
-  `imgui_impl_sdl3`.
-- Install clipboard, IME, cursor, pointer, and external-URI behavior through
-  project platform APIs; disable ImGui's default OS hooks.
-- Keep docking in the main OS window initially. Do not enable ImGui platform
-  multi-viewports, gamepad navigation, or pointer warping without a later
-  project-owned platform contract.
-- `ponder_ui` may depend on `ponder_core`, `ponder_platform`, `ponder_render`,
-  and Dear ImGui. It must not declare a direct SDL dependency or inherit SDL
-  compile usage requirements. A final executable may still receive SDL through
-  platform's link-only static dependency.
-  It must not depend on `ponder-desktop`, project/domain libraries, workflow,
-  compute, or plugins.
-- Do not add project-specific panels or application command policy until the
-  desktop shell is stable and the project APIs exist.
+- Keep public headers under `include/ponder/ui/` and use `pond::ui`.
+- Do not add Dear ImGui source, targets, adapters, compatibility flags, types, names, or behavior.
+- UI owns semantic paint commands, logical coordinates, color and clipping rules, and CPU
+  tessellation. Do not make GPU triangles its only internal UI representation.
+- Render sees only owning generic 2D draw packets and never depends on UI. Do not put widgets,
+  retained elements, logical UI units, or paint-command interpretation in render.
+- Keep Vulkan, Metal, SDL, native-window, descriptor, render-pass, command-buffer, and other backend
+  handles out of UI.
+- Preserve UI-core configure, build, test, install, and consumption when render is disabled. Isolate
+  the temporary render integration in an explicit target or source component.
+- For the current milestone, treat [open-questions.txt](open-questions.txt) as the accepted contract
+  and follow [roadmap.txt](roadmap.txt) for implementation order. The rectangle-facing API is
+  experimental; do not design the retained tree, layout, styling, text, input, focus, widgets, or
+  stable public frame API in this work.
+- Keep public headers lightweight and keep private paint/compiler representation non-installed.
+- Keep application command policy, domain data, desktop-specific panels, workflows, compute, and
+  plugin behavior outside this library.
 
 ## Verification
 
-- Configure and build a supported CMake preset.
-- When tests exist for this library, run the matching UI test executable.
-- Verify UI targets have no SDL compile usage or direct SDL target dependency.
+- Test paint recording and compilation deterministically without a GPU or native window.
+- Test generic render packets independently without linking UI.
+- Build public-header and install-tree consumers, including UI core with render disabled.
+- Run the bounded Windows/Vulkan rectangle gate when changing the paint-to-render boundary.
+- Verify UI core has no direct SDL, Vulkan, or render dependency and render has no UI dependency.

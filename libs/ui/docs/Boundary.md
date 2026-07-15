@@ -1,61 +1,37 @@
 # UI Library Boundary
 
-`ponder_ui` owns reusable user-interface models and widgets that are not tied to
-a single executable.
+`ponder_ui` owns reusable retained-mode user-interface behavior and project-owned UI paint
+semantics. The long-term target is a durable scientific desktop UI; the current milestone only
+establishes the internal foundation for rendering a rectangle.
 
-Status: SDL-free Dear ImGui integration requirements frozen on 2026-07-08.
+## Public Contract
 
-## Integration Contract
+- Public headers live under `include/ponder/ui/` and use `pond::ui`.
+- Public types describe ponder-owned UI concepts only and remain independent of GPU backends,
+  platform implementation types, and third-party UI libraries.
+- The rectangle-facing surface in the first milestone is explicitly experimental and temporary. It
+  must not constrain the later retained tree, layout, styling, input, text, or widget APIs.
+- UI-core data and behavior remain buildable, testable, installable, and usable without render.
 
-- [Dear ImGui Platform Adapter Contract](PlatformAdapter.md)
+## Rendering Boundary
 
-## Public API
+- UI owns semantic paint commands, logical coordinate and color rules, clipping, and CPU
+  tessellation.
+- UI compiles immutable paint data into owning, backend-neutral 2D draw packets only after exact
+  per-frame metrics are known.
+- Render consumes generic packets and owns shaders, pipelines, GPU resources, command recording,
+  submission, presentation, and completion-based retirement.
+- Render does not interpret retained elements or UI paint commands and never depends on
+  `ponder_ui`.
+- UI receives no Vulkan, Metal, SDL, native-window, descriptor, render-pass, command-buffer, or
+  other backend handle. No native or third-party type crosses the boundary in either direction.
 
-- Public headers live under `include/ponder/ui/`.
-- Source code uses the `pond::ui` namespace.
-- The CMake target is `ponder_ui`; the alias is `ponder::ui`.
+## Current Scope
 
-## Responsibilities
+The rectangle foundation is specified by [open-questions.txt](open-questions.txt) and ordered by
+[roadmap.txt](roadmap.txt). Text, layout, retained-tree design, input, styling, controls, docking,
+accessibility, and the stable public UI API belong to later milestones listed in
+[milestones.txt](milestones.txt).
 
-- Dear ImGui context lifetime and frame setup.
-- Project-owned `PlatformEvent` translation into Dear ImGui input.
-- Renderer backend hookup for ImGui draw data through renderer-owned frame
-  boundaries.
-- Reusable UI-facing models and editor widgets.
-- Shared shell primitives such as menu bars, dockspaces, status areas,
-  diagnostics/log panels, style, and font setup.
-- Presentation logic that should not live in domain libraries.
-- Clipboard, IME, cursor, pointer, and external-URI callbacks implemented only
-  through `ponder_platform`.
-
-## Non-Responsibilities
-
-- Native project data ownership.
-- Renderer backend resources.
-- OS window lifecycle.
-- Secondary Dear ImGui OS viewports in the initial adapter.
-- Application command policy and desktop-specific workflow ownership.
-- Project format, chemistry data, IO/import, workflow, plugin, or compute
-  behavior.
-
-## Adapter Boundary
-
-UI owns the ImGui context and custom platform adapter. It does not compile the
-bundled SDL platform backend and never consumes `SDL_Window` or `SDL_Event`.
-Docking is initially confined to the main OS window.
-
-Render owns Vulkan resources and draw submission for ImGui data. UI drives that
-narrow bridge through renderer frame boundaries without receiving Vulkan
-handles.
-
-## Dependencies
-
-`ponder_ui` may depend on `ponder_core`, `ponder_platform`, `ponder_render`, and
-Dear ImGui. It must not declare a direct SDL dependency or receive SDL compile
-usage requirements. Final executables may still receive SDL as platform's
-link-only static implementation dependency. UI must not depend on `ponder-desktop`,
-`ponder_project`, `ponder_chemistry`, `ponder_io`, `ponder_workflow`,
-`ponder_compute`, or `ponder_plugin_sdk`.
-
-Keep UI dependencies out of core, chemistry, math, project, and compute
-libraries. Prefer adapters around ImGui-facing implementation details.
+UI must not own application command policy, native project data, OS window or GPU lifetimes, domain
+workflows, or desktop-specific panels. Domain and foundation libraries must not depend on UI.

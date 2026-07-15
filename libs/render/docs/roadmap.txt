@@ -3,9 +3,9 @@
 Status: implementation plan for the first real `ponder_render` milestone.
 
 This roadmap implements and validates Vulkan
-create/clear/present/resize/minimize/shutdown across multiple platform windows. Dear ImGui and the
-first 3D visualization are separate later milestones. Their design questions live in
-`open-questions-ui.txt` and `open-questions-3d.txt`.
+create/clear/present/resize/minimize/shutdown across multiple platform windows. Project-owned UI
+drawing and the first 3D visualization are separate later milestones. Their design questions live in
+`../../ui/docs/open-questions.txt` and `open-questions-3d.txt`.
 
 The decisions in `open-questions.txt` are resolved inputs to this plan. REND-000 and REND-001 first
 remove the legacy platform/render contracts that still describe macOS Vulkan portability.
@@ -56,9 +56,9 @@ production behavior they protect rather than being deferred wholesale to the end
 - A move-only `RenderBootstrap` owns loader/instance state and remains on the platform owner thread
   to prepare surfaces. A render-thread `RenderDevice` is its child and owns device-level resources;
   targets are device children.
-- These owners use heap-stable RAII state and release-active child registries. Shutdown destroys
-  unconsumed prepared surfaces and targets, the device, the bootstrap, platform windows, and
-  finally the platform runtime.
+- These owners use heap-stable RAII state and release-active child registries. Application
+  shutdown destroys unconsumed prepared surfaces and targets before the device and bootstrap,
+  then destroys platform windows and finally the platform runtime.
 - A target owns its surface, swapchain, image views, clear-pass objects, per-frame synchronization,
   dirty/suspended state, and actual selected presentation configuration.
 - Platform pixel size is authoritative. Logical size is not used for swapchain extent. Minimized,
@@ -80,9 +80,9 @@ production behavior they protect rather than being deferred wholesale to the end
   public Vulkan types or control-flow codes.
 - Validation warnings and errors fail validation tests. Filters are exact message-ID and
   vendor/driver scoped, justified, owned, and time-bounded; informational messages do not fail.
-- Dear ImGui is not implemented here. The finished frame/target internals must leave a documented
-  overlay insertion point so ImGui work can begin without replacing device, swapchain, or frame
-  ownership.
+- UI drawing is not implemented here. The finished frame/target internals must leave a documented
+  generic 2D insertion point so a project-owned UI paint compiler can submit owning packets without
+  replacing device, swapchain, or frame ownership.
 - Windows on the current development laptop is the only initially verified runtime host. Linux X11
   and Wayland remain implemented and compile-covered but explicitly unverified until exercised on
   native hosts.
@@ -102,7 +102,7 @@ ImGui. Internal clear-pass Vulkan objects are implementation details, not a gene
 | Build foundation | REND-002 through REND-004 | Conditional targets and bootstrap API |
 | Vulkan bootstrap | REND-005 through REND-010 | Handoff, instance, surfaces, and device |
 | Presentation | REND-011 through REND-016 | Clear, recovery, and multiple windows |
-| Handoff | REND-017 through REND-020 | Tests, example, and ImGui-ready gate |
+| Handoff | REND-017 through REND-020 | Tests, example, and intermediate-draw-ready gate |
 
 ## Verification Cadence
 
@@ -152,7 +152,8 @@ Work:
 - Update `libs/platform/docs/Boundary.md`, `libs/platform/docs/Codex.md`, and the applicable
   platform roadmap/example notes.
 - Update `libs/render/docs/Boundary.md` and `libs/render/docs/Codex.md` to contain only the
-  foundation contract; keep Dear ImGui and 3D work explicitly later.
+  foundation contract; keep project-owned UI and 3D work explicitly later and Dear ImGui out of
+  the architecture.
 - Preserve the answered and deferred question files as decision provenance.
 
 Done when:
@@ -303,14 +304,16 @@ Define the two-thread contract without extending the lifetime of borrowed native
 
 Work:
 
-- Add an immutable target-state snapshot containing stable `WindowId`, pixel size, visibility, and
-  minimized/restored state. It contains no native handle or borrowed pointer.
+- Add an immutable target-state snapshot containing stable `WindowId`, pixel size, visibility,
+  faithful platform `WindowState`, and a typed presentation-environment revision. It contains no
+  native handle or borrowed pointer.
 - Define `RenderBootstrap` as the heap-stable owner-thread root for loader/instance state and
   surface preparation. It must outlive every prepared surface, device, and target created from it.
 - Give the bootstrap a synchronized release-active child registry for prepared surfaces and
   devices so teardown cannot race or silently orphan instance children.
 - Require the application to coalesce platform notifications and capture the latest state on the
-  platform owner thread before handing that copied value to render.
+  platform owner thread before handing that copied value to render. That application-side
+  aggregator owns the monotonic per-window snapshot and presentation-environment revisions.
 - Define a move-only opaque prepared-surface handoff whose public representation contains no
   Vulkan, native-window, SDL, or operating-system declaration.
 - Specify that only an owner-thread surface-preparation operation may accept a platform `Window`.
@@ -318,8 +321,9 @@ Work:
 - Forbid storing, returning, or passing the borrowed native snapshot to another thread, even behind
   an opaque wrapper. The later handoff owns a completed render surface, not native source data.
 - Permit the completed opaque surface and copied target state to transfer once to the
-  caller-selected render-affine thread. Device mutation and submission begin there while the
-  bootstrap remains on the platform owner thread.
+  caller-selected render-affine thread, accepting the identical preparation snapshot or a genuinely
+  newer monotonic snapshot. Device mutation and submission begin there while the bootstrap remains
+  on the platform owner thread.
 - Copy every descriptor and snapshot needed after the call. Do not retain `Window&`, `Window*`, or
   references into caller storage.
 - Define a fresh owner-thread surface-preparation call for surface-loss recovery. Ordinary
@@ -474,11 +478,12 @@ Work:
 
 - Create the selected Vulkan 1.2 logical device with `VK_KHR_swapchain` and no optional feature bit
   required by this milestone.
-- At device creation, query and opportunistically enable
-  `VK_EXT_swapchain_maintenance1` plus its feature and the
-  `VK_KHR_present_id`/`VK_KHR_present_wait` pair plus their separate `presentId` and `presentWait`
-  feature bits. Record each path as optional capability; absence does not reject an otherwise valid
-  Vulkan 1.2 device.
+- At device creation, prefer `VK_KHR_swapchain_maintenance1` plus its feature when the matching
+  `VK_KHR_surface_maintenance1` instance prerequisite was enabled. Use the functionally equivalent
+  `VK_EXT_swapchain_maintenance1` device extension and feature when the EXT instance prerequisite
+  is the available compatibility path. Also query the `VK_KHR_present_id`/`VK_KHR_present_wait`
+  pair plus their separate `presentId` and `presentWait` feature bits. Record each path as optional
+  capability; absence does not reject an otherwise valid Vulkan 1.2 device.
 - Support distinct graphics and presentation queue families. Provision one queue from every
   nonempty family at logical-device creation so a later same-WSI surface can use any family that
   reports presentation support; keep queue selection and serialization private.
@@ -505,6 +510,8 @@ Done when:
 
 TASK REND-011: Implement Window-Target Ownership And Suspension
 ---------------------------------------------------------------
+
+Status: completed on 2026-07-14 after the final-audit corrections recorded below.
 
 Give each window independent presentation state beneath the shared device.
 
@@ -534,15 +541,21 @@ Done when:
 TASK REND-012: Implement Swapchain Negotiation And Creation
 -----------------------------------------------------------
 
+Status: completed on 2026-07-14 after the final-audit corrections recorded below.
+
 Add presentation resources to the tested target owner.
 
 Work:
 
 - Query surface capabilities, formats, and present modes on every creation or recreation. Treat
-  capabilities as live data rather than adapter constants.
-- Prefer an SDR sRGB nonlinear surface format and opaque composition. Record the actual selected
-  format, color space, alpha mode, pixel extent, semantic presentation policy, and semantic queued
-  latency in the project-owned selected-configuration snapshot.
+  capabilities as live data rather than adapter constants, and repeat format and present-mode
+  count/read enumeration when Vulkan reports `VK_INCOMPLETE` instead of accepting a partial list.
+- Require `VK_FORMAT_B8G8R8A8_SRGB` or `VK_FORMAT_R8G8B8A8_SRGB` with
+  `VK_COLOR_SPACE_SRGB_NONLINEAR_KHR` and opaque composition; prefer BGRA deterministically when
+  both formats are present. Reject undefined, UNORM, other color spaces, and non-opaque-only
+  surfaces with `UnsupportedSurface`. Record the exact selected format, color space, alpha mode,
+  pixel extent, semantic presentation policy, and semantic queued latency in the project-owned
+  selected-configuration snapshot.
 - Map `VSync` to FIFO. Map `LowLatencyVSync` to mailbox with FIFO fallback. Map `Uncapped` to
   immediate with mailbox then FIFO fallback. Fail an unavailable requirement; for a preference,
   return the selected fallback and reason.
@@ -555,10 +568,20 @@ Work:
 - Support exclusive sharing when graphics and presentation use the same family and correct
   concurrent or ownership-transfer behavior when they differ. Keep this choice private.
 - Create and own the swapchain, image views, Vulkan 1.2 clear render pass, and framebuffer state.
-- Build swapchain state transactionally: publish the replacement only after every dependent
-  object succeeds, then retire the old state safely.
-- Add pure selection tests for capabilities, undefined/current extents, format/mode fallbacks,
-  image-count limits, transforms, composite alpha, separate queue families, and suspension.
+- Use a two-phase replacement transaction. Complete capability queries, configuration selection,
+  and other preflight work while the current generation remains usable. Publish a successor only
+  after its swapchain-dependent objects, frame resources, and presentation tracker all succeed.
+- Treat invocation of `vkCreateSwapchainKHR` with a non-null `oldSwapchain` as the irreversible
+  native commit boundary: Vulkan retires the old swapchain even when that invocation fails. Record
+  that disposition exactly once and never pass the retired handle as `oldSwapchain` again. A
+  failure at or after this boundary leaves an active target with recreation pending and no usable
+  swapchain until a `VK_NULL_HANDLE` retry commits.
+- Reserve the outgoing-generation retirement slot before that native boundary, and retry
+  `vkGetSwapchainImagesKHR` when it returns `VK_INCOMPLETE`; neither bookkeeping allocation failure
+  nor a partial native image list may cross the commit point into published target state.
+- Add pure selection tests for capabilities, undefined/current extents, accepted-format preference
+  and rejection, mode fallback, image-count limits, transforms, opaque-alpha rejection, separate
+  queue families, incomplete enumeration retry, and suspension.
 - Add live Windows create/destroy coverage. Missing Vulkan capability fails a designated render
   environment and may skip only on an explicitly optional, non-provisioned job with a precise
   reason.
@@ -566,12 +589,16 @@ Work:
 Done when:
 
 - One prepared Windows surface can become a validation-clean target with fully reported actual
-  presentation settings, and every failed swapchain step leaves the prior target usable.
+  presentation settings. A failed preflight preserves the prior target; a failure after the native
+  commit boundary leaves the documented recoverable no-swapchain state and a later retry can
+  commit without reusing the retired handle.
 - No public value exposes a raw Vulkan mode, format structure, image count,
   sharing mode, or handle.
 
 TASK REND-013: Implement Clear, Submit, And Present
 --------------------------------------------------
+
+Status: completed on 2026-07-14 after the final-audit corrections recorded below.
 
 Implement the smallest complete frame path without introducing a drawing API prematurely.
 
@@ -585,10 +612,16 @@ Work:
   require shaders, vertex buffers, descriptors, or dynamic rendering for this milestone.
 - Define clear colors as linear floating-point values and document that an sRGB target performs
   the corresponding framebuffer encoding.
-- Separate frame completion from presentation in the public lifecycle so a future ImGui pass can
-  record after the clear and before the final submit/present operation.
-- Submit with per-target frames in flight, semaphores, and fences. Serialize access to any shared
-  queue while allowing independent targets to advance without shared mutable frame state.
+- Separate frame completion from presentation in the public lifecycle so a future generic
+  intermediate stage can record after the clear and before final submit/present.
+- Submit with per-target frames in flight, swapchain-image-indexed render-finished semaphores,
+  frame-slot image-available semaphores, dedicated acquire-completion fences, and graphics
+  submission fences. Serialize access to any shared queue while allowing independent targets to
+  advance without shared mutable frame state.
+- Track acquire and submission fences as pending only after the corresponding Vulkan operation is
+  accepted. Retirement waits only those pending fences, never idle or reset-but-unsubmitted fences.
+  If a failure after successful acquisition leaves synchronization or command state unsuitable for
+  reuse, poison the complete presentation generation and rebuild it before the next usable frame.
 - Enforce the target's semantic queued-latency limit independently of its raw image count.
 - When negotiated during device creation, attach swapchain-maintenance presentation fences or
   present IDs needed by the selected completion path and retain their target-local history.
@@ -607,82 +640,105 @@ Done when:
 
 - A caller can acquire, clear, finish, and present a frame through backend-neutral public types,
   including an ordinary successful no-work path while presentation is suspended.
-- The API has an explicit recording seam immediately before submission where an ImGui renderer can
-  later be integrated without redesigning target ownership or presentation.
+- The API has an explicit semantic seam immediately before submission where the generic
+  intermediate layer can later be integrated without redesigning target ownership or presentation.
 
 TASK REND-014: Consume Window State And Recreate Swapchains
 -----------------------------------------------------------
+
+Status: completed on 2026-07-14 after the final-audit corrections recorded below.
 
 Make the target lifecycle robust under asynchronous platform changes.
 
 Work:
 
 - Accept immutable target-state snapshots captured on the platform owner thread. Route them by
-  stable `WindowId` and reject snapshots for a different target.
+  stable `WindowId`, preserve the platform `WindowState`, validate application-owned monotonic
+  snapshot/environment revisions, and reject snapshots for a different target.
 - Treat `GetPixelSize()` data as the authoritative requested swapchain extent. Logical-size
   changes alone do not trigger recreation.
-- Let applications coalesce pixel-size, state, visibility, display, and display-scale events, then
-  apply only the latest captured state before the next frame.
+- Let applications coalesce pixel-size, state, visibility, display, presentation, color-environment,
+  and display-scale events, then apply only the latest captured state before the next frame. Display
+  or presentation-environment changes increment the typed environment revision even at the same
+  pixel size.
 - Suspend promptly on hidden, minimized, or zero-pixel state. Preserve the target and device while
   releasing presentation resources that cannot be used safely.
 - Recreate lazily on the render thread before the next presentable frame. Collapse repeated resize
   notifications into one recreation at the latest extent.
 - Handle `VK_ERROR_OUT_OF_DATE_KHR` internally as a target-local recreation request. Treat
   `VK_SUBOPTIMAL_KHR` as usable and expose metadata while scheduling a safe recreation.
-- Add deterministic tests for resize storms, minimize/restore, hidden/show, zero extent,
-  out-of-date acquire/present, suboptimal, failed recreation rollback, stale snapshots, and
-  coalescing to the latest state.
+- Add deterministic tests for resize storms, minimize/restore, hidden/show, zero extent, same-size
+  presentation-environment changes, out-of-date acquire/present, suboptimal, preflight
+  preservation, post-commit-boundary no-swapchain recovery, stale snapshots, and coalescing to the
+  latest state.
 - Add live Windows lifecycle tests that resize repeatedly, minimize, restore, hide, show, and close
   without validation messages, deadlocks, unbounded waits, or device-wide idle in the normal path.
 
 Done when:
 
 - Resize and state events never require the render thread to access a platform `Window`, and the
-  next successful frame uses the latest nonzero pixel extent.
+  next successful frame uses the latest nonzero pixel extent and presentation environment.
 - Resize and minimize of one target do not alter another target's state or swapchain generation.
 
 TASK REND-015: Implement Retirement And Loss Recovery
 ------------------------------------------------------
 
+Status: completed on 2026-07-14 after the final-audit corrections recorded below.
+
 Make destructive presentation transitions correct on the Vulkan 1.2 floor.
 
 Work:
 
-- Retire old swapchains and their dependent graphics work with target-local fences or completion
-  tracking. Never use `vkDeviceWaitIdle` for ordinary resize, minimize, or target destruction.
-- Use a negotiated swapchain-maintenance presentation fence or present-ID/present-wait path as the
-  explicit completion signal when available.
-- On unextended core Vulkan 1.2 during ordinary recreation, track per-image acquire/present history
-  and defer old resources until later acquisition/presentation establishes that the presentation
-  engine released them.
-- At final shutdown or surface loss, an unextended implementation has no formal presentation fence
-  and may have no successor swapchain from which to infer completion. Use the conventional
-  `vkQueueWaitIdle`/`vkDeviceWaitIdle` practical fallback, but document that Vulkan does not define
-  it as a formal proof that presentation resources are releasable.
-- Keep that practical fallback out of ordinary frame submission. Log or count its use, and state
-  that it can stall every target sharing the queue/device.
+- Retire old swapchains only after their dependent graphics work and presentation-engine use have
+  completed through the selected completion path. A graphics-submission fence alone is not a WSI
+  retirement proof.
+- Track acquire completion separately from graphics submission. Wait only acquire and submission
+  fences marked pending by accepted operations, and retain poisoned generations until both this
+  pending device work and the selected presentation-completion proof permit destruction.
+- Prefer `VK_KHR_swapchain_maintenance1` presentation fences as the authoritative asynchronous
+  resource-release signal when its `VK_KHR_surface_maintenance1` instance prerequisite and device
+  feature are available. Use the functionally equivalent `VK_EXT_surface_maintenance1` plus
+  `VK_EXT_swapchain_maintenance1` pair as a compatibility fallback, attach a fence from the
+  selected pair to every queued presentation, and retain each generation until all fences complete.
+- When the maintenance path is unavailable but `VK_KHR_present_id` and `VK_KHR_present_wait` are
+  both enabled, assign monotonic IDs per swapchain and wait for the latest accepted ID before any
+  operation makes that native swapchain retired. Never call `vkWaitForPresentKHR` on a retired
+  swapchain; a bounded timeout falls back to the successor-history path.
+- On unextended core Vulkan 1.2, retain an old generation after successor creation until a
+  successor image that was previously presented is reacquired and the graphics submission waiting
+  on that reacquire completes. This ordered successor presentation proof, rather than a bare
+  graphics fence or unrelated acquire observation, establishes release of the predecessor.
+- Reserve the counted `vkQueueWaitIdle`/`vkDeviceWaitIdle` practical fallback for surface loss,
+  final shutdown, or another terminal transition with no usable successor. Keep it out of ordinary
+  frame submission, document that it is not a formal presentation-completion proof, and state that
+  it can stall every target sharing the queue or device.
 - Recover `VK_ERROR_SURFACE_LOST_KHR` only after the application supplies a fresh opaque surface
   produced by the owner-thread preparation operation. Never reuse stored native data.
 - Validate the replacement surface against the existing adapter and queues, then replace it
   transactionally or return `UnsupportedSurface` while preserving a destructible target.
 - Treat device loss as a stable fatal device result for this milestone. Ensure later calls fail
   consistently and destruction remains safe.
-- Test graphics completion, both extension-backed paths, core acquire-history retirement, the
-  baseline shutdown limitation, shared-queue stalls, surface loss, incompatible replacement,
-  device loss, rollback, and shutdown after every failure.
+- Test graphics completion independently from presentation completion, maintenance presentation
+  fences, present-ID ordering and pre-retirement waits, present-wait timeout demotion, exact
+  successor present/reacquire/submission history, terminal idle-fallback counting, the baseline
+  shutdown limitation, shared-queue stalls, surface loss, incompatible replacement, device loss,
+  rollback, and shutdown after every failure.
 - Add live Windows surface/target teardown and surface-loss handling where the host can produce it;
   cover unavailable hardware paths through injection.
 
 Done when:
 
-- Every old swapchain and surface uses an extension-backed completion signal or the documented core
-  1.2 retirement/final-shutdown fallback; the unextended final-shutdown path is never described as
-  a formal completion proof.
+- Every old swapchain and surface uses preferred KHR or compatibility EXT maintenance presentation
+  fences, a present-ID wait completed before native retirement, the exact Vulkan 1.2
+  successor-history proof, or the documented terminal practical fallback. Queue or device idle is
+  never described as a formal completion proof.
 - Recovery never accesses a platform `Window` or native snapshot from the render thread, and loss
   in one target cannot invalidate another.
 
 TASK REND-016: Validate Multiple Independent Windows
 ----------------------------------------------------
+
+Status: completed on 2026-07-14 after the final-audit corrections recorded below.
 
 Prove the milestone's defining multi-window behavior before broadening the renderer.
 
@@ -722,6 +778,8 @@ Done when:
 TASK REND-017: Complete Diagnostics And Failure Hardening
 ---------------------------------------------------------
 
+Status: completed on 2026-07-14 after the final-audit corrections recorded below.
+
 Make failures actionable and prove that exceptional paths preserve ownership invariants.
 
 Work:
@@ -759,6 +817,8 @@ Done when:
 
 TASK REND-018: Establish The Render Verification Matrix
 -------------------------------------------------------
+
+Status: implementation complete; required validation evidence remains blocked as of 2026-07-14.
 
 Turn the per-task checks into repeatable project gates for the completed milestone.
 
@@ -802,6 +862,9 @@ Done when:
 TASK REND-019: Add The Minimal Clear-Window Example
 ---------------------------------------------------
 
+Status: implementation and build-smoke complete; validation-clean manual acceptance remains open
+as of 2026-07-14.
+
 Create the first render example after the library and lifecycle tests are stable.
 
 Work:
@@ -838,8 +901,12 @@ Done when:
 - Its code is the recommended minimal template for applications beginning platform/render
   integration.
 
-TASK REND-020: Close The Bootstrap Milestone And Prove ImGui Readiness
----------------------------------------------------------------------
+TASK REND-020: Close The Bootstrap Milestone And Prove Intermediate-Draw Readiness
+---------------------------------------------------------------------------------
+
+Status: incomplete as of 2026-07-14. Required validation is blocked by the missing Khronos
+validation layer, and the remaining configuration, tooling, and manual closeout evidence has not
+been recorded.
 
 Audit the result as a coherent library boundary rather than a collection of passing tasks.
 
@@ -849,6 +916,10 @@ Work:
   toolset and the project's current Clang-cl configuration where available.
 - Run formatting, static analysis, all backend-free tests, injected lifecycle tests, installed
   consumer tests, live tests, and the clear-window example with warnings-as-errors.
+- Make the render-disabled gate assert that no render, Vulkan, Volk, or VMA target/dependency leaks
+  into that topology; a successful non-render build alone is not sufficient evidence.
+- Make Clang-tidy findings fail the gate and include `examples/render/1-clear-window/Main.cpp` in
+  explicit Clang-format and Clang-tidy coverage even if the general scripts still exclude examples.
 - Perform repeated manual create/clear/present/resize/minimize/restore/multi-window/shutdown cycles
   with validation enabled. Verify that ordinary frame/resize/minimize paths do not rely on
   `vkDeviceWaitIdle` and record any documented baseline final-shutdown fallback.
@@ -862,19 +933,20 @@ Work:
 - Update render boundary and developer documents to describe only implemented behavior. Keep
   unresolved 3D and UI choices in their dedicated question files instead of silently deciding
   them during bootstrap.
-- Review the public frame lifecycle with the next Dear ImGui integration in mind: the overlay must
-  be able to record after the clear and before final submission, access only explicit
-  backend-neutral target/frame data publicly, and coexist with resize and multi-window state.
-- Do not add Dear ImGui or a generalized drawing API in this task. If the review finds that ImGui
-  requires breaking target ownership or frame ordering, fix and retest that foundation before
-  declaring the milestone complete.
+- Review the public frame lifecycle for the next generic intermediate-draw layer: it must compose
+  after preceding color work and before final submission, use only backend-neutral target/frame
+  contracts, and coexist with resize and multi-window state.
+- Do not add Dear ImGui or an arbitrary GPU command API in this task. If the generic layer requires
+  breaking target ownership or frame ordering, fix and retest that foundation before declaring the
+  milestone complete.
 
 Done when:
 
 - All supported Windows milestone paths are validation-clean and documented, all exclusions are
   explicit, and no known bootstrap defect is deferred into the 3D renderer.
-- The next roadmap can begin Dear ImGui integration without first redesigning device/target
-  lifetime, window-event handoff, frame ordering, swapchain recreation, or multi-window support.
+- The next roadmap can add the generic 2D packet layer and UI-owned paint compiler/tessellator
+  without first redesigning device/target lifetime, window-event handoff, frame ordering, swapchain
+  recreation, or multi-window support.
 
 Decision Coverage
 -----------------
@@ -893,3 +965,558 @@ Decision Coverage
 | TEST-02, TEST-03, TEST-10, TEST-11, TEST-13 | REND-007, REND-017, REND-018 |
 | BUILD-01, BUILD-03, BUILD-06, BUILD-07 | REND-002, REND-003, REND-018 |
 
+
+## Final Audit
+
+Audit date: 2026-07-14.
+
+This audit covers the resolved decisions in `open-questions.txt`, the work described by REND-000
+through REND-018, the current public and private render implementation, and every render unit,
+header, consumer, install-consumer, and live integration test. It is a design and source audit, not
+an assertion that every current test failure would expose the issues below. In several important
+cases, the current tests encode the incomplete behavior or never reach the affected production
+path.
+
+### Outcome At Audit Time
+
+Do not begin REND-019 yet. The loader, WSI, adapter, logical-device, basic swapchain, clear/present,
+and two-window happy paths are useful foundations, but REND-011 through REND-018 are only partially
+complete. There are correctness gaps in presentation synchronization, swapchain retirement and
+recreation, lifetime enforcement, and loss recovery. There are also public-contract mismatches and
+verification gates that currently report more confidence than the tests provide. Publishing the
+minimal example now would make those incomplete choices the recommended application pattern.
+
+The strongest existing work should be retained:
+
+- Stable render error values, public enum/value validation, and move-only API traits have direct
+  tests.
+- Both public headers have PCH-free self-containment translation units, and the build-tree consumer
+  uses explicit public targets with strict warnings.
+- Fake dispatch gives useful deterministic coverage for loader/instance creation, validation-mode
+  selection, WSI routing, adapter ranking, queue-family selection, device creation, and basic
+  swapchain selection.
+- The Windows live tests create real Vulkan surfaces, devices, swapchains, and frames, and they
+  demonstrate basic two-window independence with finite CTest timeouts and the shared SDL resource
+  lock.
+
+### Follow-Up Disposition (2026-07-14)
+
+Every correctness blocker, public-contract correction, and test-audit finding below now has an
+implemented resolution, and the UI-000 source audit reconfirmed those invariants. REND-019 has
+therefore been implemented. This supersedes the historical instruction not to begin REND-019, but
+it does not complete REND-018 through REND-020: required validation-clean execution and the
+remaining recorded closeout matrix are still outstanding.
+
+The numbered findings below are retained as decision history. Each includes its implemented
+resolution; the current gate is missing closeout evidence, not an unresolved architecture defect.
+
+### Correctness Findings And Resolutions
+
+1. **Implement real presentation completion and retirement.**
+
+   `RenderTarget::State::RetirePresentationResources` currently treats the availability of
+   swapchain-maintenance or present-ID/present-wait extensions as if it were a completion signal.
+   It then decrements a synthetic observation counter after unrelated later presentations. The
+   frame path does not attach `VkSwapchainPresentFenceInfoEXT` or `VkPresentIdKHR`, does not call
+   `vkWaitForPresentKHR`, and does not implement the promised per-image acquire/present history for
+   unextended Vulkan 1.2. Old presentation resources can therefore be destroyed without proof that
+   the presentation engine released them, while diagnostics can incorrectly report that explicit
+   completion was used.
+
+   Reopen REND-015. Implement and test the actual negotiated extension paths. Revalidate the core
+   Vulkan 1.2 strategy against the Vulkan specification. If safe bounded ordinary retirement cannot
+   be proved on that floor, use and document a presentation-queue or device-idle fallback rather
+   than retaining the current heuristic. Correctness takes precedence over the current no-idle
+   aspiration.
+
+   Resolution (2026-07-14): implemented. Maintenance1 now prefers the promoted KHR surface/device
+   extension pair and uses the functionally equivalent EXT pair as a compatibility fallback; both
+   attach tracked presentation fences as the asynchronous retirement proof. Present IDs are waited
+   only before native retirement, with timeout demoted to the successor path. Core Vulkan 1.2
+   retains old generations until successor present/reacquire/submission history proves completion;
+   counted queue or device idle remains only for terminal paths with no usable successor. Synthetic
+   observation counters were removed.
+
+2. **Correct per-frame semaphore and post-acquire failure handling.**
+
+   Render-finished binary semaphores are keyed by frame slot and reused after waiting only for the
+   graphics submission fence. A graphics fence does not prove that the presentation queue consumed
+   its semaphore wait. Use swapchain-image-indexed present semaphores or a presentation-completion
+   primitive that proves safe reuse. In addition, failures after image acquisition can leave an
+   acquired image, a signaled binary semaphore, a recording command buffer, or a fence that was
+   reset but never submitted. The target is nevertheless left reusable, so a later frame can time
+   out indefinitely or violate Vulkan synchronization rules.
+
+   Reopen REND-013 and REND-015. Define the state transition after every fallible post-acquire
+   operation, rebuild or retire poisoned frame resources, and add failure-then-next-frame and
+   failure-then-shutdown tests rather than checking only the first error code.
+
+   Resolution (2026-07-14): implemented and tested in this change. Render-finished semaphores are
+   indexed by acquired swapchain image. Each frame slot also owns a dedicated acquire-completion
+   fence. Acquire and submission completion remain independent after a queued submission, and
+   retirement waits every fence whose operation is recorded as pending. Any failure after successful acquisition that cannot preserve reusable synchronization
+   marks the complete presentation generation poisoned; the next frame retires that generation and
+   rebuilds before acquiring again. Deterministic failure-then-next-frame and
+   failure-then-shutdown coverage in this change verifies that reset, begin/end, fence-reset,
+   submit, and present failures neither reuse poisoned state nor wait forever on work that was
+   never queued.
+
+3. **Make swapchain replacement genuinely transactional.**
+
+   Recreation passes the live old swapchain to `vkCreateSwapchainKHR`, then creates image views,
+   the render pass, framebuffers, and separate frame resources. Vulkan retires a non-null
+   `oldSwapchain` when `vkCreateSwapchainKHR` is invoked even if that invocation fails. A native or
+   later dependent-object failure therefore cannot preserve the old target as usable, despite the
+   original REND-012 and REND-014 rollback contract.
+
+   Choose a correct commit model: either do not retire the old swapchain until the replacement can
+   be committed, or transition explicitly to a recoverable no-swapchain state after the native
+   commit boundary. Test failure at every step after `vkCreateSwapchainKHR` and assert the real
+   public state, not just destruction call counts.
+
+   Resolution (2026-07-14): implemented and tested in this change. Configuration selection is a
+   preflight phase, so its failures preserve the current usable generation. The native creation
+   phase reports whether a non-null old swapchain was irreversibly retired, including when
+   `vkCreateSwapchainKHR` itself fails; that exact generation becomes ineligible for reuse. Failure
+   at or after the boundary leaves `TargetStatus::Active`, recreation pending, and no usable
+   swapchain, selected presentation configuration, or reported generation. Retirement bookkeeping is
+   reserved before entering that boundary, and incomplete native image enumeration is retried rather
+   than published. New native handles are adopted by RAII before later fallible host allocations, so
+   allocation failure cannot leak a partial successor or bypass the retirement transition. The next
+   acquisition retries with `oldSwapchain == VK_NULL_HANDLE`, while a fully built successor commits
+   all owners together and a later retirement-drain error cannot roll it back. Deterministic native-,
+   dependent-object-, host-allocation-, retry-, and shutdown-failure tests assert the transition and
+   prevent retired handles from being supplied again. The Vulkan rule is documented by
+   <https://docs.vulkan.org/refpages/latest/refpages/source/VkSwapchainCreateInfoKHR.html>.
+
+4. **Separate stale swapchains, lost surfaces, and completed recreation.**
+
+   `VK_ERROR_OUT_OF_DATE_KHR` during swapchain work is mapped to `SurfaceLost`, while some genuine
+   `VK_ERROR_SURFACE_LOST_KHR` query paths degrade to `BackendFailure`. Acquire or present returns
+   `FrameStatus::Recreated` before recreation occurs; the frontend only marks a future recreation
+   pending. A resize race can consequently tell the caller to prepare a new surface while
+   `RenderTarget::IsSurfaceLost()` remains false and `RecoverSurface()` rejects the replacement.
+   Surface recovery also creates recreation metadata whose previous and current revisions are
+   equal, which is invalid according to `IsValid(TargetRecreationInfo)`.
+
+   Reopen REND-014 and REND-015. Use distinct typed states for out-of-date/recreation-pending,
+   recreation-completed, surface-lost, and device-lost. Never invent a window-state revision for a
+   backend-only event, and ensure every reported recovery action is accepted by the corresponding
+   public operation.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change. Target status
+   now distinguishes ordinary suspension, `SurfaceLost`, and terminal `DeviceLost` states.
+   Out-of-date acquire, present, and replacement results keep the surface valid, return
+   `FrameStatus::RecreationPending`, and schedule an internal stale-swapchain retry;
+   `FrameStatus::Recreated` is returned only after the replacement commits. Genuine surface loss
+   transitions the target to `TargetStatus::SurfaceLost`, returns `RenderErrorCode::SurfaceLost`,
+   and is immediately accepted by `RecoverSurface()`, while device loss remains a distinct terminal
+   result. Backend-only presentation-change and surface-loss metadata leaves both optional platform
+   snapshot revisions absent instead of inventing a revision transition. Tests cover stale acquire,
+   stale present, replacement retry, completed recreation, surface recovery, and device-loss
+   separation.
+
+5. **Create the promised post-clear, pre-submit intermediate insertion point.**
+
+   `RenderFrame::AcquireFrame` does not acquire a swapchain image or begin recording. `Clear()`
+   only stores a color. The monolithic `FinishAndPresent()` later waits, acquires, begins and ends
+   the clear render pass, submits, and presents. No generic intermediate layer can append owning
+   draw packets after the clear and before final submission, despite that being an explicit
+   completion criterion for REND-013 and the readiness premise of REND-020.
+
+   Refactor the frame state machine before the example fixes this API in application code. The
+   acquired frame must own real recording state, clear must establish the ordered clear operation,
+   a narrow backend-neutral intermediate stage must be able to append work, and finalization must
+   submit and present. Add a deterministic ordering test for acquire, clear, intermediate insertion,
+   submit, and present.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change. Acquiring a
+   presentable frame now performs image acquisition and begins command recording; `Clear()` records
+   the clear immediately and leaves that recording open. One private renderer-owned intermediate
+   insertion seam follows the clear, and `FinishAndPresent()` alone finalizes, submits, and presents
+   the frame. An ordering test proves acquire, clear, intermediate insertion, submit, and present in
+   sequence. This is an internal backend-neutral foundation for a later owning packet contract, not
+   a public draw layer, Dear ImGui integration, callback, native-handle escape hatch, or arbitrary
+   GPU command API.
+
+6. **Enforce the accepted parent-child and destruction-thread contracts.**
+
+   The resolved LIFE-04/LIFE-05 decisions require parents to outlive children and require
+   release-active enforcement. The current bootstrap shutdown merely marks the shared registry as
+   shut down; targets and frames retain shared device/target state, so destroying a public parent
+   silently extends native resource lifetime. Existing tests explicitly bless shutdown with live
+   children. Defaulted destructors also do not verify thread affinity, allowing the last shared
+   reference to destroy Vulkan resources on an arbitrary thread.
+
+   Reopen REND-005, REND-011, and REND-016. Prefer an explicit shutdown operation that returns
+   `InvalidState` while children are live plus release-active destructor enforcement for ignored
+   violations. Add render-thread destruction checks, active-frame teardown cases, move-assignment
+   cases, and subprocess/death tests wherever termination is the accepted behavior. If shared-state
+   orphaning is intentionally preferred instead, revise every conflicting contract first; do not
+   retain both models.
+
+   Resolution (2026-07-14): implemented and tested in this change. The explicit bootstrap shutdown
+   operation now returns `InvalidState` without mutation when called from the wrong owner thread or
+   while prepared surfaces, devices, targets, or frame tokens remain. Destructors and destination
+   move assignments use release-active verification for parent-before-child release and for release
+   from the wrong owner/render thread; valid move construction continues to preserve heap-stable
+   child state. Every issued frame token, including a suspended, timed-out, or recreation-pending
+   token, keeps its target registered until completion or correct-thread abandonment. Focused
+   deterministic and subprocess death tests replace the former orphaning behavior and cover
+   shutdown retry, transfer-thread teardown, live-child destruction, and move-assignment release.
+
+7. **Guarantee the accepted opaque SDR sRGB output contract.**
+
+   Swapchain selection currently falls back from sRGB formats to UNORM and then to an arbitrary
+   first format even though this shaderless milestone has no explicit linear-to-sRGB encoding path.
+   Composite alpha can also fall back from opaque to premultiplied, postmultiplied, or inherited
+   behavior. That contradicts the accepted opaque SDR sRGB presentation contract.
+
+   For this milestone, require an sRGB format with the accepted nonlinear color space and require
+   opaque composite alpha; return `UnsupportedSurface` otherwise. Add deterministic rejection
+   tests. Broader format conversion and compositing policy belong in the later 3D/offscreen work.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change. Swapchain
+   preflight now accepts only `VK_FORMAT_B8G8R8A8_SRGB` or `VK_FORMAT_R8G8B8A8_SRGB` paired with
+   `VK_COLOR_SPACE_SRGB_NONLINEAR_KHR`, deterministically prefers BGRA when both are present, and
+   requires opaque composite alpha. UNORM, undefined, arbitrary/non-sRGB color-space, and
+   non-opaque-only surfaces fail with `UnsupportedSurface` before native swapchain creation. The
+   selected public configuration must exactly match the native format, color space, alpha mode,
+   present mode, and extent. Format and present-mode enumeration retries
+   `VK_INCOMPLETE`; adapter compatibility applies the output contract before preference ranking;
+   replacement-surface recovery preflights the complete active presentation configuration before
+   consuming the handoff; and native creation rejects inconsistent public selected-configuration
+   metadata. Linear clear values are encoded by the sRGB attachment write.
+
+8. **Replace process-global Volk dispatch with owner-local dispatch.**
+
+   The production dispatch object wraps Volk's mutable global instance/device function pointers,
+   and `volkLoadInstanceOnly`/`volkLoadDevice` overwrite them. The public model permits multiple
+   bootstraps or devices but has no process-global exclusivity guard, so concurrent or sequentially
+   overlapping owners can use function pointers loaded for another instance or device.
+
+   Reopen REND-006 and REND-010. Store `VolkInstanceTable` and `VolkDeviceTable` in their
+   respective RAII owners, or explicitly choose, document, and enforce a one-instance/one-device
+   process contract. The accepted architecture currently promises neither a global singleton nor
+   that restriction.
+
+   Resolution (2026-07-14): implemented with owner-local Volk dispatch. Loader initialization is
+   cached through `std::call_once`, and the small Volk table-population boundary is serialized
+   because pinned Volk temporarily uses mutable global loader state while filling tables. Each
+   instance and device RAII owner retains its own `VolkInstanceTable` or `VolkDeviceTable` and a
+   dispatch derived from that table; downstream device state copies the owning device dispatch.
+   VMA receives the owning instance's GIPA/GDPA explicitly. Deterministic fake-dispatch tests keep
+   overlapping instance/device owners alive across moves and verify that destruction and allocator
+   calls remain bound to the correct owner.
+
+9. **Narrow queue synchronization to the actual queues.**
+
+   One device-wide mutex currently covers a fence wait, image acquisition, command recording,
+   submission, and presentation. The bounded waits alone can block another independent target for
+   roughly the configured fence and acquisition timeouts, contradicting the narrow shared-queue
+   boundary in REND-013 and REND-016.
+
+   Perform target-local waits, acquisition, and command recording outside queue locks. Lock the
+   exact Vulkan queue only around externally synchronized queue calls, using the same lock when the
+   graphics and presentation handles alias. Add two-target tests that prove one target's bounded
+   wait does not stall the other's CPU-side frame preparation.
+
+   Resolution (2026-07-14): implemented with synchronization state owned by each logical-device
+   RAII owner and keyed by actual `VkQueue` handle. Fence and presentation-completion waits, image
+   acquisition, fence reset, and command recording remain outside queue locks. Queue submission,
+   presentation, and queue-idle calls lock only their exact queue; aliased graphics/presentation
+   handles share one lock, while distinct queues remain independent. Device-idle and native device
+   destruction use an exclusive gate against every queue operation. Deterministic tests cover
+   aliased serialization, distinct-queue independence, exclusive device waits, and the production
+   finish helper reaching command-buffer finalization and fence reset while another queue user holds
+   the shared queue lock.
+
+### Public Contract And API Corrections
+
+1. Replace the Vulkan-flavored public policy names `Fifo`, `PreferMailbox`, and
+   `PreferImmediate` with the accepted semantic `VSync`, `LowLatencyVSync`, and `Uncapped`
+   contract. Add an explicit requirement/preference strength and typed fallback reason so an unmet
+   requirement fails while a preference reports exactly why and how it changed. Do the same for the
+   semantic queued-latency request.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change. Public target
+   descriptors now use semantic `VSync`, `LowLatencyVSync`, and `Uncapped` requests with explicit
+   `Preferred` or `Required` strength. An unmet requirement returns `UnsupportedSurface`; a
+   preference returns its actual semantic policy and `UnavailableForTarget` fallback. Queued latency
+   uses the same strength model and reports the requested maximum, actual maximum, and
+   `TargetMaximumExceeded` when a preferred value is reduced. Focused negotiation tests cover exact
+   selection, each policy fallback tier, and required policy/latency rejection.
+
+2. Remove backend implementation details from general public snapshots. `SelectedPresentMode`,
+   numeric/native-named surface format and color-space values, queue-family topology, and
+   `swapchainMaintenance1`/`presentId`/`presentWait`/`vmaAllocator` fields expose Vulkan or
+   allocator choices rather than backend-neutral consumer capabilities. Native numbers and names
+   belong in `BackendDiagnostic`; public presentation values should describe semantic guarantees
+   and actual results.
+
+   Resolution (2026-07-14): implemented in this change. Adapter snapshots now expose semantic
+   presentation policies, queued-latency range, window-presentation support, and the accepted opaque
+   SDR sRGB guarantee. Selected presentation state reports only semantic request/result/fallback
+   values, output guarantee, and pixel extent. Native surface formats, color spaces, present modes,
+   queue-family topology, VMA state, and Vulkan presentation-completion features moved behind the
+   private Vulkan boundary. Compile-time public-contract checks prevent those native snapshot
+   members from returning.
+
+3. Make window-state handoff able to request presentation re-evaluation without a pixel-size
+   change. The current snapshot cannot represent a same-size display migration, color/presentation
+   environment change, or display-scale event, although REND-014 says those events are coalesced.
+   Replace the ambiguous minimized/restored Boolean pair with faithful platform window state and a
+   typed presentation-environment revision or change mask. Document who assigns monotonically
+   increasing snapshot revisions.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change.
+   `RenderTargetSnapshot` now carries `platform::WindowState` and a typed, nonzero
+   `PresentationEnvironmentRevision`. The application-side platform-event aggregator owns both
+   monotonic per-window revision sequences. Increasing the environment revision schedules and
+   coalesces presentation recreation even when pixel size is unchanged; regressing it is rejected.
+
+4. Allow an immediate prepared-surface transfer with the same valid snapshot. The current
+   `TransferToCurrentThread` path requires a strictly newer revision, forcing callers and tests to
+   invent a state change even when preparation and handoff are consecutive. Accept an identical
+   snapshot, reject older or conflicting state, and still allow a genuinely newer coalesced
+   snapshot.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change. Prepared
+   surfaces accept the identical valid preparation snapshot during immediate transfer. The shared
+   ordering validator rejects older snapshots, same-revision conflicts, and presentation-environment
+   regressions while accepting a genuinely newer coalesced snapshot. Target updates remain strictly
+   newer operations.
+
+5. Remove public test scaffolding and dead overloads. `CreatePreparedSurfaceForCompletedSurface`
+   fabricates a nominal prepared surface without Vulkan state, and
+   `CreateDevice(RenderDeviceDesc)` always fails. Move fake creation behind a private injection
+   seam or friend fixture. Remove the duplicate, currently unused
+   `RenderDeviceDesc::adapterPreference`, or give the descriptor a distinct real purpose.
+
+   Resolution (2026-07-14): Completed. The fake prepared-surface factory now lives behind the
+   source-private `RenderBootstrapTestAccess` fixture, and only the render test targets can include
+   that seam. The always-failing device overload and its legacy tests were removed. Adapter choice
+   now belongs only to `RenderAdapterSelectionDesc`; `RenderDeviceDesc` remains an empty device-
+   creation extension point instead of duplicating adapter policy.
+
+6. Propagate diagnostics structurally. Native code, symbolic name, and operation are currently
+   serialized into a display string and reparsed only for target failures; bootstrap and device
+   creation failures do not provide the promised optional `BackendDiagnostic`. Use structured
+   error context or a render failure wrapper, and expose immutable bootstrap/device/target
+   diagnostic snapshots for enabled validation, negotiated API/capabilities, and the last failure.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change. Vulkan result
+   translation now records native code, symbolic name, exact operation, render code, and validation
+   context structurally at the failure boundary; no diagnostic field is reparsed from display text.
+   Bootstrap, device, and target owners retain owning diagnostic snapshots. They report requested
+   and enabled validation, negotiated API/debug instrumentation, semantic selected-adapter and
+   presentation capabilities, lifecycle state/counters, target identity, and the last failure.
+   Focused tests cover bootstrap snapshot state, scoped native loader translation, and native target
+   failure propagation through the public target diagnostic snapshot.
+
+7. Complete the promised diagnostic instrumentation. Include `WindowId` and the target label in
+   target Vulkan object names and creation/recovery errors. Emit the documented stable events for
+   adapter selection, enabled requirements/preferences, actual presentation settings, recreation
+   reason, validation, and lifecycle misuse. Do not report timing-marker or capture-region hooks as
+   active when only object names and command labels are implemented.
+
+   Resolution (2026-07-14): implemented and deterministically tested in this change. Every
+   target-owned Vulkan object uses the stable `pond.render.target/window:<WindowId>/...` name
+   prefix, while creation and recovery failures carry the matching target identity. Stable log
+   events now cover validation configuration, adapter selection, enabled requirements/preferences,
+   requested and actual presentation settings, recreation request/completion reasons, surface
+   recovery, target failures, and lifecycle misuse. Debug hook snapshots reflect owner-local object
+   name and command-label availability; timing-marker and capture-region flags remain false.
+
+8. Reconsider allocating getters declared `noexcept`. Several device and target diagnostic
+   getters copy strings and vectors by value, so allocation failure terminates. Return stable
+   immutable views/references where lifetime permits or remove `noexcept` and keep the failure
+   model honest.
+
+   Resolution (2026-07-14): Completed. Selected-adapter and private Vulkan owner metadata getters
+   return stable immutable references. Computed device and target diagnostic snapshots remain
+   values but are no longer `noexcept`. The selected-presentation getter remains a `noexcept`
+   value return because its finalized public value is allocation-free. Compile-time API trait tests
+   lock these distinctions.
+
+### Test Audit
+
+1. **Make validation-clean a real live-test assertion.** The debug callback sets the private
+   `warningOrErrorSeen` flag, but no production or integration path reads it. Add a bounded,
+   allocation-safe validation report owned by the bootstrap/fixture, assert zero unexpected
+   warnings and errors after render resources are destroyed but before the instance is destroyed,
+   and include captured message IDs in a failure. Keep informational messages diagnostic-only.
+
+   Resolution (2026-07-14): implemented with an allocation-free, fixed-capacity validation report
+   owned by the Vulkan instance/bootstrap. Atomic counters retain warning, error, and overflow
+   totals, while up to 32 fixed-size message IDs are captured without allocation in the callback.
+   Filtered and informational messages remain diagnostic-only. Every live scenario now asserts a
+   clean report after targets and devices are destroyed but before bootstrap shutdown and prints
+   the captured IDs on failure.
+
+2. **Drive the public lifecycle through deterministic injection.** The current fake tests mostly
+   call private Vulkan helpers. Add injection beneath public bootstrap/device/target/frame owners
+   and cover suspended acquisition, skipped finish, finish without clear, invalid clear, abandoned
+   and moved frames, reacquisition after abandonment, wrong-thread use, snapshot/recovery during an
+   active frame, target isolation, sticky device loss, surface replacement, and shutdown after
+   every state.
+
+   Resolution (2026-07-14): implemented behind source-private
+   `RenderBackendTestAccess` factories that assemble real public bootstrap, device, target, and
+   frame owners from completed fake Vulkan owners. Deterministic tests cover suspended/skipped
+   frames, missing or invalid clear, abandonment and moves, reacquisition, wrong-thread rejection,
+   active-frame snapshot and recovery rejection, independent targets, sticky device loss, surface
+   replacement, and orderly shutdown from every resulting state.
+
+3. **Replace the aspirational rollback matrix with table-driven coverage.** Fail every fallible
+   instance, surface, device, allocator, swapchain, image-view, render-pass, framebuffer,
+   command-pool, command-buffer, semaphore, fence, wait, reset, begin/end, acquire, submit, present,
+   and destruction operation. For each failure, assert stable error code and structured context,
+   exact live-child/resource counts, whether the prior target remains usable or enters a documented
+   recoverable no-swapchain state, and safe final shutdown. The 2026-07-14 synchronization and
+   replacement change adds post-acquire failure/rebuild and native-commit-boundary retry coverage;
+   the exhaustive table for unrelated creation, destruction, and public-lifecycle failures remains
+   open.
+
+   Resolution (2026-07-14): implemented as table-driven creation, frame, and idle-wait matrices.
+   Rows cover loader and instance enumeration, instance/debug/surface creation, adapter and surface
+   queries, device extensions, device/allocator creation, every swapchain and frame resource,
+   fence waits and resets, command reset/begin/end, acquire, submit, present, queue idle, and device
+   idle. Each row checks stable render/native codes and operation names, exact post-failure
+   resources and target state, successful retry or the documented recoverable no-swapchain state,
+   and final zero-resource shutdown. Vulkan destroy entry points are `void`; their authoritative
+   coverage is exact successful-create-minus-destroy accounting for every destructible owner.
+
+4. **Test the real REND-015 paths.** Device feature-enablement tests do not prove use of
+   presentation fences or present-ID/wait. Add direct retirement tests for each extension-backed
+   path, the chosen Vulkan 1.2 fallback, final-shutdown fallback accounting, surface-loss recovery,
+   incompatible replacement, shared-queue stall behavior, and isolation from another target.
+   Assert that ordinary frame, resize, and minimize paths do not call a device-wide idle unless the
+   revised core-floor contract explicitly requires and documents that fallback.
+
+   Resolution (2026-07-14): implemented through public-owner tests for maintenance presentation
+   fences, present ID/wait, and the Vulkan 1.2 successor-acquire fallback. Tests prove resize and
+   minimize/restore retirement, observable final-shutdown fallback accounting, surface-loss queue
+   stalls, incompatible and compatible replacement, and continued progress on another target.
+   Ordinary frame, resize, minimize, and extension-backed shutdown paths assert zero device-wide
+   idle calls; only the documented terminal Vulkan 1.2 fallback performs one.
+
+5. **Exercise real platform state and event flow.** The live tests hard-code visibility/restored
+   state, do not pump the platform event loop, perform one immediate resize, and synthesize
+   minimized/restored snapshots instead of calling `Window::Minimize`, `Restore`, `Hide`, and
+   `Show`. Add resize storms with event coalescing, actual hide/show and minimize/restore, close
+   without immediate destruction, repeated create/destroy cycles, actual asymmetric window
+   destruction while the other keeps presenting, and a dedicated-render-thread shutdown path.
+
+   Resolution (2026-07-14): implemented in the live Windows suite. It pumps platform events through
+   resize storms while submitting one coalesced renderer snapshot, calls real hide/show and
+   minimize/restore APIs, posts and observes a close request without immediate destruction, repeats
+   window/target creation and destruction three times, destroys one live window while the other
+   keeps presenting, and tears renderer children down on a dedicated render thread.
+
+6. **Make required live jobs impossible to skip accidentally.** `PONDER_RENDER_REQUIRE_LIVE_TESTS`
+   currently affects only one render-error classifier. Platform runtime creation, window creation,
+   invalid snapshots, and non-Windows paths still skip unconditionally, while broad
+   `BackendFailure` is treated as environmental in optional jobs. Centralize prerequisite
+   handling, turn every skip into failure in a required job, and permit optional skips only for a
+   positively identified missing loader, layer, adapter, device, or display capability. A generic
+   backend failure is never a valid skip reason.
+
+   Resolution (2026-07-14): implemented with one live-prerequisite classifier used by runtime,
+   window, bootstrap, surface, adapter, device, and target setup. Required jobs compile out all skip
+   classifications. Optional jobs skip only positively identified missing display, loader,
+   instance layer/extension, presentation surface, compatible adapter, or device capability.
+   Invalid snapshots and generic backend failures always fail.
+
+7. **Make the install consumer pull real archive symbols.** The current consumer uses only
+   inline/constexpr values, so it can link without extracting render implementation objects.
+   Call and run out-of-line core/platform/render APIs, including
+   `GetRequiredWindowGraphicsCompatibility` and bootstrap construction without live Vulkan work.
+   The installed static target must transitively provide or contain the loader implementation and
+   any other required private link inputs. The current export strips those inputs, and the broader
+   install export also needs to stop publishing test-helper executables as product components.
+
+   Resolution (2026-07-14): implemented and verified from a clean install prefix. The standalone
+   consumer calls and runs out-of-line build-info, platform process, render compatibility, and
+   bootstrap lifetime APIs. The render archive contains its Volk implementation; installed static
+   core/platform targets propagate link-only spdlog, SDL3, and project-library requirements through
+   package discovery. The consumer builds and executes, and the install test rejects any platform
+   process test-helper artifact.
+
+8. **Tighten the verification commands.** Add `--no-tests=error` to every label-based CTest command
+   so a missing label or disabled target cannot pass with zero tests. Validation-mode support is
+   discovered at runtime, so the strongest-mode procedure must build and run each candidate rather
+   than choosing the first configure that succeeds. Record durable evidence for required Standard
+   and the strongest supported mode on the current Windows host.
+
+   Resolution (2026-07-14): every render label command now uses `--no-tests=error`, and each
+   advanced validation candidate has an explicit configure/build/run sequence. Durable host
+   evidence is recorded in `Verification.md`: deterministic 147/147, install consumer 1/1, and
+   Default live 3/3 passed. Standard and every advanced candidate built and ran but failed 0/3
+   because this host lacks `VK_LAYER_KHRONOS_validation`; no strongest validation mode is
+   supported until that external prerequisite is installed. Required jobs failed rather than
+   skipping, so the validation-clean exit gate remains visibly unsatisfied.
+
+9. **State sanitizer coverage accurately.** The current MSVC sanitizer helper explicitly enables no
+   sanitizer, so the verification document must not imply that MSVC AddressSanitizer ran. Record
+   Windows sanitizer coverage as unavailable until a supported configuration is implemented and
+   executed; keep Linux Clang ASan/UBSan as an unexecuted future gate.
+
+   Resolution (2026-07-14): `Verification.md` now states that Windows MSVC coverage is
+   warnings-as-errors compile/run only and that Windows sanitizer coverage is unavailable. It does
+   not claim AddressSanitizer execution. Linux Clang ASan/UBSan is explicitly an unexecuted future
+   gate.
+
+10. Serialize or isolate CTest build tests that launch nested builds in the same build directory.
+    The header and public-consumer build tests can race each other or the install consumer under
+    parallel CTest. Prefer compile targets in the normal build graph or give nested build tests an
+    explicit resource lock.
+
+    Resolution (2026-07-14): the header, public-consumer, and install-consumer nested build tests
+    share the `ponder_render_nested_build` CTest resource lock. Parallel CTest may run ordinary
+    tests concurrently, but only one test may configure, build, install, or mutate the shared build
+    tree at a time.
+
+### Documentation And Roadmap Corrections
+
+- The UI questionnaire move to `libs/ui/docs/open-questions.txt` is intentional. Keep every inbound
+  link pointed there and do not maintain a duplicate render-owned question file.
+- Keep UI-01 here as the historical decision that excludes UI from the renderer bootstrap; all
+  integration design lives in the UI questionnaire. Split bootstrap decisions from deferred clauses
+  in ARCH-03, ARCH-04,
+  LIFE-11, FRAME-03, FRAME-07, FRAME-14, and FRAME-15; their scene, offscreen, HDR, and overlay
+  portions are not implemented by this milestone and should not appear resolved here.
+- Correct `Verification.md` so it distinguishes implemented deterministic coverage, live behavior
+  actually exercised, and planned coverage. It currently claims cross-thread transfer, resize
+  storms, actual hide/show and minimize/restore, close behavior, validation failure gating, and
+  lifetime permutations that the live tests do not perform.
+- REND-011 through REND-017 now carry completion status because every finding above has an
+  implemented deterministic resolution. REND-018 through REND-020 remain explicitly incomplete
+  where required validation or closeout evidence is absent.
+- Keep Linux X11/Wayland live support explicitly unverified. Add configure/compile coverage when a
+  Linux job exists, and do not convert compile evidence into a runtime support claim.
+
+### Current Task Disposition
+
+| Tasks | Current disposition |
+| --- | --- |
+| REND-000 through REND-017 | Implemented; the follow-up resolutions above are part of their current source and deterministic test state. |
+| REND-018 | Verification infrastructure plus deterministic, install-consumer, and default-live evidence exist; required validation acceptance is incomplete. |
+| REND-019 | Example source, documentation, registration, and build-smoke evidence exist; validation-clean runtime acceptance is pending. |
+| REND-020 | Incomplete; owns required validation, the remaining clean configuration/tooling/manual matrix, durable evidence, and final documentation closeout. |
+
+### Remaining Exit Gate Before REND-020 Completion And UI-001
+
+The original REND-019 correctness prerequisites are now implemented and deterministically tested.
+Before the bootstrap milestone and UI-000 can close:
+
+- install the Khronos validation layer, pass required Standard plus all three advanced candidate
+  modes, and designate the strongest supported passing mode;
+- record a validation-clean clear-window run and repeated
+  create/clear/present/resize/minimize/restore/multi-window/shutdown cycles;
+- record clean Debug and Release, render-enabled and render-disabled MSVC configurations, plus the
+  available Clang-cl, formatting, and static-analysis gates;
+- make the render-disabled check prove dependency/target absence, make Clang-tidy findings fatal,
+  and include the clear-window source in formatting/static-analysis coverage; and
+- reconcile final boundary, developer, verification, and roadmap status documentation with the
+  evidence produced by those runs.

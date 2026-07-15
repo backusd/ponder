@@ -329,10 +329,8 @@ Rendering:
 - meshoptimizer
 
 GUI:
-- Dear ImGui
-- ImPlot
-- ImGuizmo
-- ImNodes (or custom)
+- Project-owned retained-mode scientific desktop UI
+- Font, shaping, Unicode, and accessibility dependencies selected by later milestones
 
 Python:
 - pybind11

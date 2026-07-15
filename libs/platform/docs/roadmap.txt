@@ -35,8 +35,8 @@ self-containment target is explicitly never assigned a PCH.
   The application owns frame-delta and pacing policy.
 - Display content scale, window pixel density, window display scale, logical
   size, and pixel size are distinct concepts.
-- `ponder_ui` uses project-owned platform events and primitives for its Dear
-  ImGui platform adapter. No public raw-SDL bridge is added.
+- `ponder_ui` uses project-owned platform events and primitives for its future
+  input and host-service integration. No public raw-SDL bridge is added.
 - Vulkan native-window data is the closed Win32, X11, and Wayland variant
   approved by ADR 0008. It remains narrow, tagged, borrowed, and
   owner-thread-only. The future Metal payload is not yet defined.
@@ -46,9 +46,9 @@ self-containment target is explicitly never assigned a PCH.
   platform-only measurements demonstrate a material benefit.
 - PLAT-013 is the renderer-ready foundation gate. Later platform services do not
   block renderer implementation.
-- PLAT-015 is the complete Dear ImGui platform-adapter gate. UI context, widget,
-  and render-bridge scaffolding may begin earlier, but adapter completion waits
-  for clipboard and external-URI services.
+- PLAT-015 is the complete initial UI-facing clipboard and external-URI service
+  gate. UI rendering may begin earlier; input and host-service integration can
+  consume these project APIs in later milestones.
 - PLAT-021 is the complete host-local service gate. Cross-platform verification
   is tracked separately in `future.txt`.
 
@@ -104,7 +104,7 @@ Work:
 - Record the single-runtime, owner-thread, move-only, and release-safe lifetime
   model.
 - Record the typed-event, monotonic-time, renderer-interoperability, and
-  project-owned Dear ImGui adapter decisions.
+  project-owned UI service-boundary decisions.
 - Update `Boundary.md` and `Codex.md` to match the ADR.
 - Delete `libs/platform/docs/open-questions.txt` after folding its resolved
   decisions into durable documentation.
@@ -209,13 +209,12 @@ Approved contract:
   observe renderer-owned surfaces.
 - Render exposes `GetRequiredWindowGraphicsCompatibility() noexcept` before
   desktop creates the window; desktop does not hardcode Vulkan or SDL flags.
-- UI owns one Dear ImGui context and a custom platform adapter over
-  `PlatformEvent` plus project window, input, cursor, clipboard, display,
-  text-input/IME, and external-URI services. It has no direct SDL dependency or
-  compile usage and does not compile `imgui_impl_sdl3`.
-- The initial UI uses one OS window. Dear ImGui docking is enabled only after
-  pinning its docking branch; secondary platform viewports, mouse warping,
-  gamepad navigation, and touch/pen source discrimination are deferred.
+- UI later consumes `PlatformEvent` plus project window, input, cursor,
+  clipboard, display, text-input/IME, and external-URI services. It has no direct
+  SDL dependency or compile usage.
+- The initial UI rendering milestone uses one OS window. Native multi-window UI,
+  mouse warping, gamepad navigation, and touch/pen source discrimination are
+  deferred to deliberately designed milestones.
 - Missing or underspecified project primitives are assigned to later tasks:
   private mouse hints in PLAT-004, pointer enter/leave in PLAT-008, exact wheel
   and cursor contracts in PLAT-011, and external-URI opening in PLAT-015.
@@ -627,8 +626,8 @@ Work:
 - Add motion, button press/release, and horizontal/vertical wheel event
   alternatives with logical floating-point positions and relative movement.
 - Support left, right, middle, X1, X2, and `Unknown` mouse buttons.
-- Normalize wheel direction so positive X means right and positive Y means up,
-  matching Dear ImGui's wheel input convention.
+- Normalize wheel direction so positive X means right and positive Y means up as
+  the project-owned public convention.
 - Add window mouse-grab, global capture, relative-mode, and state queries where
   SDL supports them.
 - Put window grab and relative mode on `Window`. Put global capture, global
@@ -636,7 +635,7 @@ Work:
 - Add `SystemCursorShape` alternatives `Default`, `TextInput`, `Move`,
   `ResizeNorthSouth`, `ResizeEastWest`, `ResizeNortheastSouthwest`,
   `ResizeNorthwestSoutheast`, `Pointer`, `Wait`, `Progress`, and `NotAllowed`,
-  plus cursor show/hide and visibility queries. Dear ImGui's `None` request maps
+  plus cursor show/hide and visibility queries. A UI request for no cursor maps
   to hiding the cursor.
 - Make `PlatformRuntime` lazily create and cache SDL system cursors. Selection
   does not transfer ownership, and the cursor cache is destroyed before SDL
@@ -650,8 +649,8 @@ Done when:
   headers.
 - Applicable live tests cover capture/relative-mode state without leaving the
   host cursor captured after a failure.
-- The planned Dear ImGui adapter has mouse and standard-cursor primitives without
-  the bundled SDL platform backend.
+- The future retained UI has project-owned mouse and standard-cursor primitives
+  without an SDL type bridge.
 
 TASK PLAT-012: Implement Native Window Interop
 ----------------------------------------------
@@ -779,8 +778,7 @@ TASK PLAT-015: Implement Clipboard And External URI Services
 
 Status: completed on 2026-07-09.
 
-Provide the host services needed by desktop consumers and complete the
-project-owned UI adapter contract.
+Provide the host services needed by desktop and future retained UI consumers.
 
 Work:
 
@@ -813,10 +811,10 @@ Done when:
 - Tests distinguish an empty clipboard from an SDL failure.
 - A capability-supported live test restores host clipboard state after a failed
   expectation or early return.
-- UI can install clipboard and external-URI callbacks without direct SDL calls
-  or ImGui's default OS hooks.
-- Together with PLAT-010 and PLAT-011, this task establishes the complete
-  platform-service gate for the initial Dear ImGui adapter.
+- UI can use clipboard and external-URI operations without direct SDL calls or
+  default third-party OS hooks.
+- Together with PLAT-010 and PLAT-011, this task establishes the initial
+  platform-service gate for future project-owned UI input and host integration.
 
 TASK PLAT-016: Implement Asynchronous File And Folder Dialogs
 -------------------------------------------------------------

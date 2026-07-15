@@ -113,8 +113,11 @@ and owns `VkSurfaceKHR`, and never stores or transfers the native snapshot itsel
 `RenderBootstrap` is the owner-thread root for dynamic loader and instance state. It prepares
 surfaces from platform windows and outlives every prepared surface, device, and target created from
 it. Only the completed opaque surface handoff plus copied project-owned state such
-as `WindowId`, pixel size, visibility, and minimized/restored state may cross to
-the caller-selected render thread.
+as `WindowId`, pixel size, visibility, faithful `WindowState`, and a typed presentation-environment
+revision may cross to the caller-selected render thread. The application-side platform-event
+aggregator owns monotonically increasing per-window snapshot and presentation-environment
+revisions; render validates but never fabricates them. Immediate transfer accepts the identical
+preparation snapshot, while older or same-revision conflicting state is rejected.
 
 `RenderDevice` is separate from presentation-target lifetime. A single device can
 serve multiple independent window targets when the selected adapter can present to
@@ -128,20 +131,22 @@ renderer-owned surface. Shutdown destroys or abandons active frame tokens, destr
 and unconsumed prepared surfaces, destroys the render device, destroys `RenderBootstrap`, destroys
 platform windows, and finally destroys `PlatformRuntime`.
 
-Ordinary resize, minimize, hide/show, and swapchain staleness are handled from copied state
-snapshots on the render thread. Surface loss requires a fresh owner-thread preparation call; render
-must not reuse stored native data. Device loss is fatal to the selected device for the bootstrap
-milestone.
+Ordinary resize, minimize, hide/show, same-size display or scale changes, and swapchain staleness are
+handled from copied state snapshots on the render thread. A newer presentation-environment revision
+forces presentation re-evaluation even when pixel size is unchanged. Surface loss requires a fresh
+owner-thread preparation call; render must not reuse stored native data. Device loss is fatal to the
+selected device for the bootstrap milestone.
 
-### Dear ImGui Rendering
+### Generic 2D Draw Composition
 
-Dear ImGui rendering is not part of the create/clear/present bootstrap milestone. The renderer
-foundation must leave a documented insertion point where a later renderer-owned ImGui bridge can
-record after the clear pass and before final submission.
+Generic 2D drawing is not part of the create/clear/present bootstrap milestone. The renderer
+foundation leaves a semantic insertion point after preceding color work and before final
+submission.
 
-`ponder_ui` owns the Dear ImGui context and SDL-free platform adapter. `ponder_render` will own the
-backend resources and command submission used to render borrowed ImGui draw data. UI receives no
-Vulkan handles, and render does not depend on `ponder_ui`.
+`ponder_ui` owns semantic paint commands, logical coordinates, clipping, color rules, and CPU
+tessellation into owning project-defined packets. `ponder_render` consumes only that generic packet
+contract and owns shaders, GPU resources, command recording, submission, and completion retirement.
+UI receives no Vulkan handles and render does not depend on UI.
 
 ## Consequences
 

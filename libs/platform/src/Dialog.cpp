@@ -143,6 +143,8 @@ struct PreparedDialogRequest final
     PreparedDialogRequest prepared{.kind = kind,
                                    .parentWindowId = parentWindowId,
                                    .defaultLocation = std::move(locationResult).GetValue(),
+                                   .filterNames = {},
+                                   .filterPatterns = {},
                                    .allowMultipleSelection = allowMultipleSelection};
     prepared.filterNames.reserve(filters.size());
     prepared.filterPatterns.reserve(filters.size());

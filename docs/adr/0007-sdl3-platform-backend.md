@@ -11,8 +11,8 @@ Accepted.
 ## Context
 
 `ponder` needs a durable desktop foundation before project loading, rendering,
-Dear ImGui integration, chemistry data, workflow, compute, or plugin systems are
-built on top of it.
+retained UI, chemistry data, workflow, compute, or plugin systems are built on
+top of it.
 
 The platform layer must provide reusable operating-system integration without
 turning the desktop executable into the owner of windowing and host-environment
@@ -29,7 +29,7 @@ window APIs also have main-thread requirements. These constraints must be
 represented explicitly rather than hidden behind apparently independent runtime
 or window objects.
 
-The renderer and Dear ImGui integration need platform data, but exposing
+The renderer and future retained UI need platform data, but exposing
 `SDL_Window`, `SDL_Event`, or native OS declarations would make SDL3 part of the
 public project contract. Renderer and UI integration therefore need
 project-owned interoperability types and primitives.
@@ -48,8 +48,8 @@ direct OS-specific types remain in implementation files or private headers.
 `ponder_platform` must not depend on `ponder_render`, `ponder_ui`, project or
 domain libraries, or `ponder-desktop`. The desktop executable owns application
 policy and main-loop orchestration. The renderer owns graphics devices,
-surfaces, swapchains, and drawing behavior. The UI library owns Dear ImGui
-context and adapter behavior.
+surfaces, swapchains, and drawing behavior. The UI library owns retained UI and
+paint behavior.
 
 ### Runtime And Resource Ownership
 
@@ -141,14 +141,11 @@ layer.
 Event polling skips unknown, unsupported, and stale backend events until it can
 return one translated project event or the backend queue is genuinely empty.
 
-`ponder_ui` integrates Dear ImGui through project-owned platform events and
-primitives and has no direct SDL dependency or compile usage requirement. It
-does not compile the bundled SDL platform backend. Platform therefore provides
-the required low-level primitives,
-including standard system cursors, clipboard text, text-input activation, IME
-input-area control, pointer capture/position, and external-URI opening, without
-owning ImGui behavior. The ImGui target disables default OS clipboard, IME, and
-shell hooks so they cannot bypass project callbacks.
+`ponder_ui` consumes project-owned platform events and primitives and has no
+direct SDL dependency or compile usage requirement. Platform therefore provides
+the required low-level primitives, including standard system cursors, clipboard
+text, text-input activation, IME input-area control, pointer capture/position,
+and external-URI opening, without owning retained UI behavior.
 
 ### Errors And Asynchronous Services
 

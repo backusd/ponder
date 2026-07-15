@@ -240,7 +240,7 @@ Status: platform contracts revised on 2026-07-13 for renderer interop.
   diagonal resizes, pointer, wait, progress, and not-allowed. A UI request for
   no cursor maps to cursor hiding rather than another shape.
 
-### Renderer And Dear ImGui Interop
+### Renderer And UI Interop
 
 - `WindowGraphicsCompatibility` has exactly `Default`, `Vulkan`, and `Metal`.
   `Default` requests no graphics-specific SDL flag. `Vulkan` maps to
@@ -271,14 +271,12 @@ Status: platform contracts revised on 2026-07-13 for renderer interop.
   contexts, surfaces, swapchains, and rendering.
 - The caller destroys renderer presentation state before its platform window.
   Platform's child registry cannot observe or diagnose renderer-owned surfaces.
-- `ponder_ui` implements its Dear ImGui platform adapter over project-owned
-  events, cursor, clipboard, text-input, display, and window APIs. Platform does
-  not expose an `SDL_Window` or `SDL_Event` bridge for the bundled SDL ImGui
-  backend.
-- `ponder_ui` has no direct SDL dependency or compile usage requirement. It uses
-  a custom single-OS-viewport adapter; pointer warping, gamepad navigation,
-  touch/pen sources, and secondary ImGui platform windows are not required
-  initially.
+- `ponder_ui` consumes project-owned events, cursor, clipboard, text-input,
+  display, and window APIs when its later input milestone is implemented.
+  Platform does not expose an `SDL_Window` or `SDL_Event` bridge for UI.
+- `ponder_ui` has no direct SDL dependency or compile usage requirement.
+  Pointer warping, gamepad navigation, touch/pen sources, and UI-owned native
+  multi-window behavior require their own later contracts.
 ### Clipboard, External URIs, Dialogs, And Processes
 
 - Owner-thread UTF-8 text clipboard get/set operations on `PlatformRuntime`.
@@ -360,14 +358,14 @@ Status: platform contracts revised on 2026-07-13 for renderer interop.
 - Domain models, project formats, chemistry data, IO/import policy, workflows,
   plugins, or compute-job behavior.
 - Rendering backend implementation or graphics-resource ownership.
-- Dear ImGui context, widgets, docking, presentation, or renderer adapters.
+- UI retained trees, widgets, docking, presentation, or renderer integration.
 - Desktop application workflow, main-loop policy, command routing, menus,
   recent-file lists, or project-specific behavior.
 - Frame-delta accumulation, fixed timesteps, frame limiting, or idle policy.
 - Direct Win32, Cocoa, X11, Wayland, DBus, or other OS APIs outside SDL3 unless
   a later decision deliberately expands the private backend.
 - Pointer warping, gamepad navigation, touch/pen source discrimination, or
-  secondary Dear ImGui OS-window management in the first UI adapter.
+  UI-owned native multi-window policy.
 - Rich clipboard data, outbound drag-and-drop, custom cursors, file watching,
   advanced process IO/supervision, packaging, or release integration.
 

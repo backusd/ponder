@@ -44,7 +44,10 @@ ponder_add_project_library(platform
         ponder::core
     PRIVATE_DEPS
         ponder::io
-        ponder::SDL3)
+        ponder::SDL3
+    INSTALL_PRIVATE_DEPS
+        ponder::io
+        SDL3::SDL3-static)
 
 # Keep platform PCH-free until platform-only measurements justify opting in.
 set_target_properties(ponder_platform PROPERTIES

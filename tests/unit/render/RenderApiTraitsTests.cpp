@@ -22,6 +22,14 @@ static_assert(IsRenderOwnerRole<pond::render::RenderFrame>());
 static_assert(noexcept(pond::render::GetRequiredWindowGraphicsCompatibility()));
 static_assert(std::is_same_v<decltype(pond::render::GetRequiredWindowGraphicsCompatibility()),
                              pond::platform::WindowGraphicsCompatibility>);
+static_assert(
+    std::is_same_v<decltype(std::declval<const pond::render::RenderDevice&>().GetSelectedAdapter()),
+                   const pond::render::RenderAdapterSnapshot&>);
+static_assert(noexcept(std::declval<const pond::render::RenderDevice&>().GetSelectedAdapter()));
+static_assert(!noexcept(std::declval<const pond::render::RenderDevice&>().GetDiagnostics()));
+static_assert(
+    noexcept(std::declval<const pond::render::RenderTarget&>().GetSelectedPresentationConfig()));
+static_assert(!noexcept(std::declval<const pond::render::RenderTarget&>().GetDiagnostics()));
 
 TEST(RenderApiTraitsTests, DefaultOwnerRolesAreEmptyAndMoveStable)
 {

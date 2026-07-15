@@ -1,0 +1,2030 @@
+# UI Rectangle Rendering Foundation Questions
+
+Status: answered design questionnaire for the first project-owned UI rendering milestone.
+
+The long-term target is a durable retained-mode scientific desktop UI. This milestone establishes
+only the internal rendering foundation needed to draw a rectangle correctly and sustainably. It
+does not design the retained tree or freeze the eventual application-facing UI API.
+
+The intended path is deliberately production-shaped:
+
+`temporary rectangle entry point -> UI paint list -> UI paint compiler -> generic 2D draw packet ->`
+`render-owned GPU consumer -> active render frame`
+
+The lowering in this path is not an accommodation for a third-party UI library. It is the normal
+boundary between semantic UI paint operations and backend-owned GPU work. UI owns visual meaning,
+coordinates, colors, clipping, and tessellation. Render owns shaders, pipelines, GPU memory, command
+recording, submission, presentation, and completion-based retirement.
+
+Recommendations are proposed defaults. The project owner's decision is recorded on every `Answer:`
+line, and those answers are the source for [roadmap.txt](roadmap.txt). Later UI milestones are
+listed in [milestones.txt](milestones.txt).
+
+## Fixed Inputs
+
+These constraints are already decided and are not reopened below:
+
+- Dear ImGui is not part of the architecture, build, tests, examples, or future compatibility plan.
+  Existing dependency targets, submodule requirements, adapters, flags, and active documentation
+  that exist only for Dear ImGui are removal work, not dormant functionality to preserve.
+- The target is a durable scientific desktop UI with retained state, docking, tables, property
+  editors, text input, and large data sets in later milestones. It is not a browser engine, mobile
+  toolkit, or attempt to compete with every established general-purpose framework.
+- The only new visible primitive in this milestone is a finite, axis-aligned, solid-color
+  rectangle. Text, fonts, images, layout, widgets, input, hit testing, focus, styling, themes,
+  accessibility, docking, and application data binding are deferred.
+- The rectangle-facing API is explicitly temporary and may be replaced without compatibility
+  support. Durable internal ownership and rendering contracts matter more than its spelling.
+- `ponder_render` currently targets Vulkan 1.2 on Windows, uses an explicit acquired-frame
+  lifecycle, and has a private post-clear/pre-present recording seam. The design must preserve a
+  path to a future Metal backend without placing Vulkan or native-window types in UI.
+- One render device may serve multiple targets. Resize, minimize, zero-pixel suspension, target
+  recreation, frame abandonment, device loss, and orderly shutdown are normal lifecycle cases.
+- Recoverable failures use `Result`; assertions protect internal invariants; project code remains
+  C++23, warnings-as-errors, deterministic, and testable through injected backend failures.
+- The renderer foundation closeout and a renderer-wide offline shader toolchain decision are hard
+  prerequisites. This milestone must not conceal unresolved renderer work in UI code.
+
+## Milestone Outcome And Scope
+
+- **UIR-SCOPE-01:** What observable result proves the milestone is complete?
+
+Recommendation: Render a solid rectangle over a contrasting clear color in a real project window,
+including a translucent test case that proves blending. Exercise resize, minimize, restore, and
+clean shutdown through public or explicitly experimental project APIs.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-02:** Which internal path must produce that rectangle?
+
+Recommendation: Require the complete path described above: semantic UI paint command, pure CPU
+compilation, owning generic packet, render-owned GPU layer, and the existing frame submission path.
+Direct Vulkan calls from UI, a special clear-color trick, or a one-off renderer-only rectangle API
+does not satisfy the milestone.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-03:** How independently testable must the layers be?
+
+Recommendation: Make the paint list, paint compiler, packet validator, Vulkan packet consumer, and
+live end-to-end join independently testable. A failure should be attributable to one layer without
+requiring a visible window to diagnose ordinary logic.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-04:** Should the internals support only the single rectangle shown by the workbench?
+
+Recommendation: Let the temporary entry point submit one rectangle, but make the paint list,
+compiler, packet, upload path, and draw records handle an ordered sequence of rectangles from the
+start. This avoids baking a single-primitive assumption into the durable layers.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-05:** Exactly which rectangle behavior is in scope?
+
+Recommendation: Support finite axis-aligned bounds, solid color, opacity, deterministic ordering,
+and rectangular clipping. Defer borders, corner radii, gradients, shadows, paths, transforms,
+textures, multisampling, and animation to later milestones.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-06:** Is clipping foundation work or a later visual feature?
+
+Recommendation: Establish a balanced rectangular clip stack and root-target clip now, even if the
+temporary example uses only the root. Scissor-based nested intersection is foundational for panels
+and scrolling; non-rectangular clipping remains deferred.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-07:** Which lifecycle transitions are mandatory acceptance cases?
+
+Recommendation: Cover first frame, steady frames, resize and swapchain recreation, minimize or
+zero-pixel suspension, restore, abandoned frame, submit failure, present failure after submission,
+device loss, and shutdown with work in flight.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-08:** Is one target enough for the architecture and tests?
+
+Recommendation: One visible target is enough for the basic workbench, but the generic layer must be
+owned per device and tested with two interleaved targets. Per-target frame resources must not alias
+or force unrelated targets to wait.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-09:** Are public offscreen targets, screenshots, or readback part of this milestone?
+
+Recommendation: No. Add a private GPU pixel probe only if it can reuse the exact production
+pipeline without expanding the public renderer. Deterministic CPU, command-trace, validation, and
+live WSI evidence remain the primary gates.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-10:** What performance promise is meaningful for one rectangle?
+
+Recommendation: Gate structural steady state rather than frame time: after warm-up, an unchanged
+rectangle must cause no shader compilation, pipeline creation, GPU-object creation, buffer growth,
+device-wide idle, or avoidable host allocation. Record counts and bytes for future baselines.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-SCOPE-11:** Which renderer work must be finished before implementation begins?
+
+Recommendation: Close the renderer foundation's outstanding lifetime, owner-thread, dispatch,
+queue-locking, and strict SDR sRGB items; generalize its real post-clear recording seam; and resolve
+the shared shader toolchain question. Do not solve these privately inside `ponder_ui`.
+
+Answer: The recommendation is correct, but much or all of this work might already be done. I have fixed several issues in the renderer since you write these open questions. Therefore, you need to audit the /libs/render/ library to see what is still needed.
+
+- **UIR-SCOPE-12:** What is the milestone definition of done?
+
+Recommendation: Require all deterministic unit and failure-injection tiers, shader-interface and
+stale-artifact checks, dependency and install checks, structural performance gates, and a
+validation-clean Windows/Vulkan smoke run. An example, screenshot, or successful local frame alone
+is not completion evidence.
+
+Answer: Use the recommendation exactly.
+
+## Ownership, Dependencies, And Library Boundaries
+
+- **UIR-ARCH-01:** What is the required dependency direction?
+
+Recommendation: UI may depend on a backend-neutral render contract; render must never depend on UI.
+Platform remains the owner of window and event abstractions, while Vulkan and allocator dependencies
+remain private to render.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-02:** Which subsystem owns each transformation in the path?
+
+Recommendation: UI records semantic paint commands and compiles them into geometry. Render validates
+generic geometry and state, uploads it, records GPU commands, submits, presents, and retires
+resources. Keep this ownership explicit in types, documentation, and tests.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-03:** May render understand `FillRectangle` or any retained UI concept?
+
+Recommendation: No. Render accepts ordered indexed 2D geometry with fixed project-defined state. It
+does not interpret widgets, paint commands, logical units, themes, element IDs, or layout results.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-04:** What should the UI-to-render boundary be called?
+
+Recommendation: Use precise producer-neutral names such as `Draw2DLayer` and `Draw2DPacket` rather
+than names tied to UI or the vague historical term "intermediate." The final names should describe
+ordered 2D triangle rendering without claiming to be a general canvas or GPU encoder.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-05:** Is the generic 2D contract a normal public API?
+
+Recommendation: No. Make it an explicit project-private cross-library interface target with a
+non-installed header used by render, UI integration, and render tests. The temporary public UI
+facade hides it; promote a generic application-facing API only if real non-UI producers later
+justify that commitment.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-06:** May UI include arbitrary render implementation headers for this private
+  contract?
+
+Recommendation: No. Do not share `libs/render/src` generally. Put the deliberately shared internal
+contract behind its own private CMake interface/include boundary so ownership and tests stay visible
+without installing it or granting UI access to unrelated backend internals.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-07:** What data is forbidden at the boundary?
+
+Recommendation: Forbid Vulkan, Metal, SDL, native-window, command-buffer, render-pass, shader,
+pipeline, descriptor, allocator, and third-party types; raw or erased pointers; callbacks; producer
+objects; and storage borrowed beyond the synchronous call. Only closed project-owned values and
+containers with explicit ownership cross.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-08:** Who owns a packet while and after it is recorded by the generic layer?
+
+Recommendation: The producer retains a sealed, self-contained packet for the synchronous record
+call. Render validates and copies it into renderer-owned mapped memory and never retains packet
+storage. After return, the producer may reset its exclusive builder and reuse capacity; only the GPU
+upload generation remains owned by frame completion state.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-09:** What object owns device-scoped generic 2D resources?
+
+Recommendation: Use one move-only draw-layer owner created from one `RenderDevice`. It owns pipeline
+and upload infrastructure, is usable sequentially with every compatible target on that device, and
+cannot outlive the device.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-10:** How is the destination target selected?
+
+Recommendation: Select it only through the explicit active `RenderFrame`. Validate device, target,
+and metrics revision in the temporary UI facade, then validate draw-layer device and packet extent
+against the frame. The generic packet itself does not select or identify a target; never use an
+ambient current target, window lookup, native handle, or pointer identity.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-11:** How should future Metal support affect the contract now?
+
+Recommendation: Freeze only backend-independent geometry, ordering, clipping, color, ownership, and
+frame semantics. Normalize Vulkan render-pass compatibility, buffer allocation, synchronization,
+shader artifacts, and coordinate conversion inside render.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-12:** Must UI remain useful when render is disabled?
+
+Recommendation: Yes. Keep CPU paint data and later retained-model code in `ponder_ui`; isolate the
+temporary GPU join in a separate integration target or source set gated by render. A render-disabled
+build must not need fake renderer stubs.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-13:** May any layer rely on process-global mutable state?
+
+Recommendation: No. Device, target, frame, paint recorder, compiler, and draw-layer ownership must
+be explicit. Global caches, current contexts, implicit allocators, and singleton render state make
+multi-window tests and deterministic shutdown fragile.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ARCH-14:** How should subsystem diagnostics refer to the work?
+
+Recommendation: UI diagnostics may name paint commands and compiler stages. Render diagnostics use
+producer-neutral packet, batch, pipeline, upload, target, and submission terms. Render must not
+diagnose retained elements or assume the producer is UI.
+
+Answer: Use the recommendation exactly.
+
+## Temporary Rectangle Entry Point
+
+- **UIR-API-01:** How prominently should the temporary status be represented?
+
+Recommendation: Place the entry point in an opt-in header and `pond::ui::experimental` namespace,
+with a source comment and documentation stating that no source or ABI compatibility is promised.
+Do not mix it into the eventual stable retained-mode facade.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-02:** Should the entry point be a stateless free function?
+
+Recommendation: No. Use a move-only temporary `RectangleRenderer` or `UiRenderContext` created from
+one `RenderDevice`; it owns the generic draw layer and reusable compiler storage. This makes
+lifetime, thread affinity, and steady-state reuse explicit.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-03:** What should one draw call accept?
+
+Recommendation: Accept an active `RenderFrame`, an immutable per-frame UI metrics snapshot, and one
+strongly typed rectangle paint value. Do not accept Vulkan/native handles, a command encoder, or a
+platform window object.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-04:** Who constructs and authoritatively pairs the UI metrics snapshot?
+
+Recommendation: Capture a project-owned window-metrics value on the platform owner thread and pass
+it through the same target-preparation rendezvous as resize. The acquired frame exposes the exact
+pixel extent plus the accepted target and metrics revision; UI combines only matching copies and
+rejects mismatched target, revision, or extent without borrowing a `Window`.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-05:** What outcome does a successful draw call return?
+
+Recommendation: Return a closed outcome such as `Recorded`, `SkippedSuspended`, or `SkippedEmpty`
+inside `Result`. `Recorded` means validation, upload preparation, and command recording succeeded;
+`FinishAndPresent()` remains the sole authority for submission and presentation success.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-06:** Does this milestone need a cross-frame receipt or callback?
+
+Recommendation: No. There is no external texture or semantic transaction to acknowledge. Renderer
+frame/fence bookkeeping is sufficient; add a receipt only when a later resource protocol proves it
+necessary, and never add producer callbacks.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-07:** Which failures should the entry point report?
+
+Recommendation: Return `Result` for invalid rectangle or metrics, wrong device/frame/thread,
+limits, allocation, pipeline creation, and device loss according to the accepted subsystem error
+ownership. Report normal suspension and empty output through the typed successful outcome, not an
+error.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-08:** What work occurs for suspended or empty output?
+
+Recommendation: Return `SkippedSuspended` before target-dependent compilation, or `SkippedEmpty`
+after compilation proves there are no draws. Neither case creates a pipeline, uploads bytes,
+advances a GPU ring, nor consumes the frame's one UI-stage allowance.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-09:** May temporary types leak into later retained UI interfaces?
+
+Recommendation: No. Keep rectangle descriptors, frame metrics, renderer owners, and packet names
+out of any proposed widget/tree API. Later milestones may reuse private concepts while replacing
+every temporary public spelling.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-API-10:** Should installed packages expose the temporary header?
+
+Recommendation: Install only the temporary UI facade if an install-tree workbench/consumer is an
+acceptance requirement, and mark that facade experimental. Never install the project-private
+generic packet header. Otherwise keep the entire workbench surface source-tree-only.
+
+Answer: Use the recommendation exactly.
+
+## UI Paint List And Compilation Model
+
+- **UIR-PAINT-01:** Why introduce a semantic paint list for one rectangle?
+
+Recommendation: Make a UI-owned paint list the canonical CPU representation so later retained
+elements can emit visual operations without knowing GPU geometry. Do not make triangles the only
+representation of UI meaning and do not bypass this layer in the workbench.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-02:** Which paint commands exist in the first milestone?
+
+Recommendation: Implement `FillRectangle`, `PushClipRectangle`, and `PopClip` internally. Keep the
+set deliberately closed; later milestones can add borders, images, glyphs, transforms, and layers
+without changing the ownership model.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-03:** How is a paint list constructed and made immutable?
+
+Recommendation: Use a mutable recorder or builder with explicit open and sealed states. Finalize it
+transactionally into an immutable owning snapshot; compilation accepts only a sealed snapshot so it
+cannot observe partial mutation.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-04:** What command representation should be used?
+
+Recommendation: Use a private closed tagged variant or similarly type-safe structure. Do not create
+an opcode byte stream, property bag, virtual callback hierarchy, or public ABI before the command
+set and performance characteristics are known.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-05:** Who owns command payload memory?
+
+Recommendation: The paint list owns all commands and payloads contiguously or in other deterministic
+project containers. It may not retain caller pointers, references, spans, lambdas, element objects,
+or platform events.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-06:** Is a paint list tied to a render device or target?
+
+Recommendation: No. It stores UI logical coordinates and colors only and is pure CPU data. Compile
+it after acquiring a frame, against an immutable metrics snapshot, so the same semantic list can be
+recompiled for a resized target or another scale.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-07:** How is draw ordering represented?
+
+Recommendation: Preserve recorder insertion order exactly as painter's order. Do not add z values,
+sorting, hash iteration, or automatic reordering; alpha composition and future overlapping widgets
+make order observable.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-08:** Where are rectangle and color inputs validated?
+
+Recommendation: Validate caller-facing values when recorded and validate all invariants again at
+the compiler boundary. Reject non-finite coordinates or colors before allocation or arithmetic;
+never let NaN values reach packet validation or shaders.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-09:** How are zero-sized and reversed rectangles handled?
+
+Recommendation: Treat exactly zero width or height as a deterministic no-op and reject negative
+extent or reversed bounds. Do not silently swap endpoints because that hides upstream layout bugs.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-10:** What happens when a rectangle is fully transparent?
+
+Recommendation: Permit the recorder or compiler to elide it only after validating its bounds and
+color. The optimization must preserve command indices used by diagnostics and must not disturb clip
+state or ordering of visible commands.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-11:** How is clip-stack correctness enforced?
+
+Recommendation: Give the recorder an unpoppable unbounded clip-stack sentinel, reject underflow
+immediately, and reject an unbalanced stack at finalization. The compiler replaces the sentinel
+with the concrete root target clip from matched frame metrics.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-12:** Should clips be stored on every rectangle or as ordered commands?
+
+Recommendation: Record explicit push/pop commands and let the compiler maintain the effective clip
+stack. It may bake the final scissor into each draw packet record; render should not reconstruct UI
+clip state.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-13:** What reuse behavior should the recorder support?
+
+Recommendation: Allow explicit reset after sealed output is released and retain reasonable host
+capacity. Re-recording the same small list after warm-up should not allocate, while growth remains
+checked and bounded.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-14:** May paint recording and compilation run away from the render thread?
+
+Recommendation: Yes for pure CPU work when each recorder/compiler instance has exclusive ownership.
+No global state is permitted. Compilation still requires a copied active-frame metrics snapshot and
+must finish before render-thread packet recording.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-15:** Does the first paint list need stable element IDs or retained-node references?
+
+Recommendation: No. Use deterministic command indices only for diagnostics. Retained identity,
+invalidation, and mapping paint output back to elements belong to the retained-tree milestone.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-16:** Is the paint list a serialized or versioned storage format?
+
+Recommendation: No. Keep it an evolvable in-process implementation type. Tests may inspect a stable
+diagnostic projection, but no file format, wire format, persistence promise, or public byte layout
+is needed.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-17:** May compilation mutate or partially consume the sealed list?
+
+Recommendation: No. Compilation is a logical transaction over immutable input plus frame metrics.
+Failure leaves the list reusable and produces no partial sealed packet; a reusable compiler/output
+builder owns scratch and packet capacity separately from the input list.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-18:** Should the compiler optimize adjacent rectangles in this milestone?
+
+Recommendation: Emit one shared vertex/index stream and merge only adjacent draw records whose
+pipeline and scissor are identical, without changing vertex order. Do not merge geometry or reorder
+commands unless tests prove bit-for-bit equivalent output and diagnostics.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PAINT-19:** Which limits protect recording and compilation before a packet exists?
+
+Recommendation: Define checked caps for command count, payload bytes, clip depth, recorder capacity,
+generated vertices/indices/draws, and compiler scratch/output bytes. Enforce them before container
+growth or count multiplication and return explicit requested/allowed values on failure.
+
+Answer: Use the recommendation exactly.
+
+## Coordinate Systems, Geometry, And Clipping
+
+- **UIR-GEOM-01:** What is the canonical UI coordinate system?
+
+Recommendation: Use finite floating-point logical units with origin at the top-left, positive X to
+the right, and positive Y downward. Call the units logical UI units or DIPs consistently; never call
+them pixels.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-02:** Which coordinate types should commands use?
+
+Recommendation: Introduce lightweight project-owned point, size, and rectangle value types whose
+names encode logical UI space. Avoid raw four-float arrays, renderer extents, platform structs, and
+implicit conversion to pixel-space types.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-03:** What belongs in the immutable per-frame metrics snapshot?
+
+Recommendation: Store logical width/height, exact drawable pixel width/height, derived per-axis
+logical-to-pixel ratios, stable target identity, and the platform-metrics revision accepted by the
+acquired frame. All values are copied; the snapshot borrows no window or target object.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-04:** How are logical-to-pixel ratios derived?
+
+Recommendation: Derive X and Y independently from the observed logical and drawable extents using a
+documented zero-safe rule. Do not assume uniform scale and do not substitute a nominal platform
+density value when exact extents disagree.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-05:** How do pixel density and content/display scale participate?
+
+Recommendation: Preserve their distinct platform meanings and expose them diagnostically if useful,
+but use the exact extent ratios for geometry lowering. A future style/text scale policy may consume
+display scale separately; this milestone must not conflate the concepts.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-06:** What mathematical convention defines rectangle bounds?
+
+Recommendation: Use half-open bounds `[left, top, right, bottom)`, or equivalently origin plus
+non-negative size. Document containment and intersection using that convention so adjacent
+rectangles and clips do not overlap ambiguously.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-07:** Are fractional logical coordinates valid?
+
+Recommendation: Yes. Preserve them through scaling into floating-point framebuffer pixel positions.
+Do not snap layout geometry prematurely; later policy may deliberately snap particular borders or
+text baselines.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-08:** In which space do vertices cross into render?
+
+Recommendation: The compiler lowers logical positions into top-left-origin framebuffer pixel
+floats. The generic render packet carries the exact pixel extent but no UI scale, density, display
+scale, or logical-coordinate semantics.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-09:** Where are pixel positions transformed into clip space?
+
+Recommendation: Let the render-owned vertex shader map top-left pixel coordinates to the backend's
+clip convention using exact frame constants. UI must not know Vulkan viewport inversion or NDC
+rules, and render must not know UI logical units.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-10:** Is a half-pixel offset required?
+
+Recommendation: No. Define positions as geometric pixel-edge coordinates and use the documented
+viewport transform without a legacy Direct3D-style half-pixel adjustment. Verify pixel-center math
+with CPU reference tests and a GPU probe if available.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-11:** How is the root clip established?
+
+Recommendation: Begin compilation with the half-open drawable pixel extent as the fractional root
+clip. Intersect every rectangle with its effective clip as required by `UIR-GEOM-14`, and also give
+every resulting draw an integer scissor clamped to the target extent.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-12:** How do nested clip rectangles combine?
+
+Recommendation: Transform each logical clip to pixel space, intersect it with the current effective
+clip, and push the result. A disjoint intersection becomes an empty clip whose contained draws are
+skipped while stack behavior remains deterministic.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-13:** How are floating clip edges converted to integer scissors?
+
+Recommendation: Use floor minimum edges and ceil maximum edges for a conservative coarse scissor,
+then clamp with checked arithmetic to the unsigned target extent. Exact fractional clipping comes
+from geometry intersection before tessellation, so the coarse integer scissor cannot leak output.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-14:** Should rectangles be intersected with the fractional effective clip before
+  tessellation?
+
+Recommendation: Yes. Intersect each axis-aligned rectangle with the effective clip in framebuffer
+pixel floats, skip an empty result, tessellate the exact intersection, and also emit the
+conservative integer scissor. This preserves fractional clip semantics without relying on scissor
+granularity.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-15:** What geometry represents one rectangle?
+
+Recommendation: Emit four project-owned vertices and six indices as two triangles through the same
+dynamic mesh path future glyphs, images, and shapes will use. Do not use a procedural
+`vertexIndex`-only shader or push-constant special case.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-16:** Which index width should the compiler and packet use?
+
+Recommendation: Use checked 32-bit unsigned indices from the start. This avoids a second path when
+large paint lists arrive; reject count and byte arithmetic that cannot be represented safely.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-17:** What winding and primitive topology are fixed?
+
+Recommendation: Use one documented triangle-list index order consistently, while disabling culling
+and all depth testing/writes. Unit tests should assert the exact vertex and index sequence rather
+than relying on disabled culling to hide mistakes.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-18:** How are viewport and scissor state supplied?
+
+Recommendation: Bind a full-target dynamic viewport and a per-draw dynamic scissor. Never bake
+target dimensions into a pipeline and never assume state left by clear or a future scene stage.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-19:** Can a compiled packet survive resize or target recreation?
+
+Recommendation: Treat pixel-space packets as extent-specific. The UI facade validates the matched
+target/metrics revision immediately before recording, and the draw layer validates exact packet and
+frame extents plus its owning device. Recompile the immutable paint list rather than stretching or
+accepting stale geometry.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-GEOM-20:** Which scale and extent cases must be specified explicitly?
+
+Recommendation: Test at least 1.0, 1.25, 1.5, and 2.0 scale ratios, independent X/Y ratios,
+fractional bounds, one-pixel and non-square targets, very large valid extents, and every overflow or
+non-finite boundary. Define checked limits rather than relying on native casts.
+
+Answer: Use the recommendation exactly.
+
+## Color, Alpha, Blending, And Rasterization
+
+- **UIR-COLOR-01:** In which color space are temporary rectangle colors authored?
+
+Recommendation: Provide an explicitly named sRGB straight-alpha constructor or value type for the
+temporary API. Do not accept an untagged four-float `Color` whose transfer function and alpha
+representation are ambiguous.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-02:** What is the canonical internal paint representation?
+
+Recommendation: Convert authored sRGB channels to linear light and premultiply them by alpha at the
+paint/compiler boundary. Use finite linear premultiplied RGBA for composition contracts throughout
+the rest of the path.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-03:** How are invalid color components handled?
+
+Recommendation: Reject non-finite or out-of-range straight-alpha inputs through `Result` or a
+validated constructor. Do not silently clamp values in the temporary API; future HDR or extended
+color requires an explicit new contract rather than accidental overflow.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-04:** What color representation is stored per GPU vertex?
+
+Recommendation: Use a precisely defined packed RGBA8 UNORM value containing linear premultiplied
+components. Freeze channel order and quantization/rounding with tests; do not reuse an ambiguous
+clear-color struct or depend on machine byte order.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-05:** Is eight-bit packed linear color sufficient for the foundation?
+
+Recommendation: Yes for ordinary SDR desktop UI, subject to reference tests for conversion and
+quantization. Keep the semantic paint color at higher precision so a future packet format can
+change without altering retained UI data.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-06:** Which blend state is required?
+
+Recommendation: Use premultiplied-alpha blending for both color and alpha: source `One`, destination
+`OneMinusSourceAlpha`, add operation, and RGBA writes enabled. Specify every fixed pipeline field
+rather than inheriting backend defaults.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-07:** What target color contract does the shader assume?
+
+Recommendation: Require the renderer's strict opaque SDR sRGB target. The fragment shader outputs
+linear premultiplied values and the sRGB attachment performs exactly one transfer encoding. Reject
+an incompatible target instead of guessing or double-encoding.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-08:** How is destination alpha treated on an opaque presentation target?
+
+Recommendation: Keep mathematically consistent premultiplied alpha writes in the active target
+color attachment, while the presentation contract treats the composed surface as opaque. Document
+and test the resulting alpha channel rather than relying on undefined swapchain use.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-09:** Must translucent output be tested even if the example rectangle is opaque?
+
+Recommendation: Yes. Clear to a contrasting opaque color and test a known semi-transparent
+rectangle so incorrect straight-alpha blending, double sRGB conversion, channel order, and draw
+ordering cannot pass unnoticed.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-10:** What edge-antialiasing behavior is promised?
+
+Recommendation: Hard rasterized edges only in this milestone. Preserve fractional positions but do
+not fake antialiasing by expanding bounds or modifying alpha. Rounded/path coverage and MSAA policy
+belong to later paint work.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-11:** May render reorder opaque rectangles ahead of translucent ones?
+
+Recommendation: No. Preserve painter order for every draw regardless of opacity. A future optimizer
+may prove narrowly safe adjacent merges, but opaque classification must not silently alter visual
+or diagnostic ordering.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-COLOR-12:** Which reference data should define conversion correctness?
+
+Recommendation: Store project-owned test vectors for sRGB transfer, premultiplication,
+quantization, vertex decode, blend equations, and final sRGB encoding. Avoid deriving expected
+values from the production implementation under test.
+
+Answer: Use the recommendation exactly.
+
+## Generic 2D Draw Packet
+
+- **UIR-PACKET-01:** What is the purpose of the generic packet?
+
+Recommendation: Represent one closed, producer-neutral, ordered 2D draw transaction ready for GPU
+upload and recording. It is not a UI paint list, general canvas, render graph, arbitrary GPU command
+stream, or retained resource database.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-02:** What data must the first packet own?
+
+Recommendation: Own the exact framebuffer pixel extent, project vertex array, 32-bit index array,
+and ordered draw records. Include only compatibility or provenance fields that validation genuinely
+uses; every byte must remain valid independently of producer lifetime.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-03:** What is the first project vertex schema?
+
+Recommendation: Define a standard-layout vertex containing two finite framebuffer-pixel `float`
+coordinates and one explicitly packed linear-premultiplied RGBA8 value. Freeze size, alignment,
+offsets, formats, and shader locations with static and reflected checks.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-04:** Which fields belong in one draw record?
+
+Recommendation: Store first index, index count, base vertex, and one clamped half-open integer
+scissor, plus a closed pipeline/material kind only if the validator needs it. Use element units,
+not ambiguous byte offsets.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-05:** Does the first packet need textures or descriptor references?
+
+Recommendation: No. Use a descriptor-free solid-color pipeline; do not introduce a dummy white
+texture, UV field, sampler enum, texture handle, or descriptor protocol merely to anticipate later
+images and glyphs.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-06:** How should future paint kinds extend the packet?
+
+Recommendation: Reserve conceptual room for closed pipeline/material variants and resource tables,
+but add no empty fields now. New variants may extend the experimental packet while the stable UI
+paint model remains independent of its layout.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-07:** May one packet contain many draws?
+
+Recommendation: Yes. Use one ordered packet per UI stage with shared vertex/index streams and any
+number of validated draw records. The single rectangle naturally produces four vertices, six
+indices, and one draw.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-08:** May draw records overlap or reference shared vertices?
+
+Recommendation: Permit valid shared ranges because future batching may need them, but validate every
+index, base-vertex addition, first/count range, and referenced vertex using checked arithmetic
+before recording.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-09:** What packet ownership, sealing, and reuse rules apply?
+
+Recommendation: Use one exclusive move-only packet builder with explicit open and sealed states.
+Render accepts only the sealed state by const reference and does not retain it; after the call the
+owner may reset to open while retaining capacity. Expose read-only sealed inspection and forbid
+external borrowed buffers.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-10:** Is a schema version or fingerprint needed?
+
+Recommendation: Use a compile-time/internal schema fingerprint checked between C++ and shaders, but
+do not expose runtime negotiation or a serialized version in this milestone. UI and render ship as
+one ponder build and must fail at build time on mismatch.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-11:** Which compatibility metadata accompanies the packet?
+
+Recommendation: Carry the exact pixel extent only. The draw layer's owner and active frame establish
+device/target selection, while the temporary UI facade separately validates the matched metrics
+revision. Do not store render-target pointers, incarnation tokens, swapchain generations,
+render-pass handles, window IDs, or native state in the producer-neutral packet.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-12:** How strict is packet validation?
+
+Recommendation: Validate all counts, bytes, finite positions, indices, base vertices, scissors,
+extents, compatibility fields, hard budgets, and arithmetic completely before any UI draw command
+is recorded. Reject the entire packet; never truncate or partially accept it.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-13:** What limits protect renderer memory and command work?
+
+Recommendation: Define checked representable hard limits and configurable internal soft budgets for
+vertices, indices, draws, and upload bytes. Return explicit limit errors with requested and allowed
+counts rather than relying on allocation failure or narrowing casts.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-14:** May packets contain callbacks, reset commands, or arbitrary state changes?
+
+Recommendation: No. Packets contain closed data and enums only. The draw layer binds all state it
+needs and never executes producer code, native commands, shader selection callbacks, or an opaque
+payload.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-15:** Can a packet be serialized, cached across devices, or used as public scene
+  data?
+
+Recommendation: No. It is transient in-process submission data. Cache the higher-level immutable
+paint list if useful and recompile against current frame metrics; do not promise packet persistence
+or device portability.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-16:** Does synchronous recording consume packet ownership?
+
+Recommendation: No. Validate, preflight, copy into mapped renderer memory, and record while
+borrowing the sealed owning packet only for the call. Success or failure returns ownership
+unchanged; the exclusive producer decides when to reset and reuse its capacity.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-17:** What state may the draw layer assume is already bound?
+
+Recommendation: None. It binds its pipeline, viewport, scissor, vertex buffer, index buffer, and
+every other relied-upon state. Frame composition boundaries invalidate cached assumptions so a
+future scene stage cannot accidentally affect UI output.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-PACKET-18:** Should render tests be able to construct packets without UI?
+
+Recommendation: Yes. Provide a narrow builder or test factory using project types so validator and
+backend tests prove producer neutrality and render has no link or include dependency on UI.
+
+Answer: Use the recommendation exactly.
+
+## Frame Composition, Threading, And Lifetime
+
+- **UIR-FRAME-01:** Where are UI draw commands recorded in the current frame lifecycle?
+
+Recommendation: Record them inside the render pass opened by `RenderFrame::Clear()`, after clear and
+before `FinishAndPresent()`. Do not allocate a separate command buffer, submit, queue, render pass,
+or present operation for UI.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-02:** Must clear occur before the UI stage?
+
+Recommendation: Yes for the first milestone. Reject draw-before-clear with `InvalidState`; allow
+clear-only finish. Revisit load/compose behavior only when renderer composition gains a deliberate
+contract.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-03:** Should the current exactly-one intermediate-stage marker become permanent API
+  semantics?
+
+Recommendation: No. Accept one whole UI packet initially, but model ordered composition phases so a
+future 3D content stage can precede a final UI overlay and other producer-neutral stages can be
+added without breaking the frame lifecycle.
+
+Answer: Use the recommendation exactly. Also, create a new document called libs/ui/docs/future.txt that contains a description of a future task to implement "future 3D content stage can precede a final UI overlay and other producer-neutral stages can be added without breaking the frame lifecycle"
+
+- **UIR-FRAME-04:** May the first API record several UI packets in one frame?
+
+Recommendation: Prefer one sealed packet containing many ordered draws. Reject a second UI-stage
+recording initially; repeated submission adds state and upload fragmentation without a current need.
+
+Answer: Use the recommendation exactly. Also add a section to libs/ui/docs/future.txt to discuss the possibility of "recording several UI packets in one frame" and why we might need that at some point.
+
+- **UIR-FRAME-05:** When is target-dependent compilation performed?
+
+Recommendation: Acquire a live frame, combine only the platform snapshot revision accepted by that
+frame with its authoritative pixel extent, compile, and then record on the owner render thread. For
+off-thread compilation, copy the matched snapshot and revalidate target, revision, and extent before
+recording.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-06:** Which work is render-thread affine?
+
+Recommendation: Draw-layer creation/destruction, GPU preflight, upload, command recording, frame
+mutation, submission, and completion retirement follow the owning renderer thread. Pure paint
+recording and compilation may occur elsewhere with exclusive CPU ownership.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-07:** May the same draw-layer owner be called concurrently?
+
+Recommendation: No initially. One draw layer may serve many targets sequentially on its render
+thread; document non-concurrent access and assert internal owner-thread invariants while returning
+errors for caller-visible wrong-thread use.
+
+Answer: Use the recommendation exactly. Document how this could be made different in the future in libs/ui/docs/future.txt
+
+- **UIR-FRAME-08:** How is a packet associated with a target?
+
+Recommendation: The packet has no target association. The active frame selects the target, the draw
+layer validates its device and extent, and the UI facade validates target/metrics revision before
+the synchronous call. Packets never name or retain windows and cannot be used with a different
+extent or device.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-09:** What happens for suspended or recreation-pending targets?
+
+Recommendation: Return `SkippedSuspended` before compilation/upload. Do not consume the UI stage,
+advance rings, grow buffers, record draws, or turn normal minimize/zero-pixel suspension into a UI
+failure.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-10:** What must be preflighted before the first UI GPU command?
+
+Recommendation: Complete packet validation, pipeline lookup/creation, buffer capacity growth,
+mapping/copying/flushing, and all other fallible preparation after clear but before pipeline bind or
+draw. If preflight fails, the frame remains a valid clear-only pass that can be finished or safely
+abandoned.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-11:** What does packet-recording success guarantee?
+
+Recommendation: All UI commands are present in the active command buffer and renderer-owned upload
+resources are registered with that frame's completion lifetime. The producer packet is no longer
+needed and may be reset. This does not guarantee submit, presentation, or visibility;
+`FinishAndPresent()` reports those outcomes.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-12:** How does explicit or destructor-driven frame abandonment release resources?
+
+Recommendation: Cancel unsubmitted upload reservations immediately and destroy unsubmitted
+temporary generations without waiting on a fence that will never signal. Preserve the renderer's
+existing target-generation recovery rules.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-13:** What happens when queue submission fails?
+
+Recommendation: Treat the generation as unsubmitted and follow the renderer's terminal or
+recoverable submission-failure policy. Do not enqueue its buffers for completion that cannot occur,
+and do not let UI infer success from recorded commands.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-14:** What happens when submission succeeds but presentation fails?
+
+Recommendation: Retain upload and pipeline resources until the submitted fence proves GPU
+completion even if present reports surface loss or another failure. Presentation outcome must not
+be confused with submission lifetime.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-15:** How are several frames in flight handled?
+
+Recommendation: Associate upload slices and retired buffer generations with the exact target frame
+slot and completion fence. Never overwrite data still referenced by another frame and never infer
+safety from CPU frame order alone.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-16:** How should device loss affect CPU and GPU owners?
+
+Recommendation: Device loss terminally invalidates the draw-layer GPU owner and prevents new
+records. CPU paint lists remain ordinary device-independent data; teardown follows the renderer's
+device-loss rules without callbacks into UI.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-17:** What is the required shutdown order?
+
+Recommendation: Stop new UI records, resolve or abandon any active frame, retire or tear down
+submitted resources according to renderer policy, destroy the draw layer on its owner thread, then
+destroy targets and device in their accepted order. Encode parent-child lifetime checks.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-FRAME-18:** May resize, shutdown, or buffer growth call device-wide `WaitIdle`?
+
+Recommendation: No in ordinary operation. Use existing per-slot fences and exact completion
+tracking. Reserve device-wide idle only for an already accepted exceptional teardown path, with a
+diagnostic counter so accidental steady-state use is test-visible.
+
+Answer: Use the recommendation exactly.
+
+## Vulkan Pipeline And Shader Contract
+
+- **UIR-VK-01:** Does this milestone raise the renderer's Vulkan feature floor?
+
+Recommendation: No. Remain compatible with the accepted Vulkan 1.2 baseline and current classic
+render-pass path. Do not require dynamic rendering, descriptor indexing, timeline semaphores, or a
+new optional feature for one rectangle.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-02:** Which render pass contains the rectangle draw?
+
+Recommendation: Use the target-owned render pass already opened by clear, with its single
+sample-count-one color attachment. Generalize its private clear-only naming and stage bookkeeping as
+needed, but do not create a parallel UI render pass.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-03:** What makes a cached graphics pipeline compatible with a target?
+
+Recommendation: Key by semantic attachment compatibility: color format/color contract, sample
+count, render-pass/subpass compatibility signature, shader/schema fingerprint, and relevant fixed
+state. Never key solely by a raw render-pass or swapchain handle.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-04:** Does ordinary swapchain resize recreate the pipeline?
+
+Recommendation: Reuse the pipeline when the compatibility key is unchanged because viewport and
+scissor are dynamic. Create a new pipeline transactionally when format or another compatibility
+field changes; retire the old one only after its submitted users complete.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-05:** When is the first pipeline created?
+
+Recommendation: Lazily create or explicitly prewarm it on the owning render thread during fallible
+preflight, before any UI bind/draw command. Cache successful creation; failure leaves no partial
+cache entry and the frame remains finishable as clear-only.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-06:** Who owns the rectangle shaders?
+
+Recommendation: `ponder_render` owns their portable source, compiled backend artifacts, reflection
+metadata, embedding, validation, and lifetime. UI neither compiles shaders nor selects a native
+module.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-07:** Which shader toolchain should this milestone use?
+
+Recommendation: Resolve and adopt the repository-wide renderer shader-source/compiler decision
+before implementation. Pin exact compiler, validator, and reflection tool versions; do not create a
+UI-only toolchain or silently check in an opaque SPIR-V blob.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-08:** When are shaders compiled and where do artifacts live?
+
+Recommendation: Compile offline at build time, validate and reflect the result, generate artifacts
+in the build tree, and embed them in the render library. Runtime shader compilers, runtime files,
+working-directory lookup, and stale hand-maintained binaries are forbidden.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-09:** How is shader staleness detected?
+
+Recommendation: Record source, tool, options, entry point, target, and schema fingerprints in
+generated metadata and fail the build/test when they disagree. Print the exact regeneration command
+in the diagnostic.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-10:** What does the vertex shader do?
+
+Recommendation: Decode the project vertex position/color, convert top-left framebuffer pixel
+coordinates to the backend clip convention using exact frame constants, and pass linear
+premultiplied color. It performs no UI logical scaling, clipping, texture lookup, or hidden pixel
+snapping.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-11:** What does the fragment shader do?
+
+Recommendation: Return the interpolated linear premultiplied color unchanged, subject only to the
+fixed pipeline write mask. Keep the first shader descriptor-free and free of UI-specific branches.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-12:** How is target extent communicated to the shader?
+
+Recommendation: Use a small explicitly laid-out push-constant block or another descriptor-free
+project constant mechanism containing the exact pixel transform. Validate its byte layout and
+range; do not allocate a uniform buffer per rectangle.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-13:** Does the pipeline layout contain descriptor sets?
+
+Recommendation: No. Use only the accepted push-constant range if needed. Images, glyph atlases, and
+samplers should introduce their own deliberately designed resource contract later.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-14:** Which fixed graphics state is required?
+
+Recommendation: Triangle list, sample count one, fill mode, no culling, no depth/stencil test or
+write, premultiplied-alpha blending, RGBA write mask, and the renderer's accepted rasterization
+conventions. Populate every structure deterministically with no reliance on zero-value coincidence.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-15:** Which pipeline state is dynamic?
+
+Recommendation: At minimum viewport and scissor. Bind both on every UI stage and set the scissor for
+every draw record; never assume a value left by clear, a previous frame, another target, or a future
+scene pipeline.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-16:** How is state isolation enforced across composition stages?
+
+Recommendation: Treat every stage boundary as invalidating renderer-side cached binding assumptions.
+The 2D layer explicitly establishes all state it consumes; a later content stage may do the same
+without a hidden save/restore contract.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-17:** Which backend dispatch operations must become injectable?
+
+Recommendation: Extend the existing owner-local dispatch for shader modules, pipeline layout and
+pipeline creation/destruction, VMA buffer allocation/map/flush/destruction, pipeline/viewport/
+scissor/buffer binding, push constants, and indexed draw recording. Tests must capture void command
+calls and fail every fallible step.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-18:** How are native object creation failures rolled back?
+
+Recommendation: Use small RAII owners and commit caches only after complete construction. Inject
+failure after every successful prefix and assert exact reverse cleanup, no leaked native handles,
+and a usable next frame.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-19:** Should a Vulkan pipeline cache be serialized to disk now?
+
+Recommendation: No. Reuse in-memory device-scoped pipelines and optionally an in-memory Vulkan
+pipeline-cache object if already justified. Persistent driver cache files need their own versioning,
+security, and invalidation contract.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-VK-20:** What labels and validation evidence are required?
+
+Recommendation: Use generic debug names and regions for the 2D pipeline, upload buffers, and draw
+stage; capture complete validation messages through existing renderer diagnostics. UI-specific
+paint command indices may be correlated outside the Vulkan layer.
+
+Answer: Use the recommendation exactly.
+
+## Upload Memory, Caches, And GPU Resource Lifetime
+
+- **UIR-RES-01:** How are dynamic vertices and indices uploaded?
+
+Recommendation: Use render-owned, VMA-allocated, persistently mapped host-visible streams associated
+with frame completion slots. Copy the sealed packet during preflight; do not create/destroy a native
+buffer per frame or require a staging-to-device-local copy before measurement justifies it.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-02:** Should vertex and index data share one native buffer?
+
+Recommendation: Either layout can work, but prefer one allocation with explicitly aligned vertex
+and index regions per slot if it simplifies ownership and reduces objects. Keep slice types distinct
+and validate every offset, alignment, and byte calculation.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-03:** How is memory-type selection handled?
+
+Recommendation: Request host-visible memory with the best available coherent/cached properties
+through VMA, while supporting a correct non-coherent fallback. Record the selected properties for
+diagnostics; do not assume desktop discrete-GPU behavior.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-04:** How are non-coherent writes flushed?
+
+Recommendation: Flush exactly the written ranges expanded and clamped to the device's non-coherent
+atom size, using checked offsets and allocation bounds. Unit-test unaligned starts/ends and injected
+flush failure; never flush stale or unmapped storage.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-05:** What owns upload capacity for several frames in flight?
+
+Recommendation: Give each target frame slot independently reusable slices or arenas keyed by stable
+target incarnation and exact completion. A slot becomes writable only after its fence-completion
+contract says the previous submission is done.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-06:** May targets share one device allocation arena?
+
+Recommendation: They may share a device-owned allocator and pipeline cache, but reservations and
+completion ownership must remain target/slot-specific. Growth or a delayed fence for one target must
+not corrupt or unnecessarily block another target's CPU preparation.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-07:** How does upload capacity grow?
+
+Recommendation: Grow geometrically to a checked bounded capacity large enough for the whole packet
+before recording. Never partially upload; report requested/current/limit bytes when growth cannot be
+satisfied.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-08:** When is an old buffer destroyed after growth?
+
+Recommendation: Retire the old allocation against the exact last submission that references it and
+destroy it after that completion is observed. Do not use swapchain generation alone, CPU frame
+count, or device-wide idle as a lifetime proof.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-09:** What happens to a newly grown buffer if later preflight fails?
+
+Recommendation: Keep a fully constructed reusable capacity only if cache policy deliberately
+commits it before recording; otherwise roll it back. In either case, never expose partial mapping or
+replace an in-flight buffer without safe retirement.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-10:** What happens to upload reservations when a frame is abandoned?
+
+Recommendation: Release unsubmitted ranges immediately and preserve their buffer for reuse. Do not
+advance a completion ring or retire storage against a fence for work that was never submitted.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-11:** Where do shader modules, pipeline layouts, and pipelines live?
+
+Recommendation: Own reusable pipeline resources at the device-scoped draw layer. Ordinary target
+resize does not recreate them when compatibility is unchanged; device destruction and incompatible
+replacement retire them under explicit owner-thread rules.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-12:** Does the first milestone create descriptor pools, samplers, or images?
+
+Recommendation: No. The solid rectangle path requires none. Avoid speculative resource managers;
+add texture and glyph resources when their update, ownership, and sampling requirements can be
+designed from real use cases.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-13:** What steady-state allocation behavior is required?
+
+Recommendation: After pipeline creation and sufficient upload warm-up, repeated identical frames
+perform no native object creation, VMA allocation, capacity growth, or avoidable host-container
+allocation. Tests should distinguish byte copies from allocations.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-14:** What resource budgets are needed now?
+
+Recommendation: Set explicit internal caps for packet bytes, upload capacity per target/slot, number
+of retired generations, and total draw-layer memory. Return a limit error before unbounded growth
+and expose high-water marks diagnostically.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-15:** How does draw-layer destruction handle submitted resources?
+
+Recommendation: Stop new work and use renderer-owned exact completion or the already accepted
+bounded device teardown policy before destroying referenced allocations. A destructor must not
+silently free in-flight memory or block on an unbounded wait.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-16:** Which counters should the layer expose for tests and diagnostics?
+
+Recommendation: Count packets, draws, vertices, indices, uploaded bytes, host allocations, native
+buffers, capacity growth, retired generations, flushes, pipelines created/reused, skipped frames,
+and device-idle calls. Keep these generic and snapshot-readable without exposing Vulkan handles.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-17:** Is zero-copy packet memory a goal?
+
+Recommendation: No for this milestone. A reusable owning sealed packet followed by one bounded
+mapped-memory copy gives clear lifetime, allocation, and threading semantics. Consider direct arena
+construction only after measurement and without borrowing producer memory across submission.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-RES-18:** May allocation policy be configured through the temporary UI API?
+
+Recommendation: No. Keep VMA, memory types, capacities, growth factors, and retirement private to
+render, with test-only injection and diagnostic budgets. Public tuning would prematurely expose
+backend policy.
+
+Answer: Use the recommendation exactly.
+
+## Errors, Diagnostics, And Transactionality
+
+- **UIR-ERR-01:** Which subsystem owns which errors?
+
+Recommendation: UI owns invalid paint values, unbalanced paint state, and compile failures. Render
+owns packet contract, frame/device/thread compatibility, resource, backend, submit, present, and
+device-loss failures. Preserve stable non-overlapping error domains.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-02:** When are assertions appropriate?
+
+Recommendation: Assert impossible internal states such as corrupt sealed storage or broken cache
+ownership. Return `Result` for caller data, normal suspension, limits, wrong order/thread/device,
+allocation failure, and backend outcomes.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-03:** May exceptions cross UI/render or backend boundaries?
+
+Recommendation: No for recoverable work. Catch allocation or tool-boundary exceptions where
+necessary, translate them to project errors, and keep destructors and Vulkan callback paths
+no-throw.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-04:** What does all-or-nothing recording require?
+
+Recommendation: Validate and preflight the complete packet before the first UI GPU command. On
+failure, record no partial UI draw sequence, consume no recoverable caller state, leak no resource,
+and leave frame disposition explicit.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-05:** Can a failed UI record still be followed by clear-only present?
+
+Recommendation: Yes when the failure occurred before UI commands and the renderer remains healthy.
+Return enough state for the caller to choose finish or abandonment; fatal device/command-buffer
+errors follow the existing poisoned-frame policy.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-06:** How are diagnostics structured?
+
+Recommendation: Attach subsystem stage, stable error code, device/target/frame identifiers, packet
+counts, draw or paint-command index, extent, pipeline key, capacity, and native result where
+relevant. Keep messages concise and values machine-capturable.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-07:** Who logs a propagated failure?
+
+Recommendation: Log once at the boundary that has enough application context or let the application
+log it. Lower layers return structured errors and optional captured diagnostics; they must not each
+emit duplicate messages for the same failure.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-08:** May render error text mention UI rectangles?
+
+Recommendation: No. Render reports malformed vertex/index/draw data, incompatible frame, pipeline,
+upload, or backend stages. UI translates the error with a paint-command index when useful.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-09:** How are normal skipped draws observed?
+
+Recommendation: Do not log zero-size, fully clipped, fully transparent, or suspended no-work cases
+as errors. Return `SkippedEmpty` or `SkippedSuspended` as appropriate and expose deterministic
+counters/debug traces so tests and tools can explain the result without log spam.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-10:** How are repeated backend or validation messages controlled?
+
+Recommendation: Preserve the first complete message and count repeats, with narrowly scoped
+rate-limiting after diagnostic capture. Never suppress a distinct validation error or convert a
+new failure into success.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-11:** How are native Vulkan codes exposed?
+
+Recommendation: Store them as diagnostic context owned by render while returning stable project
+errors to callers. Do not place Vulkan enums or numeric meanings in public UI types.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-ERR-12:** What recovery guarantee follows a recoverable failure?
+
+Recommendation: Document whether the same paint list, next frame, target, and draw layer remain
+usable. Tests must prove the stated recovery after every injected fallible step instead of assuming
+that cleanup implies usability.
+
+Answer: Use the recommendation exactly.
+
+## Verification And Quality Gates
+
+- **UIR-TEST-01:** Which verification tiers are required?
+
+Recommendation: Use pure UI paint/compiler tests, generic render packet tests, fake Vulkan dispatch
+tests, shader artifact/interface tests, install/dependency tests, and a bounded live Windows/Vulkan
+join. Each tier has distinct evidence and none may be replaced by the workbench.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-02:** What must paint-recorder tests cover?
+
+Recommendation: Cover command order, ownership, move behavior, sealing, reset/capacity reuse,
+zero/negative/non-finite rectangles, color validation, clip underflow/unbalanced finalization,
+nested/empty clips, and deterministic output across repeated construction.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-03:** What exact compiler output is asserted for one rectangle?
+
+Recommendation: Assert four vertices, six 32-bit indices, one draw, exact winding/order, pixel
+positions, packed colors, root scissor, bounds, and packet metadata. Expected values must be
+hand-authored reference data, not regenerated by production helpers.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-04:** Which coordinate-conversion cases need table-driven tests?
+
+Recommendation: Cover independent X/Y scales, common fractional scales, fractional and negative
+bounds, edge-touching and fully outside rectangles, one-pixel/non-square/huge targets, resize
+revision changes, conservative scissor rounding, and every narrowing/overflow boundary.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-05:** How is color correctness tested without relying on screenshots?
+
+Recommendation: Compare production conversion, packing, decode, premultiplied blending, and sRGB
+encoding against independent high-precision reference vectors, including transparent, opaque,
+mid-alpha, primary, gray, and overlapping colors with explicit tolerances.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-06:** What clipping behavior receives exact tests?
+
+Recommendation: Test root clipping, nested intersection, partial and full clipping, disjoint clips,
+empty clips followed by pop, fractional clip rounding, target clamp, order preservation, and skip
+counts. Assert both compiler output and emitted scissors.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-07:** How is malformed packet validation tested?
+
+Recommendation: Hand-build packets with non-finite positions, invalid/wrong extents, out-of-range
+indices, base-vertex overflow, truncated ranges, empty/invalid scissors, excessive counts, byte
+overflow, and schema mismatch; separately test draw-layer/frame device mismatch. Test target and
+metrics-revision mismatch at the temporary UI facade. Assert total rejection before GPU commands.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-08:** Should paint lists and packets be fuzzed?
+
+Recommendation: Yes. Add bounded deterministic fuzz/property tests for recorder state sequences,
+rectangle/clip arithmetic, compiler output invariants, and hostile packet counts/ranges. Preserve
+minimal repro seeds and run them without a GPU.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-09:** What proves the render packet is producer-neutral?
+
+Recommendation: Construct valid and invalid packets directly in render tests without linking or
+including UI, and compile render with no UI target. Assert the same validator/backend behavior as
+packets produced by the UI compiler.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-10:** What exact fake-backend command trace is expected?
+
+Recommendation: Starting after clear opened the render pass, assert pipeline bind, viewport,
+scissor, vertex/index binds, push constants, indexed draws in order, render-pass end, command-buffer
+end, submit, and present. Also assert no descriptor or extra pass/submit commands occur.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-11:** Must void Vulkan recording commands be captured?
+
+Recommendation: Yes. Extend fake dispatch to record bind, state, push, and draw arguments so tests
+can verify exact order and values. Success-returning create/submit calls alone cannot prove that a
+rectangle was recorded correctly.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-12:** Which fallible operations require injected failure tests?
+
+Recommendation: Fail every shader-module, pipeline-layout, pipeline, allocation, map, capacity
+growth, copy/flush, command begin/end, acquire, submit, and present step after every successful
+prefix. Assert exact cleanup, frame disposition, diagnostics, and subsequent recovery.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-13:** How is native-object rollback verified?
+
+Recommendation: Track all fake Vulkan/VMA owners and assert zero leaks, no double destruction,
+reverse cleanup where required, no cache entry for partial objects, and unchanged live counts after
+each injected failure and shutdown path.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-14:** Which frame lifecycle state-machine cases are mandatory?
+
+Recommendation: Test wrong order, duplicate UI packet, clear-only finish, successful draw/finish,
+abandon before and after draw recording, failure followed by finish or abandon, submit failure,
+present failure after submit, and next-frame recovery exactly as the accepted contract specifies.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-15:** How are frames-in-flight and growth hazards tested?
+
+Recommendation: Keep earlier slots artificially incomplete while later frames record, force upload
+growth, then complete fences out of CPU preparation order. Assert no overwrite, early destruction,
+global idle, false reuse, or wait on an unsubmitted generation.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-16:** What multi-target coverage is required?
+
+Recommendation: Interleave two targets on one device with different extents and frame slots; resize
+or suspend one while the other advances; force capacity growth independently; and assert correct
+pipeline sharing, packet rejection, completion ownership, and teardown order.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-17:** Which resize and suspension cases are mandatory?
+
+Recommendation: Cover unchanged-format resize, format/compatibility change, zero-pixel minimize,
+event-driven recreation, restore at a new scale, stale metrics/packet rejection, and repeated
+suspend/restore without upload or native allocation while skipped.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-18:** What device-loss and shutdown coverage is required?
+
+Recommendation: Inject loss before record, during submit, and after submitted work; destroy with
+active, abandoned, and completed frames; verify CPU paint data remains valid while GPU owners become
+terminal; and assert validation-clean parent/child destruction on the owner thread.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-19:** How are shaders verified?
+
+Recommendation: Run the pinned compiler, SPIR-V validator, and reflection/interface check in the
+build; test source/artifact/tool fingerprint staleness; assert entry points, vertex formats,
+locations, push-constant range, descriptor absence, and target environment.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-20:** Is a GPU pixel proof worthwhile?
+
+Recommendation: Add a small private test-only probe if it can render through the exact production
+pipeline and sample known inside/outside/blended pixels without exposing public readback. Otherwise
+document manual pixel evidence and rely on command, shader, color, validation, and live WSI gates.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-21:** What must the live Windows/Vulkan smoke do?
+
+Recommendation: Create a real device/window/target and temporary UI renderer; clear; draw opaque and
+translucent rectangle frames; resize; minimize/wait; restore; render again; and shut down. Fail on
+unexpected project or validation diagnostics and use a bounded timeout.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-22:** Does the live test run in ordinary headless unit lanes?
+
+Recommendation: No. Give it an explicit capability check, label, timeout, and known-capable Windows
+job or developer command. Report unsupported runner separately from test failure, and require at
+least one protected validation-capable lane before milestone completion.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-23:** How are validation-layer messages evaluated?
+
+Recommendation: Capture complete messages through renderer diagnostics and fail on every new error
+or warning. Permit only narrow documented driver-specific exceptions with owner and expiry; retain
+the first complete unexpected message as an artifact.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-24:** What leak and resource-count assertions are required?
+
+Recommendation: Compare host owners, VMA allocations, Vulkan objects, mapped buffers, retired
+generations, and pipeline entries before and after success, failure, growth, resize, device loss,
+and shutdown. Assert all submitted resources survive until exact completion and all final counts
+return to baseline.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-25:** What structural performance assertions are automated?
+
+Recommendation: Warm the pipeline and capacity, then assert repeated unchanged frames cause no
+shader/pipeline/buffer creation, capacity growth, device idle, descriptor work, or host-container
+allocation. Track upload bytes and draw counts as expected work rather than treating them as leaks.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-26:** Which public-header and type-trait checks are required?
+
+Recommendation: Compile every public or experimental header alone; assert move/copy/noexcept and
+lifetime traits of owners and packets; verify no Vulkan/SDL/native includes in UI headers; and
+exercise wrong-device/frame use without undefined behavior.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-27:** Which package-consumer tests are required?
+
+Recommendation: Build a clean installed static-library consumer for the temporary rectangle path if
+it is installed, plus render-only and render-disabled UI-core consumers. Make source-tree private
+includes unavailable so link/interface leakage is observable.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-28:** How is removal of the prior third-party UI path enforced?
+
+Recommendation: Scan active CMake targets, installed interfaces, implementation sources, examples,
+tests, and dependency requirements for ImGui identifiers and symbols. Allow only explicit negative
+architecture statements in this questionnaire/ADR and version-control history; no compatibility
+stub, implementation guide, or unused build path remains.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-TEST-29:** What non-Windows coverage is useful before another backend exists?
+
+Recommendation: Compile and run paint, compiler, packet, dependency, header, install, and fake-
+backend tests on supported compilers where available. Do not claim live platform/backend support
+from compile-only coverage.
+
+Answer: Right now, all testing will be Windows-only
+
+- **UIR-TEST-30:** Can examples or screenshots count as automated acceptance tests?
+
+Recommendation: No. They are supporting evidence and contributor tools. Completion requires the
+deterministic, injected-failure, packaging, validation, lifecycle, and live gates above.
+
+Answer: Use the recommendation exactly.
+
+## Dependencies, Build, Packaging, And CI Shape
+
+### Mandatory Dependency Cleanup
+
+The no-ImGui direction is fixed rather than awaiting an answer:
+
+- **UIR-BUILD-01 (fixed):** Remove the existing target creation, unconditional dependency check,
+  include propagation, link interfaces, cache variables, and generated package references. Leave no
+  disabled compatibility target.
+- **UIR-BUILD-02 (fixed):** Remove the submodule entry and checkout, then update allowed-dependency,
+  license, provenance, project-tree, and bootstrap documentation. Version control preserves history.
+- **UIR-BUILD-03 (fixed):** Add no `PONDER_*_IMGUI` option, backend adapter target, compatibility
+  source, or dormant test. Any future reconsideration requires a new design decision.
+
+- **UIR-BUILD-04:** Does the first rectangle path need a new runtime UI dependency?
+
+Recommendation: No. Implement paint data and tessellation with project/C++23 code and use the
+renderer dependencies already accepted for Vulkan and allocation. Shader compiler/validator tools
+are build-time renderer inputs, not UI runtime dependencies.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-05:** How should CMake separate CPU UI from render integration?
+
+Recommendation: Keep `ponder_ui` usable for CPU-only retained/paint work and add a clearly named
+render-enabled integration implementation target or source component that depends on both UI and
+render. Follow project target/alias naming and avoid a render-to-UI edge.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-06:** What happens when `PONDER_BUILD_RENDER=OFF`?
+
+Recommendation: Configure, build, test, install, and consume the UI CPU core without probing shader
+tools or Vulkan and without compiling the temporary rectangle renderer/workbench. Report the
+render-dependent target as unavailable rather than supplying fake production stubs.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-07:** When is the generic render 2D layer built?
+
+Recommendation: Build it whenever `ponder_render` is built so renderer tests and alternate packet
+producers do not depend on UI. Do not add a rectangle-specific public feature flag or compile the
+generic layer inside `ponder_ui`.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-08:** How is the static-library dependency exported?
+
+Recommendation: Model the installed link relationship explicitly so an installed UI-render
+consumer receives every required project archive in a deterministic order. Verify CMake's private
+static-link behavior rather than assuming source-tree success proves package correctness.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-09:** Where are cross-library headers visible?
+
+Recommendation: UI public headers expose only lightweight project/std types. The integration target
+may include the deliberate project-private 2D contract through its explicit internal interface
+target; neither library propagates arbitrary source directories or installs that contract.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-10:** When are shader tools discovered?
+
+Recommendation: Probe pinned compiler, validator, and reflection tools only when render shaders are
+being built or verified. A UI-core-only or render-disabled configure must not fail because a shader
+tool is absent.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-11:** Where do generated shader files go?
+
+Recommendation: Put generated SPIR-V, embedded C++ data, reflection metadata, and fingerprints in
+the build tree with explicit dependencies and byproducts. Do not modify the source tree during a
+normal build or depend on generator execution order by accident.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-12:** Which CMake option controls the temporary workbench?
+
+Recommendation: Use existing example/test options where possible. If a new project option is truly
+needed, use the `PONDER_*` prefix and describe capability rather than implementation; never make the
+core UI target conditional on the workbench.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-13:** What warning, language, PCH, and unity policy applies?
+
+Recommendation: Build new project sources as C++23 under normal warnings-as-errors and repository
+formatting. Keep generated shader blobs mechanically isolated and do not let tool-generated code
+weaken warnings or implicitly inherit project PCH/unity behavior without an explicit rule.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-14:** What is installed and exported?
+
+Recommendation: Install stable UI core and, only if package testing requires it, the experimental UI
+facade plus its required ponder archives. Never install the generic packet contract, private
+paint/compiler headers, Vulkan helpers, generated tools, test factories, or workbench targets.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-15:** How are licenses and provenance affected?
+
+Recommendation: Remove notices that apply only to the deleted UI dependency, preserve notices for
+actual shader/Vulkan/allocation tools and libraries, and record exact build-tool provenance where
+artifacts are embedded. Do not retain inaccurate notices as a substitute for history.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-16:** Which build configurations are first-class gates?
+
+Recommendation: At minimum test UI core with render off, render with generic 2D tests and no UI,
+full UI-render integration, Debug and Release on the supported MSVC toolchain, install-tree
+consumers, and platform-neutral CPU/fake tiers on supported non-Windows compilers.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-17:** Are tests enabled by default for the new targets?
+
+Recommendation: Yes, following project policy. Only the real-window capability test may be
+separately labeled/skipped for unsupported runners; deterministic CPU, fake-backend, shader,
+dependency, and package tests remain ordinary required tests.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-BUILD-18:** How are accidental dependency regressions detected in CI?
+
+Recommendation: Inspect configured targets, compile commands, installed exports, and clean consumer
+link lines. Assert render has no UI dependency, UI core has no render/Vulkan dependency, the
+integration edge is explicit, and removed third-party paths cannot be discovered transitively.
+
+Answer: Use the recommendation exactly.
+
+## Temporary Workbench And Contributor Documentation
+
+- **UIR-EX-01:** Where should the rectangle workbench live?
+
+Recommendation: Add a clearly temporary, non-installed target such as
+`examples/ui/1-rectangle` or a UI contributor workbench. Keep it under UI ownership because its
+purpose is to exercise the UI paint-to-render path, not teach a general render primitive API.
+
+Answer: Create an example application at examples/ui/1-rectangle. Follow similar conventions to
+existing examples, like examples/platform/1-window-display-lab.
+
+- **UIR-EX-02:** Is the renderer clear-window example a prerequisite?
+
+Recommendation: Finish or preserve the canonical render clear-window example independently, then
+build the rectangle workbench on the same accepted platform/render lifecycle. Do not combine the two
+support claims into one executable.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-03:** Which APIs may the workbench use?
+
+Recommendation: Use only normal platform/render APIs and the explicitly experimental temporary UI
+entry point. It may not include private paint/compiler/Vulkan headers, call native backend
+functions, or construct generic packets directly.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-04:** What should the workbench display?
+
+Recommendation: Show a contrasting clear and a stable rectangle, plus an automated or keyed
+translucent overlap case. Report scale, extent, draw, upload, and allocation counters without adding
+text rendering to the UI surface itself.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-05:** Which lifecycle behavior should it exercise?
+
+Recommendation: Pump project events, draw steady frames, resize, minimize using event wait, restore,
+handle suspension without spinning, and shut down in accepted owner order. Provide a bounded
+automatic smoke mode in addition to interactive use.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-06:** How are workbench failures handled?
+
+Recommendation: Check every `Result`, print one concise structured diagnostic, request orderly
+shutdown where possible, and exit nonzero. Never continue rendering after a poisoned frame or hide
+failure just to keep the window visible.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-07:** What warning accompanies the temporary API?
+
+Recommendation: State prominently in source and documentation that the rectangle call is a
+milestone harness, not the future retained-mode construction, layout, or rendering API. Avoid code
+patterns that applications are expected to copy long term.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-08:** Should the workbench use screenshot goldens?
+
+Recommendation: No. Use deterministic CPU and command tests plus optional targeted pixel probes.
+Screenshots may document the result but are fragile across drivers, scaling, and window decoration
+and do not prove lifecycle correctness.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-09:** May the workbench introduce input or layout abstractions?
+
+Recommendation: Only the minimal event handling already required to run, resize, suspend, and exit.
+Use fixed or simply recomputed rectangle bounds; do not treat keyboard controls, responsive layout,
+or widget state as part of this milestone.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-EX-10:** What evidence should the workbench expose to contributors?
+
+Recommendation: Print or capture device/backend identity, target extent/scale, packet/draw counts,
+pipeline/buffer creation, upload high-water marks, skip reasons, validation summary, and shutdown
+resource counts. Keep the default output concise and offer detailed diagnostics explicitly.
+
+Answer: Use the recommendation exactly.
+
+## Documentation, Decisions, And Handoff
+
+- **UIR-DOC-01:** Which document owns the long-term UI boundary?
+
+Recommendation: Keep `libs/ui/docs/Boundary.md` authoritative for UI semantics and ownership, with
+no third-party implementation promise. Keep `libs/render/docs/Boundary.md` authoritative for the
+producer-neutral 2D packet and GPU ownership.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-02:** When should a replacement UI platform-input contract be written?
+
+Recommendation: The obsolete ImGui-specific `PlatformAdapter.md` is removed as fixed cleanup. Add a
+new project-owned UI input contract only when the input-routing milestone is designed; do not
+preserve the deleted event mapping as future policy.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-03:** Which active documents must be reconciled with the no-ImGui decision?
+
+Recommendation: Update UI/render/platform boundaries and Codex guidance, renderer ADRs and
+verification text, the high-level and subsystem roadmaps, example plans, dependency decisions,
+CMake documentation, and every inbound link. Preserve unrelated accepted renderer-foundation
+decisions.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-04:** Should the new architecture receive an ADR?
+
+Recommendation: Yes. Record why ponder owns semantic paint data and tessellation, why render accepts
+producer-neutral packets, why the first path is dynamic indexed geometry, and why third-party UI
+integration was removed. Reference detailed contracts instead of copying the questionnaire.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-05:** Where is the exact generic packet contract documented?
+
+Recommendation: Document it beside the project-private render interface in backend-neutral terms,
+including coordinate/color/scissor schemas, ownership, validation, frame ordering, and
+compatibility. Keep both the interface and Vulkan implementation details non-application-facing.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-06:** Where is the paint-list/compiler contract documented?
+
+Recommendation: Keep it in UI implementation/design documentation, with semantic commands,
+logical-coordinate rules, compilation stages, invalid-input behavior, and deterministic inspection.
+Do not present private command representation as stable application API.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-07:** Which roadmap owns later UI functionality?
+
+Recommendation: Use [milestones.txt](milestones.txt) as the ordered milestone overview, and link to
+focused UI questionnaires/roadmaps as each milestone is designed. Do not smuggle later work into
+the rectangle implementation.
+
+Answer: Use the recommendation. Before generating the roadmap, move the milestone overview from
+the render documentation to `libs/ui/docs/milestones.txt`.
+
+- **UIR-DOC-08:** What support claim may milestone 1 make?
+
+Recommendation: Claim a tested project-owned rectangle paint path on the documented Windows/Vulkan
+configuration, with backend-neutral CPU/packet contracts and compile coverage as evidenced. Do not
+claim a retained widget API, complete 2D canvas, Metal runtime, or durable scientific UI yet.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-09:** How is obsolete planning material retired?
+
+Recommendation: Keep one active questionnaire at this path, update inbound links in the same change,
+and delete or rewrite contradictory active documents. Rely on version control for historical ImGui
+plans rather than maintaining parallel specifications.
+
+Answer: Use the recommendation exactly.
+
+- **UIR-DOC-10:** When is an implementation roadmap generated?
+
+Recommendation: After every in-scope `Answer:` is recorded and conflicts are resolved. Convert
+accepted answers into dependency-ordered tasks with explicit verification evidence; do not silently
+treat an unanswered recommendation as an approved contract.
+
+Answer: Use the recommendation exactly.
+
+## Explicitly Deferred UI Decisions
+
+The following are intentionally not questions for the rectangle milestone. They are ordered in
+[milestones.txt](milestones.txt) and require focused design when their prerequisites exist:
+
+- the retained element tree, identity, ownership, mutation, invalidation, snapshots, and public
+  construction API;
+- styling, themes, state selectors, metrics, and application formatting policy;
+- measurement and layout containers, constraints, transforms, and pixel-snapping policy;
+- text shaping, font fallback, glyph atlases, wrapping, selection, editing, clipboard, and IME;
+- platform input normalization, hit testing, event routing, pointer capture, focus, navigation, and
+  shortcuts;
+- borders, rounded corners, gradients, images, opacity layers, paths, shadows, and animation;
+- reusable controls, commands, validation, data binding, and application model adapters;
+- scrolling, virtualized lists/trees/tables, property grids, and large scientific data views;
+- overlays, menus, dialogs, drag and drop, docking, workspace persistence, and native multi-window
+  policy;
+- accessibility semantics and platform bridges, localization, bidirectional layout, and assistive
+  technology testing;
+- offscreen rendering, public readback, screenshot APIs, render graphs, arbitrary shaders, and a
+  general-purpose GPU command encoder; and
+- stabilization of the eventual application-facing retained UI API.

@@ -100,7 +100,7 @@ known gaps are follow-up work outside the initial scaffold:
 | Q-DEP-003 | Not relevant because vcpkg is not selected. | No vcpkg baseline decision needed. |
 | Q-DEP-004 | Not relevant because vcpkg is not selected. | No vcpkg triplet decision needed. |
 | Q-DEP-005 | Third-party patches should be isolated, documented, and easy to reapply. | Use `third_party/patches/` or equivalent patch documentation. |
-| Q-DEP-006 | First allowed dependencies are spdlog, GoogleTest, nlohmann/json, SDL3, and Dear ImGui. | Do not add Python, cloud, renderer-backend, or chemistry-engine dependencies during the scaffold. |
+| Q-DEP-006 | First allowed dependencies are spdlog, GoogleTest, nlohmann/json, and SDL3. | Do not add Python, cloud, renderer-backend, UI-toolkit, or chemistry-engine dependencies during the scaffold. |
 | Q-DEP-007 | Use nlohmann/json. | Project metadata and early structured files should use this dependency. |
 | Q-DEP-008 | Use GoogleTest. | Unit-test targets should use GoogleTest. |
 | Q-DEP-009 | Allow permissive licenses by default: MIT, BSD, Apache-2.0, ISC, Zlib, and Boost. MPL/EPL are case-by-case. Do not link GPL/AGPL into core. GPL tools may be external user-installed engines. | Document the license policy before adding third-party code. |

@@ -94,7 +94,6 @@ Implemented top-level layout:
         golden/
     third_party/
         googletest/
-        imgui/
         nlohmann_json/
         SDL3/
         spdlog/
@@ -274,7 +273,7 @@ The guiding rule for this phase:
 
     Build the smallest durable foundation that lets the desktop app become real.
     Do not rush project loading, chemistry data, workflow graphs, plugins, or
-    compute until the shell, window, renderer, and ImGui frame loop are solid.
+    compute until the shell, window, renderer, and private UI rendering path are solid.
 
 The desktop application should begin before the `.ponder` project format exists,
 but it should not begin with disposable code. The minimal prerequisites for
@@ -287,9 +286,8 @@ serious desktop work are:
 - `ponder_render` owns renderer backend selection, graphics context/device
   lifetime, swapchain/surface integration, frame begin/end, resize handling, and
   simple clear/draw behavior.
-- `ponder_ui` owns Dear ImGui context lifetime, per-frame ImGui setup, style,
-  fonts, docking/menu/status-panel primitives, and renderer/platform ImGui
-  backend glue.
+- `ponder_ui` owns the custom retained UI contract, semantic paint data, and
+  CPU tessellation. It submits only owning backend-neutral packets to render.
 - `ponder-desktop` owns application orchestration only: startup/shutdown,
   high-level app state, window/main-loop wiring, and user-facing command routing.
 
@@ -338,14 +336,13 @@ libraries that the desktop shell will touch:
   on renderer, UI, project, chemistry, workflow, or compute.
 - `ponder_render` publicly depends on `ponder_core` and `ponder_platform`.
   Vulkan/loader/allocator/OS dependencies stay private, as does future Metal
-  backend implementation. `ponder::imgui` stays private for the renderer-owned
-  draw bridge. Render has no direct SDL
-  target or compile usage and must not depend on UI, the desktop app, project,
-  chemistry, workflow, or compute.
-- `ponder_ui` may depend on `ponder_core`, `ponder_platform`, `ponder_render`,
-  and Dear ImGui, but has no direct SDL3 target or compile usage. It owns a
-  custom project-event platform adapter, not application policy. Final
-  executables still receive platform's link-only SDL implementation dependency.
+  backend implementation. Its generic 2D contract accepts only project-owned
+  packets. Render has no direct SDL target or compile usage and must not depend
+  on UI, the desktop app, project, chemistry, workflow, or compute.
+- `ponder_ui` owns project paint commands and CPU tessellation and may use
+  render's project-private generic 2D contract, but has no direct SDL3 target or compile
+  usage. Final executables still receive platform's link-only SDL implementation
+  dependency.
 - `ponder-desktop` may depend on `core`, `platform`, `render`, and `ui` for the
   first shell milestone. It should not depend on `project`, `chemistry`, `io`,
   `workflow`, `compute`, or `plugin_sdk` until those systems have real APIs.
@@ -388,41 +385,29 @@ platform window through a stable renderer boundary:
   begin/end, resize handling, vsync policy, and a clear-color pass.
 - Expose a small renderer API that the desktop app can drive without knowing the
   backend details.
-- Keep renderer code independent from project files, chemistry models, and ImGui
-  widgets.
+- Keep renderer code independent from project files, chemistry models, and UI
+  widgets or paint semantics.
 
 The goal is not a molecule viewport yet. The goal is a non-temporary render loop
 that can clear the window every frame and survive resize/shutdown cleanly.
 
-Step 6: Build the Dear ImGui UI foundation
-------------------------------------------
+Step 6: Build the project-owned rectangle rendering foundation
+--------------------------------------------------------------
 
-Implement enough `ponder_ui` to make ImGui a first-class subsystem instead of
-ad hoc code in `ponder-desktop`:
+Implement enough `ponder_ui` and the generic render 2D layer to draw one rectangle
+through the production-shaped path. Do not design the public retained widget
+system in this step.
 
-UI context/widget and renderer-bridge work may start after the renderer
-foundation, but the complete project-owned platform adapter waits for the
-PLAT-015 clipboard and external-URI gate.
-
-- ImGui context creation/destruction.
-- Project-owned `PlatformEvent` translation into ImGui; do not compile
-  `imgui_impl_sdl3` or expose SDL types.
-- Renderer backend hookup for ImGui draw data.
-- Frame begin/end helpers that fit the renderer frame lifecycle.
-- Initial style, font, docking/menu/status/log-panel primitives.
-- Testable UI state helpers where possible, keeping direct ImGui calls at the UI
-  boundary.
-- Pin Dear ImGui to a reviewed docking-branch commit before using dockspaces.
-  Keep docking inside the main OS window and leave platform multi-viewports
-  disabled initially.
-- Compile `ponder_imgui` with
-  `IMGUI_DISABLE_WIN32_DEFAULT_CLIPBOARD_FUNCTIONS`,
-  `IMGUI_DISABLE_WIN32_DEFAULT_IME_FUNCTIONS`, and
-  `IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS`; verify those default hooks are absent
-  and install project clipboard, IME, and external-URI callbacks.
-
-Do not add project-specific panels yet. The first UI should prove the shell can
-show a menu bar, dockspace, viewport area, status area, and diagnostics/log panel.
+- UI records semantic paint commands in logical coordinates and compiles them
+  into owning pixel-space packets after exact frame metrics are known.
+- Render consumes only generic indexed 2D geometry and owns shaders, pipelines,
+  GPU memory, command recording, submission, and completion retirement.
+- Establish deterministic ordering, rectangular clipping, linear premultiplied
+  color, resize/suspension behavior, and multi-target-safe frame lifetimes.
+- Add independent paint/compiler tests, generic packet/backend tests, shader
+  interface checks, failure injection, and a bounded live rectangle workbench.
+- Keep the temporary rectangle entry point explicitly experimental; text, layout,
+  retained widgets, input, styling, and the stable public API are later milestones.
 
 Step 7: Assemble the first durable `ponder-desktop` shell
 ---------------------------------------------------------
@@ -430,17 +415,20 @@ Step 7: Assemble the first durable `ponder-desktop` shell
 Grow `ponder-desktop` from scaffold to a real application shell using only
 `core`, `platform`, `render`, and `ui`:
 
+Begin this step only after the retained UI public contract is separately designed. Desktop consumes
+that facade and never calls the temporary rectangle harness or generic packet API directly.
+
 - Startup/shutdown logging and build metadata display.
 - Window creation, main loop, event dispatch, frame timing, and clean exit.
 - Obtain the selected renderer's compatibility requirement before creating the
   platform window rather than hardcoding a backend flag in the application.
 - Renderer clear pass every frame.
-- ImGui dockspace/menu/status/log UI.
+- Retained UI dockspace/menu/status/log shell.
 - Basic command routing for commands that do not require project state yet, such
   as Quit, About, toggling panels, and showing diagnostics.
 
 This should be the first user-visible milestone: a desktop app that opens a
-window, renders every frame, hosts ImGui, and has clean subsystem boundaries.
+window, renders every frame, hosts the retained UI shell, and has clean subsystem boundaries.
 
 Step 8: Verify the desktop foundation locally
 ---------------------------------------------
@@ -452,7 +440,7 @@ foundation:
 - Run unit tests for `core`, `platform`, `render`, and `ui` as those tests exist.
 - Run formatting and scoped clang-tidy for touched libraries.
 - Launch `ponder-desktop` locally and confirm it opens a window, renders a clear
-  frame, displays ImGui, handles resize, and shuts down cleanly.
+  frame, displays the retained UI, handles resize, and shuts down cleanly.
 - Confirm no generated files, logs, build outputs, or local environment files are
   staged.
 
@@ -603,7 +591,7 @@ documentation, and local verification pass. It proves:
 The next user-facing application milestone should now be smaller and earlier:
 
     A desktop application that opens a native window, renders every frame,
-    displays a durable Dear ImGui shell, handles resize/shutdown cleanly, and
+    displays a durable retained UI shell, handles resize/shutdown cleanly, and
     keeps platform, renderer, UI, and application responsibilities separated.
 
 That milestone proves the most important early desktop architecture claims:
@@ -611,8 +599,8 @@ That milestone proves the most important early desktop architecture claims:
 - The app is desktop-first but not desktop-only.
 - Platform/window code is reusable outside the app executable.
 - Renderer setup is not hidden in application code.
-- Dear ImGui integration is owned by a UI boundary, not scattered through the
-  desktop app.
+- UI paint semantics stay in the UI library and are not scattered through the desktop app or
+  renderer.
 - Future project loading can attach to a real shell instead of creating the
   shell and project features at the same time.
 

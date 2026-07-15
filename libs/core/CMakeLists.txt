@@ -5,7 +5,8 @@ ponder_configure_build_info(PONDER_CORE_BUILD_INFO_SOURCE
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated/src")
 
 set_source_files_properties("${PONDER_CORE_BUILD_INFO_SOURCE}" PROPERTIES
-    COMPILE_DEFINITIONS "PONDER_BUILD_INFO_ACTIVE_BUILD_TYPE=\"$<CONFIG>\"")
+    COMPILE_DEFINITIONS "PONDER_BUILD_INFO_ACTIVE_BUILD_TYPE=\"$<CONFIG>\""
+    SKIP_PRECOMPILE_HEADERS ON)
 
 ponder_add_project_library(core
     PUBLIC_HEADERS
@@ -36,4 +37,6 @@ ponder_add_project_library(core
         src/Pch.hpp
     PRIVATE_DEPS
         ponder::spdlog
-        ponder::moodycamel)
+        ponder::moodycamel
+    INSTALL_PRIVATE_DEPS
+        spdlog::spdlog)

@@ -4,8 +4,8 @@ Status: answered design questionnaire for the first `ponder_render` milestone.
 
 This file now contains only decisions needed to validate Vulkan
 create/clear/present/resize/minimize/shutdown across multiple platform windows. Questions whose
-implementation belongs to later 3D work are in `open-questions-3d.txt`; Dear ImGui bridge questions
-are in `open-questions-ui.txt`.
+implementation belongs to later 3D work are in `open-questions-3d.txt`; the project-owned UI
+rectangle foundation and generic 2D packet questions are in `../../ui/docs/open-questions.txt`.
 
 Recommendations are proposed defaults. The project owner's decision is recorded on each `Answer:`
 line, and those answers are the source for `roadmap.txt`.
@@ -87,12 +87,13 @@ Answer: Use the recommendation exactly.
 ## Initial Outcomes And Scope -- Resolve Before Choosing The API Shape
 
 - **SCOPE-01:** What exactly completes the first renderer milestone: validated
-  create/clear/present/resize/minimize/shutdown, that foundation plus Dear ImGui, or a first 3D
-  visualization?
+  create/clear/present/resize/minimize/shutdown, that foundation plus a first project-owned UI draw
+  path, or a first 3D visualization?
 
 Recommendation: Make validated create/clear/present/resize/minimize/shutdown the first milestone,
-then track Dear ImGui and the first 3D visualization as separate vertical slices. This isolates the
-device and presentation contract before shader, scene, and UI concerns can hide lifecycle defects.
+then track the project-owned UI rectangle foundation and first 3D visualization as separate vertical
+slices. This isolates the device and presentation contract before shader, scene, and UI concerns can
+hide lifecycle defects.
 
 Answer: Use the recommendation exactly - scope is only create/clear/present/resize/minimize/shutdown
 
@@ -477,14 +478,15 @@ Answer: Use the recommendation exactly
 
 
 
-## Dear ImGui And Overlay Composition -- Before The UI Bridge
+## UI Drawing And Overlay Composition -- Bootstrap Exclusion
 
-- **UI-01:** Is Dear ImGui rendering part of the bootstrap milestone, after the first 3D scene, or
-  only when the UI library is ready to integrate?
+- **UI-01:** Is project-owned UI drawing part of the bootstrap milestone, after the first 3D scene,
+  or the next independent rendering slice?
 
-Recommendation: Keep Dear ImGui out of the bootstrap completion criteria, then make it the next
-integration milestone before the first interactive 3D scene. This keeps the renderer foundation
-independently testable while validating overlay composition early.
+Recommendation: Keep UI drawing out of the bootstrap completion criteria, then make the rectangle
+foundation and generic 2D packet path the next UI milestone before the first interactive 3D scene.
+This keeps the renderer foundation independently testable while validating overlay composition
+early.
 
 Answer: Use the recommendation exactly
 

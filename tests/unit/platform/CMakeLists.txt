@@ -56,6 +56,7 @@ ponder_enable_warnings(ponder_platform_header_tests)
 ponder_enable_sanitizers(ponder_platform_header_tests)
 
 ponder_add_project_executable(ponder_platform_process_helper
+    NO_INSTALL
     SOURCES
         ProcessTestHelper.cpp
     FOLDER

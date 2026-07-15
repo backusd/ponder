@@ -13,7 +13,7 @@ of related operations.
 - Cover every public platform feature in at least one executable.
 - Teach several related features in each example instead of creating one
   executable per function.
-- Keep the first examples useful before rendering and Dear ImGui exist.
+- Keep the first examples useful before rendering and retained UI exist.
 - Make every example small enough to read from `main()` outward.
 - Put a short `README.md` beside every executable describing its purpose,
   controls, exercised features, observable side effects, and build/run steps.
@@ -28,7 +28,7 @@ of related operations.
 - Examples do not demonstrate deferred features such as custom cursors, rich
   clipboard data, outbound drag-and-drop, process pipes/environment/working
   directories, pointer warping, gamepads, touch/pen source discrimination, or
-  secondary Dear ImGui OS viewports.
+  UI-owned native multi-window behavior.
 - Examples must not invent provisional renderer or UI APIs merely to compile.
 
 ## Readiness Summary
@@ -43,14 +43,13 @@ until their roadmap tasks are implemented.
 | `2-input-drop-monitor` | Immediately buildable | `ponder::core`, `ponder::io`, `ponder::platform` | Input, IME, mouse, cursor, and inbound-drop behavior can be observed through console output and window titles. |
 | `3-desktop-services-workbench` | Immediately buildable | `ponder::core`, `ponder::io`, `ponder::platform` | Clipboard, URI, and asynchronous native dialogs are host services rather than rendered UI. |
 | `4-responsive-process-runner` | Immediately buildable | `ponder::core`, `ponder::platform` | Process launch is independent of the renderer; a simple window proves that blocking work stays off the event pump. |
-| `examples/render/1-clear-window` | Deferred until renderer bootstrap exists | `ponder::core`, `ponder::platform`, `ponder::render` | The canonical renderer example belongs under `examples/render/` once render can clear and present a window. Dear ImGui is not required. |
-| `6-imgui-platform-workbench` | Deferred until renderer and UI adapter exist | At least `ponder::core`, `ponder::platform`, `ponder::render`, `ponder::ui`; finalize direct ImGui usage with the UI API | This is the polished interactive tour and must use the project UI adapter, not the bundled SDL ImGui backend. |
+| `examples/render/1-clear-window` | Available through the render roadmap | `ponder::core`, `ponder::platform`, `ponder::render` | The canonical renderer example now lives under `examples/render/`; this platform roadmap links to it but does not own it. |
+| Retained UI platform-services workbench | Deferred until UI input, text, and core-control milestones exist | Owned by `libs/ui`; no platform-private dependency | This contributor workbench belongs to the UI roadmap rather than the public platform example series. |
 
-The first four examples should be implemented now. The renderer example starts
-only after `ponder_render` can create, resize, and present a window surface. The
-ImGui example starts only after the renderer can draw ImGui data and
-`ponder_ui` has its project-owned platform adapter. Deferred targets must not be
-added to CMake as non-building placeholders.
+The four platform examples and the separately owned render example are available.
+The retained UI workbench starts only after render can consume generic 2D packets
+and `ponder_ui` has project-owned input, text, and core-control behavior. Deferred
+targets must not be added to CMake as non-building placeholders.
 
 ## Repository And Build Layout
 
@@ -75,14 +74,6 @@ examples/
             Main.cpp
             README.md
         4-responsive-process-runner/
-            CMakeLists.txt
-            Main.cpp
-            README.md
-        5-renderer-window-bootstrap/       # add when its prerequisites exist
-            CMakeLists.txt
-            Main.cpp
-            README.md
-        6-imgui-platform-workbench/         # add when its prerequisites exist
             CMakeLists.txt
             Main.cpp
             README.md
@@ -448,65 +439,26 @@ synchronized messages.
 - Its README states the initial environment/stdio contract, missing nonblocking
   status API, blocking-wait warning, exit-status portability, and lack of shell.
 
-## RELATED RENDER EXAMPLE: Minimal Clear Window
+## Related Render Example: Minimal Clear Window
 
-Directory: `examples/render/1-clear-window/`
+The renderer prerequisite is now implemented. The canonical source and user
+documentation live at
+[`examples/render/1-clear-window`](../../../examples/render/1-clear-window/README.md),
+and `libs/render/docs/roadmap.txt` owns its renderer lifecycle requirements. This
+platform roadmap no longer assigns or specifies a renderer bootstrap executable
+under `examples/platform/`.
 
-Executable: `ponder-render-clear-window`
+## EXAMPLE PLAT-006: Retained UI Platform Services Workbench (Transferred)
 
-Readiness: deferred until the renderer has a stable surface/swapchain bootstrap,
-resize, minimize, shutdown, and present API. Dear ImGui is not required.
+Directory: chosen by the UI milestone; this is no longer a platform example target.
 
-This is no longer assigned to `examples/platform/`. The render roadmap owns the
-canonical example because renderer-private code, not platform example code,
-consumes native window snapshots and creates presentation surfaces.
+Executable: a non-installed UI contributor workbench.
 
-### Scenario
+Readiness: deferred until `ponder_render` consumes generic 2D packets and `ponder_ui` implements
+project-owned retained controls, input routing, and text.
 
-Ask `ponder_render` for its required window graphics compatibility, create one
-compatible platform window, and present clear frames. Renderer-private bootstrap
-obtains and interprets the borrowed native-window variant on the platform owner
-thread. The example rebuilds presentation resources after relevant
-window/display changes and demonstrates the required renderer-before-window
-teardown order.
-
-### Features Exercised
-
-- `pond::render::GetRequiredWindowGraphicsCompatibility()` before window
-  creation, followed by `Window::GetGraphicsCompatibility()` verification. The
-  example never hardcodes the backend choice.
-- Renderer-private `GetNativeHandle()` use for the active Windows/Linux Vulkan
-  payload without exposing SDL, OS, or Vulkan details through example code.
-- `InvalidArgument` on a default window, `Unsupported` on an unsupported video
-  driver, and complete-handle success on a supported Windows/Linux host.
-- Borrowed-handle lifetime, owner-thread surface preparation, copied window-state
-  snapshots, and renderer presentation rebuild boundaries.
-- Logical versus pixel resize, density and display-scale changes,
-  minimize/restore, and desktop fullscreen around one presentation target.
-- Explicit destruction of surfaces/swapchains/presentation before `Window`.
-
-### Completion Criteria
-
-- The example renders and presents through public render and platform APIs; its
-  source contains no direct SDL use or OS-specific surface creation. The renderer
-  owns host-specific interpretation behind its public boundary.
-- Resize/minimize/display migration do not use stale dimensions or borrowed
-  handles.
-- Its README distinguishes platform window ownership from renderer presentation
-  ownership and lists supported host/driver prerequisites.
-## EXAMPLE PLAT-006: ImGui Platform Workbench
-
-Directory: `examples/platform/6-imgui-platform-workbench/`
-
-Executable: `ponder-platform-6-imgui-platform-workbench`
-
-Readiness: deferred until `ponder_render` can draw ImGui data and `ponder_ui`
-implements the custom project-owned platform adapter.
-
-Finalize this target's direct dependencies with the UI API. If `Main.cpp`
-includes Dear ImGui headers to build panels, it must also declare
-`ponder::imgui` directly; do not rely on transitive compile usage from
-`ponder::ui`.
+Application-facing example source uses only public ponder APIs. It does not include SDL, native,
+project-private packet, or renderer implementation headers.
 
 ### Scenario
 
@@ -516,7 +468,7 @@ interactive capstone, not the first or only explanation of platform usage.
 
 ### Features Exercised
 
-- Project event forwarding and UI capture policy without an SDL event bridge.
+- Project event routing and UI capture policy without an SDL event bridge.
 - Keyboard/logical-key mapping, committed text, composition/IME placement,
   mouse input, cursor shapes/visibility, and supported global-pointer behavior.
 - Clipboard integration, dropped files/text, explicit URI launching, and
@@ -527,15 +479,15 @@ interactive capstone, not the first or only explanation of platform usage.
 
 ### Completion Criteria
 
-- `ponder_ui` has no direct SDL dependency and the example does not compile or
-  call the bundled SDL ImGui backend.
-- The example uses the initial custom single-OS-viewport contract; secondary
-  ImGui platform windows are not enabled accidentally.
+- `ponder_ui` has no direct SDL dependency and the example consumes only project
+  platform input and host-service types.
+- The example uses one native window; later UI-owned native multi-window behavior
+  is outside this workbench's scope.
 - The event/render pump handles asynchronous dialog completion without a
   synchronous platform wait; a parented native dialog may still be intentionally
   modal. Process waits remain off the pump, and external side effects remain
   explicit.
-- Its README identifies what is platform behavior, UI adapter behavior,
+- Its README identifies what is platform behavior, retained UI behavior,
   renderer behavior, and application policy.
 
 ## Public Feature Coverage Ledger
@@ -562,7 +514,7 @@ to the primary README instead of duplicating the explanation.
 | All open/save/folder dialog descriptors, request IDs, and outcomes | `3-desktop-services-workbench` |
 | Shell-free launch, wait, exit variants, termination, and abandonment | `4-responsive-process-runner` |
 | Graphics compatibility and renderer/window handoff | `examples/render/1-clear-window` |
-| Renderer/UI adapter integration over public platform primitives | `6-imgui-platform-workbench` |
+| Retained UI integration over public platform primitives | UI milestone workbench |
 
 ### Public Operation Checklist
 
@@ -594,8 +546,9 @@ feature groups above:
   `ShowSaveFileDialog()`, and `ShowOpenFolderDialog()`.
 - `4-responsive-process-runner`: `LaunchProcess()`, `Process::Wait()`, and
   both modes of `Process::Terminate()`.
-- `5-renderer-window-bootstrap`: `GetGraphicsCompatibility()` at the example
-  boundary and renderer-private `GetNativeHandle()` consumption.
+- [`examples/render/1-clear-window`](../../../examples/render/1-clear-window/README.md):
+  graphics compatibility at the public platform/render boundary and private
+  native-window consumption inside `ponder_render`.
 - Value/helper coverage across the primary examples: all logical/screen/pixel
   geometry types and `IsValid()` overloads, every strong platform identifier,
   `PlatformTimestamp::GetTimeSinceEpoch()` and subtraction,
@@ -642,10 +595,11 @@ Before declaring the suite complete, compare this list directly with the
    and thread-affinity documentation.
 6. Perform an immediate-suite coverage audit against all installed platform
    headers and build all four targets in supported Debug and Release presets.
-7. Add `5-renderer-window-bootstrap` only after its renderer prerequisite gate is
-   met.
-8. Add `6-imgui-platform-workbench` only after both renderer and UI prerequisite
-   gates are met.
+7. Keep the renderer bootstrap teaching path in the canonical
+   [`examples/render/1-clear-window`](../../../examples/render/1-clear-window/README.md)
+   example owned by the render roadmap.
+8. Leave the private intermediate-adapter workbench to the UI milestone; do not
+   add a platform example target for it.
 9. Repeat the public-header/event coverage audit and update readiness labels as
    deferred examples become real targets.
 
@@ -672,7 +626,7 @@ Before declaring the suite complete, compare this list directly with the
   update this roadmap, the coverage ledger, affected source, and the local
   README in the same change.
 
-The suite is complete when all six executables run on their supported hosts,
+The platform suite is complete when all four platform executables run on their supported hosts,
 every coverage-ledger row has a maintained teaching path, and none of the
 examples rely on SDL, OS-specific APIs, or private platform implementation
 details.

@@ -27,14 +27,14 @@ constexpr std::array kErrorMappings{
                  pond::core::ErrorCategory::NotFound, 0x0003'0006},
     ErrorMapping{pond::render::RenderErrorCode::NoCompatibleAdapter,
                  pond::core::ErrorCategory::NotFound, 0x0003'0007},
-    ErrorMapping{pond::render::RenderErrorCode::OutOfMemory,
-                 pond::core::ErrorCategory::General, 0x0003'0008},
-    ErrorMapping{pond::render::RenderErrorCode::SurfaceLost,
-                 pond::core::ErrorCategory::General, 0x0003'0009},
-    ErrorMapping{pond::render::RenderErrorCode::DeviceLost,
-                 pond::core::ErrorCategory::General, 0x0003'000A},
-    ErrorMapping{pond::render::RenderErrorCode::BackendFailure,
-                 pond::core::ErrorCategory::General, 0x0003'000B},
+    ErrorMapping{pond::render::RenderErrorCode::OutOfMemory, pond::core::ErrorCategory::General,
+                 0x0003'0008},
+    ErrorMapping{pond::render::RenderErrorCode::SurfaceLost, pond::core::ErrorCategory::General,
+                 0x0003'0009},
+    ErrorMapping{pond::render::RenderErrorCode::DeviceLost, pond::core::ErrorCategory::General,
+                 0x0003'000A},
+    ErrorMapping{pond::render::RenderErrorCode::BackendFailure, pond::core::ErrorCategory::General,
+                 0x0003'000B},
 };
 
 constexpr bool EveryErrorMappingIsConstexpr()
