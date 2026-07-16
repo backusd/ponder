@@ -19,6 +19,7 @@ include(RemovedUiDependencyAbsence)
 include(Sanitizers)
 include(Dependencies)
 include(InstallRules)
+include(UiBuildVerification)
 
 ponder_define_project_options()
 ponder_configure_project_defaults()
@@ -50,3 +51,4 @@ ponder_install_export()
 ponder_install_package_config()
 
 ponder_add_removed_ui_dependency_absence_check()
+ponder_add_ui_build_verification()

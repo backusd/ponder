@@ -1,8 +1,10 @@
 #include <ponder/platform/Display.hpp>
 
 #include <cstdint>
+#include <format>
 #include <gtest/gtest.h>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <type_traits>
 
@@ -55,5 +57,16 @@ TEST(DisplayOrientationTests, ExposesEveryPortableAlternative)
               pond::platform::DisplayOrientation::PortraitFlipped);
     EXPECT_NE(pond::platform::DisplayOrientation::Unknown,
               pond::platform::DisplayOrientation::Landscape);
+}
+
+TEST(DisplayOrientationTests, FormatsAndStreamsPortableAlternatives)
+{
+    std::ostringstream stream;
+    stream << pond::platform::DisplayOrientation::LandscapeFlipped;
+
+    EXPECT_EQ(std::format("{}", pond::platform::DisplayOrientation::Unknown), "unknown");
+    EXPECT_EQ(std::format("{}", pond::platform::DisplayOrientation::LandscapeFlipped),
+              "landscape_flipped");
+    EXPECT_EQ(stream.str(), "landscape_flipped");
 }
 } // namespace

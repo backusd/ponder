@@ -30,8 +30,9 @@ Status: dependency direction reviewed for the desktop foundation phase.
 - SDL3 window lifecycle, native handles, event translation, or platform dialogs;
   those belong in `ponder_platform`.
 - Renderer backend/device/surface ownership; that belongs in `ponder_render`.
-- Dear ImGui context/backend integration and reusable widgets; those belong in
-  `ponder_ui`.
+- Reusable UI state, paint semantics, layout, text, input, and widgets; those
+  belong in `ponder_ui`. Generic GPU 2D packet execution belongs in
+  `ponder_render`.
 - Project format, project validation, or project persistence; those belong in
   `ponder_project`.
 - Chemistry data ownership, IO/import handlers, workflow graphs, compute jobs,

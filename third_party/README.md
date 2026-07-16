@@ -72,11 +72,6 @@ kept separate from the core platform and are not linked into project libraries.
   - Upstream URL: https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
   - License: MIT
   - Commit: `3aa921224c154a0d2c43912bc88e1c42ce1f7607`
-- Dear ImGui
-  - Path: `third_party/imgui`
-  - License: MIT
-  - Commit: `776bf2ab0d61e719e58f2c6d27d109ab5dcf2af1`
-
 ## CMake Targets
 
 Use the project aliases from `cmake/Dependencies.cmake` instead of depending on
@@ -88,7 +83,6 @@ third-party target names directly:
 - `ponder::nlohmann_json`
 - `ponder::moodycamel`
 - `ponder::SDL3`
-- `ponder::imgui`
 - `ponder::vulkan_headers`
 - `ponder::volk`
 - `ponder::vma`

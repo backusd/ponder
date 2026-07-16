@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstddef>
+#include <format>
+#include <ostream>
 #include <source_location>
 #include <span>
 #include <string>
@@ -21,6 +23,11 @@ public:
 private:
     std::vector<std::string> m_frames;
 };
+
+inline std::ostream& operator<<(std::ostream& output, const StackTrace& stackTrace)
+{
+    return output << stackTrace.Format();
+}
 
 class StackTraceCaptureOptions final
 {
@@ -54,3 +61,16 @@ private:
 [[nodiscard]] StackTrace CaptureStackTrace(StackTraceCaptureOptions options);
 [[nodiscard]] StackTrace CaptureStackTrace();
 } // namespace pond::core
+
+namespace std
+{
+template <>
+struct formatter<pond::core::StackTrace> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const pond::core::StackTrace& stackTrace, FormatContext& context) const
+    {
+        return formatter<string>::format(stackTrace.Format(), context);
+    }
+};
+} // namespace std

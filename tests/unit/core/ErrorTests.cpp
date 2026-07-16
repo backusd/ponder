@@ -5,6 +5,7 @@
 #include <format>
 #include <gtest/gtest.h>
 #include <source_location>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -68,6 +69,20 @@ TEST(ErrorTests, ConstructsWithExplicitCode)
     EXPECT_EQ(error.GetMessage(), std::string_view{"missing"});
 }
 
+TEST(ErrorTests, ComparesDirectlyWithErrorCode)
+{
+    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::NotFound, 7};
+    constexpr pond::core::ErrorCode kOtherCode{pond::core::ErrorCategory::Unsupported, 8};
+    const pond::core::Error error{kCode, "missing"};
+
+    static_assert(pond::core::ConvertToErrorCode<pond::core::ErrorCode>);
+
+    EXPECT_TRUE(error == kCode);
+    EXPECT_TRUE(kCode == error);
+    EXPECT_FALSE(error == kOtherCode);
+    EXPECT_TRUE(error != kOtherCode);
+}
+
 TEST(ErrorTests, AcceptsExplicitStackTrace)
 {
     pond::core::StackTrace stackTrace{{"frame A", "frame B"}};
@@ -82,8 +97,12 @@ TEST(ErrorTests, AcceptsExplicitStackTrace)
 TEST(StackTraceTests, FormatsFrames)
 {
     const pond::core::StackTrace stackTrace{{"first", "second"}};
+    std::ostringstream stream;
+    stream << stackTrace;
 
     EXPECT_EQ(stackTrace.Format(), "0: first\n1: second");
+    EXPECT_EQ(std::format("{}", stackTrace), "0: first\n1: second");
+    EXPECT_EQ(stream.str(), "0: first\n1: second");
 }
 
 TEST(StackTraceTests, EmptyFallbackIsWellFormed)
@@ -143,14 +162,25 @@ TEST(ErrorFormattingTests, FormatsCategoriesAndErrors)
     constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Parse, 12};
     const auto location = std::source_location::current();
     const pond::core::Error error{kCode, "bad input", pond::core::StackTrace{}, location};
+    std::ostringstream categoryStream;
+    std::ostringstream codeStream;
+    std::ostringstream errorStream;
+
+    categoryStream << pond::core::ErrorCategory::Parse;
+    codeStream << kCode;
+    errorStream << error;
 
     EXPECT_EQ(pond::core::GetErrorCategoryName(pond::core::ErrorCategory::Parse),
               std::string_view{"parse"});
-    EXPECT_EQ(pond::core::FormatErrorCode(kCode), "parse:12");
+    EXPECT_EQ(std::format("{}", pond::core::ErrorCategory::Parse), "parse");
+    EXPECT_EQ(categoryStream.str(), "parse");
+    EXPECT_EQ(std::format("{}", kCode), "parse:12");
+    EXPECT_EQ(codeStream.str(), "parse:12");
 
-    const std::string formatted = pond::core::FormatError(error);
+    const std::string formatted = std::format("{}", error);
     EXPECT_NE(formatted.find("[parse:12] bad input"), std::string::npos);
     EXPECT_NE(formatted.find(pond::core::FormatSourceLocation(location)), std::string::npos);
+    EXPECT_EQ(errorStream.str(), formatted);
 }
 
 TEST(ErrorPropagationTests, MakeUnexpectedBuildsExplicitError)

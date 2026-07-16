@@ -320,7 +320,7 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     ASSERT_TRUE(std::holds_alternative<pond::platform::KeyboardKeyEvent>(*keyEvent));
     EXPECT_EQ(std::get<pond::platform::KeyboardKeyEvent>(*keyEvent),
               (pond::platform::KeyboardKeyEvent{
-                  .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+                  .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
                   .windowId = window.GetId(),
                   .physicalKey = pond::platform::PhysicalKey::Q,
                   .logicalKey = pond::platform::LogicalKey::FromCharacter(U'a'),
@@ -334,7 +334,7 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     ASSERT_TRUE(std::holds_alternative<pond::platform::TextInputEvent>(*textEvent));
     EXPECT_EQ(std::get<pond::platform::TextInputEvent>(*textEvent),
               (pond::platform::TextInputEvent{
-                  .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+                  .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
                   .windowId = window.GetId(),
                   .text = "typed"}));
 
@@ -343,7 +343,7 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     ASSERT_TRUE(std::holds_alternative<pond::platform::TextCompositionEvent>(*compositionEvent));
     EXPECT_EQ(std::get<pond::platform::TextCompositionEvent>(*compositionEvent),
               (pond::platform::TextCompositionEvent{
-                  .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+                  .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
                   .windowId = window.GetId(),
                   .text = "pending",
                   .selection = pond::platform::TextCompositionRange{1, 2}}));

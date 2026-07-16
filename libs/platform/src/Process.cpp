@@ -124,10 +124,7 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
 [[nodiscard]] core::Result<std::vector<std::string>> BuildArgumentStorage(const ProcessDesc& desc)
 {
     core::Result<std::string> executable = ValidateExecutablePath(desc.executable);
-    if (!executable.HasValue())
-    {
-        return core::Result<std::vector<std::string>>::FromError(std::move(executable).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(executable);
 
     std::vector<std::string> arguments;
     arguments.reserve(desc.arguments.size() + 1U);
@@ -136,11 +133,7 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
     for (std::size_t index = 0; index < desc.arguments.size(); ++index)
     {
         core::VoidResult validation = ValidateArgument(desc.arguments[index], index);
-        if (!validation.HasValue())
-        {
-            return core::Result<std::vector<std::string>>::FromError(
-                std::move(validation).GetError());
-        }
+        RETURN_ERROR_IF_FAILED(validation);
         arguments.push_back(desc.arguments[index]);
     }
 
@@ -488,10 +481,7 @@ core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBack
 {
     VerifyBackend(backend);
     core::Result<std::vector<std::string>> argumentStorage = BuildArgumentStorage(desc);
-    if (!argumentStorage.HasValue())
-    {
-        return core::Result<Process>::FromError(std::move(argumentStorage).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(argumentStorage);
 
     PlatformProcessReaperBackend reaperBackend;
     try
@@ -515,10 +505,7 @@ core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBack
     VerifyBackend(backend);
     VerifyReaperBackend(reaperBackend);
     core::Result<std::vector<std::string>> argumentStorage = BuildArgumentStorage(desc);
-    if (!argumentStorage.HasValue())
-    {
-        return core::Result<Process>::FromError(std::move(argumentStorage).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(argumentStorage);
 
     return LaunchProcessWithArguments(std::move(argumentStorage).GetValue(), backend,
                                       reaperBackend);

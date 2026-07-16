@@ -63,19 +63,13 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
     }
 
     core::VoidResult sizeValidation = ValidatePositiveSize(desc.logicalSize, "Window logical size");
-    if (!sizeValidation.HasValue())
-    {
-        return sizeValidation;
-    }
+    RETURN_ERROR_IF_FAILED(sizeValidation);
 
     if (desc.minimumLogicalSize.has_value())
     {
         core::VoidResult minimumValidation =
             ValidatePositiveSize(*desc.minimumLogicalSize, "Window minimum logical size");
-        if (!minimumValidation.HasValue())
-        {
-            return minimumValidation;
-        }
+        RETURN_ERROR_IF_FAILED(minimumValidation);
     }
 
     if (!IsKnownGraphicsCompatibility(desc.graphicsCompatibility))
@@ -123,11 +117,7 @@ core::Result<std::unique_ptr<WindowImpl>> WindowImpl::Create(PlatformRuntimeStat
     runtime.VerifyOwnerThread("window creation");
 
     core::VoidResult validation = Validate(desc);
-    if (!validation.HasValue())
-    {
-        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
-            std::move(validation).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(validation);
 
     const PlatformWindowBackend backend = runtime.m_windowBackend;
     const BackendWindowCreateDesc backendDesc{desc.title.c_str(),
@@ -367,10 +357,7 @@ core::VoidResult WindowImpl::SetPosition(ScreenPosition position)
 {
     VerifyUsable("position update");
     core::VoidResult validation = ValidatePosition(position);
-    if (!validation.HasValue())
-    {
-        return validation;
-    }
+    RETURN_ERROR_IF_FAILED(validation);
 
     const std::string_view context = GetErrorContext();
     if (!m_backend.setPosition(m_backend.context, m_nativeWindow, static_cast<int>(position.x),
@@ -427,10 +414,7 @@ core::VoidResult WindowImpl::SetLogicalSize(LogicalSize size)
 {
     VerifyUsable("logical size update");
     core::VoidResult validation = ValidatePositiveSize(size, "Window logical size");
-    if (!validation.HasValue())
-    {
-        return validation;
-    }
+    RETURN_ERROR_IF_FAILED(validation);
 
     const std::string_view context = GetErrorContext();
     if (!m_backend.setSize(m_backend.context, m_nativeWindow, static_cast<int>(size.width),
@@ -477,10 +461,7 @@ core::Result<Window> PlatformRuntime::CreateWindow(const WindowDesc& desc)
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from PlatformRuntime");
 
     auto stateResult = detail::WindowImpl::Create(*m_state, desc);
-    if (!stateResult.HasValue())
-    {
-        return core::Result<Window>::FromError(std::move(stateResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(stateResult);
 
     return Window{std::move(stateResult).GetValue()};
 }

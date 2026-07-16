@@ -10,6 +10,8 @@ backend-neutral rendering boundary.
 ## Rules
 
 - Keep public headers under `include/ponder/ui/` and use `pond::ui`.
+- Follow [ADR 0010](../../../docs/adr/0010-project-owned-ui-rendering.md) for the UI rendering
+  architecture and `Draw2D` ownership boundary.
 - Do not add Dear ImGui source, targets, adapters, compatibility flags, types, names, or behavior.
 - UI owns semantic paint commands, logical coordinates, color and clipping rules, and CPU
   tessellation. Do not make GPU triangles its only internal UI representation.

@@ -30,6 +30,7 @@ static_assert(!noexcept(std::declval<const pond::render::RenderDevice&>().GetDia
 static_assert(
     noexcept(std::declval<const pond::render::RenderTarget&>().GetSelectedPresentationConfig()));
 static_assert(!noexcept(std::declval<const pond::render::RenderTarget&>().GetDiagnostics()));
+static_assert(noexcept(std::declval<const pond::render::RenderFrame&>().GetMetrics()));
 
 TEST(RenderApiTraitsTests, DefaultOwnerRolesAreEmptyAndMoveStable)
 {

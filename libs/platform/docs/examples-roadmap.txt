@@ -212,7 +212,7 @@ snapshots, and routes close requests by strong ID.
   usable bounds, optional refresh rate, orientation, and content scale.
 - Window display ID, pixel density, display scale, and the distinction between
   screen, logical, and pixel geometry.
-- `PlatformRuntime::Now()`, `PlatformTimestamp` subtraction, `PollEvent()`, and
+- `PlatformRuntime::Now()`, `Timestamp` subtraction, `PollEvent()`, and
   the quit, window, pointer-boundary, and display event families.
 - Notification-driven re-query and capability-aware `Result` handling.
 
@@ -551,7 +551,7 @@ feature groups above:
   native-window consumption inside `ponder_render`.
 - Value/helper coverage across the primary examples: all logical/screen/pixel
   geometry types and `IsValid()` overloads, every strong platform identifier,
-  `PlatformTimestamp::GetTimeSinceEpoch()` and subtraction,
+  `Timestamp::GetTimeSinceEpoch()` and subtraction,
   `PlatformErrorCode` plus `ToErrorCode()`, every public platform enum, and
   every closed variant alternative.
 

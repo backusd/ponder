@@ -9,8 +9,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <filesystem>
-#include <iostream>
+#include <print>
 #include <limits>
 #include <optional>
 #include <sstream>
@@ -24,13 +25,69 @@
 
 namespace
 {
+struct OptionalWindowId final
+{
+    const std::optional<pond::platform::WindowId>& value;
+};
+} // namespace
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::WindowId> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::WindowId id, FormatContext& context) const
+    {
+        if (!id.IsValid())
+        {
+            return formatter<string>::format("invalid", context);
+        }
+
+        return formatter<string>::format(std::to_string(id.GetValue()), context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::DialogRequestId> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::DialogRequestId id, FormatContext& context) const
+    {
+        if (!id.IsValid())
+        {
+            return formatter<string>::format("invalid", context);
+        }
+
+        return formatter<string>::format(std::to_string(id.GetValue()), context);
+    }
+};
+
+template <>
+struct formatter<OptionalWindowId> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const OptionalWindowId& id, FormatContext& context) const
+    {
+        if (!id.value)
+        {
+            return formatter<string>::format("none", context);
+        }
+
+        return formatter<string>::format(std::format("{}", *id.value), context);
+    }
+};
+} // namespace std
+
+namespace
+{
 namespace core = pond::core;
 namespace io = pond::io;
 namespace platform = pond::platform;
 
 struct Options final
 {
-    std::optional<platform::PlatformTimestamp::Duration> autoCloseAfter;
+    std::optional<platform::Duration> autoCloseAfter;
     std::optional<std::string> externalUri;
     std::optional<std::filesystem::path> dialogLocation;
     std::string clipboardText{"Ponder UTF-8 sample: H2O -> \xCE\x94G"};
@@ -48,7 +105,7 @@ struct PendingDialog final
 {
     platform::DialogRequestId id;
     DialogKind kind{DialogKind::OpenFile};
-    platform::PlatformTimestamp requestedAt{};
+    platform::Timestamp requestedAt{};
     std::string label;
     bool parented{};
 };
@@ -64,7 +121,7 @@ struct AppState final
     platform::PlatformRuntime& runtime;
     const Options& options;
     std::vector<WindowSlot>& windows;
-    platform::PlatformTimestamp startTimestamp;
+    platform::Timestamp startTimestamp;
     std::vector<PendingDialog> pendingDialogs;
     std::uint64_t eventCount{};
     bool shutdownRequested{};
@@ -82,26 +139,27 @@ struct AppState final
 
 void PrintUsage(std::string_view executableName)
 {
-    std::cout
-        << "Usage: " << executableName << " [options]\n\n"
-        << "Options:\n"
-        << "  --auto-close-ms <milliseconds>  Exit after a short idle run.\n"
-        << "  --clipboard-text <text>         Text copied by the C command.\n"
-        << "  --dialog-location <path>        Default dialog location.\n"
-        << "  --uri <uri>                     URI opened only after pressing U.\n"
-        << "  --help                          Print this help text.\n\n"
-        << "Controls:\n"
-        << "  F1            Print this help text.\n"
-        << "  C / E / R     Copy sample text, copy empty text, or read clipboard.\n"
-        << "  B             Restore the clipboard captured before the first write.\n"
-        << "  U             Open the URI supplied with --uri.\n"
-        << "  O / M         Open parented single-file or unparented multi-file dialog.\n"
-        << "  S / F         Open parented save-file or unparented folder dialog.\n"
-        << "  A             Launch a concurrent three-dialog batch.\n"
-        << "  Q / Escape    Request shutdown; pending dialogs are still consumed.\n";
+    std::print(
+        "Usage: {} [options]\n\n"
+        "Options:\n"
+        "  --auto-close-ms <milliseconds>  Exit after a short idle run.\n"
+        "  --clipboard-text <text>         Text copied by the C command.\n"
+        "  --dialog-location <path>        Default dialog location.\n"
+        "  --uri <uri>                     URI opened only after pressing U.\n"
+        "  --help                          Print this help text.\n\n"
+        "Controls:\n"
+        "  F1            Print this help text.\n"
+        "  C / E / R     Copy sample text, copy empty text, or read clipboard.\n"
+        "  B             Restore the clipboard captured before the first write.\n"
+        "  U             Open the URI supplied with --uri.\n"
+        "  O / M         Open parented single-file or unparented multi-file dialog.\n"
+        "  S / F         Open parented save-file or unparented folder dialog.\n"
+        "  A             Launch a concurrent three-dialog batch.\n"
+        "  Q / Escape    Request shutdown; pending dialogs are still consumed.\n",
+        executableName);
 }
 
-[[nodiscard]] core::Result<platform::PlatformTimestamp::Duration> ParseMilliseconds(
+[[nodiscard]] core::Result<platform::Duration> ParseMilliseconds(
     std::string_view text)
 {
     std::uint64_t value{};
@@ -110,7 +168,7 @@ void PrintUsage(std::string_view executableName)
     const auto [next, error] = std::from_chars(begin, end, value);
     if (error != std::errc{} || next != end)
     {
-        return core::Result<platform::PlatformTimestamp::Duration>::FromError(
+        return core::Result<platform::Duration>::FromError(
             MakeOptionError("Expected a non-negative integer millisecond value."));
     }
 
@@ -119,11 +177,11 @@ void PrintUsage(std::string_view executableName)
         std::numeric_limits<Milliseconds::rep>::max());
     if (value > kMaxMilliseconds)
     {
-        return core::Result<platform::PlatformTimestamp::Duration>::FromError(
+        return core::Result<platform::Duration>::FromError(
             MakeOptionError("Auto-close duration is too large."));
     }
 
-    return platform::PlatformTimestamp::Duration{
+    return platform::Duration{
         Milliseconds{static_cast<Milliseconds::rep>(value)}};
 }
 
@@ -147,10 +205,7 @@ void PrintUsage(std::string_view executableName)
 
             ++index;
             auto duration = ParseMilliseconds(argv[index]);
-            if (!duration)
-            {
-                return core::Result<Options>::FromError(std::move(duration).GetError());
-            }
+            RETURN_ERROR_IF_FAILED(duration);
             options.autoCloseAfter = std::move(duration).GetValue();
         }
         else if (argument == "--clipboard-text")
@@ -195,26 +250,6 @@ void PrintUsage(std::string_view executableName)
     return options;
 }
 
-template <typename Id>
-[[nodiscard]] std::string FormatId(Id id)
-{
-    if (!id.IsValid())
-    {
-        return "invalid";
-    }
-    return std::to_string(id.GetValue());
-}
-
-[[nodiscard]] std::string FormatDuration(platform::PlatformTimestamp::Duration duration)
-{
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-    return std::to_string(milliseconds.count()) + " ms";
-}
-
-[[nodiscard]] std::string FormatTimestamp(platform::PlatformTimestamp timestamp)
-{
-    return std::to_string(timestamp.GetTimeSinceEpoch().count()) + " ns";
-}
 
 [[nodiscard]] std::string QuoteText(std::string_view text)
 {
@@ -286,26 +321,20 @@ template <typename Id>
 
 void PrintError(std::string_view operation, const core::Error& error)
 {
-    std::cout << operation << " failed: " << core::FormatError(error) << '\n';
-}
-
-[[nodiscard]] bool IsPlatformError(const core::Error& error, platform::PlatformErrorCode code)
-{
-    return error.GetCode() == platform::ToErrorCode(code);
+    std::println("{} failed: {}", operation, error);
 }
 
 void PrintOperationResult(std::string_view operation, const core::VoidResult& result)
 {
     if (result)
     {
-        std::cout << operation << " succeeded.\n";
+        std::println("{} succeeded.", operation);
         return;
     }
 
-    if (IsPlatformError(result.GetError(), platform::PlatformErrorCode::Unsupported))
+    if (result.GetError() == platform::PlatformErrorCode::Unsupported)
     {
-        std::cout << operation << " is unsupported on this host: "
-                  << core::FormatError(result.GetError()) << '\n';
+        std::println("{} is unsupported on this host: {}", operation, result.GetError());
         return;
     }
 
@@ -358,13 +387,13 @@ void PrintOperationResult(std::string_view operation, const core::VoidResult& re
 {
     if (state.shutdownRequested)
     {
-        std::cout << label << " ignored: shutdown has been requested.\n";
+        std::println("{} ignored: shutdown has been requested.", label);
         return false;
     }
 
     if (state.windows.empty())
     {
-        std::cout << label << " ignored: parent window is no longer available.\n";
+        std::println("{} ignored: parent window is no longer available.", label);
         return false;
     }
 
@@ -388,13 +417,13 @@ void CaptureClipboardIfNeeded(AppState& state)
     if (!original)
     {
         PrintError("PlatformRuntime::GetClipboardText before first write", original.GetError());
-        std::cout << "Clipboard restoration will be unavailable for this run.\n";
+        std::println("Clipboard restoration will be unavailable for this run.");
         return;
     }
 
     state.originalClipboardText = std::move(original).GetValue();
-    std::cout << "Captured original clipboard text for best-effort restoration ("
-              << state.originalClipboardText->size() << " byte(s)).\n";
+    std::println("Captured original clipboard text for best-effort restoration ({} byte(s)).",
+                 state.originalClipboardText->size());
 }
 
 void SetClipboardText(AppState& state, std::string_view text, std::string_view label)
@@ -429,7 +458,7 @@ void ReadClipboardText(AppState& state)
     }
 
     const std::string quoted = QuoteText(text.GetValue());
-    std::cout << "Clipboard text: " << quoted << '\n';
+    std::println("Clipboard text: {}", quoted);
     UpdateLastAction(state, "clipboard read " + quoted);
 }
 
@@ -437,7 +466,7 @@ void RestoreClipboardText(AppState& state)
 {
     if (!state.originalClipboardText)
     {
-        std::cout << "No captured clipboard text is available to restore.\n";
+        std::println("No captured clipboard text is available to restore.");
         return;
     }
 
@@ -459,12 +488,12 @@ void OpenConfiguredUri(AppState& state)
 
     if (!state.options.externalUri)
     {
-        std::cout << "No URI configured. Pass --uri <uri>, then press U.\n";
+        std::println("No URI configured. Pass --uri <uri>, then press U.");
         return;
     }
 
-    std::cout << "Opening external URI after explicit key command: "
-              << QuoteText(*state.options.externalUri) << '\n';
+    std::println("Opening external URI after explicit key command: {}",
+                 QuoteText(*state.options.externalUri));
     auto result = state.runtime.OpenExternalUri(*state.options.externalUri);
     if (result)
     {
@@ -491,10 +520,11 @@ void RegisterDialog(AppState& state, DialogKind kind, std::string label, bool pa
         .parented = parented,
     });
 
-    std::cout << state.pendingDialogs.back().label << " accepted as request " << FormatId(id)
-              << ": descriptor validation, request registration, and backend invocation "
-                 "have completed. Await a later DialogCompletedEvent.\n";
-    UpdateLastAction(state, "registered dialog " + FormatId(id));
+    std::println(
+        "{} accepted as request {}: descriptor validation, request registration, and backend "
+        "invocation have completed. Await a later DialogCompletedEvent.",
+        state.pendingDialogs.back().label, id);
+    UpdateLastAction(state, std::format("registered dialog {}", id));
 }
 
 void ShowParentedOpenFileDialog(AppState& state)
@@ -570,7 +600,7 @@ void LaunchConcurrentDialogBatch(AppState& state)
         return;
     }
 
-    std::cout << "Launching three dialog requests without assuming completion order.\n";
+    std::println("Launching three dialog requests without assuming completion order.");
 
     const platform::OpenFileDialogDesc openDesc{
         .parentWindowId = GetParentWindowId(state),
@@ -605,8 +635,8 @@ void ReleaseParentWindow(AppState& state)
         return;
     }
 
-    std::cout << "Releasing parent window after " << state.pendingDialogs.size()
-              << " pending dialog(s) remain.\n";
+    std::println("Releasing parent window after {} pending dialog(s) remain.",
+                 state.pendingDialogs.size());
     state.windows.clear();
 }
 
@@ -615,7 +645,7 @@ void RequestShutdown(AppState& state, std::string_view reason)
     if (!state.shutdownRequested)
     {
         state.shutdownRequested = true;
-        std::cout << "Shutdown requested by " << reason << ". New desktop work is disabled.\n";
+        std::println("Shutdown requested by {}. New desktop work is disabled.", reason);
     }
 
     if (state.pendingDialogs.empty())
@@ -624,8 +654,8 @@ void RequestShutdown(AppState& state, std::string_view reason)
         return;
     }
 
-    std::cout << "Waiting for " << state.pendingDialogs.size()
-              << " pending dialog completion(s) before releasing the parent.\n";
+    std::println("Waiting for {} pending dialog completion(s) before releasing the parent.",
+                 state.pendingDialogs.size());
 }
 
 [[nodiscard]] std::vector<PendingDialog>::iterator FindPendingDialog(
@@ -638,27 +668,25 @@ void RequestShutdown(AppState& state, std::string_view reason)
 
 void PrintDialogSelection(const platform::DialogSelection& selection)
 {
-    std::cout << "  outcome: selection\n";
-    std::cout << "  selected filter index: ";
+    std::println("  outcome: selection");
     if (selection.selectedFilterIndex)
     {
-        std::cout << *selection.selectedFilterIndex;
+        std::println("  selected filter index: {}", *selection.selectedFilterIndex);
     }
     else
     {
-        std::cout << "none";
+        std::println("  selected filter index: none");
     }
-    std::cout << '\n';
 
     if (selection.paths.empty())
     {
-        std::cout << "  selected paths: none\n";
+        std::println("  selected paths: none");
         return;
     }
 
     for (std::size_t index = 0; index < selection.paths.size(); ++index)
     {
-        std::cout << "  path[" << index << "]: " << FormatPath(selection.paths[index]) << '\n';
+        std::println("  path[{}]: {}", index, FormatPath(selection.paths[index]));
     }
 }
 
@@ -673,12 +701,12 @@ void PrintDialogOutcome(const platform::DialogOutcome& outcome)
 
         void operator()(platform::DialogCancellation) const
         {
-            std::cout << "  outcome: cancellation (normal user choice)\n";
+            std::println("  outcome: cancellation (normal user choice)");
         }
 
         void operator()(const platform::DialogFailure& failure) const
         {
-            std::cout << "  outcome: failure\n";
+            std::println("  outcome: failure");
             PrintError("  dialog completion", failure.error);
         }
     };
@@ -691,21 +719,21 @@ void HandleDialogCompleted(AppState& state, const platform::DialogCompletedEvent
     auto request = FindPendingDialog(state, event.requestId);
     if (request == state.pendingDialogs.end())
     {
-        std::cout << "DialogCompleted for unknown request " << FormatId(event.requestId)
-                  << "; it may have been consumed already.\n";
+        std::println("DialogCompleted for unknown request {}; it may have been consumed already.",
+                     event.requestId);
         return;
     }
 
-    std::cout << "DialogCompleted request=" << FormatId(event.requestId)
-              << " kind=" << ToString(request->kind) << " label=" << request->label
-              << " parented=" << request->parented << '\n'
-              << "  callback timestamp: " << FormatTimestamp(event.timestamp) << " (+"
-              << FormatDuration(event.timestamp - state.startTimestamp) << ")\n"
-              << "  elapsed since request registration: "
-              << FormatDuration(event.timestamp - request->requestedAt) << '\n';
+    std::println(
+        "DialogCompleted request={} kind={} label={} parented={}\n"
+        "  callback timestamp: {} (+{})\n"
+        "  elapsed since request registration: {}",
+        event.requestId, ToString(request->kind), request->label, request->parented,
+        event.timestamp, event.timestamp - state.startTimestamp,
+        event.timestamp - request->requestedAt);
     PrintDialogOutcome(event.outcome);
 
-    UpdateLastAction(state, "completed dialog " + FormatId(event.requestId));
+    UpdateLastAction(state, std::format("completed dialog {}", event.requestId));
     state.pendingDialogs.erase(request);
 
     if (state.shutdownRequested && state.pendingDialogs.empty())
@@ -761,12 +789,11 @@ void HandleCommand(AppState& state, platform::PhysicalKey key)
     }
 }
 
-void PrintEventHeader(std::string_view name, platform::PlatformTimestamp timestamp,
+void PrintEventHeader(std::string_view name, platform::Timestamp timestamp,
                       const AppState& state)
 {
-    std::cout << "[event " << state.eventCount << "] " << name << " at "
-              << FormatTimestamp(timestamp) << " (+"
-              << FormatDuration(timestamp - state.startTimestamp) << ")";
+    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp,
+               timestamp - state.startTimestamp);
 }
 
 struct EventVisitor final
@@ -776,31 +803,23 @@ struct EventVisitor final
     void operator()(const platform::QuitRequestedEvent& event) const
     {
         PrintEventHeader("QuitRequested", event.timestamp, state);
-        std::cout << '\n';
+        std::println();
         RequestShutdown(state, "quit event");
     }
 
     void operator()(const platform::WindowCloseRequestedEvent& event) const
     {
         PrintEventHeader("WindowCloseRequested", event.timestamp, state);
-        std::cout << " window=" << FormatId(event.windowId) << '\n';
+        std::println(" window={}", event.windowId);
         RequestShutdown(state, "window close request");
     }
 
     void operator()(const platform::KeyboardKeyEvent& event) const
     {
         PrintEventHeader("KeyboardKey", event.timestamp, state);
-        std::cout << " window=";
-        if (event.windowId)
-        {
-            std::cout << FormatId(*event.windowId);
-        }
-        else
-        {
-            std::cout << "none";
-        }
-        std::cout << " physical=" << static_cast<int>(event.physicalKey)
-                  << " pressed=" << event.pressed << " repeat=" << event.repeat << '\n';
+        std::println(" window={} physical={} pressed={} repeat={}",
+                     OptionalWindowId{event.windowId}, static_cast<int>(event.physicalKey),
+                     event.pressed, event.repeat);
 
         if (event.pressed && !event.repeat)
         {
@@ -811,7 +830,7 @@ struct EventVisitor final
     void operator()(const platform::DialogCompletedEvent& event) const
     {
         PrintEventHeader("DialogCompleted", event.timestamp, state);
-        std::cout << '\n';
+        std::println();
         HandleDialogCompleted(state, event);
     }
 
@@ -819,7 +838,7 @@ struct EventVisitor final
     void operator()(const Event& event) const
     {
         PrintEventHeader("Other platform event", event.timestamp, state);
-        std::cout << " observed while desktop services remain responsive.\n";
+        std::println(" observed while desktop services remain responsive.");
     }
 };
 
@@ -859,11 +878,11 @@ void RestoreClipboardOnExit(AppState& state)
 
     if (!state.originalClipboardText)
     {
-        std::cout << "Clipboard was modified, but no backup is available to restore.\n";
+        std::println("Clipboard was modified, but no backup is available to restore.");
         return;
     }
 
-    std::cout << "Restoring clipboard before runtime shutdown.\n";
+    std::println("Restoring clipboard before runtime shutdown.");
     RestoreClipboardText(state);
 }
 
@@ -880,10 +899,7 @@ void RestoreClipboardOnExit(AppState& state)
     };
 
     auto window = runtime.CreateWindow(desc);
-    if (!window)
-    {
-        return core::Result<WindowSlot>::FromError(std::move(window).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(window);
 
     return WindowSlot{.window = std::move(window).GetValue()};
 }
@@ -891,10 +907,7 @@ void RestoreClipboardOnExit(AppState& state)
 [[nodiscard]] core::VoidResult RunDesktopServicesWorkbench(int argc, char** argv)
 {
     auto optionsResult = ParseOptions(argc, argv);
-    if (!optionsResult)
-    {
-        return core::VoidResult::FromError(std::move(optionsResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(optionsResult);
 
     const Options options = std::move(optionsResult).GetValue();
     if (options.showHelp)
@@ -911,21 +924,15 @@ void RestoreClipboardOnExit(AppState& state)
     };
 
     auto runtimeResult = platform::PlatformRuntime::Create(runtimeDesc);
-    if (!runtimeResult)
-    {
-        return core::VoidResult::FromError(std::move(runtimeResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(runtimeResult);
 
     platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
-    const platform::PlatformTimestamp start = runtime.Now();
+    const platform::Timestamp start = runtime.Now();
 
     std::vector<WindowSlot> windows;
     windows.reserve(1);
     auto parent = CreateParentWindow(runtime);
-    if (!parent)
-    {
-        return core::VoidResult::FromError(std::move(parent).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(parent);
     windows.push_back(std::move(parent).GetValue());
 
     AppState state{.runtime = runtime,
@@ -936,12 +943,12 @@ void RestoreClipboardOnExit(AppState& state)
     PrintUsage(argc > 0 ? argv[0] : "ponder-platform-3-desktop-services-workbench");
     if (options.externalUri)
     {
-        std::cout << "Configured URI is " << QuoteText(*options.externalUri)
-                  << "; press U to open it.\n";
+        std::println("Configured URI is {}; press U to open it.",
+                     QuoteText(*options.externalUri));
     }
     else
     {
-        std::cout << "No URI configured; pass --uri <uri> to enable the U command.\n";
+        std::println("No URI configured; pass --uri <uri> to enable the U command.");
     }
 
     auto nextTitleUpdate = start;
@@ -949,7 +956,7 @@ void RestoreClipboardOnExit(AppState& state)
     {
         DrainEvents(state);
 
-        const platform::PlatformTimestamp now = runtime.Now();
+        const platform::Timestamp now = runtime.Now();
         if (now - nextTitleUpdate >= std::chrono::milliseconds{250})
         {
             UpdateWindowTitle(state);
@@ -959,8 +966,7 @@ void RestoreClipboardOnExit(AppState& state)
         if (options.autoCloseAfter && !state.shutdownRequested &&
             now - start >= *options.autoCloseAfter)
         {
-            std::cout << "Auto-close duration reached after " << FormatDuration(now - start)
-                      << ".\n";
+            std::println("Auto-close duration reached after {}.", now - start);
             RequestShutdown(state, "auto close");
         }
 
@@ -974,22 +980,21 @@ void RestoreClipboardOnExit(AppState& state)
 
 int main(int argc, char** argv)
 {
-    std::cout << std::boolalpha;
-
     try
     {
         const auto result = RunDesktopServicesWorkbench(argc, argv);
         if (!result)
         {
-            std::cerr << "ponder-platform-3-desktop-services-workbench failed: "
-                      << core::FormatError(result.GetError()) << '\n';
+            std::println(stderr, "ponder-platform-3-desktop-services-workbench failed: {}",
+                         result.GetError());
             return 1;
         }
     }
     catch (const std::exception& exception)
     {
-        std::cerr << "ponder-platform-3-desktop-services-workbench terminated with an exception: "
-                  << exception.what() << '\n';
+        std::println(stderr,
+                     "ponder-platform-3-desktop-services-workbench terminated with an exception: {}",
+                     exception.what());
         return 1;
     }
 

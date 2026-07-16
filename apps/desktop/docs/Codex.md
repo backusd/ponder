@@ -19,8 +19,8 @@ stub until platform, windowing, renderer, and UI integration are ready.
 - Call `pond::render::GetRequiredWindowGraphicsCompatibility()` before creating
   the main platform window; do not hardcode a renderer or SDL creation flag.
 - Keep SDL3 window/event ownership in `ponder_platform`, renderer backend/device
-  ownership in `ponder_render`, and ImGui context/backend/widget ownership in
-  `ponder_ui`.
+  and generic GPU 2D packet execution in `ponder_render`, and reusable UI state,
+  paint semantics, layout, text, input, and widgets in `ponder_ui`.
 - Do not link `ponder_project`, `ponder_chemistry`, `ponder_io`,
   `ponder_workflow`, `ponder_compute`, or `ponder_plugin_sdk` until those
   libraries expose durable APIs needed by the app.

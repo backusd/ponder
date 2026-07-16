@@ -17,7 +17,7 @@ static_assert(std::variant_size_v<pond::platform::PlatformEvent> == 33U);
 
 TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
 {
-    const pond::platform::PlatformTimestamp timestamp{123ns};
+    const pond::platform::Timestamp timestamp{123ns};
     const pond::platform::WindowId windowId{17};
     const pond::platform::DisplayId displayId{29};
 
@@ -99,7 +99,7 @@ TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
 
 TEST(PlatformEventTests, PreservesTypedUnitsAndOptionalValues)
 {
-    const pond::platform::PlatformTimestamp timestamp{456ns};
+    const pond::platform::Timestamp timestamp{456ns};
     const pond::platform::WindowId windowId{31};
     const pond::platform::DisplayId displayId{47};
 
@@ -215,7 +215,7 @@ TEST(PlatformEventTests, PreservesTypedUnitsAndOptionalValues)
 
 TEST(PlatformEventTests, DefaultedEqualityIncludesPayloadFields)
 {
-    const pond::platform::WindowFocusChangedEvent focused{pond::platform::PlatformTimestamp{789ns},
+    const pond::platform::WindowFocusChangedEvent focused{pond::platform::Timestamp{789ns},
                                                           pond::platform::WindowId{53}, true};
     const pond::platform::WindowFocusChangedEvent same = focused;
     const pond::platform::WindowFocusChangedEvent different{focused.timestamp, focused.windowId,

@@ -5,6 +5,10 @@ build-*/
 out/
 cmake-build-*/
 
+# Source-controlled clean build verification harnesses.
+!tests/build/
+!tests/build/**
+
 # CMake generated files
 CMakeFiles/
 CMakeCache.txt

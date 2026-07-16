@@ -251,11 +251,14 @@ sets `TargetStatus::SurfaceLost`, reports `RenderErrorCode::SurfaceLost`, and ma
 `FrameStatus::Recreated` is reserved for a frame after replacement has actually
 committed; it never means merely that recreation was requested.
 
-`RenderTargetSnapshot` carries the platform's faithful `WindowState` value rather than separate
-minimized/restored event flags. The application-side window-state aggregator that consumes platform
-events owns its per-window snapshot sequence: it assigns a nonzero, monotonically increasing
-snapshot revision for every newer coalesced snapshot and never reuses a revision for different
-state. Render only validates that sequence; it never invents or increments a window revision.
+`RenderTargetSnapshot` carries only copied platform-owned target metrics: window identity, exact pixel
+extent, logical extent, visibility, faithful `WindowState`, presentation-environment revision, and
+snapshot revision. Positive pixel axes require corresponding positive logical axes; zero-pixel and
+zero-logical snapshots remain valid for suspended targets. The application-side window-state
+aggregator that consumes platform events owns its per-window snapshot sequence: it assigns a nonzero,
+monotonically increasing snapshot revision for every newer coalesced snapshot and never reuses a
+revision for different state. Render only validates that sequence; it never invents or increments a
+window revision.
 
 The same aggregator also owns a nonzero, monotonically increasing
 `PresentationEnvironmentRevision` for each window lifetime. It increments that typed revision when
@@ -336,27 +339,45 @@ targets and unconsumed prepared surfaces, destroy the render device, destroy
 `RenderBootstrap`, destroy platform windows, and finally destroy
 `PlatformRuntime`.
 
-Platform pixel size is authoritative for swapchain extent. Minimized, hidden, or
-zero-pixel targets are normal suspended states rather than errors. Surface loss
-requires a fresh owner-thread preparation call; device loss is fatal to the
+Platform pixel size is the requested swapchain extent. Vulkan may select a different exact extent
+because of surface current-extent or min/max limits. Logical size and revisions remain copied from
+the accepted target snapshot, while an active `RenderFrame` reports the actual created swapchain
+pixel extent in `RenderFrameMetrics`. The value contains only window identity, logical size, exact
+pixel size, metrics revision, and target revision; it exposes no `Window` borrow, native handle, or
+pointer identity. Minimized, hidden, or zero-pixel targets are normal suspended states rather than
+errors. Surface loss requires a fresh owner-thread preparation call; device loss is fatal to the
 selected device for the bootstrap milestone.
 
-## Future Generic 2D Draw Boundary
+## Generic 2D Draw Boundary
 
-The bootstrap milestone does not implement generic 2D drawing. Its frame lifecycle is split into
-real ordered phases: frame acquisition begins command recording, `Clear()` records the clear while
-leaving frame recording open, one private renderer-owned insertion seam follows the clear, and
-`FinishAndPresent()` finalizes, submits, and presents. The acquired frame therefore owns the
-recording state needed by a later generic layer; clear work is not deferred into finalization.
+The exact implemented CPU packet contract is documented in
+[Draw2DPacket.md](Draw2DPacket.md). ADR 0010 defines the project-owned UI rendering architecture
+that uses this renderer insertion point. Frame acquisition begins command recording, `Clear()`
+records the clear while leaving frame recording open, one private generic Draw2D stage may follow
+the clear, and `FinishAndPresent()` finalizes, submits, and presents through the same command buffer,
+render pass, queue submission, and presentation path.
 
-A later explicit project-private render contract accepts only owning, project-defined 2D draw
-packets. Render owns their shaders, GPU resources, recording, submission, and completion retirement.
-`ponder_ui` owns semantic paint commands and CPU tessellation before crossing this boundary; UI
-receives no Vulkan handles and render does not depend on `ponder_ui`. The current private insertion
-seam is not yet a public draw layer, callback, native command-buffer escape hatch, canvas, or
-arbitrary GPU command API. The UI roadmap's render-integration tasks own promotion of this
-test-proven seam into the real producer-neutral 2D packet consumer. Dear ImGui is not a successor
-layer or compatibility target.
+`Draw2DLayer` is a move-only, device-scoped renderer owner. It records producer-neutral
+`Draw2DPacket` values into an explicit active `RenderFrame`; no packet selects a window, target,
+swapchain, native surface, or ambient current context. The layer validates packet invariants,
+compatibility, frame state, target metrics, owner device, and render-thread affinity before the
+backend records the stage. Render validates/acquires the device-scoped pipeline, copies packet bytes
+into the target completion slot's persistently mapped upload arena, flushes non-coherent ranges,
+and preflights command dispatch, viewport limits, and scissors before the first Draw2D command. The
+slot retains the exact upload and pipeline generations through its submission fence, including
+presentation failure. Render never retains producer-owned packet storage after the synchronous
+record call returns.
+
+The packet contract is project-private and non-installed for the rectangle milestone. It is not a
+public canvas, retained UI API, callback, native command-buffer escape hatch, arbitrary GPU command
+API, or Dear ImGui successor. `ponder_ui` owns semantic paint commands, logical coordinates,
+clipping, color rules, and CPU tessellation before crossing this boundary. `ponder_render` owns
+shaders, pipelines, GPU resources, command recording, submission, presentation, diagnostics, and
+completion-based retirement after the boundary.
+
+Render must not interpret widgets, retained elements, themes, layout results, logical UI units,
+paint commands such as `FillRectangle`, producer object identity, or application command routing.
+UI receives no Vulkan handles and render does not depend on `ponder_ui`.
 
 ## Non-Responsibilities
 

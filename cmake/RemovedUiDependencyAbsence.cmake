@@ -60,5 +60,5 @@ function(ponder_add_removed_ui_dependency_absence_check)
             -D "PONDER_REMOVED_UI_DEPENDENCY_TARGET_MANIFEST=${target_manifest}"
             -P "${PROJECT_SOURCE_DIR}/cmake/RemovedUiDependencyAbsenceCheck.cmake")
     set_tests_properties(ponder_removed_ui_dependency_absence_check PROPERTIES
-        LABELS "ui;build;dependency;deterministic")
+        LABELS "ui;build;package;dependency;deterministic;ui_build_package")
 endfunction()

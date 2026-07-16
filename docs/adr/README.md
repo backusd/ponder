@@ -31,3 +31,5 @@ Each ADR should include:
 - [ADR 0007: SDL3 Platform Backend](0007-sdl3-platform-backend.md)
 - [ADR 0008: Vulkan Renderer Backend](0008-vulkan-renderer-backend.md)
 - [ADR 0009: Fixed-Size Rendering Math](0009-fixed-size-rendering-math.md)
+- [ADR 0010: Project-Owned UI Rendering](0010-project-owned-ui-rendering.md)
+- [ADR 0011: Render Shader Toolchain](0011-render-shader-toolchain.md)

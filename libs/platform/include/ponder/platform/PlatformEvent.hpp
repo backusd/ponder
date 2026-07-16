@@ -19,7 +19,7 @@ namespace pond::platform
 {
 struct QuitRequestedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
 
     [[nodiscard]] friend bool operator==(const QuitRequestedEvent& lhs,
                                          const QuitRequestedEvent& rhs) = default;
@@ -27,7 +27,7 @@ struct QuitRequestedEvent final
 
 struct WindowCloseRequestedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
 
     [[nodiscard]] friend bool operator==(const WindowCloseRequestedEvent& lhs,
@@ -36,7 +36,7 @@ struct WindowCloseRequestedEvent final
 
 struct WindowMovedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     ScreenPosition position;
 
@@ -46,7 +46,7 @@ struct WindowMovedEvent final
 
 struct WindowLogicalSizeChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     LogicalSize logicalSize;
 
@@ -56,7 +56,7 @@ struct WindowLogicalSizeChangedEvent final
 
 struct WindowPixelSizeChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     PixelSize pixelSize;
 
@@ -66,7 +66,7 @@ struct WindowPixelSizeChangedEvent final
 
 struct WindowFocusChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     bool focused{};
 
@@ -76,7 +76,7 @@ struct WindowFocusChangedEvent final
 
 struct WindowVisibilityChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     bool visible{};
 
@@ -86,7 +86,7 @@ struct WindowVisibilityChangedEvent final
 
 struct WindowStateChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     WindowState state{WindowState::Normal};
 
@@ -96,7 +96,7 @@ struct WindowStateChangedEvent final
 
 struct WindowPresentationChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     WindowPresentation presentation{WindowPresentation::Windowed};
 
@@ -106,7 +106,7 @@ struct WindowPresentationChangedEvent final
 
 struct WindowDisplayChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
     std::optional<DisplayId> displayId;
 
@@ -116,7 +116,7 @@ struct WindowDisplayChangedEvent final
 
 struct WindowDisplayScaleChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
 
     [[nodiscard]] friend bool operator==(const WindowDisplayScaleChangedEvent& lhs,
@@ -125,7 +125,7 @@ struct WindowDisplayScaleChangedEvent final
 
 struct WindowPointerEnteredEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
 
     [[nodiscard]] friend bool operator==(const WindowPointerEnteredEvent& lhs,
@@ -134,7 +134,7 @@ struct WindowPointerEnteredEvent final
 
 struct WindowPointerLeftEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     WindowId windowId;
 
     [[nodiscard]] friend bool operator==(const WindowPointerLeftEvent& lhs,
@@ -143,7 +143,7 @@ struct WindowPointerLeftEvent final
 
 struct DisplayAddedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
 
     [[nodiscard]] friend bool operator==(const DisplayAddedEvent& lhs,
@@ -152,7 +152,7 @@ struct DisplayAddedEvent final
 
 struct DisplayRemovedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
 
     [[nodiscard]] friend bool operator==(const DisplayRemovedEvent& lhs,
@@ -161,7 +161,7 @@ struct DisplayRemovedEvent final
 
 struct DisplayMovedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
 
     [[nodiscard]] friend bool operator==(const DisplayMovedEvent& lhs,
@@ -170,7 +170,7 @@ struct DisplayMovedEvent final
 
 struct DisplayDesktopModeChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
     std::optional<ScreenExtent> extent;
 
@@ -180,7 +180,7 @@ struct DisplayDesktopModeChangedEvent final
 
 struct DisplayCurrentModeChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
     std::optional<ScreenExtent> extent;
 
@@ -190,7 +190,7 @@ struct DisplayCurrentModeChangedEvent final
 
 struct DisplayOrientationChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
     DisplayOrientation orientation{DisplayOrientation::Unknown};
 
@@ -200,7 +200,7 @@ struct DisplayOrientationChangedEvent final
 
 struct DisplayContentScaleChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
 
     [[nodiscard]] friend bool operator==(const DisplayContentScaleChangedEvent& lhs,
@@ -209,7 +209,7 @@ struct DisplayContentScaleChangedEvent final
 
 struct DisplayUsableBoundsChangedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DisplayId displayId;
 
     [[nodiscard]] friend bool operator==(const DisplayUsableBoundsChangedEvent& lhs,
@@ -218,7 +218,7 @@ struct DisplayUsableBoundsChangedEvent final
 
 struct KeyboardKeyEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     PhysicalKey physicalKey{PhysicalKey::Unknown};
     LogicalKey logicalKey;
@@ -232,7 +232,7 @@ struct KeyboardKeyEvent final
 
 struct TextInputEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     std::string text;
 
@@ -242,7 +242,7 @@ struct TextInputEvent final
 
 struct TextCompositionEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     std::string text;
     std::optional<TextCompositionRange> selection;
@@ -253,7 +253,7 @@ struct TextCompositionEvent final
 
 struct MouseMotionEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     LogicalPoint position{};
     LogicalPoint relativeMovement{};
@@ -264,7 +264,7 @@ struct MouseMotionEvent final
 
 struct MouseButtonEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     LogicalPoint position{};
     MouseButton button{MouseButton::Unknown};
@@ -276,7 +276,7 @@ struct MouseButtonEvent final
 
 struct MouseWheelEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     LogicalPoint position{};
     float horizontal{};
@@ -288,7 +288,7 @@ struct MouseWheelEvent final
 
 struct DropBeginEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     std::optional<std::string> sourceApplication;
 
@@ -298,7 +298,7 @@ struct DropBeginEvent final
 
 struct DroppedFileEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     std::filesystem::path path;
     LogicalPoint position{};
@@ -310,7 +310,7 @@ struct DroppedFileEvent final
 
 struct DroppedTextEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     std::string text;
     LogicalPoint position{};
@@ -322,7 +322,7 @@ struct DroppedTextEvent final
 
 struct DropPositionEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     LogicalPoint position{};
     std::optional<std::string> sourceApplication;
@@ -333,7 +333,7 @@ struct DropPositionEvent final
 
 struct DropCompleteEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     std::optional<WindowId> windowId;
     LogicalPoint position{};
     std::optional<std::string> sourceApplication;
@@ -344,7 +344,7 @@ struct DropCompleteEvent final
 
 struct DialogCompletedEvent final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DialogRequestId requestId;
     DialogOutcome outcome;
 

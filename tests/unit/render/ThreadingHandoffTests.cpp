@@ -13,11 +13,14 @@ namespace
     std::uint64_t revision = 1, pond::platform::WindowId windowId = pond::platform::WindowId{42},
     pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision =
         pond::render::PresentationEnvironmentRevision{1U},
-    pond::platform::PixelSize pixelSize = pond::platform::PixelSize{800, 600}, bool visible = true,
+    pond::platform::PixelSize pixelSize = pond::platform::PixelSize{800, 600},
+    pond::platform::LogicalSize logicalSize = pond::platform::LogicalSize{800, 600},
+    bool visible = true,
     pond::platform::WindowState windowState = pond::platform::WindowState::Normal)
 {
     return pond::render::RenderTargetSnapshot{
-        windowId, pixelSize, visible, windowState, presentationEnvironmentRevision, revision};
+        windowId, pixelSize, logicalSize, visible, windowState, presentationEnvironmentRevision,
+        revision};
 }
 
 [[nodiscard]] constexpr pond::render::SurfacePreparationDesc MakeSurfaceDesc(
@@ -77,12 +80,24 @@ TEST(RenderThreadingHandoffTests, ValidatesTargetSnapshotUpdateOrdering)
     EXPECT_TRUE(pond::render::ValidateTargetSnapshotUpdate(
         MakeSnapshot(2), MakeSnapshot(3, pond::platform::WindowId{42},
                                       pond::render::PresentationEnvironmentRevision{2U})));
+    EXPECT_TRUE(pond::render::ValidateTargetSnapshotUpdate(
+        MakeSnapshot(3),
+        MakeSnapshot(4, pond::platform::WindowId{42},
+                     pond::render::PresentationEnvironmentRevision{3U},
+                     pond::platform::PixelSize{800, 600}, pond::platform::LogicalSize{640, 480})));
 
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(
                           MakeSnapshot(1), MakeSnapshot(2, pond::platform::WindowId{7})),
                       pond::render::RenderErrorCode::InvalidArgument);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(2)),
                       pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(
+        pond::render::ValidateTargetSnapshotUpdate(
+            MakeSnapshot(2), MakeSnapshot(2, pond::platform::WindowId{42},
+                                          pond::render::PresentationEnvironmentRevision{2U},
+                                          pond::platform::PixelSize{800, 600},
+                                          pond::platform::LogicalSize{640, 480})),
+        pond::render::RenderErrorCode::InvalidState);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(1)),
                       pond::render::RenderErrorCode::InvalidState);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(

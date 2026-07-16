@@ -447,10 +447,7 @@ core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
             CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayBounds", context));
     }
     auto bounds = ConvertRectangle(backendBounds, "SDL_GetDisplayBounds", context);
-    if (!bounds.HasValue())
-    {
-        return core::Result<DisplayInfo>::FromError(std::move(bounds).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(bounds);
 
     BackendScreenRectangle backendUsableBounds;
     if (!m_displayBackend.getUsableBounds(m_displayBackend.context, backendDisplayId,
@@ -461,10 +458,7 @@ core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
     }
     auto usableBounds =
         ConvertRectangle(backendUsableBounds, "SDL_GetDisplayUsableBounds", context);
-    if (!usableBounds.HasValue())
-    {
-        return core::Result<DisplayInfo>::FromError(std::move(usableBounds).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(usableBounds);
 
     float refreshRateHertz{};
     if (!m_displayBackend.getCurrentRefreshRate(m_displayBackend.context, backendDisplayId,
@@ -492,10 +486,7 @@ core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
             CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayContentScale", context));
     }
     auto validContentScale = ValidateScale(contentScale, "SDL_GetDisplayContentScale", context);
-    if (!validContentScale.HasValue())
-    {
-        return core::Result<DisplayInfo>::FromError(std::move(validContentScale).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(validContentScale);
 
     return DisplayInfo{
         id,          name,        std::move(bounds).GetValue(), std::move(usableBounds).GetValue(),
@@ -505,10 +496,7 @@ core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
 core::Result<std::vector<DisplayInfo>> PlatformRuntimeState::EnumerateDisplays()
 {
     auto refresh = RefreshDisplays();
-    if (!refresh.HasValue())
-    {
-        return core::Result<std::vector<DisplayInfo>>::FromError(std::move(refresh).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(refresh);
 
     std::vector<DisplayInfo> displays;
     displays.reserve(refresh.GetValue().size());
@@ -518,10 +506,7 @@ core::Result<std::vector<DisplayInfo>> PlatformRuntimeState::EnumerateDisplays()
         PONDER_VERIFY(mapping != m_displaysByBackendId.end() && mapping->second.connected,
                       "Connected backend display {} has no project mapping", backendDisplayId);
         auto info = QueryDisplayInfo(mapping->second.id, backendDisplayId);
-        if (!info.HasValue())
-        {
-            return core::Result<std::vector<DisplayInfo>>::FromError(std::move(info).GetError());
-        }
+        RETURN_ERROR_IF_FAILED(info);
         displays.emplace_back(std::move(info).GetValue());
     }
 
@@ -538,10 +523,7 @@ core::Result<DisplayInfo> PlatformRuntimeState::GetDisplayInfo(DisplayId id)
     }
 
     auto refresh = RefreshDisplays();
-    if (!refresh.HasValue())
-    {
-        return core::Result<DisplayInfo>::FromError(std::move(refresh).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(refresh);
 
     const auto mapping = m_displaysById.find(id);
     if (mapping == m_displaysById.end() || !mapping->second.connected)
@@ -581,10 +563,7 @@ core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(void* native
     }
 
     auto refresh = RefreshDisplays();
-    if (!refresh.HasValue())
-    {
-        return core::Result<DisplayId>::FromError(std::move(refresh).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(refresh);
 
     const auto mapping = m_displaysByBackendId.find(backendDisplayId);
     if (mapping == m_displaysByBackendId.end() || !mapping->second.connected)

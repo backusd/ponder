@@ -1,18 +1,28 @@
 #include <ponder/core/Log.hpp>
 #include <ponder/platform/NativeWindow.hpp>
 #include <ponder/render/RenderError.hpp>
+#include <ponder/render/draw2d/Draw2DLayer.hpp>
+#include <ponder/render/draw2d/Draw2DPacket.hpp>
+#if PONDER_BUILD_UI_RENDER_INTEGRATION
+#include <ponder/ui/Error.hpp>
+#include <ponder/ui/experimental/RectangleRenderer.hpp>
+#endif
 
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstring>
 #include <cstdint>
+#include <cstdlib>
 #include <gtest/gtest.h>
 #include <limits>
 #include <memory>
 #include <new>
 #include <optional>
 #include <semaphore>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -49,6 +59,8 @@ struct FakePhysicalDevice final
     std::string driverName{"fake-driver"};
     std::string driverInfo{"fake-driver-info"};
     std::vector<VkMemoryHeap> memoryHeaps{};
+    VkDeviceSize nonCoherentAtomSize{64U};
+    VkExtent2D maximumViewportExtent{.width = 16'384U, .height = 16'384U};
     std::vector<VkQueueFamilyProperties> queueFamilies{};
     std::vector<VkBool32> surfaceSupport{};
     VkSurfaceCapabilitiesKHR surfaceCapabilities{};
@@ -58,6 +70,38 @@ struct FakePhysicalDevice final
     bool swapchainMaintenance1Feature{};
     bool presentIdFeature{};
     bool presentWaitFeature{};
+};
+
+struct FakeUploadAllocation final
+{
+    void* handle{};
+    VkBuffer buffer{VK_NULL_HANDLE};
+    VkDeviceSize requestedSize{};
+    VkDeviceSize allocationSize{};
+    std::unique_ptr<std::byte[]> bytes;
+    bool mapped{};
+};
+
+struct FakeFlushRange final
+{
+    void* allocation{};
+    VkDeviceSize offset{};
+    VkDeviceSize size{};
+
+    [[nodiscard]] friend constexpr bool operator==(const FakeFlushRange& lhs,
+                                                   const FakeFlushRange& rhs) noexcept = default;
+};
+
+struct FakeIndexedDraw final
+{
+    std::uint32_t indexCount{};
+    std::uint32_t instanceCount{};
+    std::uint32_t firstIndex{};
+    std::int32_t vertexOffset{};
+    std::uint32_t firstInstance{};
+
+    [[nodiscard]] friend constexpr bool operator==(const FakeIndexedDraw& lhs,
+                                                   const FakeIndexedDraw& rhs) noexcept = default;
 };
 
 struct FakeVulkanState final
@@ -95,6 +139,20 @@ struct FakeVulkanState final
     VkResult createImageViewResult{VK_SUCCESS};
     VkResult createRenderPassResult{VK_SUCCESS};
     VkResult createFramebufferResult{VK_SUCCESS};
+    VkResult createShaderModuleResult{VK_SUCCESS};
+    VkResult createPipelineLayoutResult{VK_SUCCESS};
+    VkResult createGraphicsPipelinesResult{VK_SUCCESS};
+    VkResult createBufferResult{VK_SUCCESS};
+    VkResult mapMemoryResult{VK_SUCCESS};
+    VkResult flushAllocationResult{VK_SUCCESS};
+    std::uint32_t failCreateBufferCallIndex{};
+    std::uint32_t failMapMemoryCallIndex{};
+    std::uint32_t failFlushAllocationCallIndex{};
+    bool mapMemoryReturnsNullOnSuccess{};
+    VkMemoryPropertyFlags uploadMemoryProperties{VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
+    VkDeviceSize uploadAllocationPadding{};
+    std::uint32_t failCreateShaderModuleCallIndex{};
     VkResult createCommandPoolResult{VK_SUCCESS};
     VkResult allocateCommandBuffersResult{VK_SUCCESS};
     VkResult resetCommandBufferResult{VK_SUCCESS};
@@ -161,6 +219,54 @@ struct FakeVulkanState final
     std::vector<VkSemaphore> presentWaitSemaphores{};
     std::vector<VkQueue> presentationQueues{};
     std::vector<std::string> frameTrace{};
+    std::vector<std::string> resourceTrace{};
+    std::vector<std::size_t> shaderModuleCodeSizes{};
+    VkPushConstantRange lastPushConstantRange{};
+    std::uint32_t lastPipelineLayoutSetLayoutCount{};
+    std::uint32_t lastPipelineLayoutPushConstantRangeCount{};
+    VkPipelineBindPoint lastPipelineBindPoint{VK_PIPELINE_BIND_POINT_MAX_ENUM};
+    VkPipeline lastBoundPipeline{VK_NULL_HANDLE};
+    VkPipelineLayout lastBoundLayout{VK_NULL_HANDLE};
+    pond::render::detail::VulkanHostBufferAllocationRequest lastBufferAllocationRequest{};
+    VkDeviceSize lastBufferSize{};
+    std::vector<std::unique_ptr<FakeUploadAllocation>> uploadAllocations{};
+    std::array<FakeFlushRange, 64U> flushedRanges{};
+    std::uint32_t flushedRangeCount{};
+    VkVertexInputBindingDescription lastVertexBinding{};
+    std::vector<VkVertexInputAttributeDescription> lastVertexAttributes{};
+    VkPrimitiveTopology lastInputAssemblyTopology{VK_PRIMITIVE_TOPOLOGY_MAX_ENUM};
+    VkBool32 lastPrimitiveRestartEnable{};
+    VkCullModeFlags lastCullMode{};
+    VkFrontFace lastFrontFace{VK_FRONT_FACE_MAX_ENUM};
+    VkSampleCountFlagBits lastRasterizationSamples{VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM};
+    VkBool32 lastDepthTestEnable{};
+    VkBool32 lastDepthWriteEnable{};
+    VkBool32 lastStencilTestEnable{};
+    VkPipelineColorBlendAttachmentState lastColorBlendAttachment{};
+    std::vector<VkDynamicState> lastDynamicStates{};
+    VkRenderPass lastPipelineRenderPass{VK_NULL_HANDLE};
+    std::uint32_t lastPipelineSubpass{};
+    VkViewport lastViewport{};
+    VkRect2D lastScissor{};
+    std::array<VkRect2D, 64U> scissors{};
+    std::uint32_t scissorCount{};
+    VkBuffer lastVertexBuffer{VK_NULL_HANDLE};
+    VkDeviceSize lastVertexOffset{};
+    std::array<VkBuffer, 64U> vertexBuffers{};
+    std::uint32_t vertexBufferBindCount{};
+    VkBuffer lastIndexBuffer{VK_NULL_HANDLE};
+    VkDeviceSize lastIndexOffset{};
+    VkIndexType lastIndexType{VK_INDEX_TYPE_MAX_ENUM};
+    std::array<VkBuffer, 64U> indexBuffers{};
+    std::uint32_t indexBufferBindCount{};
+    std::array<std::uint32_t, 2U> lastPushConstants{};
+    std::uint32_t lastDrawIndexCount{};
+    std::uint32_t lastDrawInstanceCount{};
+    std::uint32_t lastDrawFirstIndex{};
+    std::int32_t lastDrawVertexOffset{};
+    std::uint32_t lastDrawFirstInstance{};
+    std::array<FakeIndexedDraw, 64U> indexedDraws{};
+    std::uint32_t indexedDrawCount{};
     std::vector<std::string> debugObjectNames{};
     VkDebugUtilsMessageSeverityFlagsEXT lastDebugMessageSeverity{};
     VkDebugUtilsMessageTypeFlagsEXT lastDebugMessageType{};
@@ -210,6 +316,24 @@ struct FakeVulkanState final
     std::uint32_t destroyRenderPassCalls{};
     std::uint32_t createFramebufferCalls{};
     std::uint32_t destroyFramebufferCalls{};
+    std::uint32_t createShaderModuleCalls{};
+    std::uint32_t destroyShaderModuleCalls{};
+    std::uint32_t createPipelineLayoutCalls{};
+    std::uint32_t destroyPipelineLayoutCalls{};
+    std::uint32_t createGraphicsPipelinesCalls{};
+    std::uint32_t destroyPipelineCalls{};
+    std::uint32_t createBufferCalls{};
+    std::uint32_t destroyBufferCalls{};
+    std::uint32_t mapMemoryCalls{};
+    std::uint32_t unmapMemoryCalls{};
+    std::uint32_t flushAllocationCalls{};
+    std::uint32_t cmdBindPipelineCalls{};
+    std::uint32_t cmdSetViewportCalls{};
+    std::uint32_t cmdSetScissorCalls{};
+    std::uint32_t cmdBindVertexBuffersCalls{};
+    std::uint32_t cmdBindIndexBufferCalls{};
+    std::uint32_t cmdPushConstantsCalls{};
+    std::uint32_t cmdDrawIndexedCalls{};
     std::uint32_t createCommandPoolCalls{};
     std::uint32_t destroyCommandPoolCalls{};
     std::uint32_t allocateCommandBuffersCalls{};
@@ -250,6 +374,11 @@ struct FakeVulkanState final
     std::uintptr_t nextImageViewValue{0xC000U};
     std::uintptr_t nextRenderPassValue{0xD000U};
     std::uintptr_t nextFramebufferValue{0xE000U};
+    std::uintptr_t nextShaderModuleValue{0x13000U};
+    std::uintptr_t nextPipelineLayoutValue{0x14000U};
+    std::uintptr_t nextPipelineValue{0x15000U};
+    std::uintptr_t nextBufferValue{0x16000U};
+    std::uintptr_t nextAllocationValue{0x17000U};
     std::uintptr_t nextCommandPoolValue{0xF000U};
     std::uintptr_t nextCommandBufferValue{0x10000U};
     std::uintptr_t nextSemaphoreValue{0x11000U};
@@ -758,6 +887,9 @@ void FakeGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
     properties->properties.limits.maxFramebufferWidth = 16384U;
     properties->properties.limits.maxFramebufferHeight = 16384U;
     properties->properties.limits.maxColorAttachments = 8U;
+    properties->properties.limits.nonCoherentAtomSize = device->nonCoherentAtomSize;
+    properties->properties.limits.maxViewportDimensions[0] = device->maximumViewportExtent.width;
+    properties->properties.limits.maxViewportDimensions[1] = device->maximumViewportExtent.height;
     CopyStringToFixedArray(device->deviceName, properties->properties.deviceName,
                            sizeof(properties->properties.deviceName));
 
@@ -1456,6 +1588,454 @@ void FakeDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer,
     (void)allocator;
     ++g_fakeVulkanState->destroyFramebufferCalls;
 }
+[[nodiscard]] VkResult FakeCreateShaderModule(VkDevice device,
+                                              const VkShaderModuleCreateInfo* createInfo,
+                                              const VkAllocationCallbacks* allocator,
+                                              VkShaderModule* shaderModule) noexcept
+{
+    (void)device;
+    (void)allocator;
+    ++g_fakeVulkanState->createShaderModuleCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("createShaderModule");
+    if (createInfo != nullptr)
+    {
+        g_fakeVulkanState->shaderModuleCodeSizes.push_back(createInfo->codeSize);
+    }
+
+    if (g_fakeVulkanState->failCreateShaderModuleCallIndex ==
+        g_fakeVulkanState->createShaderModuleCalls)
+    {
+        return g_fakeVulkanState->createShaderModuleResult;
+    }
+    if (g_fakeVulkanState->failCreateShaderModuleCallIndex == 0U &&
+        g_fakeVulkanState->createShaderModuleResult != VK_SUCCESS)
+    {
+        return g_fakeVulkanState->createShaderModuleResult;
+    }
+    if (createInfo == nullptr || shaderModule == nullptr || createInfo->codeSize == 0U ||
+        createInfo->pCode == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    *shaderModule = MakeFakeHandle<VkShaderModule>(g_fakeVulkanState->nextShaderModuleValue++);
+    return VK_SUCCESS;
+}
+
+void FakeDestroyShaderModule(VkDevice device, VkShaderModule shaderModule,
+                             const VkAllocationCallbacks* allocator) noexcept
+{
+    (void)device;
+    (void)shaderModule;
+    (void)allocator;
+    g_fakeVulkanState->resourceTrace.emplace_back("destroyShaderModule");
+    ++g_fakeVulkanState->destroyShaderModuleCalls;
+}
+
+[[nodiscard]] VkResult FakeCreatePipelineLayout(VkDevice device,
+                                                const VkPipelineLayoutCreateInfo* createInfo,
+                                                const VkAllocationCallbacks* allocator,
+                                                VkPipelineLayout* layout) noexcept
+{
+    (void)device;
+    (void)allocator;
+    ++g_fakeVulkanState->createPipelineLayoutCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("createPipelineLayout");
+    if (createInfo != nullptr)
+    {
+        g_fakeVulkanState->lastPipelineLayoutSetLayoutCount = createInfo->setLayoutCount;
+        g_fakeVulkanState->lastPipelineLayoutPushConstantRangeCount =
+            createInfo->pushConstantRangeCount;
+        if (createInfo->pushConstantRangeCount > 0U && createInfo->pPushConstantRanges != nullptr)
+        {
+            g_fakeVulkanState->lastPushConstantRange = createInfo->pPushConstantRanges[0];
+        }
+    }
+    if (g_fakeVulkanState->createPipelineLayoutResult != VK_SUCCESS)
+    {
+        return g_fakeVulkanState->createPipelineLayoutResult;
+    }
+    if (createInfo == nullptr || layout == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    *layout = MakeFakeHandle<VkPipelineLayout>(g_fakeVulkanState->nextPipelineLayoutValue++);
+    return VK_SUCCESS;
+}
+
+void FakeDestroyPipelineLayout(VkDevice device, VkPipelineLayout layout,
+                               const VkAllocationCallbacks* allocator) noexcept
+{
+    (void)device;
+    (void)layout;
+    (void)allocator;
+    g_fakeVulkanState->resourceTrace.emplace_back("destroyPipelineLayout");
+    ++g_fakeVulkanState->destroyPipelineLayoutCalls;
+}
+
+[[nodiscard]] VkResult FakeCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache,
+                                                   std::uint32_t createInfoCount,
+                                                   const VkGraphicsPipelineCreateInfo* createInfos,
+                                                   const VkAllocationCallbacks* allocator,
+                                                   VkPipeline* pipelines) noexcept
+{
+    (void)device;
+    (void)pipelineCache;
+    (void)allocator;
+    ++g_fakeVulkanState->createGraphicsPipelinesCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("createGraphicsPipeline");
+    if (createInfoCount > 0U && createInfos != nullptr)
+    {
+        const VkGraphicsPipelineCreateInfo& createInfo = createInfos[0];
+        g_fakeVulkanState->lastBoundLayout = createInfo.layout;
+        g_fakeVulkanState->lastPipelineRenderPass = createInfo.renderPass;
+        g_fakeVulkanState->lastPipelineSubpass = createInfo.subpass;
+        if (createInfo.pVertexInputState != nullptr)
+        {
+            const VkPipelineVertexInputStateCreateInfo& vertexInput = *createInfo.pVertexInputState;
+            if (vertexInput.vertexBindingDescriptionCount > 0U &&
+                vertexInput.pVertexBindingDescriptions != nullptr)
+            {
+                g_fakeVulkanState->lastVertexBinding = vertexInput.pVertexBindingDescriptions[0];
+            }
+            g_fakeVulkanState->lastVertexAttributes.assign(
+                vertexInput.pVertexAttributeDescriptions,
+                vertexInput.pVertexAttributeDescriptions +
+                    vertexInput.vertexAttributeDescriptionCount);
+        }
+        if (createInfo.pInputAssemblyState != nullptr)
+        {
+            g_fakeVulkanState->lastInputAssemblyTopology = createInfo.pInputAssemblyState->topology;
+            g_fakeVulkanState->lastPrimitiveRestartEnable =
+                createInfo.pInputAssemblyState->primitiveRestartEnable;
+        }
+        if (createInfo.pRasterizationState != nullptr)
+        {
+            g_fakeVulkanState->lastCullMode = createInfo.pRasterizationState->cullMode;
+            g_fakeVulkanState->lastFrontFace = createInfo.pRasterizationState->frontFace;
+        }
+        if (createInfo.pMultisampleState != nullptr)
+        {
+            g_fakeVulkanState->lastRasterizationSamples =
+                createInfo.pMultisampleState->rasterizationSamples;
+        }
+        if (createInfo.pDepthStencilState != nullptr)
+        {
+            g_fakeVulkanState->lastDepthTestEnable = createInfo.pDepthStencilState->depthTestEnable;
+            g_fakeVulkanState->lastDepthWriteEnable =
+                createInfo.pDepthStencilState->depthWriteEnable;
+            g_fakeVulkanState->lastStencilTestEnable =
+                createInfo.pDepthStencilState->stencilTestEnable;
+        }
+        if (createInfo.pColorBlendState != nullptr &&
+            createInfo.pColorBlendState->attachmentCount > 0U &&
+            createInfo.pColorBlendState->pAttachments != nullptr)
+        {
+            g_fakeVulkanState->lastColorBlendAttachment =
+                createInfo.pColorBlendState->pAttachments[0];
+        }
+        if (createInfo.pDynamicState != nullptr)
+        {
+            g_fakeVulkanState->lastDynamicStates.assign(
+                createInfo.pDynamicState->pDynamicStates,
+                createInfo.pDynamicState->pDynamicStates +
+                    createInfo.pDynamicState->dynamicStateCount);
+        }
+    }
+    if (g_fakeVulkanState->createGraphicsPipelinesResult != VK_SUCCESS)
+    {
+        return g_fakeVulkanState->createGraphicsPipelinesResult;
+    }
+    if (createInfoCount == 0U || createInfos == nullptr || pipelines == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    pipelines[0] = MakeFakeHandle<VkPipeline>(g_fakeVulkanState->nextPipelineValue++);
+    return VK_SUCCESS;
+}
+
+void FakeDestroyPipeline(VkDevice device, VkPipeline pipeline,
+                         const VkAllocationCallbacks* allocator) noexcept
+{
+    (void)device;
+    (void)pipeline;
+    (void)allocator;
+    g_fakeVulkanState->resourceTrace.emplace_back("destroyPipeline");
+    ++g_fakeVulkanState->destroyPipelineCalls;
+}
+
+[[nodiscard]] FakeUploadAllocation* FindFakeUploadAllocation(void* allocation) noexcept
+{
+    const auto found =
+        std::ranges::find_if(g_fakeVulkanState->uploadAllocations,
+                             [allocation](const std::unique_ptr<FakeUploadAllocation>& candidate)
+                             {
+                                 return candidate->handle == allocation;
+                             });
+    return found == g_fakeVulkanState->uploadAllocations.end() ? nullptr : found->get();
+}
+
+[[nodiscard]] VkResult FakeCreateBuffer(
+    void* allocator, const VkBufferCreateInfo* createInfo,
+    const pond::render::detail::VulkanHostBufferAllocationRequest* allocationInfo, VkBuffer* buffer,
+    void** allocation,
+    pond::render::detail::VulkanHostBufferAllocationResult* allocationInfoOut) noexcept
+{
+    (void)allocator;
+    ++g_fakeVulkanState->createBufferCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("createBuffer");
+    if ((g_fakeVulkanState->failCreateBufferCallIndex == 0U ||
+         g_fakeVulkanState->createBufferCalls == g_fakeVulkanState->failCreateBufferCallIndex) &&
+        g_fakeVulkanState->createBufferResult != VK_SUCCESS)
+    {
+        return g_fakeVulkanState->createBufferResult;
+    }
+    if (createInfo == nullptr || allocationInfo == nullptr || buffer == nullptr ||
+        allocation == nullptr || allocationInfoOut == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    const VkMemoryPropertyFlags memoryProperties = g_fakeVulkanState->uploadMemoryProperties;
+    VkDeviceSize allocationSize{};
+    if (g_fakeVulkanState->uploadAllocationPadding >
+        std::numeric_limits<VkDeviceSize>::max() - createInfo->size)
+    {
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+    allocationSize = createInfo->size + g_fakeVulkanState->uploadAllocationPadding;
+    if (allocationSize > std::numeric_limits<std::size_t>::max())
+    {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    try
+    {
+        auto fakeAllocation = std::make_unique<FakeUploadAllocation>();
+        fakeAllocation->handle = reinterpret_cast<void*>(g_fakeVulkanState->nextAllocationValue);
+        fakeAllocation->buffer = MakeFakeHandle<VkBuffer>(g_fakeVulkanState->nextBufferValue);
+        fakeAllocation->requestedSize = createInfo->size;
+        fakeAllocation->allocationSize = allocationSize;
+        fakeAllocation->bytes =
+            std::make_unique<std::byte[]>(static_cast<std::size_t>(allocationSize));
+        g_fakeVulkanState->uploadAllocations.push_back(std::move(fakeAllocation));
+    }
+    catch (const std::bad_alloc&)
+    {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    catch (const std::length_error&)
+    {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    FakeUploadAllocation& created = *g_fakeVulkanState->uploadAllocations.back();
+    *buffer = created.buffer;
+    *allocation = created.handle;
+    ++g_fakeVulkanState->nextBufferValue;
+    ++g_fakeVulkanState->nextAllocationValue;
+    g_fakeVulkanState->lastBufferSize = createInfo->size;
+    g_fakeVulkanState->lastBufferAllocationRequest = *allocationInfo;
+    allocationInfoOut->memoryProperties = memoryProperties;
+    allocationInfoOut->allocationSize = allocationSize;
+    return VK_SUCCESS;
+}
+
+void FakeDestroyBuffer(void* allocator, VkBuffer buffer, void* allocation) noexcept
+{
+    (void)allocator;
+    const auto found = std::ranges::find_if(
+        g_fakeVulkanState->uploadAllocations,
+        [buffer, allocation](const std::unique_ptr<FakeUploadAllocation>& candidate)
+        {
+            return candidate->buffer == buffer && candidate->handle == allocation;
+        });
+    if (found != g_fakeVulkanState->uploadAllocations.end())
+    {
+        g_fakeVulkanState->uploadAllocations.erase(found);
+    }
+    ++g_fakeVulkanState->destroyBufferCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("destroyBuffer");
+}
+
+[[nodiscard]] VkResult FakeMapMemory(void* allocator, void* allocation, void** data) noexcept
+{
+    (void)allocator;
+    ++g_fakeVulkanState->mapMemoryCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("mapMemory");
+    if ((g_fakeVulkanState->failMapMemoryCallIndex == 0U ||
+         g_fakeVulkanState->mapMemoryCalls == g_fakeVulkanState->failMapMemoryCallIndex) &&
+        g_fakeVulkanState->mapMemoryResult != VK_SUCCESS)
+    {
+        return g_fakeVulkanState->mapMemoryResult;
+    }
+    if (data == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    FakeUploadAllocation* fakeAllocation = FindFakeUploadAllocation(allocation);
+    if (fakeAllocation == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    fakeAllocation->mapped = true;
+    *data = g_fakeVulkanState->mapMemoryReturnsNullOnSuccess
+                ? nullptr
+                : static_cast<void*>(fakeAllocation->bytes.get());
+    return VK_SUCCESS;
+}
+
+void FakeUnmapMemory(void* allocator, void* allocation) noexcept
+{
+    (void)allocator;
+    if (FakeUploadAllocation* fakeAllocation = FindFakeUploadAllocation(allocation);
+        fakeAllocation != nullptr)
+    {
+        fakeAllocation->mapped = false;
+    }
+    ++g_fakeVulkanState->unmapMemoryCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("unmapMemory");
+}
+
+[[nodiscard]] VkResult FakeFlushAllocation(void* allocator, void* allocation, VkDeviceSize offset,
+                                           VkDeviceSize size) noexcept
+{
+    (void)allocator;
+    ++g_fakeVulkanState->flushAllocationCalls;
+    g_fakeVulkanState->resourceTrace.emplace_back("flushAllocation");
+    FakeUploadAllocation* fakeAllocation = FindFakeUploadAllocation(allocation);
+    if (fakeAllocation == nullptr || !fakeAllocation->mapped ||
+        offset > fakeAllocation->allocationSize || size > fakeAllocation->allocationSize - offset ||
+        g_fakeVulkanState->flushedRangeCount >= g_fakeVulkanState->flushedRanges.size())
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    g_fakeVulkanState->flushedRanges[g_fakeVulkanState->flushedRangeCount++] =
+        FakeFlushRange{allocation, offset, size};
+    if ((g_fakeVulkanState->failFlushAllocationCallIndex == 0U ||
+         g_fakeVulkanState->flushAllocationCalls ==
+             g_fakeVulkanState->failFlushAllocationCallIndex) &&
+        g_fakeVulkanState->flushAllocationResult != VK_SUCCESS)
+    {
+        return g_fakeVulkanState->flushAllocationResult;
+    }
+    return VK_SUCCESS;
+}
+
+void FakeCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint,
+                         VkPipeline pipeline) noexcept
+{
+    (void)commandBuffer;
+    g_fakeVulkanState->lastPipelineBindPoint = bindPoint;
+    g_fakeVulkanState->lastBoundPipeline = pipeline;
+    g_fakeVulkanState->frameTrace.emplace_back("bindPipeline");
+    ++g_fakeVulkanState->cmdBindPipelineCalls;
+}
+
+void FakeCmdSetViewport(VkCommandBuffer commandBuffer, std::uint32_t firstViewport,
+                        std::uint32_t viewportCount, const VkViewport* viewports) noexcept
+{
+    (void)commandBuffer;
+    (void)firstViewport;
+    if (viewportCount > 0U && viewports != nullptr)
+    {
+        g_fakeVulkanState->lastViewport = viewports[0];
+    }
+    g_fakeVulkanState->frameTrace.emplace_back("setViewport");
+    ++g_fakeVulkanState->cmdSetViewportCalls;
+}
+
+void FakeCmdSetScissor(VkCommandBuffer commandBuffer, std::uint32_t firstScissor,
+                       std::uint32_t scissorCount, const VkRect2D* scissors) noexcept
+{
+    (void)commandBuffer;
+    (void)firstScissor;
+    if (scissorCount > 0U && scissors != nullptr)
+    {
+        g_fakeVulkanState->lastScissor = scissors[0];
+        if (g_fakeVulkanState->scissorCount < g_fakeVulkanState->scissors.size())
+        {
+            g_fakeVulkanState->scissors[g_fakeVulkanState->scissorCount++] = scissors[0];
+        }
+    }
+    g_fakeVulkanState->frameTrace.emplace_back("setScissor");
+    ++g_fakeVulkanState->cmdSetScissorCalls;
+}
+
+void FakeCmdBindVertexBuffers(VkCommandBuffer commandBuffer, std::uint32_t firstBinding,
+                              std::uint32_t bindingCount, const VkBuffer* buffers,
+                              const VkDeviceSize* offsets) noexcept
+{
+    (void)commandBuffer;
+    (void)firstBinding;
+    if (bindingCount > 0U && buffers != nullptr && offsets != nullptr)
+    {
+        g_fakeVulkanState->lastVertexBuffer = buffers[0];
+        g_fakeVulkanState->lastVertexOffset = offsets[0];
+        if (g_fakeVulkanState->vertexBufferBindCount < g_fakeVulkanState->vertexBuffers.size())
+        {
+            g_fakeVulkanState->vertexBuffers[g_fakeVulkanState->vertexBufferBindCount++] =
+                buffers[0];
+        }
+    }
+    g_fakeVulkanState->frameTrace.emplace_back("bindVertexBuffers");
+    ++g_fakeVulkanState->cmdBindVertexBuffersCalls;
+}
+
+void FakeCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                            VkIndexType indexType) noexcept
+{
+    (void)commandBuffer;
+    g_fakeVulkanState->lastIndexBuffer = buffer;
+    g_fakeVulkanState->lastIndexOffset = offset;
+    g_fakeVulkanState->lastIndexType = indexType;
+    if (g_fakeVulkanState->indexBufferBindCount < g_fakeVulkanState->indexBuffers.size())
+    {
+        g_fakeVulkanState->indexBuffers[g_fakeVulkanState->indexBufferBindCount++] = buffer;
+    }
+    g_fakeVulkanState->frameTrace.emplace_back("bindIndexBuffer");
+    ++g_fakeVulkanState->cmdBindIndexBufferCalls;
+}
+
+void FakeCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
+                          VkShaderStageFlags stageFlags, std::uint32_t offset, std::uint32_t size,
+                          const void* values) noexcept
+{
+    (void)commandBuffer;
+    (void)stageFlags;
+    (void)offset;
+    g_fakeVulkanState->lastBoundLayout = layout;
+    if (size == sizeof(g_fakeVulkanState->lastPushConstants) && values != nullptr)
+    {
+        const auto* constants = static_cast<const std::uint32_t*>(values);
+        std::copy_n(constants, g_fakeVulkanState->lastPushConstants.size(),
+                    g_fakeVulkanState->lastPushConstants.begin());
+    }
+    g_fakeVulkanState->frameTrace.emplace_back("pushConstants");
+    ++g_fakeVulkanState->cmdPushConstantsCalls;
+}
+
+void FakeCmdDrawIndexed(VkCommandBuffer commandBuffer, std::uint32_t indexCount,
+                        std::uint32_t instanceCount, std::uint32_t firstIndex,
+                        std::int32_t vertexOffset, std::uint32_t firstInstance) noexcept
+{
+    (void)commandBuffer;
+    g_fakeVulkanState->lastDrawIndexCount = indexCount;
+    g_fakeVulkanState->lastDrawInstanceCount = instanceCount;
+    g_fakeVulkanState->lastDrawFirstIndex = firstIndex;
+    g_fakeVulkanState->lastDrawVertexOffset = vertexOffset;
+    g_fakeVulkanState->lastDrawFirstInstance = firstInstance;
+    if (g_fakeVulkanState->indexedDrawCount < g_fakeVulkanState->indexedDraws.size())
+    {
+        g_fakeVulkanState->indexedDraws[g_fakeVulkanState->indexedDrawCount++] =
+            FakeIndexedDraw{indexCount, instanceCount, firstIndex, vertexOffset, firstInstance};
+    }
+    g_fakeVulkanState->frameTrace.emplace_back("drawIndexed");
+    ++g_fakeVulkanState->cmdDrawIndexedCalls;
+}
 
 [[nodiscard]] VkResult FakeCreateCommandPool(VkDevice device,
                                              const VkCommandPoolCreateInfo* createInfo,
@@ -1534,6 +2114,7 @@ void FakeDestroyCommandPool(VkDevice device, VkCommandPool commandPool,
 [[nodiscard]] VkResult FakeEndCommandBuffer(VkCommandBuffer commandBuffer) noexcept
 {
     (void)commandBuffer;
+    g_fakeVulkanState->frameTrace.emplace_back("endCommandBuffer");
     ++g_fakeVulkanState->endCommandBufferCalls;
     return g_fakeVulkanState->endCommandBufferResult;
 }
@@ -1552,6 +2133,7 @@ void FakeCmdBeginRenderPass(VkCommandBuffer commandBuffer,
 void FakeCmdEndRenderPass(VkCommandBuffer commandBuffer) noexcept
 {
     (void)commandBuffer;
+    g_fakeVulkanState->frameTrace.emplace_back("endRenderPass");
     ++g_fakeVulkanState->cmdEndRenderPassCalls;
 }
 
@@ -1765,9 +2347,9 @@ void FakeCmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer,
 {
     (void)commandBuffer;
     if (labelInfo != nullptr && labelInfo->pLabelName != nullptr &&
-        std::string_view{labelInfo->pLabelName} == "pond.render.intermediate")
+        std::string_view{labelInfo->pLabelName} == "pond.render.draw2d")
     {
-        g_fakeVulkanState->frameTrace.emplace_back("intermediate");
+        g_fakeVulkanState->frameTrace.emplace_back("draw2d");
     }
     ++g_fakeVulkanState->beginLabelCalls;
 }
@@ -1885,6 +2467,19 @@ void FakeLoadOwnerLocalDeviceTable(VolkDeviceTable* table,
     table->vkDestroyRenderPass = &FakeDestroyRenderPass;
     table->vkCreateFramebuffer = &FakeCreateFramebuffer;
     table->vkDestroyFramebuffer = &FakeDestroyFramebuffer;
+    table->vkCreateShaderModule = &FakeCreateShaderModule;
+    table->vkDestroyShaderModule = &FakeDestroyShaderModule;
+    table->vkCreatePipelineLayout = &FakeCreatePipelineLayout;
+    table->vkDestroyPipelineLayout = &FakeDestroyPipelineLayout;
+    table->vkCreateGraphicsPipelines = &FakeCreateGraphicsPipelines;
+    table->vkDestroyPipeline = &FakeDestroyPipeline;
+    table->vkCmdBindPipeline = &FakeCmdBindPipeline;
+    table->vkCmdSetViewport = &FakeCmdSetViewport;
+    table->vkCmdSetScissor = &FakeCmdSetScissor;
+    table->vkCmdBindVertexBuffers = &FakeCmdBindVertexBuffers;
+    table->vkCmdBindIndexBuffer = &FakeCmdBindIndexBuffer;
+    table->vkCmdPushConstants = &FakeCmdPushConstants;
+    table->vkCmdDrawIndexed = &FakeCmdDrawIndexed;
     table->vkCreateCommandPool = &FakeCreateCommandPool;
     table->vkDestroyCommandPool = &FakeDestroyCommandPool;
     table->vkAllocateCommandBuffers = &FakeAllocateCommandBuffers;
@@ -1947,6 +2542,24 @@ void FakeLoadOwnerLocalDeviceTable(VolkDeviceTable* table,
         .destroyRenderPass = &FakeDestroyRenderPass,
         .createFramebuffer = &FakeCreateFramebuffer,
         .destroyFramebuffer = &FakeDestroyFramebuffer,
+        .createShaderModule = &FakeCreateShaderModule,
+        .destroyShaderModule = &FakeDestroyShaderModule,
+        .createPipelineLayout = &FakeCreatePipelineLayout,
+        .destroyPipelineLayout = &FakeDestroyPipelineLayout,
+        .createGraphicsPipelines = &FakeCreateGraphicsPipelines,
+        .destroyPipeline = &FakeDestroyPipeline,
+        .createBuffer = &FakeCreateBuffer,
+        .destroyBuffer = &FakeDestroyBuffer,
+        .mapMemory = &FakeMapMemory,
+        .unmapMemory = &FakeUnmapMemory,
+        .flushAllocation = &FakeFlushAllocation,
+        .cmdBindPipeline = &FakeCmdBindPipeline,
+        .cmdSetViewport = &FakeCmdSetViewport,
+        .cmdSetScissor = &FakeCmdSetScissor,
+        .cmdBindVertexBuffers = &FakeCmdBindVertexBuffers,
+        .cmdBindIndexBuffer = &FakeCmdBindIndexBuffer,
+        .cmdPushConstants = &FakeCmdPushConstants,
+        .cmdDrawIndexed = &FakeCmdDrawIndexed,
         .createCommandPool = &FakeCreateCommandPool,
         .destroyCommandPool = &FakeDestroyCommandPool,
         .allocateCommandBuffers = &FakeAllocateCommandBuffers,
@@ -2021,10 +2634,11 @@ void FakeLoadOwnerLocalDeviceTable(VolkDeviceTable* table,
 {
     return pond::render::RenderTargetDesc{
         .targetSnapshot =
-            pond::render::RenderTargetSnapshot{pond::platform::WindowId{42}, pixelSize, visible,
-                                               pond::platform::WindowState::Normal,
-                                               pond::render::PresentationEnvironmentRevision{1},
-                                               revision},
+            pond::render::RenderTargetSnapshot{
+                pond::platform::WindowId{42}, pixelSize,
+                pond::platform::LogicalSize{pixelSize.width, pixelSize.height}, visible,
+                pond::platform::WindowState::Normal,
+                pond::render::PresentationEnvironmentRevision{1}, revision},
         .presentation = {.policy = policy, .strength = policyStrength},
         .queuedLatency = {.maximumQueuedFrames = latency, .strength = latencyStrength}};
 }
@@ -2372,6 +2986,12 @@ struct FakeLiveResourceCounts final
     std::uint64_t imageViews{};
     std::uint64_t renderPasses{};
     std::uint64_t framebuffers{};
+    std::uint64_t shaderModules{};
+    std::uint64_t pipelineLayouts{};
+    std::uint64_t pipelines{};
+    std::uint64_t buffers{};
+    std::uint64_t uploadAllocations{};
+    std::uint64_t mappedAllocations{};
     std::uint64_t commandPools{};
     std::uint64_t semaphores{};
     std::uint64_t fences{};
@@ -2393,6 +3013,18 @@ struct FakeLiveResourceCounts final
         .imageViews = state.nextImageViewValue - 0xC000U - state.destroyImageViewCalls,
         .renderPasses = state.nextRenderPassValue - 0xD000U - state.destroyRenderPassCalls,
         .framebuffers = state.nextFramebufferValue - 0xE000U - state.destroyFramebufferCalls,
+        .shaderModules = state.nextShaderModuleValue - 0x13000U - state.destroyShaderModuleCalls,
+        .pipelineLayouts =
+            state.nextPipelineLayoutValue - 0x14000U - state.destroyPipelineLayoutCalls,
+        .pipelines = state.nextPipelineValue - 0x15000U - state.destroyPipelineCalls,
+        .buffers = state.nextBufferValue - 0x16000U - state.destroyBufferCalls,
+        .uploadAllocations = state.uploadAllocations.size(),
+        .mappedAllocations = static_cast<std::uint64_t>(std::ranges::count_if(
+            state.uploadAllocations,
+            [](const std::unique_ptr<FakeUploadAllocation>& allocation) noexcept
+            {
+                return allocation->mapped;
+            })),
         .commandPools = state.nextCommandPoolValue - 0xF000U - state.destroyCommandPoolCalls,
         .semaphores = state.nextSemaphoreValue - 0x11000U - state.destroySemaphoreCalls,
         .fences = state.nextFenceValue - 0x12000U - state.destroyFenceCalls};
@@ -2430,6 +3062,174 @@ void ExpectRenderError(const pond::core::Result<ValueType>& result,
 {
     ASSERT_FALSE(result);
     EXPECT_EQ(result.GetError().GetCode(), pond::render::ToErrorCode(expectedCode));
+}
+
+#if PONDER_BUILD_UI_RENDER_INTEGRATION
+template <typename ValueType>
+void ExpectUiError(const pond::core::Result<ValueType>& result, pond::ui::UiErrorCode expectedCode)
+{
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.GetError().GetCode(), pond::ui::ToErrorCode(expectedCode));
+}
+
+[[nodiscard]] pond::ui::experimental::RectanglePaint MakeExperimentalRectangle(
+    float left = 10.0F, float top = 20.0F, float right = 110.0F, float bottom = 70.0F,
+    pond::ui::SrgbStraightAlphaColor color = {.red = 0.5F,
+                                              .green = 1.0F,
+                                              .blue = 0.0F,
+                                              .alpha = 0.5F}) noexcept
+{
+    return pond::ui::experimental::RectanglePaint{
+        .rectangle = pond::ui::LogicalRect{.origin = pond::ui::LogicalPoint{.x = left, .y = top},
+                                          .size = pond::ui::LogicalSize{.width = right - left,
+                                                                       .height = bottom - top}},
+        .color = color};
+}
+
+void PresentExperimentalRectangle(pond::ui::experimental::RectangleRenderer& renderer,
+                                  pond::render::RenderTarget& target,
+                                  const pond::ui::experimental::RectanglePaint& rectangle)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+
+    auto frameResult = target.AcquireFrame();
+    ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+    pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+    auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(frame);
+    ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
+    ASSERT_TRUE(frame.Clear());
+    const auto recorded = renderer.Record(frame, metrics.GetValue(), rectangle);
+    ASSERT_TRUE(recorded) << recorded.GetError().GetMessage();
+    EXPECT_EQ(recorded.GetValue(), RectangleRecordOutcome::Recorded);
+    const auto presented = frame.FinishAndPresent();
+    ASSERT_TRUE(presented) << presented.GetError().GetMessage();
+    EXPECT_TRUE(presented.GetValue().presented);
+}
+#endif
+
+[[nodiscard]] const FakeUploadAllocation* FindFakeUploadAllocationByBuffer(
+    const FakeVulkanState& state, VkBuffer buffer) noexcept
+{
+    const auto found =
+        std::ranges::find_if(state.uploadAllocations,
+                             [buffer](const std::unique_ptr<FakeUploadAllocation>& allocation)
+                             {
+                                 return allocation->buffer == buffer;
+                             });
+    return found == state.uploadAllocations.end() ? nullptr : found->get();
+}
+
+void ExpectUploadedBytes(const FakeUploadAllocation& allocation, VkDeviceSize offset,
+                         std::span<const std::byte> expected)
+{
+    ASSERT_LE(offset, allocation.allocationSize);
+    ASSERT_LE(expected.size(), allocation.allocationSize - offset);
+    const std::span<const std::byte> actual{
+        allocation.bytes.get() + static_cast<std::size_t>(offset), expected.size()};
+    EXPECT_TRUE(std::ranges::equal(actual, expected));
+}
+
+[[nodiscard]] pond::core::Result<pond::render::draw2d::Draw2DPacket> MakeEmptyDraw2DPacket(
+    pond::render::draw2d::Draw2DPixelExtent extent = {800U, 600U})
+{
+    pond::render::draw2d::Draw2DPacketBuilder builder;
+    if (pond::core::VoidResult setExtent = builder.SetPixelExtent(extent); !setExtent)
+    {
+        return pond::core::Result<pond::render::draw2d::Draw2DPacket>::FromError(
+            std::move(setExtent).GetError());
+    }
+
+    return builder.Seal();
+}
+
+[[nodiscard]] pond::core::Result<pond::render::draw2d::Draw2DPacket> MakeRectangleDraw2DPacket(
+    pond::render::draw2d::Draw2DPixelExtent extent = {800U, 600U})
+{
+    using namespace pond::render::draw2d;
+    Draw2DPacketBuilder builder;
+    if (pond::core::VoidResult setExtent = builder.SetPixelExtent(extent); !setExtent)
+    {
+        return pond::core::Result<Draw2DPacket>::FromError(std::move(setExtent).GetError());
+    }
+
+    const Draw2DPackedLinearPremultipliedRgba8 color =
+        Draw2DPackedLinearPremultipliedRgba8::FromChannels(32U, 64U, 96U, 128U);
+    const std::array vertices{Draw2DVertex{.x = 10.0F, .y = 20.0F, .color = color},
+                              Draw2DVertex{.x = 110.0F, .y = 20.0F, .color = color},
+                              Draw2DVertex{.x = 110.0F, .y = 70.0F, .color = color},
+                              Draw2DVertex{.x = 10.0F, .y = 70.0F, .color = color}};
+    const std::array<Draw2DIndex, 6U> indices{0U, 1U, 2U, 0U, 2U, 3U};
+    const Draw2DDrawRecord draw{
+        .firstIndex = 0U,
+        .indexCount = static_cast<std::uint32_t>(indices.size()),
+        .baseVertex = 0,
+        .scissor =
+            Draw2DScissor{.left = 0U, .top = 0U, .right = extent.width, .bottom = extent.height}};
+    if (pond::core::VoidResult append = builder.AppendVertices(vertices); !append)
+    {
+        return pond::core::Result<Draw2DPacket>::FromError(std::move(append).GetError());
+    }
+    if (pond::core::VoidResult append = builder.AppendIndices(indices); !append)
+    {
+        return pond::core::Result<Draw2DPacket>::FromError(std::move(append).GetError());
+    }
+    if (pond::core::VoidResult append = builder.AppendDrawRecord(draw); !append)
+    {
+        return pond::core::Result<Draw2DPacket>::FromError(std::move(append).GetError());
+    }
+    return builder.Seal();
+}
+
+[[nodiscard]] pond::core::Result<pond::render::draw2d::Draw2DPacket> MakeTwoRectangleDraw2DPacket(
+    pond::render::draw2d::Draw2DPixelExtent extent = {800U, 600U})
+{
+    using namespace pond::render::draw2d;
+    Draw2DPacketBuilder builder;
+    if (pond::core::VoidResult setExtent = builder.SetPixelExtent(extent); !setExtent)
+    {
+        return pond::core::Result<Draw2DPacket>::FromError(std::move(setExtent).GetError());
+    }
+
+    const Draw2DPackedLinearPremultipliedRgba8 firstColor =
+        Draw2DPackedLinearPremultipliedRgba8::FromChannels(16U, 32U, 48U, 64U);
+    const Draw2DPackedLinearPremultipliedRgba8 secondColor =
+        Draw2DPackedLinearPremultipliedRgba8::FromChannels(40U, 60U, 80U, 100U);
+    const std::array vertices{Draw2DVertex{.x = 5.0F, .y = 7.0F, .color = firstColor},
+                              Draw2DVertex{.x = 25.0F, .y = 7.0F, .color = firstColor},
+                              Draw2DVertex{.x = 25.0F, .y = 17.0F, .color = firstColor},
+                              Draw2DVertex{.x = 5.0F, .y = 17.0F, .color = firstColor},
+                              Draw2DVertex{.x = 50.0F, .y = 60.0F, .color = secondColor},
+                              Draw2DVertex{.x = 90.0F, .y = 60.0F, .color = secondColor},
+                              Draw2DVertex{.x = 90.0F, .y = 95.0F, .color = secondColor},
+                              Draw2DVertex{.x = 50.0F, .y = 95.0F, .color = secondColor}};
+    const std::array<Draw2DIndex, 12U> indices{0U, 1U, 2U, 0U, 2U, 3U, 4U, 5U, 6U, 4U, 6U, 7U};
+    const std::array draws{
+        Draw2DDrawRecord{.firstIndex = 0U,
+                         .indexCount = 6U,
+                         .baseVertex = 0,
+                         .scissor =
+                             Draw2DScissor{.left = 1U, .top = 2U, .right = 101U, .bottom = 82U}},
+        Draw2DDrawRecord{
+            .firstIndex = 6U,
+            .indexCount = 6U,
+            .baseVertex = 0,
+            .scissor = Draw2DScissor{.left = 40U, .top = 50U, .right = 140U, .bottom = 150U}}};
+    if (pond::core::VoidResult append = builder.AppendVertices(vertices); !append)
+    {
+        return pond::core::Result<Draw2DPacket>::FromError(std::move(append).GetError());
+    }
+    if (pond::core::VoidResult append = builder.AppendIndices(indices); !append)
+    {
+        return pond::core::Result<Draw2DPacket>::FromError(std::move(append).GetError());
+    }
+    for (const Draw2DDrawRecord& draw : draws)
+    {
+        if (pond::core::VoidResult append = builder.AppendDrawRecord(draw); !append)
+        {
+            return pond::core::Result<Draw2DPacket>::FromError(std::move(append).GetError());
+        }
+    }
+    return builder.Seal();
 }
 
 TEST(RenderVulkanBootstrapTests, DoesNotOpenLoaderBeforeExplicitInitialization)
@@ -3431,6 +4231,8 @@ TEST(RenderVulkanBootstrapTests, CreatesLogicalDeviceWithEveryNonemptyQueueFamil
         EXPECT_EQ(info.queuePlan.provisionedQueueFamilyIndices, expectedFamilies);
         EXPECT_EQ(state.lastDeviceQueueFamilyIndices, expectedFamilies);
         EXPECT_TRUE(info.optionalCapabilities.vmaAllocator);
+        EXPECT_EQ(info.maximumViewportDimensions,
+                  (std::array<std::uint32_t, 2U>{16'384U, 16'384U}));
         EXPECT_TRUE(
             ContainsString(state.lastDeviceEnabledExtensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME));
         EXPECT_EQ(state.createDeviceCalls, 1U);
@@ -4261,35 +5063,1184 @@ TEST(RenderVulkanBootstrapTests, TracksOldSwapchainRetirementAtNativeCreationBou
     EXPECT_EQ(state.lastOldSwapchain, oldSwapchain);
 }
 
-TEST(RenderVulkanBootstrapTests, PublicFrameExposesOneIntermediateStageAfterClear)
+TEST(RenderVulkanBootstrapTests, PublicFrameRecordsOneGeneric2DStageAfterClear)
 {
     FakeVulkanState state;
     state.physicalDevices.push_back(MakeCompatibleFakeDevice(
-        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Public Intermediate Stage GPU"));
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Public Draw2D Stage GPU"));
     const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
-    std::unique_ptr<FakePublicTarget> owners = CreateFakePublicTarget(dispatch);
-    ASSERT_NE(owners, nullptr);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+
+    auto layerResult = pond::render::draw2d::Draw2DLayer::Create(fixture->owners.device);
+    ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+    auto packetResult = MakeRectangleDraw2DPacket();
+    ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DPacket packet = std::move(packetResult).GetValue();
     state.frameTrace.clear();
 
-    auto frameResult = owners->target.AcquireFrame();
+    auto frameResult = fixture->owners.target.AcquireFrame();
     ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
     pond::render::RenderFrame frame = std::move(frameResult).GetValue();
     EXPECT_EQ(state.frameTrace, std::vector<std::string>{"acquire"});
 
-    ExpectRenderError(pond::render::detail::RenderBackendTestAccess::RecordIntermediateStage(frame),
-                      pond::render::RenderErrorCode::InvalidState);
+    const pond::render::RenderTargetSnapshot expectedSnapshot =
+        fixture->owners.target.GetTargetSnapshot();
+    const pond::render::RenderFrameMetrics metrics = frame.GetMetrics();
+    EXPECT_TRUE(pond::render::IsValid(metrics));
+    EXPECT_EQ(metrics.windowId, expectedSnapshot.GetWindowId());
+    EXPECT_EQ(metrics.logicalSize, expectedSnapshot.GetLogicalSize());
+    EXPECT_EQ(metrics.pixelSize, expectedSnapshot.GetPixelSize());
+    EXPECT_EQ(metrics.metricsRevision, expectedSnapshot.GetPresentationEnvironmentRevision());
+    EXPECT_EQ(metrics.targetRevision, expectedSnapshot.GetRevision());
+
+    ExpectRenderError(layer.Record(frame, packet), pond::render::RenderErrorCode::InvalidState);
     ASSERT_TRUE(frame.Clear());
     EXPECT_EQ(state.frameTrace, (std::vector<std::string>{"acquire", "clear"}));
 
-    ASSERT_TRUE(pond::render::detail::RenderBackendTestAccess::RecordIntermediateStage(frame));
-    ExpectRenderError(pond::render::detail::RenderBackendTestAccess::RecordIntermediateStage(frame),
-                      pond::render::RenderErrorCode::InvalidState);
-    EXPECT_EQ(state.frameTrace, (std::vector<std::string>{"acquire", "clear", "intermediate"}));
+    ASSERT_TRUE(layer.Record(frame, packet));
+    ExpectRenderError(layer.Record(frame, packet), pond::render::RenderErrorCode::InvalidState);
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline", "setViewport",
+                                        "bindVertexBuffers", "bindIndexBuffer", "pushConstants",
+                                        "setScissor", "drawIndexed"}));
 
     const auto finish = frame.FinishAndPresent();
     ASSERT_TRUE(finish) << finish.GetError().GetMessage();
+    EXPECT_FALSE(pond::render::IsValid(frame.GetMetrics()));
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "intermediate", "submit", "present"}));
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline", "setViewport",
+                                        "bindVertexBuffers", "bindIndexBuffer", "pushConstants",
+                                        "setScissor", "drawIndexed", "endRenderPass",
+                                        "endCommandBuffer", "submit", "present"}));
+    ExpectRenderError(layer.Record(frame, packet), pond::render::RenderErrorCode::InvalidState);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DLayerValidatesDeviceExtentThreadAndClearOnlyRecovery)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Validation GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> first = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(first, nullptr);
+    std::unique_ptr<FakePublicLifecycle> second = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(second, nullptr);
+
+    auto layerResult = pond::render::draw2d::Draw2DLayer::Create(first->owners.device);
+    ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+    auto goodPacketResult = MakeEmptyDraw2DPacket();
+    ASSERT_TRUE(goodPacketResult) << goodPacketResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DPacket goodPacket = std::move(goodPacketResult).GetValue();
+    auto mismatchedPacketResult = MakeEmptyDraw2DPacket({801U, 600U});
+    ASSERT_TRUE(mismatchedPacketResult) << mismatchedPacketResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DPacket mismatchedPacket =
+        std::move(mismatchedPacketResult).GetValue();
+
+    state.frameTrace.clear();
+    auto firstFrameResult = first->owners.target.AcquireFrame();
+    ASSERT_TRUE(firstFrameResult) << firstFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame firstFrame = std::move(firstFrameResult).GetValue();
+
+    std::optional<pond::core::ErrorCode> wrongThreadError;
+    std::thread wrongThread{[&]
+                            {
+                                const pond::core::VoidResult record =
+                                    layer.Record(firstFrame, goodPacket);
+                                if (!record)
+                                {
+                                    wrongThreadError = record.GetError().GetCode();
+                                }
+                            }};
+    wrongThread.join();
+    ASSERT_TRUE(wrongThreadError.has_value());
+    EXPECT_EQ(*wrongThreadError,
+              pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidState));
+
+    ASSERT_TRUE(firstFrame.Clear());
+    ExpectRenderError(layer.Record(firstFrame, mismatchedPacket),
+                      pond::render::RenderErrorCode::InvalidArgument);
+    const auto firstFinish = firstFrame.FinishAndPresent();
+    ASSERT_TRUE(firstFinish) << firstFinish.GetError().GetMessage();
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
+                                        "endCommandBuffer", "submit", "present"}));
+
+    state.frameTrace.clear();
+    auto secondFrameResult = second->owners.target.AcquireFrame();
+    ASSERT_TRUE(secondFrameResult) << secondFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame secondFrame = std::move(secondFrameResult).GetValue();
+    ASSERT_TRUE(secondFrame.Clear());
+    ExpectRenderError(layer.Record(secondFrame, goodPacket),
+                      pond::render::RenderErrorCode::InvalidState);
+    const auto secondFinish = secondFrame.FinishAndPresent();
+    ASSERT_TRUE(secondFinish) << secondFinish.GetError().GetMessage();
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
+                                        "endCommandBuffer", "submit", "present"}));
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DLayerServesTwoTargetsSequentiallyWithoutAmbientTargetState)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Multi Target GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    const pond::render::RenderTargetDesc additionalDesc{
+        .targetSnapshot =
+            pond::render::RenderTargetSnapshot{
+                pond::platform::WindowId{84}, pond::platform::PixelSize{640U, 480U},
+                pond::platform::LogicalSize{640U, 480U}, true, pond::platform::WindowState::Normal,
+                pond::render::PresentationEnvironmentRevision{1U}, 1U},
+        .presentation = {.policy = pond::render::PresentationPolicy::VSync,
+                         .strength = pond::render::RequirementStrength::Preferred},
+        .queuedLatency = {.maximumQueuedFrames = {},
+                          .strength = pond::render::RequirementStrength::Preferred}};
+    std::unique_ptr<FakePublicLifecycle> fixture =
+        CreateFakePublicLifecycle(dispatch, additionalDesc);
+    ASSERT_NE(fixture, nullptr);
+    ASSERT_TRUE(fixture->additionalTarget.has_value());
+
+    auto layerResult = pond::render::draw2d::Draw2DLayer::Create(fixture->owners.device);
+    ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+    auto firstPacketResult = MakeRectangleDraw2DPacket({800U, 600U});
+    ASSERT_TRUE(firstPacketResult) << firstPacketResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DPacket firstPacket = std::move(firstPacketResult).GetValue();
+    auto secondPacketResult = MakeRectangleDraw2DPacket({640U, 480U});
+    ASSERT_TRUE(secondPacketResult) << secondPacketResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DPacket secondPacket = std::move(secondPacketResult).GetValue();
+
+    state.frameTrace.clear();
+    auto firstFrameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(firstFrameResult) << firstFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame firstFrame = std::move(firstFrameResult).GetValue();
+    ASSERT_TRUE(firstFrame.Clear());
+    ASSERT_TRUE(layer.Record(firstFrame, firstPacket));
+    ASSERT_TRUE(firstFrame.FinishAndPresent());
+
+    auto secondFrameResult = fixture->additionalTarget->AcquireFrame();
+    ASSERT_TRUE(secondFrameResult) << secondFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame secondFrame = std::move(secondFrameResult).GetValue();
+    ASSERT_TRUE(secondFrame.Clear());
+    ASSERT_TRUE(layer.Record(secondFrame, secondPacket));
+    ASSERT_TRUE(secondFrame.FinishAndPresent());
+
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire",         "clear",         "draw2d",
+                                        "bindPipeline",    "setViewport",   "bindVertexBuffers",
+                                        "bindIndexBuffer", "pushConstants", "setScissor",
+                                        "drawIndexed",     "endRenderPass", "endCommandBuffer",
+                                        "submit",          "present",
+                                        "acquire",         "clear",         "draw2d",
+                                        "bindPipeline",    "setViewport",   "bindVertexBuffers",
+                                        "bindIndexBuffer", "pushConstants", "setScissor",
+                                        "drawIndexed",     "endRenderPass", "endCommandBuffer",
+                                        "submit",          "present"}));
+    ASSERT_EQ(state.vertexBufferBindCount, 2U);
+    EXPECT_NE(state.vertexBuffers[0], state.vertexBuffers[1]);
+    const FakeUploadAllocation* firstUpload =
+        FindFakeUploadAllocationByBuffer(state, state.vertexBuffers[0]);
+    const FakeUploadAllocation* secondUpload =
+        FindFakeUploadAllocationByBuffer(state, state.vertexBuffers[1]);
+    ASSERT_NE(firstUpload, nullptr);
+    ASSERT_NE(secondUpload, nullptr);
+    EXPECT_NE(firstUpload->bytes.get(), secondUpload->bytes.get());
+    ExpectUploadedBytes(*firstUpload, 0U, std::as_bytes(firstPacket.GetVertices()));
+    ExpectUploadedBytes(*secondUpload, 0U, std::as_bytes(secondPacket.GetVertices()));
+    EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+    EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+}
+
+#if PONDER_BUILD_UI_RENDER_INTEGRATION
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsThroughPaintAndDraw2D)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Facade GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+
+    auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+    ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+    RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+    state.frameTrace.clear();
+    auto frameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+    pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+    const auto metricsResult = pond::ui::experimental::MakeUiTargetMetricsForFrame(frame);
+    ASSERT_TRUE(metricsResult) << metricsResult.GetError().GetMessage();
+    const pond::ui::experimental::RectanglePaint rectangle = MakeExperimentalRectangle();
+
+    ASSERT_TRUE(frame.Clear());
+    const auto outcome = renderer.Record(frame, metricsResult.GetValue(), rectangle);
+    ASSERT_TRUE(outcome) << outcome.GetError().GetMessage();
+    EXPECT_EQ(outcome.GetValue(), RectangleRecordOutcome::Recorded);
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline",
+                                        "setViewport", "bindVertexBuffers", "bindIndexBuffer",
+                                        "pushConstants", "setScissor", "drawIndexed"}));
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+    EXPECT_EQ(state.createBufferCalls, 1U);
+    EXPECT_EQ(state.mapMemoryCalls, 1U);
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 1U);
+    EXPECT_FLOAT_EQ(state.lastViewport.width, 800.0F);
+    EXPECT_FLOAT_EQ(state.lastViewport.height, 600.0F);
+    EXPECT_EQ(state.lastScissor.extent.width, 800U);
+    EXPECT_EQ(state.lastScissor.extent.height, 600U);
+    EXPECT_EQ(state.lastIndexBuffer, state.lastVertexBuffer);
+
+    const auto packedColor = pond::ui::PackLinearPremultipliedRgba8(
+        pond::ui::ToLinearPremultiplied(rectangle.color));
+    ASSERT_TRUE(packedColor) << packedColor.GetError().GetMessage();
+    const pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8 expectedColor =
+        pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(
+            packedColor->GetRed(), packedColor->GetGreen(), packedColor->GetBlue(),
+            packedColor->GetAlpha());
+    const std::array expectedVertices{
+        pond::render::draw2d::Draw2DVertex{.x = 10.0F, .y = 20.0F, .color = expectedColor},
+        pond::render::draw2d::Draw2DVertex{.x = 110.0F, .y = 20.0F, .color = expectedColor},
+        pond::render::draw2d::Draw2DVertex{.x = 110.0F, .y = 70.0F, .color = expectedColor},
+        pond::render::draw2d::Draw2DVertex{.x = 10.0F, .y = 70.0F, .color = expectedColor}};
+    constexpr std::array<pond::render::draw2d::Draw2DIndex, 6U> kExpectedIndices{0U, 1U, 2U,
+                                                                                 0U, 2U, 3U};
+    const FakeUploadAllocation* upload = FindFakeUploadAllocationByBuffer(
+        state, state.lastVertexBuffer);
+    ASSERT_NE(upload, nullptr);
+    ExpectUploadedBytes(*upload, state.lastVertexOffset,
+                        std::as_bytes(std::span{expectedVertices}));
+    ExpectUploadedBytes(*upload, state.lastIndexOffset, std::as_bytes(std::span{kExpectedIndices}));
+
+    const auto finish = frame.FinishAndPresent();
+    ASSERT_TRUE(finish) << finish.GetError().GetMessage();
+    EXPECT_EQ(finish.GetValue().status, pond::render::FrameStatus::Presented);
+}
+
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsOrderedBatchInOneStage)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Batch GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+
+    auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+    ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+    RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+    const std::array rectangles{
+        MakeExperimentalRectangle(
+            10.0F, 20.0F, 210.0F, 180.0F,
+            {.red = 0.1F, .green = 0.4F, .blue = 0.9F, .alpha = 1.0F}),
+        MakeExperimentalRectangle(
+            60.0F, 50.0F, 250.0F, 220.0F,
+            {.red = 1.0F, .green = 0.2F, .blue = 0.1F, .alpha = 0.5F}),
+        MakeExperimentalRectangle(
+            120.0F, 80.0F, 280.0F, 240.0F,
+            {.red = 0.1F, .green = 0.9F, .blue = 0.5F, .alpha = 0.625F})};
+
+    state.frameTrace.clear();
+    auto frameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+    pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+    const auto metricsResult = pond::ui::experimental::MakeUiTargetMetricsForFrame(frame);
+    ASSERT_TRUE(metricsResult) << metricsResult.GetError().GetMessage();
+    ASSERT_TRUE(frame.Clear());
+
+    const auto outcome = renderer.Record(frame, metricsResult.GetValue(), rectangles);
+    ASSERT_TRUE(outcome) << outcome.GetError().GetMessage();
+    EXPECT_EQ(outcome.GetValue(), RectangleRecordOutcome::Recorded);
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline",
+                                        "setViewport", "bindVertexBuffers", "bindIndexBuffer",
+                                        "pushConstants", "setScissor", "drawIndexed"}));
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 1U);
+    EXPECT_EQ(state.lastDrawIndexCount, 18U);
+
+    std::array<pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8, 3U> colors;
+    for (std::size_t index = 0U; index < rectangles.size(); ++index)
+    {
+        const auto packed = pond::ui::PackLinearPremultipliedRgba8(
+            pond::ui::ToLinearPremultiplied(rectangles[index].color));
+        ASSERT_TRUE(packed) << packed.GetError().GetMessage();
+        colors[index] =
+            pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(
+                packed->GetRed(), packed->GetGreen(), packed->GetBlue(), packed->GetAlpha());
+    }
+
+    const std::array expectedVertices{
+        pond::render::draw2d::Draw2DVertex{.x = 10.0F, .y = 20.0F, .color = colors[0]},
+        pond::render::draw2d::Draw2DVertex{.x = 210.0F, .y = 20.0F, .color = colors[0]},
+        pond::render::draw2d::Draw2DVertex{.x = 210.0F, .y = 180.0F, .color = colors[0]},
+        pond::render::draw2d::Draw2DVertex{.x = 10.0F, .y = 180.0F, .color = colors[0]},
+        pond::render::draw2d::Draw2DVertex{.x = 60.0F, .y = 50.0F, .color = colors[1]},
+        pond::render::draw2d::Draw2DVertex{.x = 250.0F, .y = 50.0F, .color = colors[1]},
+        pond::render::draw2d::Draw2DVertex{.x = 250.0F, .y = 220.0F, .color = colors[1]},
+        pond::render::draw2d::Draw2DVertex{.x = 60.0F, .y = 220.0F, .color = colors[1]},
+        pond::render::draw2d::Draw2DVertex{.x = 120.0F, .y = 80.0F, .color = colors[2]},
+        pond::render::draw2d::Draw2DVertex{.x = 280.0F, .y = 80.0F, .color = colors[2]},
+        pond::render::draw2d::Draw2DVertex{.x = 280.0F, .y = 240.0F, .color = colors[2]},
+        pond::render::draw2d::Draw2DVertex{.x = 120.0F, .y = 240.0F, .color = colors[2]}};
+    constexpr std::array<pond::render::draw2d::Draw2DIndex, 18U> kExpectedIndices{
+        0U, 1U, 2U, 0U, 2U, 3U, 4U, 5U, 6U, 4U, 6U, 7U, 8U, 9U, 10U, 8U, 10U, 11U};
+
+    const FakeUploadAllocation* upload =
+        FindFakeUploadAllocationByBuffer(state, state.lastVertexBuffer);
+    ASSERT_NE(upload, nullptr);
+    ExpectUploadedBytes(*upload, state.lastVertexOffset,
+                        std::as_bytes(std::span{expectedVertices}));
+    ExpectUploadedBytes(*upload, state.lastIndexOffset, std::as_bytes(std::span{kExpectedIndices}));
+
+    const auto finish = frame.FinishAndPresent();
+    ASSERT_TRUE(finish) << finish.GetError().GetMessage();
+    EXPECT_EQ(finish.GetValue().status, pond::render::FrameStatus::Presented);
+}
+
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeSkipsEmptyBeforeGpuWorkAndCanRecordLater)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Empty GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+    auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+    ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+    RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+    state.frameTrace.clear();
+    auto emptyFrameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(emptyFrameResult) << emptyFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame emptyFrame = std::move(emptyFrameResult).GetValue();
+    auto emptyMetrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(emptyFrame);
+    ASSERT_TRUE(emptyMetrics) << emptyMetrics.GetError().GetMessage();
+    ASSERT_TRUE(emptyFrame.Clear());
+
+    const auto skipped = renderer.Record(emptyFrame, emptyMetrics.GetValue(),
+                                         MakeExperimentalRectangle(10.0F, 20.0F, 10.0F, 70.0F));
+    ASSERT_TRUE(skipped) << skipped.GetError().GetMessage();
+    EXPECT_EQ(skipped.GetValue(), RectangleRecordOutcome::SkippedEmpty);
+    EXPECT_EQ(state.frameTrace, (std::vector<std::string>{"acquire", "clear"}));
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 0U);
+    EXPECT_EQ(state.createBufferCalls, 0U);
+    EXPECT_EQ(state.mapMemoryCalls, 0U);
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 0U);
+    ASSERT_TRUE(emptyFrame.FinishAndPresent());
+
+    state.frameTrace.clear();
+    auto frameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+    pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+    auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(frame);
+    ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
+    ASSERT_TRUE(frame.Clear());
+    const auto recorded = renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle());
+    ASSERT_TRUE(recorded) << recorded.GetError().GetMessage();
+    EXPECT_EQ(recorded.GetValue(), RectangleRecordOutcome::Recorded);
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 1U);
+    ASSERT_TRUE(frame.FinishAndPresent());
+}
+
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeSkipsSuspendedBeforeCompilationAndGpuWork)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Suspended GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+    auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+    ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+    RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+    ASSERT_TRUE(fixture->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+        pond::platform::WindowId{42U}, pond::platform::PixelSize{}, pond::platform::LogicalSize{},
+        true, pond::platform::WindowState::Minimized,
+        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
+    state.frameTrace.clear();
+    auto suspendedResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(suspendedResult) << suspendedResult.GetError().GetMessage();
+    pond::render::RenderFrame suspended = std::move(suspendedResult).GetValue();
+    EXPECT_EQ(suspended.GetStatus(), pond::render::FrameStatus::SkippedSuspended);
+    auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(suspended);
+    ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
+
+    const auto skipped = renderer.Record(suspended, metrics.GetValue(), MakeExperimentalRectangle());
+    ASSERT_TRUE(skipped) << skipped.GetError().GetMessage();
+    EXPECT_EQ(skipped.GetValue(), RectangleRecordOutcome::SkippedSuspended);
+    EXPECT_TRUE(state.frameTrace.empty());
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 0U);
+    EXPECT_EQ(state.createBufferCalls, 0U);
+    EXPECT_EQ(state.mapMemoryCalls, 0U);
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 0U);
+    ASSERT_TRUE(suspended.FinishAndPresent());
+}
+
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeValidatesAndRecoversAfterFailures)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Validation GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> first = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(first, nullptr);
+    std::unique_ptr<FakePublicLifecycle> second = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(second, nullptr);
+    auto rendererResult = RectangleRenderer::Create(first->owners.device);
+    ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+    RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+    state.frameTrace.clear();
+    auto firstFrameResult = first->owners.target.AcquireFrame();
+    ASSERT_TRUE(firstFrameResult) << firstFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame firstFrame = std::move(firstFrameResult).GetValue();
+    auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(firstFrame);
+    ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
+
+    std::optional<pond::core::ErrorCode> wrongThreadError;
+    std::thread wrongThread{[&]
+                            {
+                                const auto record = renderer.Record(firstFrame, metrics.GetValue(),
+                                                                    MakeExperimentalRectangle());
+                                if (!record)
+                                {
+                                    wrongThreadError = record.GetError().GetCode();
+                                }
+                            }};
+    wrongThread.join();
+    ASSERT_TRUE(wrongThreadError.has_value());
+    EXPECT_EQ(*wrongThreadError,
+              pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidState));
+
+    ExpectUiError(renderer.Record(firstFrame, metrics.GetValue(),
+                                  MakeExperimentalRectangle(10.0F, 20.0F, 5.0F, 70.0F)),
+                  pond::ui::UiErrorCode::InvalidPaintValue);
+
+    ASSERT_TRUE(firstFrame.Clear());
+    const std::array invalidBatch{
+        MakeExperimentalRectangle(),
+        MakeExperimentalRectangle(10.0F, 20.0F, 5.0F, 70.0F)};
+    ExpectUiError(renderer.Record(firstFrame, metrics.GetValue(), invalidBatch),
+                  pond::ui::UiErrorCode::InvalidPaintValue);
+
+    const auto staleMetrics = pond::ui::MakeUiTargetMetrics(
+        metrics->GetTargetId(),
+        pond::ui::UiTargetRevision{metrics->GetTargetRevision().GetValue() + 1U},
+        metrics->GetMetricsRevision(), metrics->GetLogicalSize(),
+        metrics->GetFramebufferPixelSize());
+    ASSERT_TRUE(staleMetrics) << staleMetrics.GetError().GetMessage();
+    ExpectUiError(renderer.Record(firstFrame, staleMetrics.GetValue(), MakeExperimentalRectangle()),
+                  pond::ui::UiErrorCode::MetricsMismatch);
+    const auto firstFinish = firstFrame.FinishAndPresent();
+    ASSERT_TRUE(firstFinish) << firstFinish.GetError().GetMessage();
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
+                                        "endCommandBuffer", "submit", "present"}));
+
+    state.frameTrace.clear();
+    auto wrongDeviceFrameResult = second->owners.target.AcquireFrame();
+    ASSERT_TRUE(wrongDeviceFrameResult) << wrongDeviceFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame wrongDeviceFrame = std::move(wrongDeviceFrameResult).GetValue();
+    auto wrongDeviceMetrics =
+        pond::ui::experimental::MakeUiTargetMetricsForFrame(wrongDeviceFrame);
+    ASSERT_TRUE(wrongDeviceMetrics) << wrongDeviceMetrics.GetError().GetMessage();
+    ASSERT_TRUE(wrongDeviceFrame.Clear());
+    ExpectRenderError(renderer.Record(wrongDeviceFrame, wrongDeviceMetrics.GetValue(),
+                                      MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::InvalidState);
+    const auto wrongDeviceFinish = wrongDeviceFrame.FinishAndPresent();
+    ASSERT_TRUE(wrongDeviceFinish) << wrongDeviceFinish.GetError().GetMessage();
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
+                                        "endCommandBuffer", "submit", "present"}));
+
+    state.frameTrace.clear();
+    auto recoveredFrameResult = first->owners.target.AcquireFrame();
+    ASSERT_TRUE(recoveredFrameResult) << recoveredFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame recoveredFrame = std::move(recoveredFrameResult).GetValue();
+    auto recoveredMetrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(recoveredFrame);
+    ASSERT_TRUE(recoveredMetrics) << recoveredMetrics.GetError().GetMessage();
+    ASSERT_TRUE(recoveredFrame.Clear());
+    const auto recovered = renderer.Record(recoveredFrame, recoveredMetrics.GetValue(),
+                                           MakeExperimentalRectangle());
+    ASSERT_TRUE(recovered) << recovered.GetError().GetMessage();
+    EXPECT_EQ(recovered.GetValue(), RectangleRecordOutcome::Recorded);
+    ASSERT_TRUE(recoveredFrame.FinishAndPresent());
+}
+
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadePropagatesDeviceLossFromDraw2DStage)
+{
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Loss GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+    auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+    ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+    RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+    auto frameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+    pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+    auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(frame);
+    ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
+    ASSERT_TRUE(frame.Clear());
+
+    state.createGraphicsPipelinesResult = VK_ERROR_DEVICE_LOST;
+    ExpectRenderError(renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::DeviceLost);
+    EXPECT_TRUE(fixture->owners.device.IsDeviceLost());
+    const std::uint32_t pipelineCalls = state.createGraphicsPipelinesCalls;
+    ExpectRenderError(renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::DeviceLost);
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCalls);
+}
+
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRejectsWrongFramePhasesAndRecovers)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Frame State GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+    auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+    ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+    RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+    auto frameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+    pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+    auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(frame);
+    ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
+
+    pond::render::RenderFrame defaultFrame;
+    ExpectRenderError(renderer.Record(defaultFrame, metrics.GetValue(), MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::InvalidState);
+
+    ASSERT_TRUE(frame.Clear());
+    const auto recorded = renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle());
+    ASSERT_TRUE(recorded) << recorded.GetError().GetMessage();
+    EXPECT_EQ(recorded.GetValue(), RectangleRecordOutcome::Recorded);
+    ExpectRenderError(renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::InvalidState);
+    ASSERT_TRUE(frame.FinishAndPresent());
+    ExpectRenderError(renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::InvalidState);
+
+    auto movedFrameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(movedFrameResult) << movedFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame movedFrom = std::move(movedFrameResult).GetValue();
+    auto movedMetrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(movedFrom);
+    ASSERT_TRUE(movedMetrics) << movedMetrics.GetError().GetMessage();
+    pond::render::RenderFrame activeFrame = std::move(movedFrom);
+    ExpectRenderError(renderer.Record(movedFrom, movedMetrics.GetValue(), MakeExperimentalRectangle()),
+                      pond::render::RenderErrorCode::InvalidState);
+    ASSERT_TRUE(activeFrame.Clear());
+    const auto recovered =
+        renderer.Record(activeFrame, movedMetrics.GetValue(), MakeExperimentalRectangle());
+    ASSERT_TRUE(recovered) << recovered.GetError().GetMessage();
+    EXPECT_EQ(recovered.GetValue(), RectangleRecordOutcome::Recorded);
+    ASSERT_TRUE(activeFrame.FinishAndPresent());
+}
+
+TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRetriesRecoverableGpuFailures)
+{
+    enum class FailurePoint : std::uint8_t
+    {
+        Pipeline,
+        UploadAllocation
+    };
+    constexpr std::array failurePoints{FailurePoint::Pipeline, FailurePoint::UploadAllocation};
+
+    for (const FailurePoint failurePoint : failurePoints)
+    {
+        SCOPED_TRACE(static_cast<std::uint32_t>(failurePoint));
+        FakeVulkanState state;
+        state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+            0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Retry GPU"));
+        const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+        std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+        ASSERT_NE(fixture, nullptr);
+        auto rendererResult = pond::ui::experimental::RectangleRenderer::Create(
+            fixture->owners.device);
+        ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+        pond::ui::experimental::RectangleRenderer renderer =
+            std::move(rendererResult).GetValue();
+
+        auto frameResult = fixture->owners.target.AcquireFrame();
+        ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+        pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+        auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(frame);
+        ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
+        ASSERT_TRUE(frame.Clear());
+
+        if (failurePoint == FailurePoint::Pipeline)
+        {
+            state.createGraphicsPipelinesResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            state.createBufferResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        ExpectRenderError(renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle()),
+                          pond::render::RenderErrorCode::OutOfMemory);
+
+        state.createGraphicsPipelinesResult = VK_SUCCESS;
+        state.createBufferResult = VK_SUCCESS;
+        const auto recovered =
+            renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle());
+        ASSERT_TRUE(recovered) << recovered.GetError().GetMessage();
+        EXPECT_EQ(recovered.GetValue(),
+                  pond::ui::experimental::RectangleRecordOutcome::Recorded);
+        ASSERT_TRUE(frame.FinishAndPresent());
+    }
+}
+
+TEST(RenderVulkanBootstrapTests,
+     ExperimentalRectangleFacadeStaysWarmAcrossTargetsAndAsymmetricDestruction)
+{
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Rectangle Lifecycle GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    const pond::render::RenderTargetDesc secondDesc{
+        .targetSnapshot =
+            pond::render::RenderTargetSnapshot{
+                pond::platform::WindowId{84}, pond::platform::PixelSize{640U, 480U},
+                pond::platform::LogicalSize{640U, 480U}, true, pond::platform::WindowState::Normal,
+                pond::render::PresentationEnvironmentRevision{1U}, 1U},
+        .presentation = {.policy = pond::render::PresentationPolicy::VSync,
+                         .strength = pond::render::RequirementStrength::Preferred},
+        .queuedLatency = {.maximumQueuedFrames = {},
+                          .strength = pond::render::RequirementStrength::Preferred}};
+
+    {
+        std::unique_ptr<FakePublicLifecycle> fixture =
+            CreateFakePublicLifecycle(dispatch, secondDesc);
+        ASSERT_NE(fixture, nullptr);
+        ASSERT_TRUE(fixture->additionalTarget.has_value());
+        EXPECT_EQ(fixture->owners.device.GetActiveTargetCount(), 2U);
+
+        auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+        ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+        RectangleRenderer renderer = std::move(rendererResult).GetValue();
+        pond::render::RenderTarget& firstTarget = fixture->owners.target;
+        pond::render::RenderTarget& secondTarget = *fixture->additionalTarget;
+
+        for (std::uint32_t index = 0U; index < 2U; ++index)
+        {
+            ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(renderer, firstTarget,
+                                                                 MakeExperimentalRectangle()));
+            ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(
+                renderer, secondTarget, MakeExperimentalRectangle(12.0F, 14.0F, 72.0F, 44.0F)));
+        }
+
+        const std::uint32_t shaderModuleCalls = state.createShaderModuleCalls;
+        const std::uint32_t pipelineLayoutCalls = state.createPipelineLayoutCalls;
+        const std::uint32_t pipelineCalls = state.createGraphicsPipelinesCalls;
+        const std::uint32_t bufferCalls = state.createBufferCalls;
+        const std::uint32_t mapCalls = state.mapMemoryCalls;
+        const std::uint32_t flushCalls = state.flushAllocationCalls;
+        const std::uint32_t submitCalls = state.queueSubmitCalls;
+        const std::uint32_t presentCalls = state.queuePresentCalls;
+        const FakeLiveResourceCounts warmResources = GetLiveResourceCounts(state);
+        EXPECT_EQ(pipelineCalls, 1U);
+        EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+        EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+
+        state.frameTrace.clear();
+        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(renderer, firstTarget,
+                                                             MakeExperimentalRectangle()));
+        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(
+            renderer, secondTarget, MakeExperimentalRectangle(12.0F, 14.0F, 72.0F, 44.0F)));
+
+        EXPECT_EQ(state.frameTrace,
+                  (std::vector<std::string>{"acquire",         "clear",         "draw2d",
+                                            "bindPipeline",    "setViewport",   "bindVertexBuffers",
+                                            "bindIndexBuffer", "pushConstants", "setScissor",
+                                            "drawIndexed",     "endRenderPass",
+                                            "endCommandBuffer", "submit",        "present",
+                                            "acquire",         "clear",         "draw2d",
+                                            "bindPipeline",    "setViewport",   "bindVertexBuffers",
+                                            "bindIndexBuffer", "pushConstants", "setScissor",
+                                            "drawIndexed",     "endRenderPass",
+                                            "endCommandBuffer", "submit",        "present"}));
+        EXPECT_EQ(state.createShaderModuleCalls, shaderModuleCalls);
+        EXPECT_EQ(state.createPipelineLayoutCalls, pipelineLayoutCalls);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCalls);
+        EXPECT_EQ(state.createBufferCalls, bufferCalls);
+        EXPECT_EQ(state.mapMemoryCalls, mapCalls);
+        EXPECT_EQ(state.flushAllocationCalls, flushCalls);
+        EXPECT_EQ(state.queueSubmitCalls, submitCalls + 2U);
+        EXPECT_EQ(state.queuePresentCalls, presentCalls + 2U);
+        EXPECT_EQ(GetLiveResourceCounts(state), warmResources);
+        EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+        EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+
+        fixture->additionalTarget.reset();
+        EXPECT_EQ(fixture->owners.device.GetActiveTargetCount(), 1U);
+        const FakeLiveResourceCounts afterSecondTargetDestroy = GetLiveResourceCounts(state);
+        EXPECT_EQ(afterSecondTargetDestroy, warmResources);
+        EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+        EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+
+        state.frameTrace.clear();
+        const std::uint32_t submitCallsAfterDestroy = state.queueSubmitCalls;
+        const std::uint32_t presentCallsAfterDestroy = state.queuePresentCalls;
+        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(renderer, firstTarget,
+                                                             MakeExperimentalRectangle()));
+        EXPECT_EQ(state.frameTrace,
+                  (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline",
+                                            "setViewport", "bindVertexBuffers", "bindIndexBuffer",
+                                            "pushConstants", "setScissor", "drawIndexed",
+                                            "endRenderPass", "endCommandBuffer", "submit",
+                                            "present"}));
+        EXPECT_EQ(state.createShaderModuleCalls, shaderModuleCalls);
+        EXPECT_EQ(state.createPipelineLayoutCalls, pipelineLayoutCalls);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCalls);
+        EXPECT_EQ(state.createBufferCalls, bufferCalls);
+        EXPECT_EQ(state.mapMemoryCalls, mapCalls);
+        EXPECT_EQ(state.flushAllocationCalls, flushCalls);
+        EXPECT_EQ(state.queueSubmitCalls, submitCallsAfterDestroy + 1U);
+        EXPECT_EQ(state.queuePresentCalls, presentCallsAfterDestroy + 1U);
+        EXPECT_EQ(GetLiveResourceCounts(state), afterSecondTargetDestroy);
+        EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+        EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+    }
+
+    ExpectNoLiveResources(state);
+}
+
+TEST(RenderVulkanBootstrapTests,
+     ExperimentalRectangleFacadeInterleavesTargetLifecycleAndPipelineCompatibility)
+{
+    using pond::ui::experimental::RectangleRecordOutcome;
+    using pond::ui::experimental::RectangleRenderer;
+
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "UI Interleaved Lifecycle GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    const pond::render::RenderTargetDesc secondDesc{
+        .targetSnapshot =
+            pond::render::RenderTargetSnapshot{
+                pond::platform::WindowId{84U}, pond::platform::PixelSize{640U, 480U},
+                pond::platform::LogicalSize{640U, 480U}, true, pond::platform::WindowState::Normal,
+                pond::render::PresentationEnvironmentRevision{1U}, 1U},
+        .presentation = {.policy = pond::render::PresentationPolicy::VSync,
+                         .strength = pond::render::RequirementStrength::Preferred},
+        .queuedLatency = {.maximumQueuedFrames = {},
+                          .strength = pond::render::RequirementStrength::Preferred}};
+
+    {
+        std::unique_ptr<FakePublicLifecycle> fixture =
+            CreateFakePublicLifecycle(dispatch, secondDesc);
+        ASSERT_NE(fixture, nullptr);
+        ASSERT_TRUE(fixture->additionalTarget.has_value());
+        pond::render::RenderTarget& firstTarget = fixture->owners.target;
+        pond::render::RenderTarget& secondTarget = *fixture->additionalTarget;
+
+        auto rendererResult = RectangleRenderer::Create(fixture->owners.device);
+        ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
+        RectangleRenderer renderer = std::move(rendererResult).GetValue();
+
+        ASSERT_NO_FATAL_FAILURE(
+            PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
+        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(
+            renderer, secondTarget, MakeExperimentalRectangle(12.0F, 14.0F, 72.0F, 44.0F)));
+
+        const std::uint64_t firstGeneration = firstTarget.GetSwapchainGeneration();
+        const std::uint64_t secondGeneration = secondTarget.GetSwapchainGeneration();
+        const std::uint64_t firstFrames = firstTarget.GetDiagnostics().framesPresented;
+        const std::uint64_t secondFrames = secondTarget.GetDiagnostics().framesPresented;
+        const std::uint32_t warmPipelineCalls = state.createGraphicsPipelinesCalls;
+        ASSERT_EQ(warmPipelineCalls, 1U);
+
+        ASSERT_TRUE(secondTarget.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+            pond::platform::WindowId{84U}, pond::platform::PixelSize{960U, 540U},
+            pond::platform::LogicalSize{640U, 360U}, true, pond::platform::WindowState::Normal,
+            pond::render::PresentationEnvironmentRevision{2U}, 2U}));
+        EXPECT_TRUE(secondTarget.HasPendingRecreation());
+        EXPECT_EQ(firstTarget.GetSwapchainGeneration(), firstGeneration);
+        EXPECT_FALSE(firstTarget.HasPendingRecreation());
+
+        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(
+            renderer, secondTarget, MakeExperimentalRectangle(20.0F, 25.0F, 140.0F, 85.0F)));
+        const std::uint64_t resizedSecondGeneration = secondTarget.GetSwapchainGeneration();
+        EXPECT_GT(resizedSecondGeneration, secondGeneration);
+        EXPECT_EQ(secondTarget.GetDiagnostics().framesPresented, secondFrames + 1U);
+        EXPECT_EQ(firstTarget.GetDiagnostics().framesPresented, firstFrames);
+        EXPECT_FLOAT_EQ(state.lastViewport.width, 960.0F);
+        EXPECT_FLOAT_EQ(state.lastViewport.height, 540.0F);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, warmPipelineCalls);
+
+        ASSERT_NO_FATAL_FAILURE(
+            PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
+        EXPECT_EQ(firstTarget.GetSwapchainGeneration(), firstGeneration);
+        EXPECT_EQ(firstTarget.GetDiagnostics().framesPresented, firstFrames + 1U);
+        EXPECT_FLOAT_EQ(state.lastViewport.width, 800.0F);
+        EXPECT_FLOAT_EQ(state.lastViewport.height, 600.0F);
+
+        ASSERT_TRUE(secondTarget.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+            pond::platform::WindowId{84U}, pond::platform::PixelSize{},
+            pond::platform::LogicalSize{}, true, pond::platform::WindowState::Minimized,
+            pond::render::PresentationEnvironmentRevision{3U}, 3U}));
+        EXPECT_TRUE(secondTarget.IsSuspended());
+        EXPECT_FALSE(secondTarget.HasSwapchain());
+        EXPECT_EQ(firstTarget.GetStatus(), pond::render::TargetStatus::Active);
+        EXPECT_TRUE(firstTarget.HasSwapchain());
+        EXPECT_EQ(firstTarget.GetSwapchainGeneration(), firstGeneration);
+
+        state.frameTrace.clear();
+        const std::uint32_t acquireCallsBeforeSuspended = state.acquireNextImageCalls;
+        const std::uint32_t pipelineCallsBeforeSuspended = state.createGraphicsPipelinesCalls;
+        const std::uint32_t bufferCallsBeforeSuspended = state.createBufferCalls;
+        const std::uint32_t mapCallsBeforeSuspended = state.mapMemoryCalls;
+        const std::uint32_t drawCallsBeforeSuspended = state.cmdDrawIndexedCalls;
+        const std::uint32_t submitCallsBeforeSuspended = state.queueSubmitCalls;
+        const std::uint32_t presentCallsBeforeSuspended = state.queuePresentCalls;
+
+        auto suspendedResult = secondTarget.AcquireFrame();
+        ASSERT_TRUE(suspendedResult) << suspendedResult.GetError().GetMessage();
+        pond::render::RenderFrame suspended = std::move(suspendedResult).GetValue();
+        ASSERT_EQ(suspended.GetStatus(), pond::render::FrameStatus::SkippedSuspended);
+        auto suspendedMetrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(suspended);
+        ASSERT_TRUE(suspendedMetrics) << suspendedMetrics.GetError().GetMessage();
+        const auto skipped =
+            renderer.Record(suspended, suspendedMetrics.GetValue(), MakeExperimentalRectangle());
+        ASSERT_TRUE(skipped) << skipped.GetError().GetMessage();
+        EXPECT_EQ(skipped.GetValue(), RectangleRecordOutcome::SkippedSuspended);
+        const auto suspendedFinish = suspended.FinishAndPresent();
+        ASSERT_TRUE(suspendedFinish) << suspendedFinish.GetError().GetMessage();
+        EXPECT_FALSE(suspendedFinish.GetValue().presented);
+
+        EXPECT_TRUE(state.frameTrace.empty());
+        EXPECT_EQ(state.acquireNextImageCalls, acquireCallsBeforeSuspended);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCallsBeforeSuspended);
+        EXPECT_EQ(state.createBufferCalls, bufferCallsBeforeSuspended);
+        EXPECT_EQ(state.mapMemoryCalls, mapCallsBeforeSuspended);
+        EXPECT_EQ(state.cmdDrawIndexedCalls, drawCallsBeforeSuspended);
+        EXPECT_EQ(state.queueSubmitCalls, submitCallsBeforeSuspended);
+        EXPECT_EQ(state.queuePresentCalls, presentCallsBeforeSuspended);
+        EXPECT_EQ(secondTarget.GetDiagnostics().framesPresented, secondFrames + 1U);
+
+        ASSERT_NO_FATAL_FAILURE(
+            PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
+        EXPECT_EQ(firstTarget.GetDiagnostics().framesPresented, firstFrames + 2U);
+        EXPECT_EQ(firstTarget.GetSwapchainGeneration(), firstGeneration);
+        EXPECT_FLOAT_EQ(state.lastViewport.width, 800.0F);
+        EXPECT_FLOAT_EQ(state.lastViewport.height, 600.0F);
+
+        state.physicalDevices[0].surfaceFormats = {VkSurfaceFormatKHR{
+            .format = VK_FORMAT_R8G8B8A8_SRGB,
+            .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}};
+        const std::uint32_t pipelineCallsBeforeRestore = state.createGraphicsPipelinesCalls;
+        ASSERT_TRUE(secondTarget.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+            pond::platform::WindowId{84U}, pond::platform::PixelSize{720U, 512U},
+            pond::platform::LogicalSize{360U, 256U}, true, pond::platform::WindowState::Normal,
+            pond::render::PresentationEnvironmentRevision{4U}, 4U}));
+
+        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(
+            renderer, secondTarget, MakeExperimentalRectangle(8.0F, 12.0F, 88.0F, 52.0F)));
+        EXPECT_GT(secondTarget.GetSwapchainGeneration(), resizedSecondGeneration);
+        EXPECT_EQ(secondTarget.GetDiagnostics().framesPresented, secondFrames + 2U);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCallsBeforeRestore + 1U);
+        EXPECT_FLOAT_EQ(state.lastViewport.width, 720.0F);
+        EXPECT_FLOAT_EQ(state.lastViewport.height, 512.0F);
+
+        const std::uint32_t pipelineCallsBeforeCompatibilitySwitch =
+            state.createGraphicsPipelinesCalls;
+        ASSERT_NO_FATAL_FAILURE(
+            PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
+        EXPECT_EQ(state.createGraphicsPipelinesCalls,
+                  pipelineCallsBeforeCompatibilitySwitch + 1U);
+        EXPECT_EQ(firstTarget.GetSwapchainGeneration(), firstGeneration);
+        EXPECT_EQ(firstTarget.GetDiagnostics().framesPresented, firstFrames + 3U);
+        EXPECT_FLOAT_EQ(state.lastViewport.width, 800.0F);
+        EXPECT_FLOAT_EQ(state.lastViewport.height, 600.0F);
+        EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+        EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+
+        fixture->additionalTarget.reset();
+        EXPECT_EQ(fixture->owners.device.GetActiveTargetCount(), 1U);
+        const std::uint32_t pipelineCallsAfterDestroy = state.createGraphicsPipelinesCalls;
+        ASSERT_NO_FATAL_FAILURE(
+            PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCallsAfterDestroy);
+        EXPECT_EQ(firstTarget.GetDiagnostics().framesPresented, firstFrames + 4U);
+        EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+        EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+    }
+
+    ExpectNoLiveResources(state);
+}
+#endif
+
+TEST(RenderVulkanBootstrapTests, ActiveFrameMetricsUseActualClampedFramebufferExtent)
+{
+    FakeVulkanState state;
+    FakePhysicalDevice device = MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Metrics GPU");
+    device.surfaceCapabilities.maxImageExtent = VkExtent2D{.width = 640U, .height = 480U};
+    state.physicalDevices.push_back(std::move(device));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+    EXPECT_EQ(fixture->owners.target.GetTargetSnapshot().GetPixelSize(),
+              (pond::platform::PixelSize{800U, 600U}));
+
+    auto layerResult = pond::render::draw2d::Draw2DLayer::Create(fixture->owners.device);
+    ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+    auto packetResult = MakeRectangleDraw2DPacket({640U, 480U});
+    ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+
+    auto frameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+    pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+    EXPECT_EQ(frame.GetMetrics().pixelSize, (pond::platform::PixelSize{640U, 480U}));
+    EXPECT_EQ(frame.GetMetrics().logicalSize, (pond::platform::LogicalSize{800U, 600U}));
+    ASSERT_TRUE(frame.Clear());
+    ASSERT_TRUE(layer.Record(frame, packetResult.GetValue()));
+    EXPECT_FLOAT_EQ(state.lastViewport.width, 640.0F);
+    EXPECT_FLOAT_EQ(state.lastViewport.height, 480.0F);
+    ASSERT_TRUE(frame.FinishAndPresent());
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DDeviceLossIsStickyAcrossTargets)
+{
+    enum class FailurePoint : std::uint8_t
+    {
+        Pipeline,
+        Mapping,
+        Flush
+    };
+    const std::array cases{FailurePoint::Pipeline, FailurePoint::Mapping, FailurePoint::Flush};
+    for (const FailurePoint failurePoint : cases)
+    {
+        SCOPED_TRACE(static_cast<std::uint32_t>(failurePoint));
+        FakeVulkanState state;
+        state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+            0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Loss GPU"));
+        const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+        pond::render::RenderTargetDesc additionalDesc{
+            .targetSnapshot =
+                pond::render::RenderTargetSnapshot{
+                    pond::platform::WindowId{43}, pond::platform::PixelSize{640U, 480U},
+                    pond::platform::LogicalSize{640U, 480U}, true,
+                    pond::platform::WindowState::Normal,
+                    pond::render::PresentationEnvironmentRevision{1U}, 1U},
+            .presentation = {.policy = pond::render::PresentationPolicy::VSync,
+                             .strength = pond::render::RequirementStrength::Preferred},
+            .queuedLatency = {.maximumQueuedFrames = {},
+                              .strength = pond::render::RequirementStrength::Preferred}};
+        std::unique_ptr<FakePublicLifecycle> fixture =
+            CreateFakePublicLifecycle(dispatch, additionalDesc);
+        ASSERT_NE(fixture, nullptr);
+        ASSERT_TRUE(fixture->additionalTarget.has_value());
+        auto layerResult = pond::render::draw2d::Draw2DLayer::Create(fixture->owners.device);
+        ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+        pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+        auto packetResult = MakeRectangleDraw2DPacket();
+        ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+        auto frameResult = fixture->owners.target.AcquireFrame();
+        ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
+        pond::render::RenderFrame frame = std::move(frameResult).GetValue();
+        ASSERT_TRUE(frame.Clear());
+
+        switch (failurePoint)
+        {
+        case FailurePoint::Pipeline:
+            state.createGraphicsPipelinesResult = VK_ERROR_DEVICE_LOST;
+            break;
+        case FailurePoint::Mapping:
+            state.mapMemoryResult = VK_ERROR_DEVICE_LOST;
+            break;
+        case FailurePoint::Flush:
+            state.uploadMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            state.flushAllocationResult = VK_ERROR_DEVICE_LOST;
+            break;
+        }
+
+        ExpectRenderError(layer.Record(frame, packetResult.GetValue()),
+                          pond::render::RenderErrorCode::DeviceLost);
+        EXPECT_TRUE(fixture->owners.device.IsDeviceLost());
+        EXPECT_TRUE(fixture->owners.target.IsDeviceLost());
+        EXPECT_TRUE(fixture->additionalTarget->IsDeviceLost());
+        const std::uint32_t pipelineCalls = state.createGraphicsPipelinesCalls;
+        const std::uint32_t mapCalls = state.mapMemoryCalls;
+        const std::uint32_t flushCalls = state.flushAllocationCalls;
+        ExpectRenderError(layer.Record(frame, packetResult.GetValue()),
+                          pond::render::RenderErrorCode::DeviceLost);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCalls);
+        EXPECT_EQ(state.mapMemoryCalls, mapCalls);
+        EXPECT_EQ(state.flushAllocationCalls, flushCalls);
+    }
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DLayerSkipsSuspendedAndRecreationPendingFrames)
+{
+    {
+        FakeVulkanState state;
+        state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+            0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Suspended GPU"));
+        const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+        std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+        ASSERT_NE(fixture, nullptr);
+        auto layerResult = pond::render::draw2d::Draw2DLayer::Create(fixture->owners.device);
+        ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+        pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+        auto packetResult = MakeEmptyDraw2DPacket();
+        ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+        pond::render::draw2d::Draw2DPacket packet = std::move(packetResult).GetValue();
+        [[maybe_unused]] pond::render::draw2d::Draw2DPacket retainedPacket = std::move(packet);
+
+        ASSERT_TRUE(fixture->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+            pond::platform::WindowId{42}, pond::platform::PixelSize{},
+            pond::platform::LogicalSize{}, true, pond::platform::WindowState::Minimized,
+            pond::render::PresentationEnvironmentRevision{1U}, 2U}));
+        state.frameTrace.clear();
+        auto suspendedResult = fixture->owners.target.AcquireFrame();
+        ASSERT_TRUE(suspendedResult) << suspendedResult.GetError().GetMessage();
+        pond::render::RenderFrame suspended = std::move(suspendedResult).GetValue();
+        EXPECT_EQ(suspended.GetStatus(), pond::render::FrameStatus::SkippedSuspended);
+        EXPECT_TRUE(layer.Record(suspended, packet));
+        EXPECT_TRUE(layer.Record(suspended, packet));
+        const auto finish = suspended.FinishAndPresent();
+        ASSERT_TRUE(finish) << finish.GetError().GetMessage();
+        EXPECT_TRUE(state.frameTrace.empty());
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, 0U);
+        EXPECT_EQ(state.createBufferCalls, 0U);
+        EXPECT_EQ(state.mapMemoryCalls, 0U);
+    }
+
+    {
+        FakeVulkanState state;
+        state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+            0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Pending GPU"));
+        const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+        std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+        ASSERT_NE(fixture, nullptr);
+        auto layerResult = pond::render::draw2d::Draw2DLayer::Create(fixture->owners.device);
+        ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+        pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+        auto packetResult = MakeEmptyDraw2DPacket();
+        ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+        pond::render::draw2d::Draw2DPacket packet = std::move(packetResult).GetValue();
+        [[maybe_unused]] pond::render::draw2d::Draw2DPacket retainedPacket = std::move(packet);
+
+        state.frameTrace.clear();
+        state.acquireNextImageResult = VK_ERROR_OUT_OF_DATE_KHR;
+        auto pendingResult = fixture->owners.target.AcquireFrame();
+        ASSERT_TRUE(pendingResult) << pendingResult.GetError().GetMessage();
+        pond::render::RenderFrame pending = std::move(pendingResult).GetValue();
+        EXPECT_EQ(pending.GetStatus(), pond::render::FrameStatus::RecreationPending);
+        EXPECT_TRUE(layer.Record(pending, packet));
+        EXPECT_TRUE(layer.Record(pending, packet));
+        const auto finish = pending.FinishAndPresent();
+        ASSERT_TRUE(finish) << finish.GetError().GetMessage();
+        EXPECT_EQ(state.frameTrace, std::vector<std::string>{"acquire"});
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, 0U);
+        EXPECT_EQ(state.createBufferCalls, 0U);
+        EXPECT_EQ(state.mapMemoryCalls, 0U);
+    }
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DRecordsAfterResizeAndMinimizeRestore)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Restore GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
+    ASSERT_NE(fixture, nullptr);
+
+    auto layerResult = pond::render::draw2d::Draw2DLayer::Create(fixture->owners.device);
+    ASSERT_TRUE(layerResult) << layerResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DLayer layer = std::move(layerResult).GetValue();
+
+    const pond::platform::WindowId windowId{42U};
+    ASSERT_TRUE(fixture->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+        windowId, pond::platform::PixelSize{640U, 480U}, pond::platform::LogicalSize{640U, 480U},
+        true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
+    auto resizedPacketResult = MakeRectangleDraw2DPacket({640U, 480U});
+    ASSERT_TRUE(resizedPacketResult) << resizedPacketResult.GetError().GetMessage();
+
+    auto resizedFrameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(resizedFrameResult) << resizedFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame resizedFrame = std::move(resizedFrameResult).GetValue();
+    EXPECT_EQ(resizedFrame.GetStatus(), pond::render::FrameStatus::Recreated);
+    EXPECT_EQ(resizedFrame.GetMetrics().pixelSize, (pond::platform::PixelSize{640U, 480U}));
+    ASSERT_TRUE(resizedFrame.Clear());
+    ASSERT_TRUE(layer.Record(resizedFrame, resizedPacketResult.GetValue()));
+    EXPECT_FLOAT_EQ(state.lastViewport.width, 640.0F);
+    EXPECT_FLOAT_EQ(state.lastViewport.height, 480.0F);
+    ASSERT_TRUE(resizedFrame.FinishAndPresent());
+
+    ASSERT_TRUE(fixture->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+        windowId, pond::platform::PixelSize{}, pond::platform::LogicalSize{}, true,
+        pond::platform::WindowState::Minimized, pond::render::PresentationEnvironmentRevision{1U},
+        3U}));
+    auto suspendedFrameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(suspendedFrameResult) << suspendedFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame suspendedFrame = std::move(suspendedFrameResult).GetValue();
+    EXPECT_EQ(suspendedFrame.GetStatus(), pond::render::FrameStatus::SkippedSuspended);
+    ASSERT_TRUE(layer.Record(suspendedFrame, resizedPacketResult.GetValue()));
+    ASSERT_TRUE(suspendedFrame.FinishAndPresent());
+
+    ASSERT_TRUE(fixture->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
+        windowId, pond::platform::PixelSize{700U, 500U}, pond::platform::LogicalSize{700U, 500U},
+        true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 4U}));
+    auto restoredPacketResult = MakeRectangleDraw2DPacket({700U, 500U});
+    ASSERT_TRUE(restoredPacketResult) << restoredPacketResult.GetError().GetMessage();
+    auto restoredFrameResult = fixture->owners.target.AcquireFrame();
+    ASSERT_TRUE(restoredFrameResult) << restoredFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame restoredFrame = std::move(restoredFrameResult).GetValue();
+    EXPECT_EQ(restoredFrame.GetStatus(), pond::render::FrameStatus::Recreated);
+    EXPECT_EQ(restoredFrame.GetMetrics().pixelSize, (pond::platform::PixelSize{700U, 500U}));
+    ASSERT_TRUE(restoredFrame.Clear());
+    ASSERT_TRUE(layer.Record(restoredFrame, restoredPacketResult.GetValue()));
+    EXPECT_FLOAT_EQ(state.lastViewport.width, 700.0F);
+    EXPECT_FLOAT_EQ(state.lastViewport.height, 500.0F);
+    ASSERT_TRUE(restoredFrame.FinishAndPresent());
+
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 2U);
+    EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
+    EXPECT_EQ(state.queueWaitIdleCalls, 0U);
 }
 
 TEST(RenderVulkanBootstrapTests,
@@ -4385,6 +6336,15 @@ TEST(RenderVulkanBootstrapTests, PublicAcquireSurfaceLossBecomesStickyUntilRecov
     ASSERT_TRUE(recoveredFrameResult) << recoveredFrameResult.GetError().GetMessage();
     pond::render::RenderFrame recoveredFrame = std::move(recoveredFrameResult).GetValue();
     EXPECT_EQ(recoveredFrame.GetStatus(), pond::render::FrameStatus::Recreated);
+    const pond::render::RenderTargetSnapshot recoveredSnapshot = owners->target.GetTargetSnapshot();
+    const pond::render::RenderFrameMetrics recoveredMetrics = recoveredFrame.GetMetrics();
+    EXPECT_TRUE(pond::render::IsValid(recoveredMetrics));
+    EXPECT_EQ(recoveredMetrics.windowId, recoveredSnapshot.GetWindowId());
+    EXPECT_EQ(recoveredMetrics.logicalSize, recoveredSnapshot.GetLogicalSize());
+    EXPECT_EQ(recoveredMetrics.pixelSize, recoveredSnapshot.GetPixelSize());
+    EXPECT_EQ(recoveredMetrics.metricsRevision,
+              recoveredSnapshot.GetPresentationEnvironmentRevision());
+    EXPECT_EQ(recoveredMetrics.targetRevision, recoveredSnapshot.GetRevision());
     ASSERT_TRUE(recoveredFrame.Clear());
     const auto recoveredFinish = recoveredFrame.FinishAndPresent();
     ASSERT_TRUE(recoveredFinish) << recoveredFinish.GetError().GetMessage();
@@ -4603,16 +6563,20 @@ TEST(RenderVulkanBootstrapTests, SameSizePresentationEnvironmentChangesCoalesceI
     ASSERT_NE(owners, nullptr);
 
     const pond::render::RenderTargetSnapshot initialSnapshot = owners->target.GetTargetSnapshot();
+    const pond::platform::LogicalSize firstScaleLogicalSize{640U, 480U};
+    const pond::platform::LogicalSize coalescedScaleLogicalSize{720U, 540U};
     const std::uint32_t createSwapchainCallsBefore = state.createSwapchainCalls;
     ASSERT_EQ(initialSnapshot.GetPresentationEnvironmentRevision(),
               pond::render::PresentationEnvironmentRevision{1U});
 
     ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        initialSnapshot.GetWindowId(), initialSnapshot.GetPixelSize(), initialSnapshot.IsVisible(),
-        initialSnapshot.GetWindowState(), pond::render::PresentationEnvironmentRevision{2U}, 2U}));
+        initialSnapshot.GetWindowId(), initialSnapshot.GetPixelSize(), firstScaleLogicalSize,
+        initialSnapshot.IsVisible(), initialSnapshot.GetWindowState(),
+        pond::render::PresentationEnvironmentRevision{2U}, 2U}));
     ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        initialSnapshot.GetWindowId(), initialSnapshot.GetPixelSize(), initialSnapshot.IsVisible(),
-        initialSnapshot.GetWindowState(), pond::render::PresentationEnvironmentRevision{3U}, 3U}));
+        initialSnapshot.GetWindowId(), initialSnapshot.GetPixelSize(), coalescedScaleLogicalSize,
+        initialSnapshot.IsVisible(), initialSnapshot.GetWindowState(),
+        pond::render::PresentationEnvironmentRevision{3U}, 3U}));
 
     EXPECT_EQ(state.createSwapchainCalls, createSwapchainCallsBefore);
     ASSERT_TRUE(owners->target.GetPendingRecreationInfo().has_value());
@@ -4621,6 +6585,7 @@ TEST(RenderVulkanBootstrapTests, SameSizePresentationEnvironmentChangesCoalesceI
     EXPECT_EQ(pending.reason, pond::render::TargetRecreationReason::PresentationChanged);
     EXPECT_EQ(pending.previousRevision, 1U);
     EXPECT_EQ(pending.currentRevision, 3U);
+    EXPECT_EQ(owners->target.GetTargetSnapshot().GetLogicalSize(), coalescedScaleLogicalSize);
 
     auto frameResult = owners->target.AcquireFrame();
     ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
@@ -4633,6 +6598,12 @@ TEST(RenderVulkanBootstrapTests, SameSizePresentationEnvironmentChangesCoalesceI
 
     pond::render::RenderFrame frame = std::move(frameResult).GetValue();
     EXPECT_EQ(frame.GetStatus(), pond::render::FrameStatus::Recreated);
+    const pond::render::RenderFrameMetrics coalescedMetrics = frame.GetMetrics();
+    EXPECT_TRUE(pond::render::IsValid(coalescedMetrics));
+    EXPECT_EQ(coalescedMetrics.logicalSize, coalescedScaleLogicalSize);
+    EXPECT_EQ(coalescedMetrics.pixelSize, initialSnapshot.GetPixelSize());
+    EXPECT_EQ(coalescedMetrics.metricsRevision, pond::render::PresentationEnvironmentRevision{3U});
+    EXPECT_EQ(coalescedMetrics.targetRevision, 3U);
     ASSERT_TRUE(frame.Clear());
     const auto present = frame.FinishAndPresent();
     ASSERT_TRUE(present) << present.GetError().GetMessage();
@@ -4651,8 +6622,10 @@ TEST(RenderVulkanBootstrapTests, PublicTargetPreflightFailurePreservesCommittedS
     const pond::platform::PixelSize initialExtent{800, 600};
     const pond::platform::PixelSize resizedExtent{801, 601};
     ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, resizedExtent, true, pond::platform::WindowState::Normal,
-        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
+        pond::platform::WindowId{42}, resizedExtent,
+        pond::platform::LogicalSize{resizedExtent.width, resizedExtent.height}, true,
+        pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
+        2U}));
     ASSERT_TRUE(owners->target.HasPendingRecreation());
 
     state.getSurfaceCapabilitiesResult = VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -4715,9 +6688,9 @@ TEST(RenderVulkanBootstrapTests, PublicTargetOutputContractFailurePreservesCommi
         owners->target.GetSelectedPresentationConfig();
     ASSERT_TRUE(initialConfig.has_value());
     ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-        pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-        2U}));
+        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+        pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
 
     state.physicalDevices[0].surfaceFormats = {VkSurfaceFormatKHR{
         .format = VK_FORMAT_B8G8R8A8_UNORM, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}};
@@ -4764,9 +6737,9 @@ TEST(RenderVulkanBootstrapTests, PublicTargetOpaqueAlphaFailurePreservesCommitte
         owners->target.GetSelectedPresentationConfig();
     ASSERT_TRUE(initialConfig.has_value());
     ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-        pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-        2U}));
+        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+        pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
 
     state.physicalDevices[0].surfaceCapabilities.supportedCompositeAlpha =
         VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR | VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR |
@@ -4804,9 +6777,9 @@ TEST(RenderVulkanBootstrapTests, PublicSurfaceQueryLossTransitionsToSurfaceRecov
     ASSERT_NE(owners, nullptr);
 
     ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-        pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-        2U}));
+        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+        pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
     state.getSurfaceCapabilitiesResult = VK_ERROR_SURFACE_LOST_KHR;
 
     ExpectRenderError(owners->target.AcquireFrame(), pond::render::RenderErrorCode::SurfaceLost);
@@ -4847,9 +6820,9 @@ TEST(RenderVulkanBootstrapTests, PublicTargetReplacementFailureRetiresOldSwapcha
         ASSERT_NE(owners, nullptr);
 
         ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-            pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-            pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-            2U}));
+            pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+            pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+            pond::render::PresentationEnvironmentRevision{1U}, 2U}));
         state.*(failureCase.resultField) = VK_ERROR_OUT_OF_HOST_MEMORY;
         const auto failedFrame = owners->target.AcquireFrame();
 
@@ -4891,9 +6864,9 @@ TEST(RenderVulkanBootstrapTests, PublicTargetHostAllocationFailureRetiresOldSwap
     ASSERT_NE(owners, nullptr);
 
     ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-        pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-        2U}));
+        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+        pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
     state.throwBadAllocOnSwapchainImageRead = true;
     const auto failedFrame = owners->target.AcquireFrame();
 
@@ -4942,9 +6915,9 @@ TEST(RenderVulkanBootstrapTests, PublicTargetReplacementFailureLeavesDestructibl
         ASSERT_NE(owners, nullptr);
 
         ASSERT_TRUE(owners->target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-            pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-            pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-            2U}));
+            pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+            pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+            pond::render::PresentationEnvironmentRevision{1U}, 2U}));
         state.*(failureCase.resultField) = VK_ERROR_OUT_OF_HOST_MEMORY;
         ExpectRenderError(owners->target.AcquireFrame(),
                           pond::render::RenderErrorCode::OutOfMemory);
@@ -5036,6 +7009,7 @@ TEST(RenderVulkanBootstrapTests,
     const pond::render::RenderTargetSnapshot minimizedSnapshot{
         initialSnapshot.GetWindowId(),
         pond::platform::PixelSize{},
+        pond::platform::LogicalSize{},
         true,
         pond::platform::WindowState::Minimized,
         initialSnapshot.GetPresentationEnvironmentRevision(),
@@ -5473,7 +7447,7 @@ TEST(RenderVulkanBootstrapTests, TargetLocalFinishPreparationCompletesBeforeTheE
     EXPECT_EQ(state.queuePresentCalls, 1U);
 }
 
-TEST(RenderVulkanBootstrapTests, RecordsAcquireClearIntermediateSubmitAndPresentInExactOrder)
+TEST(RenderVulkanBootstrapTests, RecordsAcquireClearDraw2DSubmitAndPresentInExactOrder)
 {
     FakeVulkanState state;
     state.physicalDevices.push_back(MakeCompatibleFakeDevice(
@@ -5503,14 +7477,43 @@ TEST(RenderVulkanBootstrapTests, RecordsAcquireClearIntermediateSubmitAndPresent
     EXPECT_EQ(state.queueSubmitCalls, 0U);
     EXPECT_EQ(state.queuePresentCalls, 0U);
 
-    const auto intermediate = pond::render::detail::RecordVulkanIntermediateStageMarker(
-        dispatch, owners->frameResources, recording);
-    ASSERT_TRUE(intermediate) << intermediate.GetError().GetMessage();
-    EXPECT_EQ(recording.phase,
-              pond::render::detail::VulkanFrameRecordingPhase::IntermediateRecorded);
-    EXPECT_EQ(state.frameTrace, (std::vector<std::string>{"acquire", "clear", "intermediate"}));
+    auto packetResult = MakeTwoRectangleDraw2DPacket();
+    ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DPacket packet = std::move(packetResult).GetValue();
+    pond::render::detail::VulkanDraw2DPipelineCache pipelineCache;
+    const auto draw2dStage = pond::render::detail::RecordVulkanDraw2DStage(
+        dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+        recording, packet);
+    ASSERT_TRUE(draw2dStage) << draw2dStage.GetError().GetMessage();
+    EXPECT_EQ(recording.phase, pond::render::detail::VulkanFrameRecordingPhase::Draw2DRecorded);
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline", "setViewport",
+                                        "bindVertexBuffers", "bindIndexBuffer", "pushConstants",
+                                        "setScissor", "drawIndexed", "setScissor", "drawIndexed"}));
     EXPECT_EQ(state.queueSubmitCalls, 0U);
     EXPECT_EQ(state.queuePresentCalls, 0U);
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Reserved);
+    EXPECT_EQ(state.scissorCount, 2U);
+    EXPECT_EQ(state.scissors[0].offset.x, 1);
+    EXPECT_EQ(state.scissors[0].offset.y, 2);
+    EXPECT_EQ(state.scissors[0].extent.width, 100U);
+    EXPECT_EQ(state.scissors[0].extent.height, 80U);
+    EXPECT_EQ(state.scissors[1].offset.x, 40);
+    EXPECT_EQ(state.scissors[1].offset.y, 50);
+    EXPECT_EQ(state.scissors[1].extent.width, 100U);
+    EXPECT_EQ(state.scissors[1].extent.height, 100U);
+    EXPECT_EQ(state.indexedDrawCount, 2U);
+    EXPECT_EQ(state.indexedDraws[0], (FakeIndexedDraw{6U, 1U, 0U, 0, 0U}));
+    EXPECT_EQ(state.indexedDraws[1], (FakeIndexedDraw{6U, 1U, 6U, 0, 0U}));
+
+    const FakeUploadAllocation* upload =
+        FindFakeUploadAllocationByBuffer(state, state.lastVertexBuffer);
+    ASSERT_NE(upload, nullptr);
+    ExpectUploadedBytes(*upload, state.lastVertexOffset, std::as_bytes(packet.GetVertices()));
+    ExpectUploadedBytes(*upload, state.lastIndexOffset, std::as_bytes(packet.GetIndices()));
+    pipelineCache.Reset();
+    EXPECT_EQ(state.destroyPipelineCalls, 0U);
 
     const auto finish = pond::render::detail::FinishAndPresentVulkanFrame(
         dispatch, owners->device, owners->swapchain, owners->frameResources,
@@ -5518,8 +7521,1181 @@ TEST(RenderVulkanBootstrapTests, RecordsAcquireClearIntermediateSubmitAndPresent
     ASSERT_TRUE(finish) << finish.GetError().GetMessage();
     EXPECT_EQ(finish.GetValue().status, pond::render::FrameStatus::Presented);
     EXPECT_EQ(recording.phase, pond::render::detail::VulkanFrameRecordingPhase::Terminal);
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+    EXPECT_EQ(state.destroyPipelineCalls, 0U);
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "intermediate", "submit", "present"}));
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline", "setViewport",
+                                        "bindVertexBuffers", "bindIndexBuffer", "pushConstants",
+                                        "setScissor", "drawIndexed", "setScissor", "drawIndexed",
+                                        "endRenderPass", "endCommandBuffer", "submit", "present"}));
+
+    auto completed = owners->frameResources.PrepareFrameSlot(dispatch, 0U, 0U);
+    ASSERT_TRUE(completed) << completed.GetError().GetMessage();
+    EXPECT_TRUE(completed.GetValue());
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+    EXPECT_EQ(state.destroyPipelineCalls, 1U);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DUploadArenaCopiesAlignedCoherentStreamsAndReusesWarmCapacity)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Upload GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+
+    const std::array vertices{std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44},
+                              std::byte{0x55}};
+    const std::array indices{std::byte{0xA1}, std::byte{0xA2}, std::byte{0xA3}, std::byte{0xA4},
+                             std::byte{0xA5}, std::byte{0xA6}, std::byte{0xA7}};
+    state.resourceTrace.clear();
+    {
+        auto arenaResult = pond::render::detail::VulkanDraw2DUploadArena::Create(
+            dispatch, owners->device, 2U, 8U * 1024U);
+        ASSERT_TRUE(arenaResult) << arenaResult.GetError().GetMessage();
+        pond::render::detail::VulkanDraw2DUploadArena arena = std::move(arenaResult).GetValue();
+
+        auto first = arena.ReserveAndUpload(0U, vertices, indices);
+        ASSERT_TRUE(first) << first.GetError().GetMessage();
+        EXPECT_EQ(first.GetValue().vertexOffset, 0U);
+        EXPECT_EQ(first.GetValue().vertexBytes, vertices.size());
+        EXPECT_EQ(first.GetValue().indexOffset, 8U);
+        EXPECT_EQ(first.GetValue().indexBytes, indices.size());
+        EXPECT_EQ(first.GetValue().uploadBytes, 15U);
+        EXPECT_EQ(state.createBufferCalls, 1U);
+        EXPECT_EQ(state.mapMemoryCalls, 1U);
+        EXPECT_EQ(state.flushAllocationCalls, 0U);
+        EXPECT_EQ(state.resourceTrace,
+                  (std::vector<std::string>{"createBuffer", "mapMemory"}));
+        EXPECT_EQ(state.lastBufferAllocationRequest.requiredMemoryProperties,
+                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        EXPECT_EQ(state.lastBufferAllocationRequest.preferredMemoryProperties,
+                  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+
+        const FakeUploadAllocation* allocation =
+            FindFakeUploadAllocationByBuffer(state, first.GetValue().buffer);
+        ASSERT_NE(allocation, nullptr);
+        ExpectUploadedBytes(*allocation, first.GetValue().vertexOffset, vertices);
+        ExpectUploadedBytes(*allocation, first.GetValue().indexOffset, indices);
+
+        const pond::render::detail::VulkanDraw2DUploadSlotSnapshot reserved =
+            arena.GetSlotSnapshot(0U);
+        EXPECT_EQ(reserved.state, pond::render::detail::VulkanDraw2DUploadSlotState::Reserved);
+        EXPECT_EQ(reserved.capacityBytes, 4U * 1024U);
+        EXPECT_EQ(reserved.reservedBytes, 15U);
+        EXPECT_TRUE(reserved.coherent);
+        EXPECT_EQ(arena.GetStats().allocationCount, 1U);
+        EXPECT_EQ(arena.GetStats().generationCount, 1U);
+        EXPECT_EQ(arena.GetStats().reservedBytes, 15U);
+
+        arena.Abandon(0U);
+        EXPECT_EQ(arena.GetSlotSnapshot(0U).state,
+                  pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+        EXPECT_EQ(arena.GetStats().reservedBytes, 0U);
+
+        const std::uint32_t createCalls = state.createBufferCalls;
+        const std::uint32_t mapCalls = state.mapMemoryCalls;
+        auto warm = arena.ReserveAndUpload(0U, vertices, indices);
+        ASSERT_TRUE(warm) << warm.GetError().GetMessage();
+        EXPECT_EQ(warm.GetValue().buffer, first.GetValue().buffer);
+        EXPECT_EQ(warm.GetValue().generation, first.GetValue().generation);
+        EXPECT_EQ(state.createBufferCalls, createCalls);
+        EXPECT_EQ(state.mapMemoryCalls, mapCalls);
+        EXPECT_EQ(arena.GetStats().growthCount, 0U);
+
+        arena.MarkSubmitted(0U);
+        EXPECT_EQ(arena.GetSlotSnapshot(0U).state,
+                  pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+        EXPECT_EQ(arena.GetStats().reservedBytes, 0U);
+        EXPECT_EQ(arena.GetStats().uploadedBytes, 15U);
+        ExpectRenderError(arena.ReserveAndUpload(0U, vertices, indices),
+                          pond::render::RenderErrorCode::InvalidState);
+        arena.Complete(0U);
+        EXPECT_EQ(arena.GetSlotSnapshot(0U).state,
+                  pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+        EXPECT_EQ(arena.GetStats().uploadedBytes, 0U);
+    }
+
+    EXPECT_EQ(state.unmapMemoryCalls, 1U);
+    EXPECT_EQ(state.destroyBufferCalls, 1U);
+    EXPECT_TRUE(state.uploadAllocations.empty());
+    EXPECT_EQ(state.resourceTrace,
+              (std::vector<std::string>{"createBuffer", "mapMemory", "unmapMemory",
+                                        "destroyBuffer"}));
+}
+
+TEST(RenderVulkanBootstrapTests,
+     Draw2DUploadArenaFlushesNonCoherentWritesToAtomAlignedClampedRanges)
+{
+    FakeVulkanState state;
+    FakePhysicalDevice device = MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Flush GPU");
+    device.nonCoherentAtomSize = 64U;
+    state.physicalDevices.push_back(std::move(device));
+    state.uploadMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+
+    std::array<std::byte, 65U> vertices{};
+    std::array<std::byte, 2U> indices{};
+    std::ranges::fill(vertices, std::byte{0x5A});
+    std::ranges::fill(indices, std::byte{0xC3});
+    state.resourceTrace.clear();
+
+    auto arenaResult =
+        pond::render::detail::VulkanDraw2DUploadArena::Create(dispatch, owners->device, 1U, 70U);
+    ASSERT_TRUE(arenaResult) << arenaResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DUploadArena arena = std::move(arenaResult).GetValue();
+    auto reservation = arena.ReserveAndUpload(0U, vertices, indices);
+    ASSERT_TRUE(reservation) << reservation.GetError().GetMessage();
+    EXPECT_EQ(reservation.GetValue().indexOffset, 68U);
+    EXPECT_EQ(reservation.GetValue().uploadBytes, 70U);
+    EXPECT_EQ(state.lastBufferSize, 70U);
+    ASSERT_EQ(state.flushedRangeCount, 2U);
+    const FakeUploadAllocation* allocation =
+        FindFakeUploadAllocationByBuffer(state, reservation.GetValue().buffer);
+    ASSERT_NE(allocation, nullptr);
+    EXPECT_EQ(state.flushedRanges[0], (FakeFlushRange{allocation->handle, 0U, 70U}));
+    EXPECT_EQ(state.flushedRanges[1], (FakeFlushRange{allocation->handle, 64U, 6U}));
+    EXPECT_EQ(arena.GetStats().flushCount, 2U);
+    EXPECT_FALSE(arena.GetSlotSnapshot(0U).coherent);
+    EXPECT_EQ(state.resourceTrace,
+              (std::vector<std::string>{"createBuffer", "mapMemory", "flushAllocation",
+                                        "flushAllocation"}));
+    ExpectUploadedBytes(*allocation, 0U, vertices);
+    ExpectUploadedBytes(*allocation, 68U, indices);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DUploadLayoutRejectsEveryLimitAndOverflow)
+{
+    auto exact = pond::render::detail::ComputeVulkanDraw2DUploadLayout(1U, 1U, 5U);
+    ASSERT_TRUE(exact) << exact.GetError().GetMessage();
+    EXPECT_EQ(exact.GetValue(), (pond::render::detail::VulkanDraw2DUploadLayout{1U, 4U, 1U, 5U}));
+
+    ExpectRenderError(pond::render::detail::ComputeVulkanDraw2DUploadLayout(0U, 1U, 5U),
+                      pond::render::RenderErrorCode::InvalidArgument);
+    ExpectRenderError(pond::render::detail::ComputeVulkanDraw2DUploadLayout(1U, 0U, 5U),
+                      pond::render::RenderErrorCode::InvalidArgument);
+    ExpectRenderError(pond::render::detail::ComputeVulkanDraw2DUploadLayout(1U, 1U, 4U),
+                      pond::render::RenderErrorCode::InvalidArgument);
+    ExpectRenderError(pond::render::detail::ComputeVulkanDraw2DUploadLayout(
+                          std::numeric_limits<VkDeviceSize>::max() - 1U, 1U,
+                          std::numeric_limits<VkDeviceSize>::max()),
+                      pond::render::RenderErrorCode::InvalidArgument);
+    ExpectRenderError(pond::render::detail::ComputeVulkanDraw2DUploadLayout(
+                          std::numeric_limits<VkDeviceSize>::max() - 3U, 4U,
+                          std::numeric_limits<VkDeviceSize>::max()),
+                      pond::render::RenderErrorCode::InvalidArgument);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DUploadArenaRollsBackAllocationMappingFlushAndGrowthFailures)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Rollback GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    auto arenaResult = pond::render::detail::VulkanDraw2DUploadArena::Create(
+        dispatch, owners->device, 1U, 16U * 1024U);
+    ASSERT_TRUE(arenaResult) << arenaResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DUploadArena arena = std::move(arenaResult).GetValue();
+
+    const std::array smallVertices{std::byte{1}, std::byte{2}, std::byte{3}};
+    const std::array smallIndices{std::byte{4}, std::byte{5}, std::byte{6}, std::byte{7}};
+
+    state.createBufferResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    ExpectRenderError(arena.ReserveAndUpload(0U, smallVertices, smallIndices),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_EQ(arena.GetStats(), pond::render::detail::VulkanDraw2DUploadStats{});
+    EXPECT_EQ(arena.GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+
+    state.createBufferResult = VK_SUCCESS;
+    state.mapMemoryResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    ExpectRenderError(arena.ReserveAndUpload(0U, smallVertices, smallIndices),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_EQ(state.destroyBufferCalls, 1U);
+    EXPECT_EQ(state.unmapMemoryCalls, 0U);
+
+    state.mapMemoryResult = VK_SUCCESS;
+    state.mapMemoryReturnsNullOnSuccess = true;
+    ExpectRenderError(arena.ReserveAndUpload(0U, smallVertices, smallIndices),
+                      pond::render::RenderErrorCode::BackendFailure);
+    EXPECT_EQ(state.destroyBufferCalls, 2U);
+    EXPECT_EQ(state.unmapMemoryCalls, 1U);
+
+    state.mapMemoryReturnsNullOnSuccess = false;
+    auto warm = arena.ReserveAndUpload(0U, smallVertices, smallIndices);
+    ASSERT_TRUE(warm) << warm.GetError().GetMessage();
+    arena.Abandon(0U);
+    const pond::render::detail::VulkanDraw2DUploadSlotSnapshot warmSlot = arena.GetSlotSnapshot(0U);
+    ASSERT_EQ(warmSlot.capacityBytes, 4U * 1024U);
+    ASSERT_EQ(warmSlot.generation, 1U);
+    const pond::render::detail::VulkanDraw2DUploadStats warmStats = arena.GetStats();
+
+    std::array<std::byte, 5'001U> largeVertices{};
+    const std::array largeIndices{std::byte{8}, std::byte{9}, std::byte{10}};
+    state.createBufferResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    state.failCreateBufferCallIndex = state.createBufferCalls + 1U;
+    ExpectRenderError(arena.ReserveAndUpload(0U, largeVertices, largeIndices),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_EQ(arena.GetSlotSnapshot(0U), warmSlot);
+    EXPECT_EQ(arena.GetStats(), warmStats);
+
+    state.createBufferResult = VK_SUCCESS;
+    state.failCreateBufferCallIndex = 0U;
+    state.mapMemoryResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    state.failMapMemoryCallIndex = state.mapMemoryCalls + 1U;
+    ExpectRenderError(arena.ReserveAndUpload(0U, largeVertices, largeIndices),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_EQ(arena.GetSlotSnapshot(0U), warmSlot);
+    EXPECT_EQ(arena.GetStats(), warmStats);
+
+    state.mapMemoryResult = VK_SUCCESS;
+    state.failMapMemoryCallIndex = 0U;
+    state.uploadMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    state.flushAllocationResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    state.failFlushAllocationCallIndex = state.flushAllocationCalls + 1U;
+    ExpectRenderError(arena.ReserveAndUpload(0U, largeVertices, largeIndices),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_EQ(arena.GetSlotSnapshot(0U), warmSlot);
+    EXPECT_EQ(arena.GetStats(), warmStats);
+
+    state.failFlushAllocationCallIndex = state.flushAllocationCalls + 2U;
+    ExpectRenderError(arena.ReserveAndUpload(0U, largeVertices, largeIndices),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_EQ(arena.GetSlotSnapshot(0U), warmSlot);
+    pond::render::detail::VulkanDraw2DUploadStats partialFlushStats = arena.GetStats();
+    EXPECT_EQ(partialFlushStats.flushCount, warmStats.flushCount + 1U);
+    partialFlushStats.flushCount = warmStats.flushCount;
+    EXPECT_EQ(partialFlushStats, warmStats);
+
+    state.flushAllocationResult = VK_SUCCESS;
+    state.failFlushAllocationCallIndex = 0U;
+    auto grown = arena.ReserveAndUpload(0U, largeVertices, largeIndices);
+    ASSERT_TRUE(grown) << grown.GetError().GetMessage();
+    EXPECT_EQ(arena.GetSlotSnapshot(0U).capacityBytes, 8U * 1024U);
+    EXPECT_EQ(arena.GetSlotSnapshot(0U).generation, 2U);
+    EXPECT_EQ(arena.GetStats().allocationCount, 2U);
+    EXPECT_EQ(arena.GetStats().growthCount, 1U);
+    EXPECT_EQ(arena.GetStats().retirementCount, 1U);
+    EXPECT_EQ(arena.GetStats().generationCount, 2U);
+}
+
+TEST(RenderVulkanBootstrapTests,
+     Draw2DUploadArenaCompletesSlotsOutOfOrderWithoutAliasingOrOverwrite)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Slots GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    auto arenaResult = pond::render::detail::VulkanDraw2DUploadArena::Create(
+        dispatch, owners->device, 3U, 8U * 1024U);
+    ASSERT_TRUE(arenaResult) << arenaResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DUploadArena arena = std::move(arenaResult).GetValue();
+
+    const std::array<std::array<std::byte, 3U>, 3U> vertexStreams{
+        std::array{std::byte{0x10}, std::byte{0x11}, std::byte{0x12}},
+        std::array{std::byte{0x20}, std::byte{0x21}, std::byte{0x22}},
+        std::array{std::byte{0x30}, std::byte{0x31}, std::byte{0x32}}};
+    const std::array<std::array<std::byte, 2U>, 3U> indexStreams{
+        std::array{std::byte{0xA0}, std::byte{0xA1}}, std::array{std::byte{0xB0}, std::byte{0xB1}},
+        std::array{std::byte{0xC0}, std::byte{0xC1}}};
+    std::array<pond::render::detail::VulkanDraw2DUploadReservation, 3U> reservations{};
+    std::array<const std::byte*, 3U> mappedPointers{};
+    for (std::uint32_t slotIndex = 0U; slotIndex < reservations.size(); ++slotIndex)
+    {
+        auto reservation =
+            arena.ReserveAndUpload(slotIndex, vertexStreams[slotIndex], indexStreams[slotIndex]);
+        ASSERT_TRUE(reservation) << reservation.GetError().GetMessage();
+        reservations[slotIndex] = reservation.GetValue();
+        const FakeUploadAllocation* allocation =
+            FindFakeUploadAllocationByBuffer(state, reservations[slotIndex].buffer);
+        ASSERT_NE(allocation, nullptr);
+        mappedPointers[slotIndex] = allocation->bytes.get();
+        ExpectUploadedBytes(*allocation, 0U, vertexStreams[slotIndex]);
+        ExpectUploadedBytes(*allocation, reservations[slotIndex].indexOffset,
+                            indexStreams[slotIndex]);
+        arena.MarkSubmitted(slotIndex);
+    }
+    EXPECT_NE(reservations[0].buffer, reservations[1].buffer);
+    EXPECT_NE(reservations[1].buffer, reservations[2].buffer);
+    EXPECT_NE(mappedPointers[0], mappedPointers[1]);
+    EXPECT_NE(mappedPointers[1], mappedPointers[2]);
+    EXPECT_EQ(arena.GetStats().uploadedBytes, reservations[0].uploadBytes +
+                                                  reservations[1].uploadBytes +
+                                                  reservations[2].uploadBytes);
+
+    ExpectRenderError(arena.ReserveAndUpload(1U, vertexStreams[1], indexStreams[1]),
+                      pond::render::RenderErrorCode::InvalidState);
+    arena.Complete(1U);
+    EXPECT_EQ(arena.GetSlotSnapshot(1U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+    EXPECT_EQ(arena.GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+    EXPECT_EQ(arena.GetSlotSnapshot(2U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+
+    const std::uint32_t allocationCalls = state.createBufferCalls;
+    const std::array replacementVertices{std::byte{0xD0}, std::byte{0xD1}, std::byte{0xD2}};
+    auto reused = arena.ReserveAndUpload(1U, replacementVertices, indexStreams[1]);
+    ASSERT_TRUE(reused) << reused.GetError().GetMessage();
+    EXPECT_EQ(reused.GetValue().buffer, reservations[1].buffer);
+    EXPECT_EQ(state.createBufferCalls, allocationCalls);
+    arena.Abandon(1U);
+
+    arena.Complete(2U);
+    arena.Complete(0U);
+    EXPECT_EQ(arena.GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+    EXPECT_EQ(arena.GetSlotSnapshot(2U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+    EXPECT_EQ(arena.GetStats().uploadedBytes, 0U);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DPreflightFailureMatrixLeavesClearOnlyFrameUncommitted)
+{
+    enum class FailurePrefix : std::uint8_t
+    {
+        VertexShader,
+        FragmentShader,
+        PipelineLayout,
+        GraphicsPipeline,
+        BufferAllocation,
+        Mapping,
+        Flush,
+        ViewportLimit,
+        CommandDispatch
+    };
+    struct FailureCase final
+    {
+        const char* name{};
+        FailurePrefix prefix{FailurePrefix::VertexShader};
+        pond::render::RenderErrorCode errorCode{pond::render::RenderErrorCode::OutOfMemory};
+    };
+    const std::array cases{FailureCase{"vertex shader", FailurePrefix::VertexShader},
+                           FailureCase{"fragment shader", FailurePrefix::FragmentShader},
+                           FailureCase{"pipeline layout", FailurePrefix::PipelineLayout},
+                           FailureCase{"graphics pipeline", FailurePrefix::GraphicsPipeline},
+                           FailureCase{"buffer allocation", FailurePrefix::BufferAllocation},
+                           FailureCase{"mapping", FailurePrefix::Mapping},
+                           FailureCase{"flush", FailurePrefix::Flush},
+                           FailureCase{"viewport limit", FailurePrefix::ViewportLimit,
+                                       pond::render::RenderErrorCode::UnsupportedCapability},
+                           FailureCase{"command dispatch", FailurePrefix::CommandDispatch,
+                                       pond::render::RenderErrorCode::UnsupportedCapability}};
+
+    for (const FailureCase& failureCase : cases)
+    {
+        SCOPED_TRACE(failureCase.name);
+        FakeVulkanState state;
+        state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+            0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, failureCase.name));
+        if (failureCase.prefix == FailurePrefix::ViewportLimit)
+        {
+            state.physicalDevices.back().maximumViewportExtent =
+                VkExtent2D{.width = 799U, .height = 600U};
+        }
+        {
+            pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+            std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+            ASSERT_NE(owners, nullptr);
+
+            switch (failureCase.prefix)
+            {
+            case FailurePrefix::VertexShader:
+                state.failCreateShaderModuleCallIndex = 1U;
+                state.createShaderModuleResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            case FailurePrefix::FragmentShader:
+                state.failCreateShaderModuleCallIndex = 2U;
+                state.createShaderModuleResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            case FailurePrefix::PipelineLayout:
+                state.createPipelineLayoutResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            case FailurePrefix::GraphicsPipeline:
+                state.createGraphicsPipelinesResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            case FailurePrefix::BufferAllocation:
+                state.createBufferResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            case FailurePrefix::Mapping:
+                state.mapMemoryResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            case FailurePrefix::Flush:
+                state.uploadMemoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+                state.flushAllocationResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            case FailurePrefix::ViewportLimit:
+                break;
+            case FailurePrefix::CommandDispatch:
+                dispatch.cmdSetScissor = nullptr;
+                break;
+            }
+
+            state.frameTrace.clear();
+            auto begin = pond::render::detail::BeginVulkanFrame(
+                dispatch, owners->device, owners->swapchain, owners->frameResources,
+                owners->presentationTracker, owners->device.GetInfo().queuePlan, 0U);
+            ASSERT_TRUE(begin) << begin.GetError().GetMessage();
+            pond::render::detail::VulkanFrameRecordingState recording =
+                std::move(begin).GetValue().recording;
+            ASSERT_TRUE(pond::render::detail::RecordVulkanFrameClear(
+                dispatch, owners->swapchain, owners->frameResources, recording,
+                pond::render::ClearColor{}));
+
+            auto packetResult = MakeRectangleDraw2DPacket();
+            ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+            pond::render::draw2d::Draw2DPacket packet = std::move(packetResult).GetValue();
+            pond::render::detail::VulkanDraw2DPipelineCache pipelineCache;
+            const auto failed = pond::render::detail::RecordVulkanDraw2DStage(
+                dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+                recording, packet);
+            ExpectRenderError(failed, failureCase.errorCode);
+            EXPECT_EQ(recording.phase,
+                      pond::render::detail::VulkanFrameRecordingPhase::ClearRecorded);
+            EXPECT_EQ(state.frameTrace, (std::vector<std::string>{"acquire", "clear"}));
+            EXPECT_EQ(state.cmdBindPipelineCalls, 0U);
+            EXPECT_EQ(state.cmdSetViewportCalls, 0U);
+            EXPECT_EQ(state.cmdBindVertexBuffersCalls, 0U);
+            EXPECT_EQ(state.cmdBindIndexBufferCalls, 0U);
+            EXPECT_EQ(state.cmdPushConstantsCalls, 0U);
+            EXPECT_EQ(state.cmdSetScissorCalls, 0U);
+            EXPECT_EQ(state.cmdDrawIndexedCalls, 0U);
+            EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+                      pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+            EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetStats().reservedBytes, 0U);
+            EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetStats().uploadedBytes, 0U);
+
+            const auto clearOnlyFinish = pond::render::detail::FinishAndPresentVulkanFrame(
+                dispatch, owners->device, owners->swapchain, owners->frameResources,
+                owners->presentationTracker, owners->device.GetInfo().queuePlan, recording);
+            ASSERT_TRUE(clearOnlyFinish) << clearOnlyFinish.GetError().GetMessage();
+            EXPECT_EQ(state.frameTrace,
+                      (std::vector<std::string>{"acquire", "clear", "endRenderPass",
+                                                "endCommandBuffer", "submit", "present"}));
+        }
+        ExpectNoLiveResources(state);
+    }
+}
+
+TEST(RenderVulkanBootstrapTests, EmptyDraw2DPacketDoesNoWorkAndDoesNotConsumeStage)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Empty GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    auto begin = pond::render::detail::BeginVulkanFrame(
+        dispatch, owners->device, owners->swapchain, owners->frameResources,
+        owners->presentationTracker, owners->device.GetInfo().queuePlan, 0U);
+    ASSERT_TRUE(begin) << begin.GetError().GetMessage();
+    pond::render::detail::VulkanFrameRecordingState recording =
+        std::move(begin).GetValue().recording;
+    ASSERT_TRUE(pond::render::detail::RecordVulkanFrameClear(dispatch, owners->swapchain,
+                                                             owners->frameResources, recording,
+                                                             pond::render::ClearColor{}));
+    auto emptyResult = MakeEmptyDraw2DPacket();
+    ASSERT_TRUE(emptyResult) << emptyResult.GetError().GetMessage();
+    pond::render::draw2d::Draw2DPacket empty = std::move(emptyResult).GetValue();
+    pond::render::detail::VulkanDraw2DPipelineCache pipelineCache;
+
+    ASSERT_TRUE(pond::render::detail::RecordVulkanDraw2DStage(
+        dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+        recording, empty));
+    ASSERT_TRUE(pond::render::detail::RecordVulkanDraw2DStage(
+        dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+        recording, empty));
+    EXPECT_EQ(recording.phase, pond::render::detail::VulkanFrameRecordingPhase::ClearRecorded);
+    EXPECT_FALSE(pipelineCache.IsValid());
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 0U);
+    EXPECT_EQ(state.createBufferCalls, 0U);
+    EXPECT_EQ(state.mapMemoryCalls, 0U);
+    EXPECT_EQ(state.flushAllocationCalls, 0U);
+    EXPECT_EQ(state.cmdBindPipelineCalls, 0U);
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetStats(),
+              pond::render::detail::VulkanDraw2DUploadStats{});
+
+    auto rectangleResult = MakeRectangleDraw2DPacket();
+    ASSERT_TRUE(rectangleResult) << rectangleResult.GetError().GetMessage();
+    ASSERT_TRUE(pond::render::detail::RecordVulkanDraw2DStage(
+        dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+        recording, rectangleResult.GetValue()));
+    EXPECT_EQ(recording.phase, pond::render::detail::VulkanFrameRecordingPhase::Draw2DRecorded);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DSubmitFailureAbandonsUnsubmittedOwnership)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Submit GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    auto begin = pond::render::detail::BeginVulkanFrame(
+        dispatch, owners->device, owners->swapchain, owners->frameResources,
+        owners->presentationTracker, owners->device.GetInfo().queuePlan, 0U);
+    ASSERT_TRUE(begin) << begin.GetError().GetMessage();
+    pond::render::detail::VulkanFrameRecordingState recording =
+        std::move(begin).GetValue().recording;
+    ASSERT_TRUE(pond::render::detail::RecordVulkanFrameClear(dispatch, owners->swapchain,
+                                                             owners->frameResources, recording,
+                                                             pond::render::ClearColor{}));
+    auto packetResult = MakeRectangleDraw2DPacket();
+    ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DPipelineCache pipelineCache;
+    ASSERT_TRUE(pond::render::detail::RecordVulkanDraw2DStage(
+        dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+        recording, packetResult.GetValue()));
+    ASSERT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Reserved);
+
+    state.queueSubmitResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    ExpectRenderError(pond::render::detail::FinishAndPresentVulkanFrame(
+                          dispatch, owners->device, owners->swapchain, owners->frameResources,
+                          owners->presentationTracker, owners->device.GetInfo().queuePlan,
+                          recording),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_TRUE(owners->frameResources.IsPoisoned());
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetStats().reservedBytes, 0U);
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetStats().uploadedBytes, 0U);
+    pipelineCache.Reset();
+    EXPECT_EQ(state.destroyPipelineCalls, 1U);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DPresentFailureRetainsSubmissionUntilExactFenceCompletion)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Present GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    auto begin = pond::render::detail::BeginVulkanFrame(
+        dispatch, owners->device, owners->swapchain, owners->frameResources,
+        owners->presentationTracker, owners->device.GetInfo().queuePlan, 0U);
+    ASSERT_TRUE(begin) << begin.GetError().GetMessage();
+    pond::render::detail::VulkanFrameRecordingState recording =
+        std::move(begin).GetValue().recording;
+    ASSERT_TRUE(pond::render::detail::RecordVulkanFrameClear(dispatch, owners->swapchain,
+                                                             owners->frameResources, recording,
+                                                             pond::render::ClearColor{}));
+    auto packetResult = MakeRectangleDraw2DPacket();
+    ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DPipelineCache pipelineCache;
+    ASSERT_TRUE(pond::render::detail::RecordVulkanDraw2DStage(
+        dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+        recording, packetResult.GetValue()));
+
+    state.queuePresentResult = VK_ERROR_OUT_OF_DATE_KHR;
+    const auto finish = pond::render::detail::FinishAndPresentVulkanFrame(
+        dispatch, owners->device, owners->swapchain, owners->frameResources,
+        owners->presentationTracker, owners->device.GetInfo().queuePlan, recording);
+    ASSERT_TRUE(finish) << finish.GetError().GetMessage();
+    EXPECT_EQ(finish.GetValue().status, pond::render::FrameStatus::RecreationPending);
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+    pipelineCache.Reset();
+    EXPECT_EQ(state.destroyPipelineCalls, 0U);
+
+    state.waitForFencesResult = VK_TIMEOUT;
+    auto pending = owners->frameResources.PrepareFrameSlot(dispatch, 0U, 0U);
+    ASSERT_TRUE(pending) << pending.GetError().GetMessage();
+    EXPECT_FALSE(pending.GetValue());
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+    EXPECT_EQ(state.destroyPipelineCalls, 0U);
+
+    state.waitForFencesResult = VK_SUCCESS;
+    auto complete = owners->frameResources.PrepareFrameSlot(dispatch, 0U, 0U);
+    ASSERT_TRUE(complete) << complete.GetError().GetMessage();
+    EXPECT_TRUE(complete.GetValue());
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+    EXPECT_EQ(state.destroyPipelineCalls, 1U);
+}
+
+TEST(RenderVulkanBootstrapTests,
+     Draw2DNonEnqueuedPresentFailureRetainsSubmissionThroughPoisonedRetirement)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Poison GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    auto begin = pond::render::detail::BeginVulkanFrame(
+        dispatch, owners->device, owners->swapchain, owners->frameResources,
+        owners->presentationTracker, owners->device.GetInfo().queuePlan, 0U);
+    ASSERT_TRUE(begin) << begin.GetError().GetMessage();
+    pond::render::detail::VulkanFrameRecordingState recording =
+        std::move(begin).GetValue().recording;
+    ASSERT_TRUE(pond::render::detail::RecordVulkanFrameClear(dispatch, owners->swapchain,
+                                                             owners->frameResources, recording,
+                                                             pond::render::ClearColor{}));
+    auto packetResult = MakeRectangleDraw2DPacket();
+    ASSERT_TRUE(packetResult) << packetResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DPipelineCache pipelineCache;
+    ASSERT_TRUE(pond::render::detail::RecordVulkanDraw2DStage(
+        dispatch, owners->device, owners->swapchain, owners->frameResources, pipelineCache,
+        recording, packetResult.GetValue()));
+
+    state.queuePresentResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    ExpectRenderError(pond::render::detail::FinishAndPresentVulkanFrame(
+                          dispatch, owners->device, owners->swapchain, owners->frameResources,
+                          owners->presentationTracker, owners->device.GetInfo().queuePlan,
+                          recording),
+                      pond::render::RenderErrorCode::OutOfMemory);
+    EXPECT_TRUE(owners->frameResources.IsPoisoned());
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+    pipelineCache.Reset();
+    EXPECT_EQ(state.destroyPipelineCalls, 0U);
+
+    state.waitForFencesResult = VK_TIMEOUT;
+    auto pending = owners->frameResources.AreAllFencesSignaled(dispatch, 0U);
+    ASSERT_TRUE(pending) << pending.GetError().GetMessage();
+    EXPECT_FALSE(pending.GetValue());
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Submitted);
+    EXPECT_EQ(state.destroyPipelineCalls, 0U);
+
+    state.waitForFencesResult = VK_SUCCESS;
+    auto complete = owners->frameResources.AreAllFencesSignaled(dispatch, 0U);
+    ASSERT_TRUE(complete) << complete.GetError().GetMessage();
+    EXPECT_TRUE(complete.GetValue());
+    EXPECT_EQ(owners->frameResources.GetDraw2DUploadArena().GetSlotSnapshot(0U).state,
+              pond::render::detail::VulkanDraw2DUploadSlotState::Idle);
+    EXPECT_EQ(state.destroyPipelineCalls, 1U);
+}
+
+TEST(RenderVulkanBootstrapTests, CreatesDraw2DPipelineWithFixedStateAndDestroysInReverseOrder)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Pipeline GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    state.resourceTrace.clear();
+
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            owners->swapchain.GetConfig());
+    const VkRenderPass renderPass = owners->swapchain.GetRenderPass();
+    {
+        auto pipelineResult = pond::render::detail::CreateVulkanDraw2DPipeline(
+            dispatch, owners->device, owners->swapchain, key);
+        ASSERT_TRUE(pipelineResult) << pipelineResult.GetError().GetMessage();
+        pond::render::detail::VulkanDraw2DPipelineOwner pipeline =
+            std::move(pipelineResult).GetValue();
+        EXPECT_TRUE(pipeline.IsValid());
+        EXPECT_EQ(pipeline.GetKey(), key);
+        EXPECT_NE(pipeline.GetPipeline(), VK_NULL_HANDLE);
+        EXPECT_NE(pipeline.GetLayout(), VK_NULL_HANDLE);
+
+        EXPECT_EQ(state.createShaderModuleCalls, 2U);
+        EXPECT_EQ(state.createPipelineLayoutCalls, 1U);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+        EXPECT_EQ(state.lastPipelineLayoutSetLayoutCount, 0U);
+        EXPECT_EQ(state.lastPipelineLayoutPushConstantRangeCount, 1U);
+        EXPECT_EQ(state.lastPushConstantRange.stageFlags, VK_SHADER_STAGE_VERTEX_BIT);
+        EXPECT_EQ(state.lastPushConstantRange.offset, 0U);
+        EXPECT_EQ(state.lastPushConstantRange.size, 8U);
+        ASSERT_EQ(state.lastVertexAttributes.size(), 2U);
+        EXPECT_EQ(state.lastVertexBinding.binding, 0U);
+        EXPECT_EQ(state.lastVertexBinding.stride, 12U);
+        EXPECT_EQ(state.lastVertexBinding.inputRate, VK_VERTEX_INPUT_RATE_VERTEX);
+        EXPECT_EQ(state.lastVertexAttributes[0].location, 0U);
+        EXPECT_EQ(state.lastVertexAttributes[0].format, VK_FORMAT_R32G32_SFLOAT);
+        EXPECT_EQ(state.lastVertexAttributes[0].offset, 0U);
+        EXPECT_EQ(state.lastVertexAttributes[1].location, 1U);
+        EXPECT_EQ(state.lastVertexAttributes[1].format, VK_FORMAT_R8G8B8A8_UNORM);
+        EXPECT_EQ(state.lastVertexAttributes[1].offset, 8U);
+        EXPECT_EQ(state.lastInputAssemblyTopology, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+        EXPECT_EQ(state.lastPrimitiveRestartEnable, VK_FALSE);
+        EXPECT_EQ(state.lastCullMode, VK_CULL_MODE_NONE);
+        EXPECT_EQ(state.lastFrontFace, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+        EXPECT_EQ(state.lastRasterizationSamples, VK_SAMPLE_COUNT_1_BIT);
+        EXPECT_EQ(state.lastDepthTestEnable, VK_FALSE);
+        EXPECT_EQ(state.lastDepthWriteEnable, VK_FALSE);
+        EXPECT_EQ(state.lastStencilTestEnable, VK_FALSE);
+        EXPECT_EQ(state.lastColorBlendAttachment.blendEnable, VK_TRUE);
+        EXPECT_EQ(state.lastColorBlendAttachment.srcColorBlendFactor, VK_BLEND_FACTOR_ONE);
+        EXPECT_EQ(state.lastColorBlendAttachment.dstColorBlendFactor,
+                  VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+        EXPECT_EQ(state.lastColorBlendAttachment.srcAlphaBlendFactor, VK_BLEND_FACTOR_ONE);
+        EXPECT_EQ(state.lastColorBlendAttachment.dstAlphaBlendFactor,
+                  VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+        EXPECT_EQ(state.lastDynamicStates, (std::vector<VkDynamicState>{VK_DYNAMIC_STATE_VIEWPORT,
+                                                                        VK_DYNAMIC_STATE_SCISSOR}));
+        EXPECT_EQ(state.lastPipelineRenderPass, renderPass);
+        EXPECT_EQ(state.lastPipelineSubpass, key.subpass);
+        EXPECT_EQ(state.resourceTrace,
+                  (std::vector<std::string>{"createShaderModule", "createShaderModule",
+                                            "createPipelineLayout", "createGraphicsPipeline"}));
+        EXPECT_TRUE(ContainsString(state.debugObjectNames, "pond.render.draw2d.pipeline"));
+    }
+
+    EXPECT_EQ(state.resourceTrace,
+              (std::vector<std::string>{"createShaderModule", "createShaderModule",
+                                        "createPipelineLayout", "createGraphicsPipeline",
+                                        "destroyPipeline", "destroyPipelineLayout",
+                                        "destroyShaderModule", "destroyShaderModule"}));
+    EXPECT_EQ(state.destroyPipelineCalls, 1U);
+    EXPECT_EQ(state.destroyPipelineLayoutCalls, 1U);
+    EXPECT_EQ(state.destroyShaderModuleCalls, 2U);
+}
+
+TEST(RenderVulkanBootstrapTests, RollsBackEveryPartialDraw2DPipelineCreationFailure)
+{
+    struct FailureCase final
+    {
+        const char* name{};
+        std::uint32_t failedShaderCall{};
+        VkResult shaderResult{VK_SUCCESS};
+        VkResult layoutResult{VK_SUCCESS};
+        VkResult graphicsResult{VK_SUCCESS};
+        std::vector<std::string> expectedTrace{};
+    };
+
+    const std::array cases{
+        FailureCase{.name = "vertex shader",
+                    .failedShaderCall = 1U,
+                    .shaderResult = VK_ERROR_OUT_OF_HOST_MEMORY,
+                    .expectedTrace = {"createShaderModule"}},
+        FailureCase{
+            .name = "fragment shader",
+            .failedShaderCall = 2U,
+            .shaderResult = VK_ERROR_OUT_OF_DEVICE_MEMORY,
+            .expectedTrace = {"createShaderModule", "createShaderModule", "destroyShaderModule"}},
+        FailureCase{.name = "layout",
+                    .layoutResult = VK_ERROR_OUT_OF_HOST_MEMORY,
+                    .expectedTrace = {"createShaderModule", "createShaderModule",
+                                      "createPipelineLayout", "destroyShaderModule",
+                                      "destroyShaderModule"}},
+        FailureCase{.name = "graphics pipeline",
+                    .graphicsResult = VK_ERROR_DEVICE_LOST,
+                    .expectedTrace = {"createShaderModule", "createShaderModule",
+                                      "createPipelineLayout", "createGraphicsPipeline",
+                                      "destroyPipelineLayout", "destroyShaderModule",
+                                      "destroyShaderModule"}},
+    };
+
+    for (const FailureCase& failureCase : cases)
+    {
+        SCOPED_TRACE(failureCase.name);
+        FakeVulkanState state;
+        state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+            0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, failureCase.name));
+        state.failCreateShaderModuleCallIndex = failureCase.failedShaderCall;
+        state.createShaderModuleResult = failureCase.shaderResult;
+        state.createPipelineLayoutResult = failureCase.layoutResult;
+        state.createGraphicsPipelinesResult = failureCase.graphicsResult;
+        const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+        std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+        ASSERT_NE(owners, nullptr);
+        state.resourceTrace.clear();
+
+        const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+            pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+                owners->swapchain.GetConfig());
+        auto pipelineResult = pond::render::detail::CreateVulkanDraw2DPipeline(
+            dispatch, owners->device, owners->swapchain, key);
+        EXPECT_FALSE(pipelineResult);
+        EXPECT_EQ(state.resourceTrace, failureCase.expectedTrace);
+    }
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DPipelineKeyIgnoresExtentAndSeparatesIncompatibleContracts)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Key GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+
+    pond::render::detail::VulkanSwapchainConfig resizedConfig = owners->swapchain.GetConfig();
+    resizedConfig.extent.width += 123U;
+    resizedConfig.extent.height += 45U;
+
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey baseKey =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            owners->swapchain.GetConfig());
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey resizedKey =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(resizedConfig);
+    EXPECT_EQ(baseKey, resizedKey);
+
+    pond::render::detail::VulkanDraw2DPipelineCompatibilityKey differentFormat = baseKey;
+    differentFormat.colorAttachmentFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    differentFormat.renderPassCompatibilitySignature =
+        pond::render::detail::ComputeVulkanDraw2DRenderPassCompatibilitySignature(
+            differentFormat.colorAttachmentFormat, differentFormat.sampleCount,
+            differentFormat.colorContract, differentFormat.subpass);
+    EXPECT_NE(baseKey, differentFormat);
+
+    pond::render::detail::VulkanDraw2DPipelineCompatibilityKey differentSubpass = baseKey;
+    differentSubpass.subpass = 1U;
+    differentSubpass.renderPassCompatibilitySignature =
+        pond::render::detail::ComputeVulkanDraw2DRenderPassCompatibilitySignature(
+            differentSubpass.colorAttachmentFormat, differentSubpass.sampleCount,
+            differentSubpass.colorContract, differentSubpass.subpass);
+    EXPECT_NE(baseKey, differentSubpass);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DPipelineCacheHitsExtentReuseAndReplacesIncompatiblePipeline)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Cache GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    state.resourceTrace.clear();
+
+    pond::render::detail::VulkanDraw2DPipelineCache cache;
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            owners->swapchain.GetConfig());
+
+    auto first = cache.GetOrCreate(dispatch, owners->device, owners->swapchain, key);
+    ASSERT_TRUE(first) << first.GetError().GetMessage();
+    EXPECT_FALSE(first.GetValue().cacheHit);
+    EXPECT_FALSE(first.GetValue().replaced);
+    const VkPipeline firstPipeline = first.GetValue().pipeline;
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+
+    auto second = cache.GetOrCreate(dispatch, owners->device, owners->swapchain, key);
+    ASSERT_TRUE(second) << second.GetError().GetMessage();
+    EXPECT_TRUE(second.GetValue().cacheHit);
+    EXPECT_EQ(second.GetValue().pipeline, firstPipeline);
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+
+    pond::render::detail::VulkanSwapchainConfig resizedConfig = owners->swapchain.GetConfig();
+    resizedConfig.extent.width += 100U;
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey resizedKey =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(resizedConfig);
+    auto resized = cache.GetOrCreate(dispatch, owners->device, owners->swapchain, resizedKey);
+    ASSERT_TRUE(resized) << resized.GetError().GetMessage();
+    EXPECT_TRUE(resized.GetValue().cacheHit);
+    EXPECT_EQ(resized.GetValue().pipeline, firstPipeline);
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+
+    pond::render::detail::VulkanSwapchainConfig incompatibleConfig = owners->swapchain.GetConfig();
+    incompatibleConfig.format = VK_FORMAT_R8G8B8A8_SRGB;
+    pond::render::detail::VulkanSwapchainCreationState creationState;
+    auto incompatibleSwapchainResult = pond::render::detail::CreateVulkanSwapchainForSelectedConfig(
+        dispatch, owners->device, MakeFakeHandle<VkSurfaceKHR>(0x6000U), incompatibleConfig,
+        VK_NULL_HANDLE, creationState);
+    ASSERT_TRUE(incompatibleSwapchainResult) << incompatibleSwapchainResult.GetError().GetMessage();
+    pond::render::detail::VulkanSwapchainOwner incompatibleSwapchain =
+        std::move(incompatibleSwapchainResult).GetValue();
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey incompatibleKey =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            incompatibleSwapchain.GetConfig());
+
+    state.createGraphicsPipelinesResult = VK_ERROR_DEVICE_LOST;
+    auto failed =
+        cache.GetOrCreate(dispatch, owners->device, incompatibleSwapchain, incompatibleKey);
+    EXPECT_FALSE(failed);
+    EXPECT_EQ(cache.GetCurrentPipeline().GetPipeline(), firstPipeline);
+    EXPECT_EQ(state.destroyPipelineCalls, 0U);
+
+    state.createGraphicsPipelinesResult = VK_SUCCESS;
+    auto replacement =
+        cache.GetOrCreate(dispatch, owners->device, incompatibleSwapchain, incompatibleKey);
+    ASSERT_TRUE(replacement) << replacement.GetError().GetMessage();
+    EXPECT_FALSE(replacement.GetValue().cacheHit);
+    EXPECT_TRUE(replacement.GetValue().replaced);
+    EXPECT_NE(replacement.GetValue().pipeline, firstPipeline);
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 3U);
+    EXPECT_EQ(state.destroyPipelineCalls, 1U);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DPipelineCacheRejectsReuseAcrossDevices)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Device Cache GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> firstOwners = CreateFakeFrameTestOwners(dispatch);
+    std::unique_ptr<FakeFrameTestOwners> secondOwners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(firstOwners, nullptr);
+    ASSERT_NE(secondOwners, nullptr);
+    ASSERT_NE(firstOwners->device.GetHandle(), secondOwners->device.GetHandle());
+
+    pond::render::detail::VulkanDraw2DPipelineCache cache;
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey firstKey =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            firstOwners->swapchain.GetConfig());
+    auto first = cache.GetOrCreate(dispatch, firstOwners->device, firstOwners->swapchain, firstKey);
+    ASSERT_TRUE(first) << first.GetError().GetMessage();
+    const VkPipeline firstPipeline = first.GetValue().pipeline;
+    ASSERT_NE(firstPipeline, VK_NULL_HANDLE);
+    ASSERT_EQ(state.createGraphicsPipelinesCalls, 1U);
+
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey secondKey =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            secondOwners->swapchain.GetConfig());
+    ExpectRenderError(
+        cache.GetOrCreate(dispatch, secondOwners->device, secondOwners->swapchain, secondKey),
+        pond::render::RenderErrorCode::InvalidState);
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+    EXPECT_EQ(cache.GetCurrentPipeline().GetPipeline(), firstPipeline);
+}
+
+TEST(RenderVulkanBootstrapTests, RejectsDraw2DSchemaMismatchBeforeNativePipelineCreation)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Schema GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+
+    pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            owners->swapchain.GetConfig());
+    key.shaderSchemaFingerprint = 0U;
+    auto pipelineResult = pond::render::detail::CreateVulkanDraw2DPipeline(dispatch, owners->device,
+                                                                           owners->swapchain, key);
+    EXPECT_FALSE(pipelineResult);
+    EXPECT_EQ(state.createShaderModuleCalls, 0U);
+    EXPECT_EQ(state.createPipelineLayoutCalls, 0U);
+    EXPECT_EQ(state.createGraphicsPipelinesCalls, 0U);
+}
+
+TEST(RenderVulkanBootstrapTests, RecordsDraw2DPipelineCommandsWithoutPriorBindings)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Record GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            owners->swapchain.GetConfig());
+    auto pipelineResult = pond::render::detail::CreateVulkanDraw2DPipeline(dispatch, owners->device,
+                                                                           owners->swapchain, key);
+    ASSERT_TRUE(pipelineResult) << pipelineResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DPipelineOwner pipeline = std::move(pipelineResult).GetValue();
+    state.frameTrace.clear();
+
+    const VkCommandBuffer commandBuffer = MakeFakeHandle<VkCommandBuffer>(0x123000U);
+    const VkBuffer vertexBuffer = MakeFakeHandle<VkBuffer>(0x123100U);
+    const VkBuffer indexBuffer = MakeFakeHandle<VkBuffer>(0x123200U);
+    const std::array draws{pond::render::draw2d::Draw2DDrawRecord{
+        .firstIndex = 6U,
+        .indexCount = 12U,
+        .baseVertex = -4,
+        .scissor = pond::render::draw2d::Draw2DScissor{
+            .left = 7U, .top = 9U, .right = 307U, .bottom = 209U}}};
+
+    const auto record = pond::render::detail::RecordVulkanDraw2DPipelineCommands(
+        dispatch, commandBuffer, pipeline, vertexBuffer, 16U, indexBuffer, 32U,
+        VkExtent2D{.width = 800U, .height = 600U}, VkExtent2D{.width = 16'384U, .height = 16'384U},
+        draws);
+    ASSERT_TRUE(record) << record.GetError().GetMessage();
+
+    EXPECT_EQ(state.frameTrace,
+              (std::vector<std::string>{"draw2d", "bindPipeline", "setViewport",
+                                        "bindVertexBuffers", "bindIndexBuffer", "pushConstants",
+                                        "setScissor", "drawIndexed"}));
+    EXPECT_EQ(state.cmdBindPipelineCalls, 1U);
+    EXPECT_EQ(state.cmdSetViewportCalls, 1U);
+    EXPECT_EQ(state.cmdBindVertexBuffersCalls, 1U);
+    EXPECT_EQ(state.cmdBindIndexBufferCalls, 1U);
+    EXPECT_EQ(state.cmdPushConstantsCalls, 1U);
+    EXPECT_EQ(state.cmdSetScissorCalls, 1U);
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 1U);
+    EXPECT_EQ(state.lastPipelineBindPoint, VK_PIPELINE_BIND_POINT_GRAPHICS);
+    EXPECT_EQ(state.lastBoundPipeline, pipeline.GetPipeline());
+    EXPECT_FLOAT_EQ(state.lastViewport.width, 800.0F);
+    EXPECT_FLOAT_EQ(state.lastViewport.height, 600.0F);
+    EXPECT_EQ(state.lastVertexBuffer, vertexBuffer);
+    EXPECT_EQ(state.lastVertexOffset, 16U);
+    EXPECT_EQ(state.lastIndexBuffer, indexBuffer);
+    EXPECT_EQ(state.lastIndexOffset, 32U);
+    EXPECT_EQ(state.lastIndexType, VK_INDEX_TYPE_UINT32);
+    EXPECT_EQ(state.lastPushConstants[0], 800U);
+    EXPECT_EQ(state.lastPushConstants[1], 600U);
+    EXPECT_EQ(state.lastScissor.offset.x, 7);
+    EXPECT_EQ(state.lastScissor.offset.y, 9);
+    EXPECT_EQ(state.lastScissor.extent.width, 300U);
+    EXPECT_EQ(state.lastScissor.extent.height, 200U);
+    EXPECT_EQ(state.lastDrawIndexCount, 12U);
+    EXPECT_EQ(state.lastDrawInstanceCount, 1U);
+    EXPECT_EQ(state.lastDrawFirstIndex, 6U);
+    EXPECT_EQ(state.lastDrawVertexOffset, -4);
+    EXPECT_EQ(state.lastDrawFirstInstance, 0U);
+}
+
+TEST(RenderVulkanBootstrapTests, RejectsUnrepresentableDraw2DScissorsBeforeCommands)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Scissor GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            owners->swapchain.GetConfig());
+    auto pipelineResult = pond::render::detail::CreateVulkanDraw2DPipeline(dispatch, owners->device,
+                                                                           owners->swapchain, key);
+    ASSERT_TRUE(pipelineResult) << pipelineResult.GetError().GetMessage();
+    pond::render::detail::VulkanDraw2DPipelineOwner pipeline = std::move(pipelineResult).GetValue();
+    state.frameTrace.clear();
+
+    constexpr std::uint32_t kUnrepresentableOffset{
+        static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()) + 1U};
+    const std::array draws{pond::render::draw2d::Draw2DDrawRecord{
+        .firstIndex = 0U,
+        .indexCount = 3U,
+        .baseVertex = 0,
+        .scissor = pond::render::draw2d::Draw2DScissor{.left = kUnrepresentableOffset,
+                                                       .top = 0U,
+                                                       .right = kUnrepresentableOffset + 1U,
+                                                       .bottom = 1U}}};
+    ExpectRenderError(
+        pond::render::detail::RecordVulkanDraw2DPipelineCommands(
+            dispatch, MakeFakeHandle<VkCommandBuffer>(0x123000U), pipeline,
+            MakeFakeHandle<VkBuffer>(0x123100U), 0U, MakeFakeHandle<VkBuffer>(0x123200U), 0U,
+            VkExtent2D{.width = std::numeric_limits<std::uint32_t>::max(), .height = 1U},
+            VkExtent2D{.width = std::numeric_limits<std::uint32_t>::max(), .height = 1U}, draws),
+        pond::render::RenderErrorCode::InvalidArgument);
+    EXPECT_TRUE(state.frameTrace.empty());
+    EXPECT_EQ(state.cmdBindPipelineCalls, 0U);
+    EXPECT_EQ(state.cmdSetViewportCalls, 0U);
+    EXPECT_EQ(state.cmdSetScissorCalls, 0U);
+    EXPECT_EQ(state.cmdDrawIndexedCalls, 0U);
+}
+
+TEST(RenderVulkanBootstrapTests, MovesAndShutsDownDraw2DPipelineOwnerOnce)
+{
+    FakeVulkanState state;
+    state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+        0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Move GPU"));
+    const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+    std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+    ASSERT_NE(owners, nullptr);
+
+    const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+        pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+            owners->swapchain.GetConfig());
+    {
+        auto sourceResult = pond::render::detail::CreateVulkanDraw2DPipeline(
+            dispatch, owners->device, owners->swapchain, key);
+        ASSERT_TRUE(sourceResult) << sourceResult.GetError().GetMessage();
+        pond::render::detail::VulkanDraw2DPipelineOwner source =
+            std::move(sourceResult).GetValue();
+        const VkPipeline pipelineHandle = source.GetPipeline();
+        pond::render::detail::VulkanDraw2DPipelineOwner moved{std::move(source)};
+        EXPECT_FALSE(source.IsValid());
+        EXPECT_TRUE(moved.IsValid());
+        EXPECT_EQ(moved.GetPipeline(), pipelineHandle);
+
+        auto destinationResult = pond::render::detail::CreateVulkanDraw2DPipeline(
+            dispatch, owners->device, owners->swapchain, key);
+        ASSERT_TRUE(destinationResult) << destinationResult.GetError().GetMessage();
+        pond::render::detail::VulkanDraw2DPipelineOwner assigned =
+            std::move(destinationResult).GetValue();
+        const VkPipeline replacedHandle = assigned.GetPipeline();
+        ASSERT_NE(replacedHandle, pipelineHandle);
+        assigned = std::move(moved);
+        EXPECT_FALSE(moved.IsValid());
+        EXPECT_TRUE(assigned.IsValid());
+        EXPECT_EQ(assigned.GetPipeline(), pipelineHandle);
+        EXPECT_EQ(state.destroyPipelineCalls, 1U);
+    }
+
+    EXPECT_EQ(state.destroyPipelineCalls, 2U);
+    EXPECT_EQ(state.destroyPipelineLayoutCalls, 2U);
+    EXPECT_EQ(state.destroyShaderModuleCalls, 4U);
+}
+
+TEST(RenderVulkanBootstrapTests, Draw2DPipelineOwnerTerminatesWhenDestroyedOffOwnerThread)
+{
+#if defined(GTEST_HAS_DEATH_TEST) && GTEST_HAS_DEATH_TEST
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_DEATH(
+        {
+            FakeVulkanState state;
+            state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+                0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Death GPU"));
+            const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+            std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+            if (owners == nullptr)
+            {
+                std::abort();
+            }
+
+            const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+                pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+                    owners->swapchain.GetConfig());
+            auto pipelineResult = pond::render::detail::CreateVulkanDraw2DPipeline(
+                dispatch, owners->device, owners->swapchain, key);
+            if (!pipelineResult)
+            {
+                std::abort();
+            }
+
+            std::optional<pond::render::detail::VulkanDraw2DPipelineOwner> pipeline;
+            pipeline.emplace(std::move(pipelineResult).GetValue());
+            std::thread worker{[pipeline = std::move(pipeline)]() mutable
+                               {
+                                   pipeline.reset();
+                               }};
+            worker.join();
+        },
+        "VulkanDraw2DPipelineOwner destruction");
+#endif
+}
+
+TEST(RenderVulkanBootstrapTests, VulkanDeviceOwnerRejectsLiveDraw2DPipelineChild)
+{
+#if defined(GTEST_HAS_DEATH_TEST) && GTEST_HAS_DEATH_TEST
+    GTEST_FLAG_SET(death_test_style, "threadsafe");
+    EXPECT_DEATH(
+        {
+            FakeVulkanState state;
+            state.physicalDevices.push_back(MakeCompatibleFakeDevice(
+                0x5001U, 1U, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, "Draw2D Parent GPU"));
+            const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
+            std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
+            if (owners == nullptr)
+            {
+                std::abort();
+            }
+            const pond::render::detail::VulkanDraw2DPipelineCompatibilityKey key =
+                pond::render::detail::MakeVulkanDraw2DPipelineCompatibilityKey(
+                    owners->swapchain.GetConfig());
+            auto pipelineResult = pond::render::detail::CreateVulkanDraw2DPipeline(
+                dispatch, owners->device, owners->swapchain, key);
+            if (!pipelineResult)
+            {
+                std::abort();
+            }
+            pond::render::detail::VulkanDraw2DPipelineOwner pipeline =
+                std::move(pipelineResult).GetValue();
+            owners->device.Reset();
+        },
+        "requires every Draw2D pipeline child");
+#endif
 }
 
 TEST(RenderVulkanBootstrapTests, MapsFrameAcquireTimeoutAndSubmitFailure)
@@ -6842,6 +10018,7 @@ TEST(RenderVulkanBootstrapTests,
     const pond::render::RenderTargetSnapshot hidden{
         pond::platform::WindowId{42},
         pond::platform::PixelSize{800, 600},
+        pond::platform::LogicalSize{800U, 600U},
         false,
         pond::platform::WindowState::Normal,
         pond::render::PresentationEnvironmentRevision{1U},
@@ -6858,6 +10035,7 @@ TEST(RenderVulkanBootstrapTests,
     const pond::render::RenderTargetSnapshot restored{
         pond::platform::WindowId{42},
         pond::platform::PixelSize{800, 600},
+        pond::platform::LogicalSize{800U, 600U},
         true,
         pond::platform::WindowState::Normal,
         pond::render::PresentationEnvironmentRevision{1U},
@@ -6870,6 +10048,7 @@ TEST(RenderVulkanBootstrapTests,
     const pond::render::RenderTargetSnapshot activeUpdate{
         pond::platform::WindowId{42},
         pond::platform::PixelSize{801, 600},
+        pond::platform::LogicalSize{801U, 600U},
         true,
         pond::platform::WindowState::Normal,
         pond::render::PresentationEnvironmentRevision{1U},
@@ -6935,6 +10114,7 @@ TEST(RenderVulkanBootstrapTests, PublicLifecycleInjectionCoversSurfaceReplacemen
     additionalDesc.targetSnapshot =
         pond::render::RenderTargetSnapshot{pond::platform::WindowId{43},
                                            pond::platform::PixelSize{640, 480},
+                                           pond::platform::LogicalSize{640U, 480U},
                                            true,
                                            pond::platform::WindowState::Normal,
                                            pond::render::PresentationEnvironmentRevision{1U},
@@ -6995,6 +10175,7 @@ TEST(RenderVulkanBootstrapTests, PublicLifecycleInjectionMakesDeviceLossStickyAc
     additionalDesc.targetSnapshot =
         pond::render::RenderTargetSnapshot{pond::platform::WindowId{43},
                                            pond::platform::PixelSize{640, 480},
+                                           pond::platform::LogicalSize{640U, 480U},
                                            true,
                                            pond::platform::WindowState::Normal,
                                            pond::render::PresentationEnvironmentRevision{1U},
@@ -7133,9 +10314,9 @@ struct PublicRetirementExtensionCase final
 {
     return pond::render::RenderTargetDesc{
         .targetSnapshot =
-            pond::render::RenderTargetSnapshot{windowId, pixelSize, true, windowState,
-                                               pond::render::PresentationEnvironmentRevision{1U},
-                                               revision},
+            pond::render::RenderTargetSnapshot{
+                windowId, pixelSize, pond::platform::LogicalSize{pixelSize.width, pixelSize.height},
+                true, windowState, pond::render::PresentationEnvironmentRevision{1U}, revision},
         .presentation = {.policy = pond::render::PresentationPolicy::VSync,
                          .strength = pond::render::RequirementStrength::Preferred},
         .queuedLatency = {.maximumQueuedFrames = {},
@@ -7216,8 +10397,8 @@ TEST(RenderVulkanBootstrapTests,
         ASSERT_NO_FATAL_FAILURE(PresentPublicFrame(lifecycle->owners.target));
         ASSERT_TRUE(
             lifecycle->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-                pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-                pond::platform::WindowState::Normal,
+                pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+                pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
                 pond::render::PresentationEnvironmentRevision{1U}, 2U}));
 
         auto replacementResult = lifecycle->owners.target.AcquireFrame();
@@ -7272,9 +10453,9 @@ TEST(RenderVulkanBootstrapTests,
 
     ASSERT_NO_FATAL_FAILURE(PresentPublicFrame(lifecycle->owners.target));
     ASSERT_TRUE(lifecycle->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-        pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-        2U}));
+        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+        pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 2U}));
     ASSERT_NO_FATAL_FAILURE(PresentPublicFrame(lifecycle->owners.target));
     ASSERT_NO_FATAL_FAILURE(PresentFramesUntilRetirementCompletes(lifecycle->owners.target, 1U));
 
@@ -7289,19 +10470,33 @@ TEST(RenderVulkanBootstrapTests,
     EXPECT_EQ(state.queueWaitIdleCalls, 0U);
 
     ASSERT_TRUE(lifecycle->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, pond::platform::PixelSize{}, true,
-        pond::platform::WindowState::Minimized, pond::render::PresentationEnvironmentRevision{1U},
-        3U}));
+        pond::platform::WindowId{42}, pond::platform::PixelSize{}, pond::platform::LogicalSize{},
+        true, pond::platform::WindowState::Minimized,
+        pond::render::PresentationEnvironmentRevision{1U}, 3U}));
     EXPECT_TRUE(lifecycle->owners.target.IsSuspended());
     EXPECT_FALSE(lifecycle->owners.target.HasSwapchain());
     EXPECT_GT(lifecycle->owners.target.GetPresentationRetirementStats().pendingResourceSets, 0U);
     EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
     EXPECT_EQ(state.queueWaitIdleCalls, 0U);
 
+    auto suspendedFrameResult = lifecycle->owners.target.AcquireFrame();
+    ASSERT_TRUE(suspendedFrameResult) << suspendedFrameResult.GetError().GetMessage();
+    pond::render::RenderFrame suspendedFrame = std::move(suspendedFrameResult).GetValue();
+    EXPECT_EQ(suspendedFrame.GetStatus(), pond::render::FrameStatus::SkippedSuspended);
+    const pond::render::RenderFrameMetrics suspendedMetrics = suspendedFrame.GetMetrics();
+    EXPECT_TRUE(pond::render::IsValid(suspendedMetrics));
+    EXPECT_EQ(suspendedMetrics.pixelSize, pond::platform::PixelSize{});
+    EXPECT_EQ(suspendedMetrics.logicalSize, pond::platform::LogicalSize{});
+    EXPECT_EQ(suspendedMetrics.metricsRevision, pond::render::PresentationEnvironmentRevision{1U});
+    EXPECT_EQ(suspendedMetrics.targetRevision, 3U);
+    const auto suspendedFinish = suspendedFrame.FinishAndPresent();
+    ASSERT_TRUE(suspendedFinish) << suspendedFinish.GetError().GetMessage();
+    EXPECT_FALSE(suspendedFinish.GetValue().presented);
+
     ASSERT_TRUE(lifecycle->owners.target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601}, true,
-        pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-        4U}));
+        pond::platform::WindowId{42}, pond::platform::PixelSize{801, 601},
+        pond::platform::LogicalSize{801U, 601U}, true, pond::platform::WindowState::Normal,
+        pond::render::PresentationEnvironmentRevision{1U}, 4U}));
     ASSERT_NO_FATAL_FAILURE(PresentPublicFrame(lifecycle->owners.target));
     ASSERT_NO_FATAL_FAILURE(PresentFramesUntilRetirementCompletes(lifecycle->owners.target, 2U));
 

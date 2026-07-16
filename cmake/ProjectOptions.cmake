@@ -7,6 +7,9 @@ function(ponder_define_project_options)
     option(PONDER_BUILD_EXAMPLES "Build ponder examples." ON)
     option(PONDER_BUILD_PLUGINS "Build ponder plugins." ON)
     option(PONDER_BUILD_RENDER "Build the ponder render library." ON)
+    option(PONDER_BUILD_UI_RENDER_INTEGRATION
+        "Build the temporary UI-to-render integration and experimental facade."
+        "${PONDER_BUILD_RENDER}")
 
     set(ponder_render_vulkan_default OFF)
     if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -37,6 +40,8 @@ function(ponder_define_project_options)
     endif()
 
     if(NOT PONDER_BUILD_RENDER)
+        set(PONDER_BUILD_UI_RENDER_INTEGRATION OFF CACHE BOOL
+            "Build the temporary UI-to-render integration and experimental facade." FORCE)
         set(PONDER_RENDER_ENABLE_VULKAN OFF CACHE BOOL
             "Enable the Vulkan render backend on Windows and Linux." FORCE)
         set(PONDER_RENDER_ENABLE_VALIDATION OFF CACHE BOOL
@@ -88,6 +93,7 @@ function(ponder_define_project_options)
         "PONDER_BUILD_EXAMPLES=${PONDER_BUILD_EXAMPLES};"
         "PONDER_BUILD_PLUGINS=${PONDER_BUILD_PLUGINS};"
         "PONDER_BUILD_RENDER=${PONDER_BUILD_RENDER};"
+        "PONDER_BUILD_UI_RENDER_INTEGRATION=${PONDER_BUILD_UI_RENDER_INTEGRATION};"
         "PONDER_RENDER_ENABLE_VULKAN=${PONDER_RENDER_ENABLE_VULKAN};"
         "PONDER_RENDER_ENABLE_VALIDATION=${PONDER_RENDER_ENABLE_VALIDATION};"
         "PONDER_BUILD_RENDER_INTEGRATION_TESTS=${PONDER_BUILD_RENDER_INTEGRATION_TESTS};"

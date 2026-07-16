@@ -18,12 +18,20 @@ static_assert(pond::render::IsValid(pond::render::ClearColor{
 [[maybe_unused]] constexpr pond::render::RenderTargetSnapshot kSnapshot{
     pond::platform::WindowId{7U},
     pond::platform::PixelSize{320U, 240U},
+    pond::platform::LogicalSize{320U, 240U},
     true,
     pond::platform::WindowState::Normal,
     pond::render::PresentationEnvironmentRevision{1U},
     1U};
 static_assert(pond::render::IsValid(kSnapshot));
 
+[[maybe_unused]] constexpr pond::render::RenderFrameMetrics kFrameMetrics{
+    .windowId = pond::platform::WindowId{7U},
+    .logicalSize = pond::platform::LogicalSize{320U, 240U},
+    .pixelSize = pond::platform::PixelSize{640U, 480U},
+    .metricsRevision = pond::render::PresentationEnvironmentRevision{2U},
+    .targetRevision = 3U};
+static_assert(pond::render::IsValid(kFrameMetrics));
 [[maybe_unused]] constexpr pond::render::SurfacePreparationDesc kSurfaceDesc{
     .targetSnapshot = kSnapshot, .reason = pond::render::SurfacePreparationReason::Initial};
 static_assert(pond::render::IsValid(kSurfaceDesc));

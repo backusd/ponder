@@ -17,8 +17,9 @@ int main()
 
     const pond::platform::WindowId windowId{42U};
     const pond::platform::PixelSize pixelSize{640U, 480U};
+    const pond::platform::LogicalSize logicalSize{640U, 480U};
     const pond::render::RenderTargetSnapshot snapshot{
-        windowId, pixelSize, true, pond::platform::WindowState::Normal,
+        windowId, pixelSize, logicalSize, true, pond::platform::WindowState::Normal,
         pond::render::PresentationEnvironmentRevision{1U}, 1U};
     if (!pond::render::IsValid(snapshot))
     {

@@ -41,7 +41,7 @@ public:
     PlatformRuntime(PlatformRuntime&&) noexcept;
     PlatformRuntime& operator=(PlatformRuntime&&) noexcept;
 
-    [[nodiscard]] PlatformTimestamp Now() const;
+    [[nodiscard]] Timestamp Now() const;
     [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<Window> CreateWindow(const WindowDesc& desc);
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();

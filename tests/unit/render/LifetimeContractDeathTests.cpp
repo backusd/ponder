@@ -19,6 +19,7 @@ namespace
 {
     return pond::render::RenderTargetSnapshot{pond::platform::WindowId{42},
                                               pond::platform::PixelSize{800, 600},
+                                              pond::platform::LogicalSize{800U, 600U},
                                               true,
                                               pond::platform::WindowState::Normal,
                                               pond::render::PresentationEnvironmentRevision{1U},
@@ -60,9 +61,9 @@ namespace
 {
     return pond::render::RenderTargetDesc{
         .targetSnapshot = pond::render::RenderTargetSnapshot{
-            pond::platform::WindowId{42}, pond::platform::PixelSize{800, 600}, false,
-            pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-            1U}};
+            pond::platform::WindowId{42}, pond::platform::PixelSize{800, 600},
+            pond::platform::LogicalSize{800U, 600U}, false, pond::platform::WindowState::Normal,
+            pond::render::PresentationEnvironmentRevision{1U}, 1U}};
 }
 
 [[nodiscard]] pond::render::detail::RenderLifetimeContractOwners CreateDeviceAndTargetOrAbort()

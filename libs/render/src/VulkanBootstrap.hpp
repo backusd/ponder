@@ -4,16 +4,26 @@
 #include <ponder/platform/NativeWindow.hpp>
 #include <ponder/render/Bootstrap.hpp>
 
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 #include <volk.h>
 
 #include "VulkanQueueSynchronization.hpp"
+
+namespace pond::render::draw2d
+{
+class Draw2DPacket;
+struct Draw2DDrawRecord;
+} // namespace pond::render::draw2d
 
 namespace pond::render::detail
 {
@@ -150,9 +160,24 @@ struct VulkanDeviceInfo final
     RenderAdapterSnapshot selectedAdapter{};
     VulkanDeviceQueuePlan queuePlan{};
     VulkanDeviceOptionalCapabilities optionalCapabilities{};
+    VkDeviceSize nonCoherentAtomSize{1U};
+    std::array<std::uint32_t, 2U> maximumViewportDimensions{};
 
     [[nodiscard]] friend bool operator==(const VulkanDeviceInfo& lhs,
                                          const VulkanDeviceInfo& rhs) = default;
+};
+
+struct VulkanHostBufferAllocationRequest final
+{
+    VkMemoryPropertyFlags requiredMemoryProperties{VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT};
+    VkMemoryPropertyFlags preferredMemoryProperties{VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                                    VK_MEMORY_PROPERTY_HOST_CACHED_BIT};
+};
+
+struct VulkanHostBufferAllocationResult final
+{
+    VkMemoryPropertyFlags memoryProperties{};
+    VkDeviceSize allocationSize{};
 };
 
 struct VulkanValidationMessageFilter final
@@ -243,6 +268,36 @@ struct VulkanGlobalDispatch final
     using CreateFramebufferFn = VkResult (*)(VkDevice, const VkFramebufferCreateInfo*,
                                              const VkAllocationCallbacks*, VkFramebuffer*);
     using DestroyFramebufferFn = void (*)(VkDevice, VkFramebuffer, const VkAllocationCallbacks*);
+    using CreateShaderModuleFn = VkResult (*)(VkDevice, const VkShaderModuleCreateInfo*,
+                                              const VkAllocationCallbacks*, VkShaderModule*);
+    using DestroyShaderModuleFn = void (*)(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
+    using CreatePipelineLayoutFn = VkResult (*)(VkDevice, const VkPipelineLayoutCreateInfo*,
+                                                const VkAllocationCallbacks*, VkPipelineLayout*);
+    using DestroyPipelineLayoutFn = void (*)(VkDevice, VkPipelineLayout,
+                                             const VkAllocationCallbacks*);
+    using CreateGraphicsPipelinesFn = VkResult (*)(VkDevice, VkPipelineCache, std::uint32_t,
+                                                   const VkGraphicsPipelineCreateInfo*,
+                                                   const VkAllocationCallbacks*, VkPipeline*);
+    using DestroyPipelineFn = void (*)(VkDevice, VkPipeline, const VkAllocationCallbacks*);
+    using CreateBufferFn = VkResult (*)(void*, const VkBufferCreateInfo*,
+                                        const VulkanHostBufferAllocationRequest*, VkBuffer*, void**,
+                                        VulkanHostBufferAllocationResult*);
+    using DestroyBufferFn = void (*)(void*, VkBuffer, void*);
+    using MapMemoryFn = VkResult (*)(void*, void*, void**);
+    using UnmapMemoryFn = void (*)(void*, void*);
+    using FlushAllocationFn = VkResult (*)(void*, void*, VkDeviceSize, VkDeviceSize);
+    using CmdBindPipelineFn = void (*)(VkCommandBuffer, VkPipelineBindPoint, VkPipeline);
+    using CmdSetViewportFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t,
+                                      const VkViewport*);
+    using CmdSetScissorFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t,
+                                     const VkRect2D*);
+    using CmdBindVertexBuffersFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t,
+                                            const VkBuffer*, const VkDeviceSize*);
+    using CmdBindIndexBufferFn = void (*)(VkCommandBuffer, VkBuffer, VkDeviceSize, VkIndexType);
+    using CmdPushConstantsFn = void (*)(VkCommandBuffer, VkPipelineLayout, VkShaderStageFlags,
+                                        std::uint32_t, std::uint32_t, const void*);
+    using CmdDrawIndexedFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, std::uint32_t,
+                                      std::int32_t, std::uint32_t);
     using CreateCommandPoolFn = VkResult (*)(VkDevice, const VkCommandPoolCreateInfo*,
                                              const VkAllocationCallbacks*, VkCommandPool*);
     using DestroyCommandPoolFn = void (*)(VkDevice, VkCommandPool, const VkAllocationCallbacks*);
@@ -319,6 +374,24 @@ struct VulkanGlobalDispatch final
     DestroyRenderPassFn destroyRenderPass{};
     CreateFramebufferFn createFramebuffer{};
     DestroyFramebufferFn destroyFramebuffer{};
+    CreateShaderModuleFn createShaderModule{};
+    DestroyShaderModuleFn destroyShaderModule{};
+    CreatePipelineLayoutFn createPipelineLayout{};
+    DestroyPipelineLayoutFn destroyPipelineLayout{};
+    CreateGraphicsPipelinesFn createGraphicsPipelines{};
+    DestroyPipelineFn destroyPipeline{};
+    CreateBufferFn createBuffer{};
+    DestroyBufferFn destroyBuffer{};
+    MapMemoryFn mapMemory{};
+    UnmapMemoryFn unmapMemory{};
+    FlushAllocationFn flushAllocation{};
+    CmdBindPipelineFn cmdBindPipeline{};
+    CmdSetViewportFn cmdSetViewport{};
+    CmdSetScissorFn cmdSetScissor{};
+    CmdBindVertexBuffersFn cmdBindVertexBuffers{};
+    CmdBindIndexBufferFn cmdBindIndexBuffer{};
+    CmdPushConstantsFn cmdPushConstants{};
+    CmdDrawIndexedFn cmdDrawIndexed{};
     CreateCommandPoolFn createCommandPool{};
     DestroyCommandPoolFn destroyCommandPool{};
     AllocateCommandBuffersFn allocateCommandBuffers{};
@@ -418,6 +491,12 @@ private:
     VulkanSurfaceInfo m_info{};
 };
 
+struct VulkanDeviceChildLifetime final
+{
+    std::atomic_bool active{true};
+    std::atomic_uint32_t draw2DPipelineChildren{};
+};
+
 class VulkanDeviceOwner final
 {
 public:
@@ -431,6 +510,10 @@ public:
     [[nodiscard]] bool IsValid() const noexcept;
     [[nodiscard]] VkDevice GetHandle() const noexcept;
     [[nodiscard]] VkPhysicalDevice GetPhysicalDevice() const noexcept;
+    [[nodiscard]] void* GetAllocator() const noexcept;
+    [[nodiscard]] VkDeviceSize GetNonCoherentAtomSize() const noexcept;
+    [[nodiscard]] const std::shared_ptr<VulkanDeviceChildLifetime>& GetChildLifetime()
+        const noexcept;
     [[nodiscard]] const VulkanDeviceInfo& GetInfo() const noexcept;
     [[nodiscard]] const VulkanGlobalDispatch& GetDispatch() const noexcept;
     [[nodiscard]] VkQueue GetQueue(std::uint32_t queueFamilyIndex) const noexcept;
@@ -456,7 +539,8 @@ private:
                       VulkanGlobalDispatch::QueueWaitIdleFn queueWaitIdle,
                       VulkanGlobalDispatch::DestroyAllocatorFn destroyAllocator,
                       VulkanGlobalDispatch dispatch, std::optional<VolkDeviceTable> volkTable,
-                      VulkanDeviceInfo info) noexcept;
+                      VulkanDeviceInfo info,
+                      std::shared_ptr<VulkanDeviceChildLifetime> childLifetime) noexcept;
 
     std::shared_ptr<VulkanInstanceOwner> m_instance;
     VkPhysicalDevice m_physicalDevice{VK_NULL_HANDLE};
@@ -471,6 +555,7 @@ private:
     VulkanGlobalDispatch m_dispatch{};
     std::optional<VolkDeviceTable> m_volkTable{};
     VulkanDeviceInfo m_info{};
+    std::shared_ptr<VulkanDeviceChildLifetime> m_childLifetime;
 };
 
 struct VulkanSwapchainConfig final
@@ -556,6 +641,287 @@ private:
     VulkanSwapchainConfig m_config{};
 };
 
+enum class VulkanDraw2DColorContract : std::uint8_t
+{
+    LinearPremultipliedIntoOpaqueSdrSrgb = 0
+};
+
+struct VulkanDraw2DPipelineCompatibilityKey final
+{
+    VkFormat colorAttachmentFormat{VK_FORMAT_UNDEFINED};
+    VulkanDraw2DColorContract colorContract{
+        VulkanDraw2DColorContract::LinearPremultipliedIntoOpaqueSdrSrgb};
+    VkSampleCountFlagBits sampleCount{VK_SAMPLE_COUNT_1_BIT};
+    std::uint64_t renderPassCompatibilitySignature{};
+    std::uint32_t subpass{};
+    std::uint64_t shaderSchemaFingerprint{};
+    std::uint64_t fixedStateSignature{};
+
+    [[nodiscard]] friend constexpr bool operator==(
+        const VulkanDraw2DPipelineCompatibilityKey& lhs,
+        const VulkanDraw2DPipelineCompatibilityKey& rhs) noexcept = default;
+};
+
+struct VulkanDraw2DCommandDraw final
+{
+    VkRect2D scissor{};
+    std::uint32_t firstIndex{};
+    std::uint32_t indexCount{};
+    std::int32_t baseVertex{};
+
+    [[nodiscard]] friend constexpr bool operator==(
+        const VulkanDraw2DCommandDraw& lhs, const VulkanDraw2DCommandDraw& rhs) noexcept = default;
+};
+
+struct VulkanDraw2DPipelineCacheUpdate final
+{
+    bool cacheHit{};
+    bool replaced{};
+    VkPipeline pipeline{VK_NULL_HANDLE};
+    VkPipelineLayout layout{VK_NULL_HANDLE};
+
+    [[nodiscard]] friend constexpr bool operator==(
+        const VulkanDraw2DPipelineCacheUpdate& lhs,
+        const VulkanDraw2DPipelineCacheUpdate& rhs) noexcept = default;
+};
+
+class VulkanDraw2DPipelineOwner final
+{
+public:
+    VulkanDraw2DPipelineOwner() noexcept;
+    VulkanDraw2DPipelineOwner(const VulkanDraw2DPipelineOwner&) = delete;
+    VulkanDraw2DPipelineOwner& operator=(const VulkanDraw2DPipelineOwner&) = delete;
+    VulkanDraw2DPipelineOwner(VulkanDraw2DPipelineOwner&& other) noexcept;
+    VulkanDraw2DPipelineOwner& operator=(VulkanDraw2DPipelineOwner&& other) noexcept;
+    ~VulkanDraw2DPipelineOwner();
+
+    [[nodiscard]] bool IsValid() const noexcept;
+    [[nodiscard]] VkPipeline GetPipeline() const noexcept;
+    [[nodiscard]] VkPipelineLayout GetLayout() const noexcept;
+    [[nodiscard]] VkShaderModule GetVertexShaderModule() const noexcept;
+    [[nodiscard]] VkShaderModule GetFragmentShaderModule() const noexcept;
+    [[nodiscard]] const VulkanDraw2DPipelineCompatibilityKey& GetKey() const noexcept;
+
+    void Reset() noexcept;
+
+private:
+    friend core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(
+        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+        const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key);
+
+    VulkanDraw2DPipelineOwner(VkDevice device, VkShaderModule vertexShader,
+                              VkShaderModule fragmentShader, VkPipelineLayout layout,
+                              VkPipeline pipeline,
+                              VulkanGlobalDispatch::DestroyShaderModuleFn destroyShaderModule,
+                              VulkanGlobalDispatch::DestroyPipelineLayoutFn destroyPipelineLayout,
+                              VulkanGlobalDispatch::DestroyPipelineFn destroyPipeline,
+                              VulkanDraw2DPipelineCompatibilityKey key,
+                              std::shared_ptr<VulkanDeviceChildLifetime> childLifetime) noexcept;
+
+    VkDevice m_device{VK_NULL_HANDLE};
+    VkShaderModule m_vertexShader{VK_NULL_HANDLE};
+    VkShaderModule m_fragmentShader{VK_NULL_HANDLE};
+    VkPipelineLayout m_layout{VK_NULL_HANDLE};
+    VkPipeline m_pipeline{VK_NULL_HANDLE};
+    VulkanGlobalDispatch::DestroyShaderModuleFn m_destroyShaderModule{};
+    VulkanGlobalDispatch::DestroyPipelineLayoutFn m_destroyPipelineLayout{};
+    VulkanGlobalDispatch::DestroyPipelineFn m_destroyPipeline{};
+    VulkanDraw2DPipelineCompatibilityKey m_key{};
+    std::shared_ptr<VulkanDeviceChildLifetime> m_childLifetime;
+    std::thread::id m_ownerThread{};
+};
+
+class VulkanDraw2DPipelineCache final
+{
+public:
+    VulkanDraw2DPipelineCache() noexcept;
+    VulkanDraw2DPipelineCache(const VulkanDraw2DPipelineCache&) = delete;
+    VulkanDraw2DPipelineCache& operator=(const VulkanDraw2DPipelineCache&) = delete;
+    VulkanDraw2DPipelineCache(VulkanDraw2DPipelineCache&& other) noexcept;
+    VulkanDraw2DPipelineCache& operator=(VulkanDraw2DPipelineCache&& other) noexcept;
+    ~VulkanDraw2DPipelineCache();
+
+    [[nodiscard]] bool IsValid() const noexcept;
+    [[nodiscard]] const VulkanDraw2DPipelineOwner& GetCurrentPipeline() const noexcept;
+    [[nodiscard]] std::shared_ptr<const VulkanDraw2DPipelineOwner> AcquireCurrentPipeline()
+        const noexcept;
+    [[nodiscard]] core::Result<VulkanDraw2DPipelineCacheUpdate> GetOrCreate(
+        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+        const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key);
+
+    void Reset() noexcept;
+
+private:
+    VkDevice m_device{VK_NULL_HANDLE};
+    std::shared_ptr<VulkanDraw2DPipelineOwner> m_pipeline;
+};
+
+enum class VulkanDraw2DUploadSlotState : std::uint8_t
+{
+    Idle = 0,
+    Reserved = 1,
+    Submitted = 2
+};
+
+struct VulkanDraw2DUploadReservation final
+{
+    std::uint32_t slotIndex{};
+    std::uint64_t generation{};
+    VkBuffer buffer{VK_NULL_HANDLE};
+    VkDeviceSize vertexOffset{};
+    VkDeviceSize vertexBytes{};
+    VkDeviceSize indexOffset{};
+    VkDeviceSize indexBytes{};
+    VkDeviceSize uploadBytes{};
+
+    [[nodiscard]] constexpr bool IsValid() const noexcept
+    {
+        return generation > 0U && buffer != VK_NULL_HANDLE && uploadBytes > 0U;
+    }
+};
+
+struct VulkanDraw2DUploadLayout final
+{
+    VkDeviceSize vertexBytes{};
+    VkDeviceSize indexOffset{};
+    VkDeviceSize indexBytes{};
+    VkDeviceSize uploadBytes{};
+
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DUploadLayout& lhs,
+                                                   const VulkanDraw2DUploadLayout& rhs) noexcept =
+        default;
+};
+
+[[nodiscard]] core::Result<VulkanDraw2DUploadLayout> ComputeVulkanDraw2DUploadLayout(
+    VkDeviceSize vertexBytes, VkDeviceSize indexBytes, VkDeviceSize maximumUploadBytes);
+
+struct VulkanDraw2DUploadSlotSnapshot final
+{
+    VulkanDraw2DUploadSlotState state{VulkanDraw2DUploadSlotState::Idle};
+    std::uint64_t generation{};
+    VkDeviceSize capacityBytes{};
+    VkDeviceSize reservedBytes{};
+    bool coherent{};
+
+    [[nodiscard]] friend constexpr bool operator==(
+        const VulkanDraw2DUploadSlotSnapshot& lhs,
+        const VulkanDraw2DUploadSlotSnapshot& rhs) noexcept = default;
+};
+
+struct VulkanDraw2DUploadStats final
+{
+    VkDeviceSize currentCapacityBytes{};
+    VkDeviceSize reservedBytes{};
+    VkDeviceSize uploadedBytes{};
+    VkDeviceSize highWaterReservedBytes{};
+    std::uint64_t allocationCount{};
+    std::uint64_t growthCount{};
+    std::uint64_t generationCount{};
+    std::uint64_t flushCount{};
+    std::uint64_t retirementCount{};
+
+    [[nodiscard]] friend constexpr bool operator==(
+        const VulkanDraw2DUploadStats& lhs, const VulkanDraw2DUploadStats& rhs) noexcept = default;
+};
+
+class VulkanDraw2DUploadBufferOwner final
+{
+public:
+    VulkanDraw2DUploadBufferOwner() noexcept;
+    VulkanDraw2DUploadBufferOwner(const VulkanDraw2DUploadBufferOwner&) = delete;
+    VulkanDraw2DUploadBufferOwner& operator=(const VulkanDraw2DUploadBufferOwner&) = delete;
+    VulkanDraw2DUploadBufferOwner(VulkanDraw2DUploadBufferOwner&& other) noexcept;
+    VulkanDraw2DUploadBufferOwner& operator=(VulkanDraw2DUploadBufferOwner&& other) noexcept;
+    ~VulkanDraw2DUploadBufferOwner();
+
+    [[nodiscard]] bool IsValid() const noexcept;
+    [[nodiscard]] VkBuffer GetBuffer() const noexcept;
+    [[nodiscard]] std::byte* GetMappedData() const noexcept;
+    [[nodiscard]] VkDeviceSize GetCapacity() const noexcept;
+    [[nodiscard]] bool IsCoherent() const noexcept;
+    [[nodiscard]] std::uint64_t GetGeneration() const noexcept;
+
+    void Reset() noexcept;
+
+private:
+    friend class VulkanDraw2DUploadArena;
+
+    VulkanDraw2DUploadBufferOwner(void* allocator, VkBuffer buffer, void* allocation,
+                                  std::byte* mappedData, VkDeviceSize capacity,
+                                  VkDeviceSize allocationSize, bool coherent,
+                                  std::uint64_t generation,
+                                  VulkanGlobalDispatch::DestroyBufferFn destroyBuffer,
+                                  VulkanGlobalDispatch::UnmapMemoryFn unmapMemory) noexcept;
+
+    void* m_allocator{};
+    VkBuffer m_buffer{VK_NULL_HANDLE};
+    void* m_allocation{};
+    std::byte* m_mappedData{};
+    VkDeviceSize m_capacity{};
+    VkDeviceSize m_allocationSize{};
+    bool m_coherent{};
+    std::uint64_t m_generation{};
+    VulkanGlobalDispatch::DestroyBufferFn m_destroyBuffer{};
+    VulkanGlobalDispatch::UnmapMemoryFn m_unmapMemory{};
+    std::thread::id m_ownerThread{};
+};
+
+class VulkanDraw2DUploadArena final
+{
+public:
+    VulkanDraw2DUploadArena() noexcept;
+    VulkanDraw2DUploadArena(const VulkanDraw2DUploadArena&) = delete;
+    VulkanDraw2DUploadArena& operator=(const VulkanDraw2DUploadArena&) = delete;
+    VulkanDraw2DUploadArena(VulkanDraw2DUploadArena&& other) noexcept;
+    VulkanDraw2DUploadArena& operator=(VulkanDraw2DUploadArena&& other) noexcept;
+    ~VulkanDraw2DUploadArena();
+
+    [[nodiscard]] static core::Result<VulkanDraw2DUploadArena> Create(
+        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+        std::uint32_t slotCount, VkDeviceSize maximumUploadBytes);
+
+    [[nodiscard]] bool IsValid() const noexcept;
+    [[nodiscard]] std::uint32_t GetSlotCount() const noexcept;
+    [[nodiscard]] VulkanDraw2DUploadSlotSnapshot GetSlotSnapshot(
+        std::uint32_t slotIndex) const noexcept;
+    [[nodiscard]] VulkanDraw2DUploadStats GetStats() const noexcept;
+    [[nodiscard]] core::Result<VulkanDraw2DUploadReservation> ReserveAndUpload(
+        std::uint32_t slotIndex, std::span<const std::byte> vertices,
+        std::span<const std::byte> indices);
+    void MarkSubmitted(std::uint32_t slotIndex) noexcept;
+    void Abandon(std::uint32_t slotIndex) noexcept;
+    void Complete(std::uint32_t slotIndex) noexcept;
+    void Reset() noexcept;
+
+private:
+    struct Slot final
+    {
+        VulkanDraw2DUploadBufferOwner buffer{};
+        VulkanDraw2DUploadSlotState state{VulkanDraw2DUploadSlotState::Idle};
+        VkDeviceSize reservedBytes{};
+    };
+
+    VulkanDraw2DUploadArena(VulkanGlobalDispatch dispatch, void* allocator,
+                            VkDeviceSize nonCoherentAtomSize, VkDeviceSize maximumUploadBytes,
+                            std::vector<Slot> slots) noexcept;
+
+    [[nodiscard]] core::Result<VulkanDraw2DUploadBufferOwner> CreateBuffer(
+        VkDeviceSize capacity, std::uint64_t generation);
+    [[nodiscard]] core::VoidResult CopyAndFlush(VulkanDraw2DUploadBufferOwner& buffer,
+                                                VkDeviceSize vertexOffset,
+                                                std::span<const std::byte> vertices,
+                                                VkDeviceSize indexOffset,
+                                                std::span<const std::byte> indices);
+
+    VulkanGlobalDispatch m_dispatch{};
+    void* m_allocator{};
+    VkDeviceSize m_nonCoherentAtomSize{1U};
+    VkDeviceSize m_maximumUploadBytes{};
+    std::vector<Slot> m_slots{};
+    VulkanDraw2DUploadStats m_stats{};
+    std::thread::id m_ownerThread{};
+};
+
 struct VulkanFrameSlotResources final
 {
     VkCommandBuffer commandBuffer{VK_NULL_HANDLE};
@@ -570,6 +936,22 @@ struct VulkanFrameSlotResources final
     {
         return commandBuffer != VK_NULL_HANDLE && imageAvailableSemaphore != VK_NULL_HANDLE &&
                imageAcquiredFence != VK_NULL_HANDLE && inFlightFence != VK_NULL_HANDLE;
+    }
+};
+
+struct VulkanCompletedSubmissionSlots final
+{
+    std::array<std::uint32_t, QueuedFrameLatency::kMaximumFrames> values{};
+    std::uint32_t count{};
+
+    [[nodiscard]] constexpr const std::uint32_t* begin() const noexcept
+    {
+        return values.data();
+    }
+
+    [[nodiscard]] constexpr const std::uint32_t* end() const noexcept
+    {
+        return values.data() + count;
     }
 };
 
@@ -593,8 +975,13 @@ public:
                                                       std::uint64_t timeoutNanoseconds);
     void RecordImageAcquired(std::uint32_t slotIndex) noexcept;
     void RecordSubmissionQueued(std::uint32_t slotIndex) noexcept;
+    [[nodiscard]] VulkanDraw2DUploadArena& GetDraw2DUploadArena() noexcept;
+    [[nodiscard]] const VulkanDraw2DUploadArena& GetDraw2DUploadArena() const noexcept;
+    [[nodiscard]] core::VoidResult AttachDraw2DPipeline(
+        std::uint32_t slotIndex, std::shared_ptr<const VulkanDraw2DPipelineOwner> pipeline);
+    void AbandonDraw2D(std::uint32_t slotIndex) noexcept;
     void MarkPoisoned() noexcept;
-    [[nodiscard]] std::vector<std::uint32_t> ConsumeCompletedSubmissionSlots() noexcept;
+    [[nodiscard]] VulkanCompletedSubmissionSlots ConsumeCompletedSubmissionSlots() noexcept;
     [[nodiscard]] core::Result<bool> AreAllFencesSignaled(const VulkanGlobalDispatch& dispatch,
                                                           std::uint64_t timeoutNanoseconds = 0U);
 
@@ -606,18 +993,22 @@ private:
         platform::WindowId windowId, const VulkanDeviceQueuePlan& queuePlan,
         QueuedFrameLatency queuedLatency, std::uint32_t swapchainImageCount);
 
-    VulkanFrameResourcesOwner(VkDevice device, VkCommandPool commandPool,
-                              std::vector<VulkanFrameSlotResources> slots,
-                              std::vector<VkSemaphore> renderFinishedSemaphores,
-                              VulkanGlobalDispatch::DestroyCommandPoolFn destroyCommandPool,
-                              VulkanGlobalDispatch::DestroySemaphoreFn destroySemaphore,
-                              VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept;
+    VulkanFrameResourcesOwner(
+        VkDevice device, VkCommandPool commandPool, std::vector<VulkanFrameSlotResources> slots,
+        std::vector<VkSemaphore> renderFinishedSemaphores,
+        VulkanDraw2DUploadArena&& draw2DUploadArena,
+        std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines,
+        VulkanGlobalDispatch::DestroyCommandPoolFn destroyCommandPool,
+        VulkanGlobalDispatch::DestroySemaphoreFn destroySemaphore,
+        VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept;
 
     VkDevice m_device{VK_NULL_HANDLE};
     VkCommandPool m_commandPool{VK_NULL_HANDLE};
     std::vector<VulkanFrameSlotResources> m_slots{};
     std::vector<VkSemaphore> m_renderFinishedSemaphores{};
-    std::vector<std::uint32_t> m_completedSubmissionSlots{};
+    VulkanCompletedSubmissionSlots m_completedSubmissionSlots{};
+    VulkanDraw2DUploadArena m_draw2DUploadArena{};
+    std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> m_draw2DSubmissionPipelines{};
     bool m_poisoned{};
     VulkanGlobalDispatch::DestroyCommandPoolFn m_destroyCommandPool{};
     VulkanGlobalDispatch::DestroySemaphoreFn m_destroySemaphore{};
@@ -764,7 +1155,6 @@ public:
         VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc);
     [[nodiscard]] static core::Result<PreparedSurface> CreateRecoverySurface(
         RenderTarget& target, VulkanSurfaceOwner&& surface, RenderTargetSnapshot snapshot);
-    [[nodiscard]] static core::VoidResult RecordIntermediateStage(RenderFrame& frame);
 };
 
 enum class VulkanFrameRecordingPhase : std::uint8_t
@@ -772,7 +1162,7 @@ enum class VulkanFrameRecordingPhase : std::uint8_t
     Inactive = 0,
     Recording = 1,
     ClearRecorded = 2,
-    IntermediateRecorded = 3,
+    Draw2DRecorded = 3,
     Submitted = 4,
     Terminal = 5
 };
@@ -788,7 +1178,7 @@ struct VulkanFrameRecordingState final
     {
         return phase == VulkanFrameRecordingPhase::Recording ||
                phase == VulkanFrameRecordingPhase::ClearRecorded ||
-               phase == VulkanFrameRecordingPhase::IntermediateRecorded;
+               phase == VulkanFrameRecordingPhase::Draw2DRecorded;
     }
 };
 
@@ -867,9 +1257,26 @@ private:
     const VulkanGlobalDispatch& dispatch, const VulkanSwapchainOwner& swapchain,
     const VulkanFrameResourcesOwner& frameResources, VulkanFrameRecordingState& recording,
     ClearColor clearColor);
-[[nodiscard]] core::VoidResult RecordVulkanIntermediateStageMarker(
-    const VulkanGlobalDispatch& dispatch, const VulkanFrameResourcesOwner& frameResources,
-    VulkanFrameRecordingState& recording);
+[[nodiscard]] core::VoidResult RecordVulkanDraw2DStage(
+    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+    const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
+    VulkanDraw2DPipelineCache& pipelineCache, VulkanFrameRecordingState& recording,
+    const ::pond::render::draw2d::Draw2DPacket& packet);
+[[nodiscard]] std::uint64_t GetVulkanDraw2DFixedStateSignature() noexcept;
+[[nodiscard]] std::uint64_t ComputeVulkanDraw2DRenderPassCompatibilitySignature(
+    VkFormat colorAttachmentFormat, VkSampleCountFlagBits sampleCount,
+    VulkanDraw2DColorContract colorContract, std::uint32_t subpass) noexcept;
+[[nodiscard]] VulkanDraw2DPipelineCompatibilityKey MakeVulkanDraw2DPipelineCompatibilityKey(
+    const VulkanSwapchainConfig& config, std::uint32_t subpass = 0U) noexcept;
+[[nodiscard]] core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(
+    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+    const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key);
+[[nodiscard]] core::VoidResult RecordVulkanDraw2DPipelineCommands(
+    const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBuffer,
+    const VulkanDraw2DPipelineOwner& pipeline, VkBuffer vertexBuffer, VkDeviceSize vertexOffset,
+    VkBuffer indexBuffer, VkDeviceSize indexOffset, VkExtent2D extent,
+    VkExtent2D maximumViewportExtent,
+    std::span<const ::pond::render::draw2d::Draw2DDrawRecord> draws);
 [[nodiscard]] core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(
     const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
     const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,

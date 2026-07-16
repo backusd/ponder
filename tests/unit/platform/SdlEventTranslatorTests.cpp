@@ -29,10 +29,10 @@ constexpr pond::platform::WindowId kWindowId{7};
 constexpr pond::platform::DisplayId kDisplayId{11};
 constexpr std::uint64_t kTimestampNanoseconds{123'456'789};
 
-[[nodiscard]] constexpr pond::platform::PlatformTimestamp MakeTimestamp(
+[[nodiscard]] constexpr pond::platform::Timestamp MakeTimestamp(
     std::int64_t nanoseconds = static_cast<std::int64_t>(kTimestampNanoseconds))
 {
-    return pond::platform::PlatformTimestamp{std::chrono::nanoseconds{nanoseconds}};
+    return pond::platform::Timestamp{std::chrono::nanoseconds{nanoseconds}};
 }
 
 struct ResolverState final
@@ -244,7 +244,7 @@ protected:
 
 TEST_F(SdlEventTranslatorTests, TranslatesQuitAndEveryWindowLifecycleSignal)
 {
-    const pond::platform::PlatformTimestamp timestamp = MakeTimestamp();
+    const pond::platform::Timestamp timestamp = MakeTimestamp();
 
     ExpectTranslatedEvent(Translate(MakeQuitEvent()),
                           pond::platform::QuitRequestedEvent{.timestamp = timestamp});
@@ -853,7 +853,7 @@ TEST_F(SdlEventTranslatorTests, MapsOptionalWindowDestinationDisplays)
 
 TEST_F(SdlEventTranslatorTests, TranslatesEveryDisplaySignalAndOptionalModeExtent)
 {
-    const pond::platform::PlatformTimestamp timestamp = MakeTimestamp();
+    const pond::platform::Timestamp timestamp = MakeTimestamp();
 
     ExpectTranslatedEvent(
         Translate(MakeDisplayEvent(SDL_EVENT_DISPLAY_ADDED)),

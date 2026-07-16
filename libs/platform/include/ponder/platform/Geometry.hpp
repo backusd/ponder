@@ -4,6 +4,9 @@
 
 #include <compare>
 #include <cstdint>
+#include <format>
+#include <ostream>
+#include <string>
 
 namespace pond::platform
 {
@@ -94,4 +97,133 @@ struct PixelSize final
 {
     return IsValid(rectangle.origin) && IsValid(rectangle.extent);
 }
+
+inline std::ostream& operator<<(std::ostream& output, ScreenPosition position)
+{
+    return output << '(' << position.x << ", " << position.y << ')';
+}
+
+inline std::ostream& operator<<(std::ostream& output, ScreenExtent extent)
+{
+    return output << extent.width << 'x' << extent.height;
+}
+
+inline std::ostream& operator<<(std::ostream& output, ScreenRectangle rectangle)
+{
+    return output << rectangle.position << " / " << rectangle.extent;
+}
+
+inline std::ostream& operator<<(std::ostream& output, LogicalPoint point)
+{
+    return output << '(' << point.x << ", " << point.y << ')';
+}
+
+inline std::ostream& operator<<(std::ostream& output, LogicalExtent extent)
+{
+    return output << extent.width << 'x' << extent.height;
+}
+
+inline std::ostream& operator<<(std::ostream& output, LogicalRectangle rectangle)
+{
+    return output << rectangle.origin << " / " << rectangle.extent;
+}
+
+inline std::ostream& operator<<(std::ostream& output, LogicalSize size)
+{
+    return output << size.width << 'x' << size.height;
+}
+
+inline std::ostream& operator<<(std::ostream& output, PixelSize size)
+{
+    return output << size.width << 'x' << size.height;
+}
 } // namespace pond::platform
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::ScreenPosition> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::ScreenPosition position, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("({}, {})", position.x, position.y), context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::ScreenExtent> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::ScreenExtent extent, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("{}x{}", extent.width, extent.height),
+                                         context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::ScreenRectangle> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::ScreenRectangle rectangle, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("{} / {}", rectangle.position,
+                                                     rectangle.extent),
+                                         context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::LogicalPoint> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::LogicalPoint point, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("({}, {})", point.x, point.y), context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::LogicalExtent> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::LogicalExtent extent, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("{}x{}", extent.width, extent.height),
+                                         context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::LogicalRectangle> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::LogicalRectangle rectangle, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("{} / {}", rectangle.origin,
+                                                     rectangle.extent),
+                                         context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::LogicalSize> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::LogicalSize size, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("{}x{}", size.width, size.height), context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::PixelSize> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::PixelSize size, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("{}x{}", size.width, size.height), context);
+    }
+};
+} // namespace std

@@ -8,12 +8,31 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
 #include <variant>
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::WindowId> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::WindowId id, FormatContext& context) const
+    {
+        if (!id.IsValid())
+        {
+            return formatter<string>::format("invalid", context);
+        }
+
+        return formatter<string>::format(std::to_string(id.GetValue()), context);
+    }
+};
+} // namespace std
 
 namespace
 {
@@ -54,40 +73,26 @@ enum class FrameAction : std::uint8_t
     RecoverSurface
 };
 
-[[nodiscard]] bool IsRenderError(const core::Error& error, render::RenderErrorCode code) noexcept
-{
-    return error.GetCode() == render::ToErrorCode(code);
-}
 
 [[nodiscard]] core::Result<render::RenderTargetSnapshot> CaptureWindowSnapshot(
     const platform::Window& window, std::uint64_t snapshotRevision,
     render::PresentationEnvironmentRevision presentationEnvironmentRevision)
 {
     auto pixelSize = window.GetPixelSize();
-    if (!pixelSize)
-    {
-        return core::Result<render::RenderTargetSnapshot>::FromError(
-            std::move(pixelSize).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(pixelSize);
+
+    auto logicalSize = window.GetLogicalSize();
+    RETURN_ERROR_IF_FAILED(logicalSize);
 
     auto visible = window.IsVisible();
-    if (!visible)
-    {
-        return core::Result<render::RenderTargetSnapshot>::FromError(std::move(visible).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(visible);
 
     auto windowState = window.GetState();
-    if (!windowState)
-    {
-        return core::Result<render::RenderTargetSnapshot>::FromError(
-            std::move(windowState).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(windowState);
 
-    return render::RenderTargetSnapshot{window.GetId(),
-                                        pixelSize.GetValue(),
-                                        visible.GetValue(),
-                                        windowState.GetValue(),
-                                        presentationEnvironmentRevision,
+    return render::RenderTargetSnapshot{window.GetId(),         pixelSize.GetValue(),
+                                        logicalSize.GetValue(), visible.GetValue(),
+                                        windowState.GetValue(), presentationEnvironmentRevision,
                                         snapshotRevision};
 }
 
@@ -192,17 +197,14 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
         if (!batch.captureFailureReported)
         {
             LOG_WARNING_CATEGORY(kLogCategory, "window_snapshot_deferred error={}",
-                                 core::FormatError(snapshotResult.GetError()));
+                                 std::format("{}", snapshotResult.GetError()));
             batch.captureFailureReported = true;
         }
         return false;
     }
 
     const render::RenderTargetSnapshot snapshot = std::move(snapshotResult).GetValue();
-    if (core::VoidResult update = target.UpdateTargetSnapshot(snapshot); !update)
-    {
-        return core::Result<bool>::FromError(std::move(update).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(target.UpdateTargetSnapshot(snapshot));
 
     sequence.snapshotRevision = nextSnapshotRevision;
     sequence.presentationEnvironmentRevision = nextPresentationRevision;
@@ -215,33 +217,28 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
 [[nodiscard]] core::Result<FrameAction> RenderOneFrame(render::RenderTarget& target)
 {
     auto frameResult = target.AcquireFrame();
-    if (!frameResult)
+    if (!frameResult && frameResult.GetError() == render::RenderErrorCode::SurfaceLost)
     {
-        if (IsRenderError(frameResult.GetError(), render::RenderErrorCode::SurfaceLost))
-        {
-            return FrameAction::RecoverSurface;
-        }
-        return core::Result<FrameAction>::FromError(std::move(frameResult).GetError());
+        return FrameAction::RecoverSurface;
     }
+    RETURN_ERROR_IF_FAILED(frameResult);
 
     render::RenderFrame frame = std::move(frameResult).GetValue();
-    if (core::VoidResult clear = frame.Clear(); !clear)
-    {
-        core::Error error = std::move(clear).GetError();
-        // Releasing an unfinished frame explicitly abandons its acquired work safely.
-        frame = render::RenderFrame{};
-        return core::Result<FrameAction>::FromError(std::move(error));
-    }
+    core::VoidResult clear = frame.Clear();
+    RETURN_ERROR_IF_FAILED_FN(
+        clear,
+        [&frame](const core::Error&)
+        {
+            // Releasing an unfinished frame explicitly abandons its acquired work safely.
+            frame = render::RenderFrame{};
+        });
 
     auto presentResult = frame.FinishAndPresent();
-    if (!presentResult)
+    if (!presentResult && presentResult.GetError() == render::RenderErrorCode::SurfaceLost)
     {
-        if (IsRenderError(presentResult.GetError(), render::RenderErrorCode::SurfaceLost))
-        {
-            return FrameAction::RecoverSurface;
-        }
-        return core::Result<FrameAction>::FromError(std::move(presentResult).GetError());
+        return FrameAction::RecoverSurface;
     }
+    RETURN_ERROR_IF_FAILED(presentResult);
 
     return presentResult.GetValue().presented ? FrameAction::Presented : FrameAction::NoWork;
 }
@@ -256,16 +253,10 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
                     .targetSnapshot = snapshot,
                     .reason = render::SurfacePreparationReason::SurfaceLossRecovery,
                 });
-    if (!surfaceResult)
-    {
-        return core::VoidResult::FromError(std::move(surfaceResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(surfaceResult);
 
     render::PreparedSurface surface = std::move(surfaceResult).GetValue();
-    if (core::VoidResult transfer = surface.TransferToCurrentThread(snapshot); !transfer)
-    {
-        return transfer;
-    }
+    RETURN_ERROR_IF_FAILED(surface.TransferToCurrentThread(snapshot));
 
     return target.RecoverSurface(std::move(surface));
 }
@@ -287,10 +278,7 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
         }
 
         auto snapshotApplied = TryApplyPendingSnapshot(window, target, events, sequence);
-        if (!snapshotApplied)
-        {
-            return core::VoidResult::FromError(std::move(snapshotApplied).GetError());
-        }
+        RETURN_ERROR_IF_FAILED(snapshotApplied);
         if (!snapshotApplied.GetValue())
         {
             std::this_thread::sleep_for(kNoWorkDelay);
@@ -298,10 +286,7 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
         }
 
         auto actionResult = RenderOneFrame(target);
-        if (!actionResult)
-        {
-            return core::VoidResult::FromError(std::move(actionResult).GetError());
-        }
+        RETURN_ERROR_IF_FAILED(actionResult);
 
         switch (actionResult.GetValue())
         {
@@ -312,13 +297,11 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
             break;
         case FrameAction::RecoverSurface:
             LOG_WARNING_CATEGORY(kLogCategory, "surface_lost_recovery_requested window={}",
-                                 window.GetId().GetValue());
-            if (core::VoidResult recovery = RecoverSurface(bootstrap, window, target); !recovery)
-            {
-                return recovery;
-            }
+                                 std::format("{}", window.GetId()));
+            auto recovery = RecoverSurface(bootstrap, window, target);
+            RETURN_ERROR_IF_FAILED(recovery);
             LOG_INFO_CATEGORY(kLogCategory, "surface_recovered window={}",
-                              window.GetId().GetValue());
+                              std::format("{}", window.GetId()));
             std::this_thread::sleep_for(kNoWorkDelay);
             break;
         }
@@ -357,18 +340,12 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
 {
     auto initialSnapshotResult =
         CaptureWindowSnapshot(window, 1U, render::PresentationEnvironmentRevision{1U});
-    if (!initialSnapshotResult)
-    {
-        return core::VoidResult::FromError(std::move(initialSnapshotResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(initialSnapshotResult);
     const render::RenderTargetSnapshot initialSnapshot =
         std::move(initialSnapshotResult).GetValue();
 
     auto bootstrapResult = render::RenderBootstrap::Create(render::RenderBootstrapDesc{});
-    if (!bootstrapResult)
-    {
-        return core::VoidResult::FromError(std::move(bootstrapResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(bootstrapResult);
     render::RenderBootstrap bootstrap = std::move(bootstrapResult).GetValue();
 
     auto surfaceResult =
@@ -376,32 +353,19 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
                                              .targetSnapshot = initialSnapshot,
                                              .reason = render::SurfacePreparationReason::Initial,
                                          });
-    if (!surfaceResult)
-    {
-        return core::VoidResult::FromError(std::move(surfaceResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(surfaceResult);
     render::PreparedSurface deviceSelectionSurface = std::move(surfaceResult).GetValue();
 
-    if (core::VoidResult transfer = deviceSelectionSurface.TransferToCurrentThread(initialSnapshot);
-        !transfer)
-    {
-        return transfer;
-    }
+    RETURN_ERROR_IF_FAILED(deviceSelectionSurface.TransferToCurrentThread(initialSnapshot));
 
     auto selectionResult =
         bootstrap.SelectAdapter(deviceSelectionSurface, render::RenderAdapterSelectionDesc{});
-    if (!selectionResult)
-    {
-        return core::VoidResult::FromError(std::move(selectionResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(selectionResult);
     render::RenderAdapterSelection selection = std::move(selectionResult).GetValue();
 
     auto deviceResult =
         bootstrap.CreateDevice(deviceSelectionSurface, selection, render::RenderDeviceDesc{});
-    if (!deviceResult)
-    {
-        return core::VoidResult::FromError(std::move(deviceResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(deviceResult);
     render::RenderDevice device = std::move(deviceResult).GetValue();
     render::PreparedSurface targetSurface = std::move(deviceSelectionSurface);
 
@@ -410,17 +374,18 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
                                                                 .targetSnapshot = initialSnapshot,
                                                                 .clearColor = kClearColor,
                                                             });
-    if (!targetResult)
-    {
-        // A failed target creation may leave the prepared surface unconsumed.
-        targetSurface = render::PreparedSurface{};
-        device = render::RenderDevice{};
-        return core::VoidResult::FromError(std::move(targetResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED_FN(
+        targetResult,
+        [&targetSurface, &device](const core::Error&)
+        {
+            // A failed target creation may leave the prepared surface unconsumed.
+            targetSurface = render::PreparedSurface{};
+            device = render::RenderDevice{};
+        });
     render::RenderTarget target = std::move(targetResult).GetValue();
 
     LOG_INFO_CATEGORY(kLogCategory, "renderer_ready adapter={} window={}",
-                      selection.selectedAdapter.identity.name, window.GetId().GetValue());
+                      selection.selectedAdapter.identity.name, std::format("{}", window.GetId()));
 
     core::VoidResult runResult = window.Show();
     if (runResult)
@@ -454,10 +419,7 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
         .applicationIdentifier = std::string{"org.ponder.examples.render.clear-window"},
     };
     auto runtimeResult = platform::PlatformRuntime::Create(runtimeDesc);
-    if (!runtimeResult)
-    {
-        return core::VoidResult::FromError(std::move(runtimeResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(runtimeResult);
     platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
 
     core::VoidResult rendererResult;
@@ -472,10 +434,7 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
             .graphicsCompatibility = render::GetRequiredWindowGraphicsCompatibility(),
         };
         auto windowResult = runtime.CreateWindow(windowDesc);
-        if (!windowResult)
-        {
-            return core::VoidResult::FromError(std::move(windowResult).GetError());
-        }
+        RETURN_ERROR_IF_FAILED(windowResult);
         platform::Window window = std::move(windowResult).GetValue();
 
         rendererResult = RunRenderer(runtime, window);
@@ -494,7 +453,7 @@ int main()
         if (!result)
         {
             LOG_ERROR_CATEGORY(kLogCategory, "example_failed error={}",
-                               core::FormatError(result.GetError()));
+                               std::format("{}", result.GetError()));
             core::FlushLog();
             return 1;
         }

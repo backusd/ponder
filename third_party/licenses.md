@@ -119,15 +119,6 @@ Dependencies are pinned as Git submodules. Floating branches are not allowed.
   Vulkan C API and Volk-owned dynamic dispatch.
 - Notes: do not expose VMA declarations or allocator handles through public
   render headers.
-### Dear ImGui
-
-- Purpose: immediate-mode UI for early desktop tooling.
-- Usage: runtime dependency for desktop/editor-facing targets.
-- License: MIT.
-- License file: `third_party/imgui/LICENSE.txt`.
-- Pinned commit: `776bf2ab0d61e719e58f2c6d27d109ab5dcf2af1`.
-- Notes: built through the local `ponder_imgui` target because upstream does
-  not provide a root CMake target.
 
 ## Review Checklist For New Dependencies
 

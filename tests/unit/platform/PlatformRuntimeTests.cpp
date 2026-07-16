@@ -4078,7 +4078,7 @@ TEST_F(PlatformRuntimeBackendTests, PollingContinuesPastIgnoredEventsUntilAProje
     m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(700)});
 
     ExpectPolledEvent(runtime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                               .timestamp = pond::platform::PlatformTimestamp{
+                                               .timestamp = pond::platform::Timestamp{
                                                    std::chrono::nanoseconds{700}}});
     EXPECT_TRUE(m_fake.eventQueue.empty());
     EXPECT_EQ(m_fake.pollEventCalls, 7);
@@ -4135,19 +4135,19 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedEventsForMultipleWindows)
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowMovedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = second.GetId(),
             .position = {-250, 90}});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowFocusChangedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
             .windowId = first.GetId(),
             .focused = true});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowCloseRequestedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
             .windowId = second.GetId()});
     EXPECT_EQ(m_fake.destroyWindowCalls, 0);
     EXPECT_EQ(first.GetId(), pond::platform::WindowId{1});
@@ -4176,13 +4176,13 @@ TEST_F(PlatformRuntimeBackendTests,
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowCloseRequestedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = window.GetId()});
     EXPECT_EQ(m_fake.destroyWindowCalls, 0);
     EXPECT_EQ(window.GetId(), pond::platform::WindowId{1});
 
     ExpectPolledEvent(runtime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                               .timestamp = pond::platform::PlatformTimestamp{
+                                               .timestamp = pond::platform::Timestamp{
                                                    std::chrono::nanoseconds{200}}});
     EXPECT_EQ(m_fake.destroyWindowCalls, 0);
 }
@@ -4213,7 +4213,7 @@ TEST_F(PlatformRuntimeBackendTests, PollingShownInvalidatesTheHiddenStateDisambi
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowVisibilityChangedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = window.GetId(),
             .visible = true});
 
@@ -4251,7 +4251,7 @@ TEST_F(PlatformRuntimeBackendTests, DelayedShownEventPreservesNewerHiddenStateRe
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowVisibilityChangedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = window.GetId(),
             .visible = true});
 
@@ -4289,7 +4289,7 @@ TEST_F(PlatformRuntimeBackendTests, DelayedShownEventDoesNotOverwriteNewerVisibl
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowVisibilityChangedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = window.GetId(),
             .visible = true});
 
@@ -4321,7 +4321,7 @@ TEST_F(PlatformRuntimeBackendTests, IgnoresDestroyedWindowEventsAndDoesNotReuseP
         {.event = MakeQueuedWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED, 55, 0, 0, 100)});
     m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(200)});
     ExpectPolledEvent(runtime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                               .timestamp = pond::platform::PlatformTimestamp{
+                                               .timestamp = pond::platform::Timestamp{
                                                    std::chrono::nanoseconds{200}}});
     EXPECT_EQ(m_fake.pollEventCalls, 2);
 
@@ -4336,7 +4336,7 @@ TEST_F(PlatformRuntimeBackendTests, IgnoresDestroyedWindowEventsAndDoesNotReuseP
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowMovedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
             .windowId = second.GetId(),
             .position = {8, 9}});
 }
@@ -4386,7 +4386,7 @@ TEST_F(PlatformRuntimeBackendTests, RoutesDisplayAdditionRemovalAndReconnectionW
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DisplayRemovedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
             .displayId = originalId});
 
     auto stale = runtime.GetDisplayInfo(originalId);
@@ -4411,7 +4411,7 @@ TEST_F(PlatformRuntimeBackendTests, RoutesDisplayAdditionRemovalAndReconnectionW
          .connectedDisplayIds = std::vector<std::uint32_t>{20, 10}});
     m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(500)});
     ExpectPolledEvent(runtime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                               .timestamp = pond::platform::PlatformTimestamp{
+                                               .timestamp = pond::platform::Timestamp{
                                                    std::chrono::nanoseconds{500}}});
 }
 
@@ -4435,7 +4435,7 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInitialDisplayEventsBeforeAnyDisplayQu
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DisplayMovedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .displayId = pond::platform::DisplayId{1}});
 
     auto displays = runtime.EnumerateDisplays();
@@ -4474,14 +4474,14 @@ TEST_F(PlatformRuntimeBackendTests, RetainsDisplayIdentityWhenAQueryObservesRemo
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DisplayRemovedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .displayId = removedId});
 
     m_fake.eventQueue.push_back(
         {.event = MakeQueuedDisplayEvent(SDL_EVENT_DISPLAY_REMOVED, 10, 0, 0, 200)});
     m_fake.eventQueue.push_back({.event = MakeQueuedQuitEvent(300)});
     ExpectPolledEvent(runtime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                               .timestamp = pond::platform::PlatformTimestamp{
+                                               .timestamp = pond::platform::Timestamp{
                                                    std::chrono::nanoseconds{300}}});
 }
 
@@ -4522,7 +4522,7 @@ TEST_F(PlatformRuntimeBackendTests, ReusesDisplayIdentityWhenAQueryObservesAddit
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DisplayAddedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .displayId = refreshedId});
 }
 
@@ -4564,19 +4564,19 @@ TEST_F(PlatformRuntimeBackendTests,
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowDisplayChangedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = window.GetId(),
             .displayId = displayId});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowDisplayChangedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
             .windowId = window.GetId(),
             .displayId = std::nullopt});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::WindowDisplayChangedEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
             .windowId = window.GetId(),
             .displayId = std::nullopt});
 }
@@ -4619,7 +4619,7 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedKeyboardTextAndCompositionE
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::KeyboardKeyEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = first.GetId(),
             .physicalKey = pond::platform::PhysicalKey::A,
             .logicalKey = pond::platform::LogicalKey::FromCharacter(U'a'),
@@ -4630,20 +4630,20 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedKeyboardTextAndCompositionE
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::TextInputEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
             .windowId = second.GetId(),
             .text = inputText});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::TextCompositionEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
             .windowId = first.GetId(),
             .text = compositionText,
             .selection = pond::platform::TextCompositionRange{0, 0}});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::KeyboardKeyEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{400}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{400}},
             .windowId = std::nullopt,
             .physicalKey = pond::platform::PhysicalKey::Unknown,
             .logicalKey = pond::platform::LogicalKey::Unknown(),
@@ -4875,14 +4875,14 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedMouseEventsAcrossWindowsAnd
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::MouseMotionEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = first.GetId(),
             .position = {10.5F, -2.25F},
             .relativeMovement = {1.5F, -0.5F}});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::MouseButtonEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
             .windowId = second.GetId(),
             .position = {3.0F, 4.0F},
             .button = pond::platform::MouseButton::X2,
@@ -4890,13 +4890,13 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedMouseEventsAcrossWindowsAnd
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::MouseWheelEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
             .windowId = first.GetId(),
             .position = {8.0F, 9.0F},
             .horizontal = -0.5F,
             .vertical = 1.25F});
     ExpectPolledEvent(runtime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                               .timestamp = pond::platform::PlatformTimestamp{
+                                               .timestamp = pond::platform::Timestamp{
                                                    std::chrono::nanoseconds{500}}});
     EXPECT_EQ(m_fake.pollEventCalls, 5);
 }
@@ -4942,13 +4942,13 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedDropEventsAcrossWindowsAndS
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DropBeginEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{100}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
             .windowId = first.GetId(),
             .sourceApplication = std::optional<std::string>{"source-app"}});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DroppedFileEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{200}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
             .windowId = second.GetId(),
             .path = std::filesystem::path{"C:/tmp/dropped.sdf"},
             .position = {3.0F, 4.0F},
@@ -4956,7 +4956,7 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedDropEventsAcrossWindowsAndS
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DroppedTextEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{300}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
             .windowId = second.GetId(),
             .text = text,
             .position = {5.0F, 6.0F},
@@ -4964,19 +4964,19 @@ TEST_F(PlatformRuntimeBackendTests, RoutesInterleavedDropEventsAcrossWindowsAndS
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DropPositionEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{400}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{400}},
             .windowId = first.GetId(),
             .position = {7.0F, 8.0F},
             .sourceApplication = std::optional<std::string>{"source-app"}});
     ExpectPolledEvent(
         runtime.PollEvent(),
         pond::platform::DropCompleteEvent{
-            .timestamp = pond::platform::PlatformTimestamp{std::chrono::nanoseconds{500}},
+            .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{500}},
             .windowId = std::nullopt,
             .position = {9.0F, 10.0F},
             .sourceApplication = std::nullopt});
     ExpectPolledEvent(runtime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                               .timestamp = pond::platform::PlatformTimestamp{
+                                               .timestamp = pond::platform::Timestamp{
                                                    std::chrono::nanoseconds{600}}});
     EXPECT_EQ(m_fake.pollEventCalls, 7);
 }
@@ -5808,7 +5808,7 @@ TEST_F(PlatformRuntimeBackendTests, GuardsPollEventAfterMoveAndAcrossThreads)
     EXPECT_EQ(m_fake.pollEventCalls, 0);
 
     ExpectPolledEvent(movedRuntime.PollEvent(), pond::platform::QuitRequestedEvent{
-                                                    .timestamp = pond::platform::PlatformTimestamp{
+                                                    .timestamp = pond::platform::Timestamp{
                                                         std::chrono::nanoseconds{100}}});
     EXPECT_EQ(m_fake.pollEventCalls, 1);
 }

@@ -231,6 +231,12 @@ template <typename Predicate>
         return core::Result<RenderTargetSnapshot>::FromError(std::move(pixelSize).GetError());
     }
 
+    auto logicalSize = window.GetLogicalSize();
+    if (!logicalSize)
+    {
+        return core::Result<RenderTargetSnapshot>::FromError(std::move(logicalSize).GetError());
+    }
+
     auto visible = window.IsVisible();
     if (!visible)
     {
@@ -244,8 +250,8 @@ template <typename Predicate>
     }
 
     return core::Result<RenderTargetSnapshot>::FromValue(
-        RenderTargetSnapshot{window.GetId(), pixelSize.GetValue(), visible.GetValue(),
-                             state.GetValue(), presentationRevision, revision});
+        RenderTargetSnapshot{window.GetId(), pixelSize.GetValue(), logicalSize.GetValue(),
+                             visible.GetValue(), state.GetValue(), presentationRevision, revision});
 }
 
 [[nodiscard]] inline std::string FormatValidationReport(const RenderValidationReport& report)

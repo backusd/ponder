@@ -199,9 +199,13 @@ REND-020.
 
 Implementation evidence:
 
-- Removed the active third-party target construction, dependency requirement, `.gitmodules` entry,`r`n  and checkout.
-- Added `ponder_removed_ui_dependency_absence_check` to scan configured target properties and`r`n  active source/config files while ignoring design-document exclusion statements.
-- Verified clean configure, full Debug build, focused UI tests, source/config scans, clean`r`n  build-tree scans, and installed package/export scans through the Visual Studio Developer`r`n  Command Prompt.
+- Removed the active third-party target construction, dependency requirement, `.gitmodules` entry,
+  and checkout.
+- Added `ponder_removed_ui_dependency_absence_check` to scan configured target properties and
+  active source/config files while ignoring design-document exclusion statements.
+- Verified clean configure, full Debug build, focused UI tests, source/config scans, clean
+  build-tree scans, and installed package/export scans through the Visual Studio Developer
+  Command Prompt.
 
 Remove the obsolete third-party UI path before creating its replacement so no compatibility target
 or accidental dependency shapes the new architecture.
@@ -232,6 +236,16 @@ Done when:
 TASK UI-002: Record The UI Rendering Architecture
 -------------------------------------------------
 
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added ADR 0010 as the durable project-owned UI rendering decision record.
+- Reconciled UI and render boundary docs around semantic paint ownership, private
+  `Draw2DPacket`/`Draw2DLayer` ownership, frame selection, and backend isolation.
+- Linked ADR 0010 from ADR index, ADR 0008, UI/render Codex guidance, and the high-level
+  roadmap.
+
 Record the accepted ownership and dependency boundary before implementation names and private
 headers become difficult to change.
 
@@ -259,6 +273,28 @@ Done when:
 
 TASK UI-003: Establish UI And Private 2D Build Topology
 ------------------------------------------------------
+
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added non-installed render-owned `ponder_render_draw2d_packet` and `ponder_render_draw2d`
+  targets for the private Draw2D packet boundary and generic 2D implementation anchor.
+- Added non-installed `ponder_ui_render_integration` as the sole UI-to-render implementation edge;
+  `libs/render` still has no `ponder_ui` dependency or source reference.
+- Added focused UI header/unit, render Draw2D packet/header, render Draw2D build, UI integration
+  build, and UI install-consumer topology.
+- Verified render-on MSVC Debug configure/build and focused CTest checks through the Visual Studio
+  Developer Command Prompt: `ponder_render_draw2d_build`,
+  `ponder_render_draw2d_packet_header_tests_build`, `UiSmokeTests.ExposesLibraryName`,
+  `ponder_ui_header_tests_build`, `ponder_ui_render_integration_library_build`, and the
+  executable `UiRenderIntegrationTopologyTests.LinksTheCompleteStaticIntegrationClosure` passed.
+- Verified render-off MSVC Debug configure/build/test/install-consumer through the Visual Studio
+  Developer Command Prompt with install rules enabled and apps/tools/examples/plugins disabled:
+  `UiSmokeTests.ExposesLibraryName`, `ponder_ui_header_tests_build`, and
+  `ponder_ui_install_consumer_test` all passed. The render-off cache forced render/Vulkan options
+  off, no `libs/render` build tree was generated, and the UI install consumer scan found no private
+  Draw2D packet header/export leakage.
 
 Create explicit CMake boundaries for CPU-only UI, render-owned generic 2D code, and the temporary
 join before adding behavior.
@@ -293,9 +329,40 @@ Done when:
 TASK UI-004: Establish The Renderer Shader Toolchain
 ---------------------------------------------------
 
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added ADR 0011 selecting HLSL 2021, DXC with SPIR-V CodeGen, SPIRV-Tools `spirv-val`, and
+  SPIRV-Cross JSON reflection as the render-owned shader toolchain.
+- Added build-time CMake shader helpers that generate SPIR-V, reflection JSON, embedded C++,
+  manifest metadata, and artifact checks in the build tree. The helpers define cache path overrides
+  but do not discover tools at normal configure time.
+- Added automatic build-time discovery that prefers `%VULKAN_SDK%/Bin` and installed
+  `C:/VulkanSDK/*/Bin` directories before falling back to `PATH`, so the installed Vulkan SDK wins
+  over the Windows Kits `dxc` that lacks SPIR-V CodeGen.
+- Added the render-owned `Sentinel.hlsl` shader and explicit non-installed
+  `ponder_render_sentinel_shader` / `ponder_render_sentinel_shader_artifact_check` targets.
+- Verified the Windows Kits `dxc` at
+  `C:/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64/dxc.exe` still fails the SPIR-V
+  probe with `SPIR-V CodeGen not available`; the Vulkan SDK `dxc` at
+  `C:/VulkanSDK/1.4.350.0/Bin/dxc.exe` compiles the probe and `spirv-val` validates it.
+- Verified a fresh render-on MSVC Debug configure/build through the Visual Studio Developer Command
+  Prompt with no shader cache variables set. The sentinel target generated, validated, reflected,
+  embedded, and checked the artifact by auto-discovering `C:/VulkanSDK/1.4.350.0/Bin`.
+- Verified focused registered CTest build checks through the Visual Studio Developer Command Prompt:
+  `ponder_render_sentinel_shader_build` and
+  `ponder_render_sentinel_shader_artifact_check_build` both passed.
+- Review hardened shader freshness to hash transitive preprocessed source, exact tool binaries
+  and identities, options, schema, and generator/check scripts; generation now verifies temporary
+  artifacts transactionally and leaves current artifacts untouched.
+- Added and passed a hostile staleness target that perturbs source/header, SPIR-V, reflection,
+  manifest, stamp, schema, options, source identity, and tool identity independently.
+- Earlier render-off MSVC Debug configure/build and focused UI smoke tests passed with render/tools
+  disabled, preserving the no shader-tool probing requirement for UI core.
+
 Select and implement one repository-wide offline shader compiler, validator, reflection, and
 embedding strategy before rectangle shaders or 3D shaders make incompatible local choices.
-
 Work:
 
 - Evaluate the accepted portable renderer-owned source approaches against SPIR-V generation,
@@ -327,6 +394,31 @@ Done when:
 
 TASK UI-005: Define Foundation Values, Errors, And Limits
 --------------------------------------------------------
+
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added public UI foundation value headers for stable UI errors, logical geometry, copied target
+  metrics, color semantics/conversion, hard limits, draw outcomes, counters, and high-water marks.
+- Reserved the `0x0004'0000` through `0x0004'FFFF` UI error-code range and mapped UI-owned
+  invalid paint value, paint-state, metrics, compilation, and limit failures into `core::ErrorCode`.
+- Added tagged logical UI units, framebuffer pixel extents, copied target identity/revisions,
+  zero-safe independent X/Y scale derivation, bounded sRGB straight-alpha authoring color,
+  linear-premultiplied semantic color, and explicitly packed linear-premultiplied RGBA8.
+- Added focused reference tests for invalid/non-finite/reversed/zero-area/transparent cases,
+  sRGB transfer, premultiplication, RGBA8 packing, source-over blending, final sRGB encoding,
+  hard-limit rejection, and draw outcome/diagnostic counters.
+- Review made target metrics immutable after validated construction, rejects finite rectangles whose
+  positive float extents collapse at their represented edges, checks RGBA8 quantization before
+  narrowing, and preserves caller source locations through UI error helpers.
+- Added PCH-free header self-containment translation units for every new public UI value header and
+  updated the install consumer to include and use the new installed headers.
+- Verified a render-disabled MSVC Debug configure/build through the Visual Studio Developer Command
+  Prompt with `ponder_ui_tests` and `ponder_ui_header_tests` only.
+- Verified focused CTest entries through the Visual Studio Developer Command Prompt:
+  `UiFoundationValueTests.*`, `UiSmokeTests.ExposesLibraryName`, and
+  `ponder_ui_header_tests_build` all passed.
 
 Define the lightweight project-owned values used by paint recording, compilation, diagnostics, and
 the temporary facade before private containers or GPU code depend on their representation.
@@ -367,6 +459,33 @@ Done when:
 TASK UI-006: Implement The Paint Recorder And Sealed Paint List
 --------------------------------------------------------------
 
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added the non-installed private `ponder_ui_paint` target containing an owning semantic paint
+  recorder and immutable sealed paint list. The target depends on UI foundation values only and has
+  no render, platform, backend, widget, retained-element, serialization, or third-party dependency.
+- Implemented type-safe tagged `FillRectangle`, `PushClipRectangle`, and `PopClip` command records
+  with deterministic command indices, insertion order, and separate contiguous typed payload storage.
+- Added open/sealed recorder state, explicit reset, move-only ownership, unpoppable clip sentinel,
+  transactional final balance checks, mutation-after-seal rejection, and sealed-list ownership that
+  survives recorder reset/reuse.
+- Validated paint values at recording time, records zero-area and transparent fills as validated
+  no-op semantic commands, and enforces command-count, payload-byte, and clip-depth limits before
+  growth.
+- Review added checked arithmetic and bounded geometric capacity growth, host-container failure
+  handling, invalid-limit rejection, exact command/payload/clip boundaries, empty-clip coverage,
+  source-location preservation, and canonical reusable recorder/empty-list states after moves.
+- Added focused paint-recorder tests covering ordered mixed commands, invalid fills,
+  zero/transparent fills, nested clips, underflow, final imbalance, mutation after seal, recorder
+  limit boundaries, move behavior, reset/capacity reuse, deterministic inspection, and sealed-list
+  ownership after recorder reset.
+- Verified a render-disabled MSVC Debug configure/build through the Visual Studio Developer Command
+  Prompt with only `ponder_ui_paint` and `ponder_ui_paint_tests` for this task.
+- Verified focused CTest entries through the Visual Studio Developer Command Prompt:
+  `UiPaintRecorderTests.*` and `ponder_ui_paint_build` all passed.
+
 Make an owning semantic paint list the canonical CPU input even though the temporary facade emits
 only one rectangle.
 
@@ -402,6 +521,29 @@ Done when:
 TASK UI-007: Define And Validate The Generic Draw2D Packet
 ---------------------------------------------------------
 
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Implemented the non-installed render-owned packet contract with an exact positive pixel extent,
+  standard-layout 12-byte pixel-space vertex, explicit linear-premultiplied RGBA byte order, 32-bit
+  indices, ordered indexed triangle-list draws, signed base vertex, and clamped half-open scissors.
+- Locked the complete extent/vertex/index/draw/scissor/topology schema and coordinate semantics with
+  corrected FNV-1a known values; packets carry the exact fingerprint without runtime negotiation or
+  serialization.
+- Added move-only owning packet and open/sealed builder types with immutable spans, checked reserve
+  and append operations, transactional seal, capacity-preserving reset, independently owned returned
+  packets, reusable moved-from builders, and canonical-empty moved-from packets.
+- Added pure CPU count/data/packet inspection for every extent, fingerprint, arithmetic, count, byte,
+  finite-position, color, raw-index, draw-range, base-vertex, scissor, canonical-empty, and configured
+  budget invariant before any future backend work.
+- Bounded hostile shared-range validation with constant-time base-zero handling, global-extrema
+  shortcuts, and an explicit checked work budget for nonzero-base ranges that require scanning.
+- Added render-only hostile/valid packet tests and PCH-free header checks without including or linking
+  UI, plus the exact private contract in `libs/render/docs/Draw2DPacket.md`.
+- Verified the packet library/header and focused `RenderDraw2DPacketTests.*` targets in MSVC Debug
+  through the Visual Studio Developer Command Prompt; broad property/fuzz work remains in UI-016.
+
 Create the narrow producer-neutral contract that render can validate and test without linking UI.
 
 Work:
@@ -433,6 +575,33 @@ Done when:
 
 TASK UI-008: Implement The Deterministic UI Paint Compiler
 ---------------------------------------------------------
+
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Implemented a private move-only CPU compiler accepting only an immutable sealed paint list, copied
+  validated target metrics, exclusive clip scratch, and the reusable render-owned packet builder.
+- Added independent double-precision X/Y scaling, exact fractional root/nested clip intersection,
+  top-left pixel-edge output, conservative floor/ceil clamped scissors, and no snapping, uniform-scale
+  assumption, half-pixel offset, platform window, GPU, or backend dependency.
+- Added deterministic four-vertex/six-index rectangle tessellation in TL/TR/BR/BL and
+  `0,1,2,0,2,3` order, checked linear-premultiplied RGBA8 packing, ordered elision, and only adjacent
+  contiguous equal-scissor draw merging.
+- Compilation now gates oversized command spans before linear statistics work, structurally
+  revalidates the sealed list, performs a checked two-pass transaction, incrementally stops at the
+  exact fill crossing an output budget, compares complete pass summaries, and exposes copied
+  deterministic inspection for command indices, counts, bounds, stages, and requested/allowed limits.
+- Failure publishes no packet, preserves immutable input and prior packets, reports fresh non-stale
+  inspection and the originating error code/location, retains warm capacity, and requires explicit
+  reset; compiler moves leave the source coherent and reusable.
+- Added hand-authored CPU tests for exact geometry/color/order, asymmetric and fractional scaling,
+  root/nested/empty clipping, scissors, all elisions, merging, overflow, every limit, transactionality,
+  move/reset/capacity behavior, and repeated bit-for-bit semantic determinism.
+- Documented the exact private contract in `PaintCompiler.md`; linked the authoritative render/UI
+  boundaries and retained the sole UI-to-render implementation edge.
+- Verified focused packet/compiler/foundation/recorder/topology tests in MSVC Debug, then reverified
+  render-disabled UI headers/tests and the installed UI package consumer. No GPU/window was required.
 
 Compile immutable semantic paint into a sealed packet through a pure CPU transaction that is
 independent of Vulkan and native windows.
@@ -473,6 +642,53 @@ Done when:
 TASK UI-009: Complete The Platform-To-Frame Metrics Rendezvous
 -------------------------------------------------------------
 
+Status: completed on 2026-07-15, with the host live integration run blocked by unrelated Vulkan
+loader validation noise when launched elevated.
+
+Implementation evidence:
+
+- Extended `RenderTargetSnapshot` with copied logical extent while preserving copied window identity,
+  exact pixel extent, visibility, faithful `WindowState`, presentation-environment revision, and
+  target snapshot revision.
+- Kept zero-size suspended snapshots valid, but rejected positive pixel axes without corresponding
+  positive logical axes so UI cannot compile geometry against incomplete metrics.
+- Captured logical size in the clear-window example and render live-test snapshot helpers on the
+  platform owner thread before transferring only copied values to render.
+- Added `RenderFrameMetrics` and `RenderFrame::GetMetrics()` so an active frame exposes only closed
+  project values: target identity, logical size, pixel size, accepted metrics revision, and target
+  revision. Completed or empty frames return invalid metrics.
+- Reused the existing presentation-environment revision as the copied metrics revision so equal-pixel
+  display-scale/presentation-environment changes are distinguishable and coalesce through the same
+  transactional target update path as resize.
+- Added focused value, public-consumer, API-trait, threading-handoff, and fake Vulkan backend tests
+  for same-snapshot handoff, newer coalesced updates, stale/conflicting revisions, equal-pixel scale
+  changes, suspension, recreation, and recovery.
+- Corrected active-frame metrics to report the actual created swapchain extent rather than the
+  requested snapshot extent while retaining the accepted logical size, target identity, metrics
+  revision, and target revision.
+- Added a non-installed UI/render metrics rendezvous that converts only closed frame values and
+  rejects invalid metrics or any target, target-revision, metrics-revision, logical-extent, or
+  pixel-extent mismatch before the later facade invokes paint compilation.
+- Kept nominal display scale available through the distinct platform query for future style/text
+  policy, but intentionally kept it out of exact geometry lowering per `UIR-GEOM-05`.
+- Built the live render integration target that owns the owner-thread capture helper. The one live
+  owner-thread runtime scenario was attempted but failed before exercising UI-009 assertions because
+  the approved/elevated run made the Vulkan loader emit validation errors for the host's missing Epic
+  overlay JSON and ignored layer environment variables. No product code was relaxed for that host
+  issue.
+
+Validation evidence:
+
+- `cmd.exe /s /c "call \"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\VsDevCmd.bat\" -arch=x64 -host_arch=x64 && cmake --build build\\rend-020-msvc-render-on-debug --target ponder_render_tests ponder_render_backend_tests ponder_render_header_tests ponder_render_public_consumer_tests ponder_render_clear_window"`
+- `build\rend-020-msvc-render-on-debug\bin\ponder_render_tests.exe --gtest_filter=RenderBootstrapValueTests.*:RenderThreadingHandoffTests.*:RenderApiTraitsTests.*` passed 23 tests.
+- `build\rend-020-msvc-render-on-debug\bin\ponder_render_backend_tests.exe --gtest_filter=RenderVulkanBootstrapTests.PublicFrameExposesOneIntermediateStageAfterClear:RenderVulkanBootstrapTests.PublicAcquireSurfaceLossBecomesStickyUntilRecovery:RenderVulkanBootstrapTests.SameSizePresentationEnvironmentChangesCoalesceIntoOneRecreation:RenderVulkanBootstrapTests.PublicVulkan12RetirementUsesAcquireHistoryUntilFinalShutdownFallback:RenderVulkanBootstrapTests.PublicLifecycleInjectionCoversSuspensionActiveFrameAndWrongThreadUse` passed 5 tests.
+- `cmd.exe /s /c "call \"C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\Common7\\Tools\\VsDevCmd.bat\" -arch=x64 -host_arch=x64 && cmake --build build\\ui-007-008 --target ponder_render_integration_tests --config Debug"` passed.
+- `ponder_ui_render_integration_topology_tests.exe --gtest_brief=1` passed 4 closed-value
+  rendezvous tests.
+- `RenderVulkanBootstrapTests.ActiveFrameMetricsUseActualClampedFramebufferExtent` passed and
+  proves an 800x600 requested snapshot uses the actual 640x480 framebuffer extent for packet
+  validation, viewport recording, and presentation.
+
 Carry one authoritative copied metrics snapshot from the platform owner thread to the acquired
 frame so UI cannot combine geometry with stale swapchain state.
 
@@ -508,6 +724,36 @@ Done when:
 TASK UI-010: Promote The Intermediate Seam To A Generic 2D Stage
 ---------------------------------------------------------------
 
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added a private move-only, device-scoped `Draw2DLayer` created from a `RenderDevice`; it is
+  render-thread-affine, tracks device lifetime, and records only to an explicit active
+  `RenderFrame`.
+- Replaced the test-only intermediate marker with the internal `Draw2DRecorded` composition phase
+  and `RecordVulkanDraw2DStage`, recorded inside the clear-opened render pass and existing command
+  buffer.
+- Validated layer owner device, frame state, packet validity, packet/frame pixel extent,
+  clear-before-recording, second-packet rejection, wrong thread, wrong device, and draw-after-finish
+  before any future GPU upload/pipeline work.
+- Preserved clear-only frames and made suspended/recreation-pending frames skip the stage without
+  consuming the one-stage allowance.
+- Kept the contract producer-neutral: packets still carry no target identity, no UI dependency was
+  added to render, and no callback/native command escape hatch was exposed.
+- Strengthened skipped-frame ordering so suspension and recreation-pending return before packet
+  validation or GPU work; a deliberately moved-from packet remains usable for repeated skips.
+- Made pipeline, map, and flush device loss sticky at shared device state so every target on the
+  device rejects later Draw2D work without repeating native operations.
+- Proved two targets receive distinct target-local upload buffers and backing allocations and
+  progress without ordinary queue-wide or device-wide idle.
+
+Validation evidence:
+
+- `cmd.exe /s /c 'call "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cmake --build build\rend-020-msvc-render-on-debug --target ponder_render_draw2d ponder_render_draw2d_header_tests ponder_render_backend_tests --config Debug'` passed.
+- `build\rend-020-msvc-render-on-debug\bin\ponder_render_backend_tests.exe --gtest_filter=RenderVulkanBootstrapTests.PublicFrameRecordsOneGeneric2DStageAfterClear:RenderVulkanBootstrapTests.Draw2DLayerValidatesDeviceExtentThreadAndClearOnlyRecovery:RenderVulkanBootstrapTests.Draw2DLayerServesTwoTargetsSequentiallyWithoutAmbientTargetState:RenderVulkanBootstrapTests.Draw2DLayerSkipsSuspendedAndRecreationPendingFrames:RenderVulkanBootstrapTests.RecordsAcquireClearDraw2DSubmitAndPresentInExactOrder` passed 5 tests.
+- Focused regressions additionally cover sticky device loss and distinct two-target upload storage.
+
 Replace the test-only post-clear marker with one real producer-neutral packet-recording phase while
 preserving the renderer's acquired-frame ownership and single submission path.
 
@@ -541,6 +787,25 @@ Done when:
 TASK UI-011: Add Rectangle Shaders And Generated Interfaces
 -----------------------------------------------------------
 
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added the render-owned HLSL vertex/fragment pair and generated embedded SPIR-V interfaces for
+  pixel-to-clip conversion and linear-premultiplied color with no descriptors or runtime assets.
+- Tightened reflection validation to require exactly one correctly named/staged entry point; exact
+  input/output cardinality, locations, names, and types; one exact vertex push-constant structure;
+  and no descriptor or specialization resources.
+- Made the production `ponder_render` archive depend on the reflection-interface check so a normal
+  renderer build cannot consume drifted generated artifacts.
+
+Validation evidence:
+
+- Current generated reflection passed the exact interface check; deliberately mismatched
+  reflection failed the check.
+- The focused production `ponder_render_draw2d` build regenerated/verified both artifacts and
+  passed the exact interface check.
+
 Add the smallest render-owned shader pair that implements the accepted packet semantics through the
 offline toolchain rather than introducing UI-specific GPU behavior.
 
@@ -573,6 +838,21 @@ Done when:
 
 TASK UI-012: Implement The Device-Scoped Vulkan 2D Pipeline
 ----------------------------------------------------------
+
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Bound each cache to one Vulkan device and derived/validated compatibility from the actual
+  swapchain config and render pass, preventing cross-device reuse and key/render-pass disagreement.
+- Added explicit device-child lifetime tracking and shared pipeline generations: device teardown
+  rejects live pipelines and each submitted completion slot retains its exact pipeline until its
+  fence completes.
+- Preserved the previous compatible pipeline when an incompatible successor fails, and emitted a
+  debug region only when both begin/end callbacks are available.
+- Captured the Vulkan device's maximum viewport dimensions and preflighted them, complete command
+  dispatch, and every scissor conversion before the first command, so unsupported extents or
+  unrepresentable rectangles produce no partial trace.
 
 Create reusable device-owned Vulkan pipeline state for the fixed generic 2D contract with
 transactional creation and deterministic fake-dispatch evidence.
@@ -609,8 +889,45 @@ Done when:
   prior producer's bindings.
 - Only the pipeline/dispatch targets and their focused deterministic tests have been built and run.
 
+Validation evidence:
+
+- `cmd.exe /s /c 'call "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64 && cmake --build build\rend-020-msvc-render-on-debug --target ponder_render_draw2d ponder_render_backend_tests --config Debug'` passed.
+- `build\rend-020-msvc-render-on-debug\bin\ponder_render_backend_tests.exe --gtest_filter=RenderVulkanBootstrapTests.CreatesDraw2DPipelineWithFixedStateAndDestroysInReverseOrder:RenderVulkanBootstrapTests.RollsBackEveryPartialDraw2DPipelineCreationFailure:RenderVulkanBootstrapTests.Draw2DPipelineKeyIgnoresExtentAndSeparatesIncompatibleContracts:RenderVulkanBootstrapTests.Draw2DPipelineCacheHitsExtentReuseAndReplacesIncompatiblePipeline:RenderVulkanBootstrapTests.RejectsDraw2DSchemaMismatchBeforeNativePipelineCreation:RenderVulkanBootstrapTests.RecordsDraw2DPipelineCommandsWithoutPriorBindings:RenderVulkanBootstrapTests.MovesAndShutsDownDraw2DPipelineOwnerOnce:RenderVulkanBootstrapTests.Draw2DPipelineOwnerTerminatesWhenDestroyedOffOwnerThread` passed 8 tests.
+- The audited focused run additionally passed cross-device cache isolation, live-child device
+  rejection, incompatible-successor rollback, viewport-limit rejection, and signed-scissor
+  rejection before commands.
+
 TASK UI-013: Implement Completion-Owned Upload Arenas
 -----------------------------------------------------
+
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Added one target-local arena with a persistently mapped combined vertex/index VMA allocation per
+  completion slot. Each slot owns capacity, generation, reservation state, mapping, and bounded
+  counters; no producer or native handles escape render.
+- Added checked four-byte stream layout, hard-limit arithmetic, lazy allocation, geometric growth,
+  and successor-first publication. Allocation, map, copy, flush, and growth failures preserve the
+  prior idle generation and committed ownership statistics.
+- Required host-visible memory, preferred coherent/cached memory, skipped flushes for coherent
+  allocations, and expanded/clamped non-coherent ranges to the device atom using the true VMA
+  allocation size. Every successful native flush is counted, including a successful first range
+  when a later range fails.
+- Copied sealed packet spans synchronously and implemented exact `Idle -> Reserved -> Submitted ->
+  Idle` ownership. Abandonment releases unsubmitted work; submit/present paths retain upload and
+  pipeline generations through the matching fence, including poisoned retirement.
+- Replaced completion-batch vector churn with fixed bounded storage. Warm unchanged packets perform
+  no VMA allocation, mapping, or growth; inspection confirms the production warm path creates no
+  per-frame host container.
+
+Validation evidence:
+
+- Focused fake-VMA tests cover coherent/non-coherent paths, exact alignment and atom clamping, every
+  layout limit/overflow, allocation/map/flush/growth rollback, partial flush accounting, warm reuse,
+  out-of-order completion, abandonment, submit/present failure, and two-target non-aliasing.
+- The final focused Draw2D/backend filter passed 28 tests; the complete
+  `RenderVulkanBootstrapTests.*` suite passed all 133 tests.
 
 Add bounded renderer-owned upload storage whose lifetime follows the exact target frame slot and
 GPU completion rather than producer memory or frame count guesses.
@@ -648,6 +965,34 @@ Done when:
 
 TASK UI-014: Record Draw2D Packets Transactionally
 -------------------------------------------------
+
+Status: completed on 2026-07-15.
+
+Implementation evidence:
+
+- Connected packet validation, swapchain-derived pipeline acquisition, upload reservation/copy/
+  flush, exact pipeline attachment, and command recording inside the existing clear-opened command
+  buffer and render pass.
+- Completed all fallible native and argument preflight before binding, then recorded pipeline,
+  viewport, vertex/index streams, extent constants, scissors, and indexed draws in packet order.
+  The frame commits `Draw2DRecorded` only after every command is emitted.
+- Recoverable precommand failure abandons upload/pipeline ownership, emits no 2D command, preserves
+  `ClearRecorded`, and permits clear-only finish. Empty, suspended, and recreation-pending input
+  consumes no stage or GPU work.
+- Tied the exact upload and pipeline generation to successful submission completion. Submit failure
+  releases unsubmitted ownership; every post-submit present outcome retains ownership until the
+  exact fence completes; device loss is terminal across all targets.
+
+Validation evidence:
+
+- Focused regressions cover the full ordered trace, two draws/scissors and exact bytes, every
+  fallible preflight prefix, empty and skipped frames, abandonment, submit failure, enqueued and
+  non-enqueued present failure, exact-fence retirement, device loss, resize, minimize/restore,
+  compatible pipeline reuse, and two sequential targets.
+- `ponder_render_draw2d`, `ponder_render_backend_tests`, and the UI rendezvous target built with
+  warnings-as-errors through the Visual Studio Developer Command Prompt.
+- `ponder_ui_render_integration_topology_tests.exe --gtest_brief=1` passed 4 tests; the focused
+  Draw2D/backend filter passed 28 tests; the complete fake-Vulkan backend suite passed 133 tests.
 
 Connect the validated packet, pipeline, upload arena, and acquired frame so one generic 2D stage is
 recorded through the existing clear/submit/present lifecycle.
@@ -687,6 +1032,45 @@ Done when:
 TASK UI-015: Add The Experimental Rectangle Facade
 --------------------------------------------------
 
+Status: completed on 2026-07-16.
+
+Implementation evidence:
+
+- Added the opt-in `pond::ui::experimental::RectangleRenderer` facade with an explicit temporary
+  stability notice, a strongly typed `RectanglePaint`, `RectangleRecordOutcome`, and a public helper
+  for taking an immutable UI metrics snapshot from one active `RenderFrame`.
+- Kept the public facade free of windows, native handles, packets, backend encoders, and private
+  paint/compiler types. The move-only facade owns private `Draw2DLayer`, paint recorder, compiler,
+  packet builder capacity, and reusable state behind the installed header.
+- Preserved the semantic path: rectangle paint records into a sealed paint list, compiles to a
+  generic Draw2D packet, and records through the existing render 2D stage. Suspended frames skip
+  before target-dependent compilation; empty rectangles skip before GPU work and stage consumption.
+- Recycled the facade's sealed-list and packet storage after warm-up, with transactional reserve
+  before sealed-list publication and pointer-stability tests for every retained output stream.
+- Documented render-thread affinity for creation, use, moves, move-assignment release, and
+  destruction, plus the clear-only retry contract after recoverable preflight failure.
+- Split UI render-integration topology assertions out of installable rendezvous code, added a
+  private Draw2D frame-access validator for early thread/device/frame checks, and embedded generated
+  rectangle shader sources into the installed `ponder_render` archive so the installed facade can
+  link without exporting private shader or packet targets.
+
+Validation evidence:
+
+- Built `ponder_ui_experimental`, `ponder_ui_experimental_header_tests`,
+  `ponder_render_backend_tests`, and `ponder_ui_render_integration_topology_tests` through the
+  Visual Studio Developer Command Prompt with warnings-as-errors.
+- `ponder_render_backend_tests.exe --gtest_filter=RenderVulkanBootstrapTests.ExperimentalRectangleFacade* --gtest_brief=1`
+  passed 9 tests covering recorded, empty, suspended, wrong thread/device/frame phase, stale
+  metrics, invalid paint, recoverable pipeline/upload retry, device loss, warmed multi-target use,
+  resize/suspend/restore, pipeline-compatibility changes, asymmetric teardown, and reuse after
+  failure.
+- `ponder_ui_render_integration_topology_tests.exe --gtest_brief=1` passed 4 tests.
+- A separate install-rule build at `build/ui-015-install-smoke` passed
+  `ponder_ui_install_consumer_test`, including installed `ponder::ui_experimental` link coverage and
+  the private Draw2D packet/export guard.
+- A separate render-disabled build at `build/ui-015-render-off` built `ponder_ui` and
+  `ponder_ui_header_tests`, confirming UI core does not compile the facade when render is disabled.
+
 Expose one intentionally temporary UI-owned join that exercises every durable layer without making
 the generic packet or GPU backend application-facing.
 
@@ -725,6 +1109,45 @@ Done when:
 TASK UI-016: Complete CPU And Packet Verification
 -------------------------------------------------
 
+Status: completed on 2026-07-16.
+
+Implementation evidence:
+
+- Added `ponder_ui_cpu_packet_verification_tests` as the bounded deterministic CPU/packet property
+  executable. It covers recorder state-machine transactions, fractional clip/scale arithmetic with an
+  independent reference, compiler output invariants across generated paint lists, hostile packet
+  mutations, and stable packet diagnostic names.
+- Every property-style run records a fixed seed in its test trace: `0x5EED1601` for recorder
+  sequences, `0xC11A1602` for fractional clip/scale cases, `0xC0DE1603` for compiler invariants,
+  and `0xBAD01604` for hostile packet mutations. Every case derives an independent case seed and
+  records per-step seeds and the complete generated operation/value in its failure trace.
+- Added independent color conversion/packing vectors, one-pixel and large exactly representable
+  target cases, invalid hard-limit rollback, reusable sealed-list storage, and packet-builder
+  recycling checks that preserve every warmed output-stream address.
+- Added the `ui_cpu_packet` CTest label across the CPU foundation, paint recorder, paint compiler,
+  new CPU/packet property executable, generic Draw2D packet executable, public UI header build,
+  experimental UI header build, and private packet-header build.
+- Added the named `ponder_ui_cpu_packet_verification_gate` CTest entry so the complete CPU/header/
+  packet tier can be run without selecting individual executables or test filters.
+- Kept backend lifecycle, fake Vulkan failure injection, shader artifact checks, install/package
+  matrix expansion, and live Windows/Vulkan rectangle proof assigned to UI-017 and later gates; this
+  task intentionally verifies the pure CPU/header/packet tier only.
+
+Validation evidence:
+
+- Built `ponder_ui_tests`, `ponder_ui_paint_tests`, `ponder_ui_paint_compiler_tests`,
+  `ponder_ui_cpu_packet_verification_tests`, `ponder_render_draw2d_packet_tests`,
+  `ponder_ui_header_tests`, `ponder_ui_experimental_header_tests`, and
+  `ponder_render_draw2d_packet_header_tests` through the Visual Studio Developer Command Prompt with
+  warnings-as-errors.
+- `ponder_ui_cpu_packet_verification_tests.exe --gtest_brief=1` passed 5 tests.
+- `ctest --test-dir build\ui-018-matrix-smoke\full_integration-Debug -C Debug -L
+  ui_cpu_packet --output-on-failure --no-tests=error` passed 74 tests with no filter expression.
+- `ctest --test-dir build\rend-020-msvc-render-on-debug -C Debug -R
+  ponder_ui_cpu_packet_verification_gate --output-on-failure --no-tests=error` passed the named gate.
+- A disabled/skip/filter scan over the in-scope UI and packet tests found no `DISABLED_`,
+  `GTEST_SKIP`, or committed `--gtest_filter` usage.
+
 Turn the focused paint, compiler, and packet tests accumulated by earlier tasks into one
 comprehensive deterministic Windows gate.
 
@@ -757,6 +1180,48 @@ Done when:
 
 TASK UI-017: Complete Backend, Failure, And Lifecycle Verification
 -----------------------------------------------------------------
+
+Status: completed on 2026-07-16.
+
+Implementation evidence:
+
+- Added `RenderVulkanBootstrapTests.ExperimentalRectangleFacadeStaysWarmAcrossTargetsAndAsymmetricDestruction`
+  to exercise the temporary UI rectangle facade across two targets with different extents, warmed
+  upload slots, exact command traces, stable shader/pipeline/upload call counts, asymmetric target
+  release, continued rendering on the surviving target, no device/queue idle on the steady path, and
+  final zero-resource teardown.
+- Added `RenderVulkanBootstrapTests.ExperimentalRectangleFacadeInterleavesTargetLifecycleAndPipelineCompatibility`
+  to combine two-target interleaving, resize, minimize/suspended skip, restore, compatible extent
+  reuse, incompatible format replacement, target isolation, asymmetric teardown, and continued
+  rendering into one lifecycle transaction.
+- Extended exact successful traces through render-pass and command-buffer completion, and retained
+  separate upload-resource traces for create/map/flush/unmap/destroy ordering. Strengthened active
+  destination move-assignment coverage and warmed host-list/packet reuse evidence.
+- Promoted the deterministic fake backend, lifetime death contracts, Draw2D shader interface and
+  artifact checks, private Draw2D build/header checks, UI render-integration topology tests, and UI
+  experimental build/header checks under the shared `ui_backend_lifecycle` CTest label.
+- Added the named `ponder_ui_backend_lifecycle_verification_gate` CTest entry so the whole backend,
+  failure, lifecycle, shader-artifact, and UI/render integration tier runs with `--no-tests=error`
+  and without selecting individual gtest filters.
+- Relied on the existing fake-Vulkan matrices for successful-prefix rollback, frame failure
+  injection, upload allocation/map/flush/growth rollback, command-order traces, submit/present
+  disposition, recreation/retirement, device-loss stickiness, owner-thread enforcement, and shutdown
+  with work in flight instead of duplicating those cases in UI facade tests.
+
+Validation evidence:
+
+- Built `ponder_render_backend_tests`, `ponder_render_lifetime_contract_tests`,
+  `ponder_render_draw2d_shader_interface_tests`, and `ponder_ui_render_integration_topology_tests`
+  through the Visual Studio Developer Command Prompt with warnings-as-errors.
+- Rebuilt `ponder_render_backend_tests` after the final assertion adjustment.
+- `ponder_render_backend_tests.exe --gtest_filter=RenderVulkanBootstrapTests.ExperimentalRectangleFacade* --gtest_brief=1`
+  passed all 9 facade, recovery, warmed-storage, and combined target-lifecycle tests.
+- `ctest --test-dir build\rend-020-msvc-render-on-debug -C Debug -R
+  ExperimentalRectangleFacadeStaysWarmAcrossTargetsAndAsymmetricDestruction --output-on-failure
+  --no-tests=error` passed the new focused test.
+- `ctest --test-dir build\ui-018-matrix-smoke\full_integration-Debug -C Debug -L
+  ui_backend_lifecycle --output-on-failure --no-tests=error` passed all 176 deterministic backend,
+  lifecycle, shader, header, and UI-integration tests with no filter expression.
 
 Build an exhaustive deterministic fake-Vulkan/VMA transaction gate for the GPU path before relying
 on a real driver to reveal ownership mistakes.
@@ -797,6 +1262,44 @@ Done when:
 TASK UI-018: Complete Build, Header, Package, And Dependency Verification
 ------------------------------------------------------------------------
 
+Status: completed on 2026-07-16.
+
+Implementation evidence:
+
+- Added the explicit `PONDER_BUILD_UI_RENDER_INTEGRATION` option and gated the temporary
+  UI-to-render integration and experimental facade independently from render. UI core remains
+  available with render disabled, while generic Draw2D remains available without UI integration.
+- Added configured-target/cache/package verification and a clean Windows MSVC/Ninja matrix for
+  render-disabled, generic-render, and full-integration topologies in Debug and Release. The matrix
+  proves tests remain enabled by default, requires compile-command inspection, builds focused
+  production/header/test targets, and invokes every expected package check by exact test name.
+- Replaced recursive public-header installation with target file sets, then added installed stable
+  and experimental PCH-free header consumers. The consumers call out-of-line core, platform,
+  render, and UI functions, propagate Debug/Release configuration, and verify relocatable static
+  link closure without private packet, shader, backend, helper, or test exports.
+- Hardened installed header, export-target, package, compile-command, and verbose link-line scans;
+  expanded the removed-dependency scan through source/configuration and license/provenance metadata;
+  and guarded every new recursive consumer cleanup with normalized strict-child checks.
+- Serialized nested build tests under one resource lock and added `--no-tests=error` to every new
+  label- or exact-name CTest command. Normal generators without compile-database support retain the
+  target/cache/package checks; the exhaustive matrix is registered only for MSVC/Ninja and remains
+  fail-closed on compile commands.
+
+Validation evidence:
+
+- Clean MSVC/Ninja Debug and Release trees passed for `render_off`, `render_generic`, and
+  `full_integration`, including focused archive/header builds and the one-way topology assertions.
+- The full-integration `ui_cpu_packet` label passed 74/74 tests and the
+  `ui_backend_lifecycle` label passed 176/176 tests in both Debug and Release with
+  `--no-tests=error`.
+- All 11 expected post-hardening Release package checks passed individually across the three
+  topologies. These include strict topology checks, the removed-dependency scan, stable and
+  experimental UI install consumers, and render install consumers wherever render is enabled.
+- Strict compile-command topology checks passed all three Release topologies; the explicit
+  unsupported-generator mode retained target/cache/package verification and skipped only the
+  unavailable compile-command portion. Unsafe root and sibling cleanup paths and a direct
+  non-Ninja exhaustive-matrix invocation were rejected before mutation.
+
 Prove the accepted static-library and optional-feature topology from clean Windows configurations,
 including cases that source-tree linking can accidentally conceal.
 
@@ -833,6 +1336,53 @@ Done when:
 
 TASK UI-019: Add The Rectangle Workbench
 ----------------------------------------
+
+Status: completed on 2026-07-16.
+
+Implementation evidence:
+
+- Added the non-installed ponder_ui_1_rectangle target under examples/ui/1-rectangle, gated by
+  PONDER_BUILD_UI_RENDER_INTEGRATION and linked only to public core, platform, render, and
+  experimental UI targets. Added the UI example index, local README, and a compile-only CTest
+  build smoke without registering the executable as a runtime acceptance test.
+- Extended the temporary RectangleRenderer facade with an ordered span overload while preserving
+  the singular overload. The facade validates the complete batch, records paints in input order,
+  compiles once, and consumes exactly one generic Draw2D stage, allowing the workbench to render
+  one opaque and two overlapping translucent rectangles without exposing private packet types.
+- Added deterministic fake-backend coverage for ordered batch vertices, premultiplied colors,
+  indices, one merged draw, one Draw2D stage, whole-batch prevalidation, and recovery. Extended the
+  PCH-free public experimental-header consumer to compile both overloads.
+- Implemented copied target snapshots, coalesced resize/display/state events, current per-frame UI
+  metrics, surface-loss recovery, typed skip handling, suspended polling backoff, and explicit
+  frame/UI-owner/target/device/bootstrap/window/runtime teardown.
+- Added interactive, --auto-close-ms, --help, and --smoke modes using the updated Result
+  propagation macros and std::print facilities. Bounded success requires at least one recorded and
+  presented UI batch; --smoke also performs a public-API resize/minimize/restore tour and requires
+  presentation to resume afterward.
+- Kept default validation for interactive and --auto-close-ms runs. The explicit --smoke
+  capability lane disables validation so unrelated host-layer diagnostics do not masquerade as
+  UI-019 failures; it remains explicitly separate from the required UI-021 validation gate.
+
+Validation evidence:
+
+- Built ponder_ui_1_rectangle, ponder_ui_experimental_header_tests, and
+  ponder_render_backend_tests with warnings-as-errors through the x64 Visual Studio Developer
+  Command Prompt. The rectangle shader artifact and reflected-interface checks remained current.
+- The RenderVulkanBootstrapTests.ExperimentalRectangleFacade* filter passed all 10 deterministic
+  facade/backend tests, including the new ordered-batch and batch-prevalidation coverage.
+- The exact ponder_ui_1_rectangle_build_smoke CTest entry passed. The --help path returned zero,
+  and a malformed --auto-close-ms value printed a structured invalid-argument error and returned
+  one before creating platform state.
+- A bounded --smoke run on the NVIDIA GeForce RTX 3070 Laptop GPU resized from 960x640 to 800x520,
+  recreated presentation resources, minimized, observed 16 typed suspended skips with a 50 ms
+  backoff, restored, resumed drawing, and exited successfully after 8,965 UI-presented frames,
+  including 4,177 after restore. Final prepared-surface/device/target counts and validation
+  warning/error/drop counts were all zero.
+- A validation-enabled bounded run also recorded and presented 6,134 UI frames and retired every
+  renderer child, but correctly returned nonzero because the elevated host Vulkan loader reported
+  a stale missing Epic Overlay implicit-layer manifest as one warning and one error. This
+  environment diagnostic is not suppressed by the default/auto-close paths and is deferred to the
+  explicit validation-capable UI-021 environment.
 
 Create the requested non-installed contributor example at `examples/ui/1-rectangle` using the same
 lifecycle and documentation conventions as `examples/platform/1-window-display-lab`.

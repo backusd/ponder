@@ -69,6 +69,6 @@ does not launch this interactive program.
 ## Intentional Scope
 
 This example renders one clear-only window. It uses no SDL, Vulkan, native-window,
-shader, geometry, scene, Dear ImGui, or backend-selection API directly. Keeping
+shader, geometry, scene, UI toolkit, or backend-selection API directly. Keeping
 that scope narrow makes the renderer lifecycle, window-state handoff, error
 handling, and teardown sequence a readable template for future applications.

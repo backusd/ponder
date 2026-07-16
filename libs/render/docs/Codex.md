@@ -56,8 +56,11 @@ visualization data flow.
 - Do not declare a direct SDL dependency or inherit SDL compile usage. Do not
   depend on `ponder-desktop`, project/domain libraries, workflow, compute, or
   plugins.
-- A later narrow generic 2D contract accepts only owning project-defined packets;
-  UI owns semantic paint commands and tessellation before crossing that boundary.
+- Follow [ADR 0010](../../../docs/adr/0010-project-owned-ui-rendering.md) for the project-owned
+  UI rendering architecture and private producer-neutral `Draw2D` contract.
+- The private narrow generic 2D contract accepts only owning project-defined packets;
+  UI owns semantic paint commands and tessellation before crossing that boundary, while render owns
+  validation, shaders, pipelines, completion-slot upload, command recording, and retirement.
   Do not add retained UI types, logical UI units, producer callbacks, native
   command escapes, UI widgets, or arbitrary GPU commands.
 - Dear ImGui is not part of the planned architecture, dependency boundary, or
@@ -69,8 +72,14 @@ visualization data flow.
 ## Verification
 
 - Configure and build a supported CMake preset.
-- Follow `libs/render/docs/Verification.md` for the render verification matrix, including deterministic labels, live labels, install-consumer coverage, and validation-mode commands.
-- For normal deterministic checks, run CTest with `-L render -LE live`. For live Windows render presentation checks, run `-L live` with the `ponder_platform_sdl` resource lock and an explicit timeout.
+- Follow libs/render/docs/Verification.md for the render verification matrix, including
+  deterministic labels, live labels, install-consumer coverage, and validation-mode commands.
+- For normal deterministic checks, run CTest with -L render -LE live. For live Windows render
+  presentation checks, run -L live with the ponder_platform_sdl resource lock and an explicit
+  timeout.
 - Do not call the bootstrap milestone validation-clean when the required Khronos
   validation layer is absent. Optional Default-mode success is not a substitute
   for a passing required Standard-validation run.
+- Follow [ADR 0011](../../../docs/adr/0011-render-shader-toolchain.md) for render-owned
+  shader source, SPIR-V generation, validation, reflection, embedding, and build-tree artifact
+  provenance. Do not add runtime shader compilation or checked-in opaque shader binaries.

@@ -1,6 +1,5 @@
 #include <ponder/core/Result.hpp>
 
-#include <format>
 #include <utility>
 
 namespace pond::core
@@ -42,14 +41,5 @@ const StackTrace& Error::GetStackTrace() const noexcept
     return m_stackTrace;
 }
 
-std::string FormatErrorCode(ErrorCode code)
-{
-    return std::format("{}:{}", GetErrorCategoryName(code.GetCategory()), code.GetValue());
-}
 
-std::string FormatError(const Error& error)
-{
-    return std::format("[{}] {} ({})", FormatErrorCode(error.GetCode()), error.GetMessage(),
-                       FormatSourceLocation(error.GetLocation()));
-}
 } // namespace pond::core

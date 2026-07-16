@@ -9,8 +9,6 @@ find_package(ponder CONFIG REQUIRED)
 add_executable(ponder_render_install_consumer Main.cpp)
 target_compile_features(ponder_render_install_consumer PRIVATE cxx_std_23)
 target_link_libraries(ponder_render_install_consumer PRIVATE
-    ponder::core
-    ponder::platform
     ponder::render)
 
 if(MSVC)

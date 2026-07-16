@@ -23,6 +23,11 @@ class Window;
 
 namespace pond::render
 {
+namespace draw2d
+{
+class Draw2DLayer;
+} // namespace draw2d
+
 namespace detail
 {
 class RenderBackendTestAccess;
@@ -326,11 +331,12 @@ class RenderTargetSnapshot final
 public:
     constexpr RenderTargetSnapshot() noexcept = default;
     constexpr RenderTargetSnapshot(platform::WindowId windowId, platform::PixelSize pixelSize,
-                                   bool visible, platform::WindowState windowState,
+                                   platform::LogicalSize logicalSize, bool visible,
+                                   platform::WindowState windowState,
                                    PresentationEnvironmentRevision presentationEnvironmentRevision,
                                    std::uint64_t revision) noexcept
-        : m_windowId{windowId}, m_pixelSize{pixelSize}, m_visible{visible},
-          m_windowState{windowState},
+        : m_windowId{windowId}, m_pixelSize{pixelSize}, m_logicalSize{logicalSize},
+          m_visible{visible}, m_windowState{windowState},
           m_presentationEnvironmentRevision{presentationEnvironmentRevision}, m_revision{revision}
     {
     }
@@ -343,6 +349,11 @@ public:
     [[nodiscard]] constexpr platform::PixelSize GetPixelSize() const noexcept
     {
         return m_pixelSize;
+    }
+
+    [[nodiscard]] constexpr platform::LogicalSize GetLogicalSize() const noexcept
+    {
+        return m_logicalSize;
     }
 
     [[nodiscard]] constexpr bool IsVisible() const noexcept
@@ -372,10 +383,23 @@ public:
 private:
     platform::WindowId m_windowId{};
     platform::PixelSize m_pixelSize{};
+    platform::LogicalSize m_logicalSize{};
     bool m_visible{};
     platform::WindowState m_windowState{platform::WindowState::Normal};
     PresentationEnvironmentRevision m_presentationEnvironmentRevision{};
     std::uint64_t m_revision{};
+};
+
+struct RenderFrameMetrics final
+{
+    platform::WindowId windowId{};
+    platform::LogicalSize logicalSize{};
+    platform::PixelSize pixelSize{};
+    PresentationEnvironmentRevision metricsRevision{};
+    std::uint64_t targetRevision{};
+
+    [[nodiscard]] friend constexpr bool operator==(
+        const RenderFrameMetrics& lhs, const RenderFrameMetrics& rhs) noexcept = default;
 };
 
 struct SelectedPresentationConfig final
@@ -910,6 +934,14 @@ struct RenderFrameResult final
         return false;
     }
 
+    const platform::PixelSize pixelSize = value.GetPixelSize();
+    const platform::LogicalSize logicalSize = value.GetLogicalSize();
+    if ((pixelSize.width > 0U && logicalSize.width == 0U) ||
+        (pixelSize.height > 0U && logicalSize.height == 0U))
+    {
+        return false;
+    }
+
     switch (value.GetWindowState())
     {
     case platform::WindowState::Normal:
@@ -919,6 +951,14 @@ struct RenderFrameResult final
     }
 
     return false;
+}
+
+[[nodiscard]] constexpr bool IsValid(RenderFrameMetrics value) noexcept
+{
+    const bool extentsMatch = (value.pixelSize.width == 0U || value.logicalSize.width > 0U) &&
+                              (value.pixelSize.height == 0U || value.logicalSize.height > 0U);
+    return value.windowId.IsValid() && IsValid(value.metricsRevision) &&
+           value.targetRevision > 0U && extentsMatch;
 }
 
 [[nodiscard]] constexpr bool IsValid(const SelectedPresentationConfig& value) noexcept
@@ -1108,6 +1148,7 @@ private:
     friend class RenderBootstrap;
     friend class RenderTarget;
     friend class RenderFrame;
+    friend class draw2d::Draw2DLayer;
     friend class detail::RenderBackendTestAccess;
 
     struct State;
@@ -1139,6 +1180,7 @@ private:
     friend class RenderDevice;
     friend class RenderTarget;
     friend class detail::RenderBackendTestAccess;
+    friend class draw2d::Draw2DLayer;
     friend class detail::RenderBootstrapTestAccess;
 
     struct State;
@@ -1181,6 +1223,7 @@ public:
 private:
     friend class RenderDevice;
     friend class RenderFrame;
+    friend class draw2d::Draw2DLayer;
     friend class detail::RenderBackendTestAccess;
 
     struct State;
@@ -1203,6 +1246,7 @@ public:
     [[nodiscard]] bool IsValid() const noexcept;
     [[nodiscard]] FrameStatus GetStatus() const noexcept;
     [[nodiscard]] TargetStatus GetTargetStatus() const noexcept;
+    [[nodiscard]] RenderFrameMetrics GetMetrics() const noexcept;
     [[nodiscard]] bool IsSkipped() const noexcept;
     [[nodiscard]] core::VoidResult VerifyRenderThread() const;
     [[nodiscard]] core::VoidResult Clear();
@@ -1212,6 +1256,7 @@ public:
 private:
     friend class RenderTarget;
     friend class detail::RenderBackendTestAccess;
+    friend class draw2d::Draw2DLayer;
 
     struct State;
 

@@ -2,8 +2,10 @@
 
 #include <concepts>
 #include <cstdint>
+#include <format>
 #include <gtest/gtest.h>
 #include <limits>
+#include <sstream>
 #include <type_traits>
 
 namespace
@@ -99,5 +101,30 @@ TEST(PlatformGeometryTests, KeepsLogicalAndPixelSizesDistinct)
     EXPECT_EQ(kLogicalSize.height, 800U);
     EXPECT_EQ(kPixelSize.width, 2560U);
     EXPECT_EQ(kPixelSize.height, 1600U);
+}
+
+TEST(PlatformGeometryTests, FormatsAndStreamsGeometryValues)
+{
+    const pond::platform::ScreenPosition position{-12, 34};
+    const pond::platform::ScreenExtent extent{800, 600};
+    const pond::platform::ScreenRectangle rectangle{position, extent};
+    const pond::platform::LogicalPoint point{1.5F, -2.25F};
+    const pond::platform::LogicalExtent logicalExtent{3.5F, 4.25F};
+    const pond::platform::LogicalRectangle logicalRectangle{point, logicalExtent};
+    const pond::platform::LogicalSize logicalSize{320, 200};
+    const pond::platform::PixelSize pixelSize{640, 400};
+    std::ostringstream stream;
+
+    stream << rectangle;
+
+    EXPECT_EQ(std::format("{}", position), "(-12, 34)");
+    EXPECT_EQ(std::format("{}", extent), "800x600");
+    EXPECT_EQ(std::format("{}", rectangle), "(-12, 34) / 800x600");
+    EXPECT_EQ(stream.str(), "(-12, 34) / 800x600");
+    EXPECT_EQ(std::format("{}", point), "(1.5, -2.25)");
+    EXPECT_EQ(std::format("{}", logicalExtent), "3.5x4.25");
+    EXPECT_EQ(std::format("{}", logicalRectangle), "(1.5, -2.25) / 3.5x4.25");
+    EXPECT_EQ(std::format("{}", logicalSize), "320x200");
+    EXPECT_EQ(std::format("{}", pixelSize), "640x400");
 }
 } // namespace

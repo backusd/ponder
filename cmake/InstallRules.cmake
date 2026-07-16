@@ -21,19 +21,6 @@ function(ponder_install_target target_name)
         INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 endfunction()
 
-function(ponder_install_public_headers include_dir)
-    if(NOT PONDER_ENABLE_INSTALL_RULES)
-        return()
-    endif()
-
-    if(NOT IS_ABSOLUTE "${include_dir}")
-        set(include_dir "${PROJECT_SOURCE_DIR}/${include_dir}")
-    endif()
-
-    install(DIRECTORY "${include_dir}/"
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-endfunction()
-
 function(ponder_install_export)
     if(NOT PONDER_ENABLE_INSTALL_RULES)
         return()

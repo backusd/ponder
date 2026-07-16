@@ -13,10 +13,13 @@ inputs.
 - `projects/` contains sample `.ponder` projects once the native project format
   exists.
 
+- **ui/** contains runnable UI/render integration workbenches.
+
 ## Example Indexes
 
 - [Platform examples](platform/README.md)
 - [Render examples](render/README.md)
+- [UI examples](ui/README.md)
 
 ## Rules
 

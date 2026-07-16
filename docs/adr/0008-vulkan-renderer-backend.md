@@ -4,6 +4,10 @@
 
 Accepted.
 
+## Related Decisions
+
+- [ADR 0010: Project-Owned UI Rendering](0010-project-owned-ui-rendering.md)
+
 ## Context
 
 The first durable desktop shell needs a renderer that can clear and present a
@@ -131,7 +135,8 @@ renderer-owned surface. Shutdown destroys or abandons active frame tokens, destr
 and unconsumed prepared surfaces, destroys the render device, destroys `RenderBootstrap`, destroys
 platform windows, and finally destroys `PlatformRuntime`.
 
-Ordinary resize, minimize, hide/show, same-size display or scale changes, and swapchain staleness are
+Ordinary resize, minimize, hide/show, same-size display or scale changes, and swapchain
+staleness are
 handled from copied state snapshots on the render thread. A newer presentation-environment revision
 forces presentation re-evaluation even when pixel size is unchanged. Surface loss requires a fresh
 owner-thread preparation call; render must not reuse stored native data. Device loss is fatal to the
@@ -143,10 +148,11 @@ Generic 2D drawing is not part of the create/clear/present bootstrap milestone. 
 foundation leaves a semantic insertion point after preceding color work and before final
 submission.
 
-`ponder_ui` owns semantic paint commands, logical coordinates, clipping, color rules, and CPU
-tessellation into owning project-defined packets. `ponder_render` consumes only that generic packet
-contract and owns shaders, GPU resources, command recording, submission, and completion retirement.
-UI receives no Vulkan handles and render does not depend on UI.
+ADR 0010 records the ownership of project-owned UI rendering. `ponder_ui` owns semantic paint
+commands, logical coordinates, clipping, color rules, and CPU tessellation into owning
+project-defined packets. `ponder_render` consumes only the producer-neutral packet contract and owns
+shaders, GPU resources, command recording, submission, and completion retirement. UI receives no
+Vulkan handles and render does not depend on UI.
 
 ## Consequences
 

@@ -47,44 +47,41 @@ using MetadataSnapshots = detail::RuntimeMetadataSnapshots;
 
 [[nodiscard]] core::VoidResult Validate(const PlatformRuntimeDesc& desc)
 {
+    using ResultType = core::VoidResult;
+
     if (desc.applicationName.empty() || !core::IsValidUtf8WithoutEmbeddedNull(desc.applicationName))
     {
-        return core::VoidResult::FromError(core::Error{
-            kInvalidArgumentCode,
+        return ResultType::FromError(core::Error{kInvalidArgumentCode,
             "Platform runtime application name must be non-empty UTF-8 without embedded nulls."});
     }
 
     if (desc.applicationVersion.has_value() &&
         !core::IsValidUtf8WithoutEmbeddedNull(*desc.applicationVersion))
     {
-        return core::VoidResult::FromError(core::Error{
-            kInvalidArgumentCode,
+        return ResultType::FromError(core::Error{kInvalidArgumentCode,
             "Platform runtime application version must be UTF-8 without embedded nulls."});
     }
 
     if (desc.applicationVersion.has_value() && desc.applicationVersion->empty())
     {
-        return core::VoidResult::FromError(
-            core::Error{kInvalidArgumentCode,
-                        "Platform runtime application version must be absent or non-empty."});
+        return ResultType::FromError(core::Error{kInvalidArgumentCode,
+            "Platform runtime application version must be absent or non-empty."});
     }
 
     if (desc.applicationIdentifier.has_value() &&
         !core::IsValidUtf8WithoutEmbeddedNull(*desc.applicationIdentifier))
     {
-        return core::VoidResult::FromError(core::Error{
-            kInvalidArgumentCode,
+        return ResultType::FromError(core::Error{kInvalidArgumentCode,
             "Platform runtime application identifier must be UTF-8 without embedded nulls."});
     }
 
     if (desc.applicationIdentifier.has_value() && desc.applicationIdentifier->empty())
     {
-        return core::VoidResult::FromError(
-            core::Error{kInvalidArgumentCode,
-                        "Platform runtime application identifier must be absent or non-empty."});
+        return ResultType::FromError(core::Error{kInvalidArgumentCode,
+            "Platform runtime application identifier must be absent or non-empty."});
     }
 
-    return core::VoidResult::Success();
+    return ResultType::Success();
 }
 
 void VerifyBackend(const detail::PlatformRuntimeBackend& backend)
@@ -280,14 +277,18 @@ void RestoreRuntimeHints(const detail::PlatformRuntimeBackend& backend,
     const detail::PlatformRuntimeBackend& backend)
 {
     return MetadataSnapshots{{
-        MetadataSnapshot{detail::ApplicationMetadataProperty::Name,
-                         CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Name)},
+        MetadataSnapshot{
+            detail::ApplicationMetadataProperty::Name,
+            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Name)
+        },
         MetadataSnapshot{
             detail::ApplicationMetadataProperty::Version,
-            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Version)},
+            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Version)
+        },
         MetadataSnapshot{
             detail::ApplicationMetadataProperty::Identifier,
-            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Identifier)},
+            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Identifier)
+        },
     }};
 }
 
@@ -488,31 +489,34 @@ std::optional<WindowId> PlatformRuntimeState::FindWindowId(std::uint32_t backend
                                                   : std::nullopt;
 }
 
-PlatformTimestamp PlatformRuntimeState::Now() const
+Timestamp PlatformRuntimeState::Now() const
 {
     VerifyOwnerThread("timestamp query");
     return CaptureBackendTimestamp();
 }
 
-PlatformTimestamp PlatformRuntimeState::CaptureBackendTimestamp() const
+Timestamp PlatformRuntimeState::CaptureBackendTimestamp() const
 {
     const std::uint64_t ticks = m_backend.getTicksNanoseconds(m_backend.context);
     constexpr auto kMaximumTicks =
         static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
     PONDER_VERIFY(ticks <= kMaximumTicks,
-                  "SDL monotonic timestamp exceeds PlatformTimestamp range");
-    return PlatformTimestamp{std::chrono::nanoseconds{static_cast<std::int64_t>(ticks)}};
+                  "SDL monotonic timestamp exceeds Timestamp range");
+    return Timestamp{std::chrono::nanoseconds{static_cast<std::int64_t>(ticks)}};
 }
 } // namespace detail
 
 core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc& desc)
 {
+    using ResultType = core::Result<PlatformRuntime>;
+
     RuntimeSlotState expectedSlot = RuntimeSlotState::Available;
-    if (!runtimeSlot.compare_exchange_strong(expectedSlot, RuntimeSlotState::Creating,
+    if (!runtimeSlot.compare_exchange_strong(expectedSlot,
+                                             RuntimeSlotState::Creating,
                                              std::memory_order_acq_rel))
     {
-        return core::Result<PlatformRuntime>::FromError(
-            core::Error{kRuntimeAlreadyActiveCode, "A platform runtime is already active."});
+        return ResultType::FromError(core::Error{kRuntimeAlreadyActiveCode,
+            "A platform runtime is already active."});
     }
 
     auto releaseReservation = core::MakeScopeExit(
@@ -522,26 +526,26 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
         });
 
     core::VoidResult validation = Validate(desc);
-    if (!validation.HasValue())
-    {
-        return core::Result<PlatformRuntime>::FromError(std::move(validation).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(validation);
 
     PONDER_VERIFY(std::this_thread::get_id() == processEntryThread,
                   "PlatformRuntime must be created on the process entry thread");
 
     const detail::PlatformRuntimeBackend backend = detail::GetPlatformRuntimeBackend();
     VerifyBackend(backend);
+
     const detail::PlatformWindowBackend windowBackend = detail::GetPlatformWindowBackend();
     VerifyWindowBackend(windowBackend);
+
     const detail::PlatformDisplayBackend displayBackend = detail::GetPlatformDisplayBackend();
     VerifyDisplayBackend(displayBackend);
+
     PONDER_VERIFY(backend.isMainThread(backend.context),
                   "PlatformRuntime must be created on SDL's main thread");
+
     if (backend.hasInitializedSubsystems(backend.context))
     {
-        return core::Result<PlatformRuntime>::FromError(core::Error{
-            kBackendFailureCode,
+        return ResultType::FromError(core::Error{kBackendFailureCode,
             "Cannot create PlatformRuntime while SDL subsystems are already initialized."});
     }
 
@@ -555,14 +559,14 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
 
     if (!backend.setHintOverride(backend.context, detail::kMouseFocusClickThroughHint, "1"))
     {
-        return core::Result<PlatformRuntime>::FromError(detail::CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetHintWithPriority", detail::kMouseFocusClickThroughHint));
+        return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
+            "SDL_SetHintWithPriority", detail::kMouseFocusClickThroughHint));
     }
 
     if (!backend.setHintOverride(backend.context, detail::kMouseAutoCaptureHint, "0"))
     {
-        return core::Result<PlatformRuntime>::FromError(detail::CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetHintWithPriority", detail::kMouseAutoCaptureHint));
+        return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
+            "SDL_SetHintWithPriority", detail::kMouseAutoCaptureHint));
     }
 
     MetadataSnapshots metadataSnapshots = CaptureApplicationMetadata(backend);
@@ -580,20 +584,28 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     };
 
     const MetadataValue metadata[]{
-        {detail::ApplicationMetadataProperty::Name, desc.applicationName.c_str(), "name"},
-        {detail::ApplicationMetadataProperty::Version,
-         desc.applicationVersion.has_value() ? desc.applicationVersion->c_str() : nullptr,
-         "version"},
-        {detail::ApplicationMetadataProperty::Identifier,
-         desc.applicationIdentifier.has_value() ? desc.applicationIdentifier->c_str() : nullptr,
-         "identifier"}};
+        {
+            detail::ApplicationMetadataProperty::Name,
+            desc.applicationName.c_str(),
+            "name"
+        },
+        {
+            detail::ApplicationMetadataProperty::Version,
+            desc.applicationVersion.has_value() ? desc.applicationVersion->c_str() : nullptr,
+            "version"
+        },
+        {
+            detail::ApplicationMetadataProperty::Identifier,
+            desc.applicationIdentifier.has_value() ? desc.applicationIdentifier->c_str() : nullptr,
+            "identifier"
+        }};
 
     for (const MetadataValue& value : metadata)
     {
         if (!backend.setAppMetadataProperty(backend.context, value.property, value.value))
         {
-            return core::Result<PlatformRuntime>::FromError(detail::CaptureSdlFailure(
-                kBackendFailureCode, "SDL_SetAppMetadataProperty", value.context));
+            return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
+                "SDL_SetAppMetadataProperty", value.context));
         }
     }
 
@@ -605,8 +617,8 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
 
     if (!backend.initializeVideo(backend.context))
     {
-        return core::Result<PlatformRuntime>::FromError(
-            detail::CaptureSdlFailure(kBackendFailureCode, "SDL_Init", "SDL_INIT_VIDEO"));
+        return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
+            "SDL_Init", "SDL_INIT_VIDEO"));
     }
 
     auto state = std::make_unique<detail::PlatformRuntimeState>(
@@ -630,7 +642,7 @@ PlatformRuntime::~PlatformRuntime() noexcept = default;
 PlatformRuntime::PlatformRuntime(PlatformRuntime&&) noexcept = default;
 PlatformRuntime& PlatformRuntime::operator=(PlatformRuntime&&) noexcept = default;
 
-PlatformTimestamp PlatformRuntime::Now() const
+Timestamp PlatformRuntime::Now() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from PlatformRuntime");
     return m_state->Now();

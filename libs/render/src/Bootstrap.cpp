@@ -3,6 +3,8 @@
 #include <ponder/platform/NativeWindow.hpp>
 #include <ponder/platform/Window.hpp>
 #include <ponder/render/Bootstrap.hpp>
+#include <ponder/render/draw2d/Draw2DLayer.hpp>
+#include <ponder/render/draw2d/Draw2DPacket.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -544,6 +546,9 @@ struct RenderDevice::State final
         PONDER_VERIFY(GetTargetCount() == 0U,
                       "RenderDevice destruction requires every RenderTarget to be destroyed "
                       "first");
+        PONDER_VERIFY(GetDraw2DLayerCount() == 0U,
+                      "RenderDevice destruction requires every Draw2DLayer to be destroyed "
+                      "first");
     }
 
     void AdoptPresentationResourcesForFinalShutdown(
@@ -777,6 +782,33 @@ struct RenderDevice::State final
         return targetCount;
     }
 
+    [[nodiscard]] bool TryRegisterDraw2DLayer()
+    {
+        std::scoped_lock lock{draw2DLayerMutex};
+        if (!token.IsActive())
+        {
+            return false;
+        }
+
+        ++draw2DLayerCount;
+        return true;
+    }
+
+    void ReleaseDraw2DLayer() noexcept
+    {
+        std::scoped_lock lock{draw2DLayerMutex};
+        if (draw2DLayerCount > 0U)
+        {
+            --draw2DLayerCount;
+        }
+    }
+
+    [[nodiscard]] std::uint32_t GetDraw2DLayerCount() const noexcept
+    {
+        std::scoped_lock lock{draw2DLayerMutex};
+        return draw2DLayerCount;
+    }
+
     [[nodiscard]] bool IsDeviceLost() const noexcept
     {
         return deviceLostError.has_value();
@@ -813,10 +845,13 @@ struct RenderDevice::State final
     std::thread::id renderThread;
     detail::VulkanGlobalDispatch vulkanDispatch{};
     detail::VulkanDeviceOwner vulkanDevice;
+    detail::VulkanDraw2DPipelineCache vulkanDraw2DPipelineCache{};
     mutable std::mutex targetMutex;
+    mutable std::mutex draw2DLayerMutex;
     mutable std::mutex retirementMutex;
     std::vector<OrphanedPresentationResources> orphanedPresentationResources{};
     std::uint32_t targetCount{};
+    std::uint32_t draw2DLayerCount{};
     std::uint64_t targetCreateAttempts{};
     std::uint64_t targetCreateSuccesses{};
     std::uint64_t targetCreateFailures{};
@@ -984,6 +1019,22 @@ struct RenderFrame::State final
           recording{std::move(inputRecording)}, renderThread{std::this_thread::get_id()},
           holdsActiveFrame{inputHoldsActiveFrame}
     {
+        if (targetState != nullptr)
+        {
+            const RenderTargetSnapshot snapshot = targetState->targetSnapshot;
+            platform::PixelSize pixelSize = snapshot.GetPixelSize();
+            if (recording.IsActive() && targetState->vulkanSwapchain.IsValid())
+            {
+                const VkExtent2D extent = targetState->vulkanSwapchain.GetConfig().extent;
+                pixelSize = platform::PixelSize{extent.width, extent.height};
+            }
+            metrics =
+                RenderFrameMetrics{.windowId = snapshot.GetWindowId(),
+                                   .logicalSize = snapshot.GetLogicalSize(),
+                                   .pixelSize = pixelSize,
+                                   .metricsRevision = snapshot.GetPresentationEnvironmentRevision(),
+                                   .targetRevision = snapshot.GetRevision()};
+        }
     }
 
     ~State()
@@ -1029,6 +1080,7 @@ struct RenderFrame::State final
     TargetStatus targetStatus{TargetStatus::Suspended};
     ClearColor clearColor{};
     detail::VulkanFrameRecordingState recording{};
+    RenderFrameMetrics metrics{};
     std::thread::id renderThread;
     bool clearRecorded{};
     bool completed{};
@@ -1328,18 +1380,6 @@ core::Result<PreparedSurface> detail::RenderBackendTestAccess::CreateRecoverySur
     return core::Result<PreparedSurface>::FromValue(PreparedSurface{std::move(state)});
 }
 
-core::VoidResult detail::RenderBackendTestAccess::RecordIntermediateStage(RenderFrame& frame)
-{
-    if (core::VoidResult renderThread = frame.VerifyRenderThread(); !renderThread)
-    {
-        return renderThread;
-    }
-
-    RenderFrame::State& frameState = *frame.m_state;
-    RenderTarget::State& target = *frameState.targetState;
-    return RecordVulkanIntermediateStageMarker(target.deviceState->vulkanDispatch,
-                                               target.vulkanFrameResources, frameState.recording);
-}
 void RenderTarget::State::MarkWindowRecreationPending(TargetRecreationReason reason,
                                                       std::uint64_t previousRevision,
                                                       std::uint64_t currentRevision) noexcept
@@ -2053,7 +2093,7 @@ core::Result<PreparedSurface> RenderBootstrap::PrepareSurface(platform::Window& 
             RenderErrorCode::InvalidState, "PrepareSurface requires a valid RenderBootstrap."));
     }
 
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     const auto fail = [this, &diagnosticScope, windowId = window.GetId()](
                           core::Error error,
                           std::string_view operation) -> core::Result<PreparedSurface>
@@ -2187,7 +2227,7 @@ core::Result<RenderAdapterSelection> RenderBootstrap::SelectAdapter(
             RenderErrorCode::InvalidState, "SelectAdapter requires a valid RenderBootstrap."));
     }
 
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     const auto fail = [this, &diagnosticScope, windowId = firstSurface.GetWindowId()](
                           core::Error error) -> core::Result<RenderAdapterSelection>
     {
@@ -2275,7 +2315,7 @@ core::Result<RenderDevice> RenderBootstrap::CreateDevice(
             RenderErrorCode::InvalidState, "CreateDevice requires a valid RenderBootstrap."));
     }
 
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     const auto fail = [this, &diagnosticScope, windowId = firstSurface.GetWindowId()](
                           core::Error error) -> core::Result<RenderDevice>
     {
@@ -2430,7 +2470,7 @@ core::VoidResult RenderDevice::VerifyRenderThread() const
 
 core::VoidResult RenderDevice::WaitIdle() const
 {
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     if (core::VoidResult renderThread = VerifyRenderThread(); !renderThread)
     {
         return renderThread;
@@ -2479,7 +2519,7 @@ std::uint32_t RenderDevice::GetActiveTargetCount() const noexcept
 core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& preparedSurface,
                                                             const RenderTargetDesc& desc)
 {
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     std::string targetLabel;
     auto fail = [this, &diagnosticScope, &targetLabel, &desc](core::Error error)
     {
@@ -2694,6 +2734,206 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
     return core::Result<RenderTarget>::FromValue(RenderTarget{std::move(targetState)});
 }
 
+namespace draw2d
+{
+namespace
+{
+[[nodiscard]] bool IsNonRecordingFrameStatus(FrameStatus status) noexcept
+{
+    return status == FrameStatus::SkippedSuspended || status == FrameStatus::TimedOut ||
+           status == FrameStatus::RecreationPending;
+}
+
+[[nodiscard]] Draw2DPixelExtent ToDraw2DPixelExtent(platform::PixelSize extent) noexcept
+{
+    return Draw2DPixelExtent{extent.width, extent.height};
+}
+} // namespace
+
+Draw2DLayer::Draw2DLayer() noexcept = default;
+
+Draw2DLayer::Draw2DLayer(std::shared_ptr<RenderDevice::State> state) noexcept
+    : m_state{std::move(state)},
+      m_renderThread{m_state == nullptr ? std::thread::id{} : m_state->renderThread}
+{
+}
+
+Draw2DLayer::Draw2DLayer(Draw2DLayer&& other) noexcept
+    : m_state{std::move(other.m_state)}, m_renderThread{std::exchange(other.m_renderThread, {})}
+{
+}
+
+Draw2DLayer& Draw2DLayer::operator=(Draw2DLayer&& other) noexcept
+{
+    if (this != &other)
+    {
+        Release();
+        m_state = std::move(other.m_state);
+        m_renderThread = std::exchange(other.m_renderThread, {});
+    }
+
+    return *this;
+}
+
+Draw2DLayer::~Draw2DLayer()
+{
+    Release();
+}
+
+core::Result<Draw2DLayer> Draw2DLayer::Create(RenderDevice& device)
+{
+    if (core::VoidResult renderThread = device.VerifyRenderThread(); !renderThread)
+    {
+        return core::Result<Draw2DLayer>::FromError(std::move(renderThread).GetError());
+    }
+
+    if (!device.m_state->TryRegisterDraw2DLayer())
+    {
+        return core::Result<Draw2DLayer>::FromError(MakeRenderError(
+            RenderErrorCode::InvalidState, "Draw2DLayer cannot be created after device shutdown."));
+    }
+
+    return core::Result<Draw2DLayer>::FromValue(Draw2DLayer{device.m_state});
+}
+
+bool Draw2DLayer::IsValid() const noexcept
+{
+    return m_state != nullptr && m_state->token.IsActive();
+}
+
+core::VoidResult Draw2DLayer::VerifyRenderThread() const
+{
+    if (m_state == nullptr)
+    {
+        return MakeRenderFailure(RenderErrorCode::InvalidState,
+                                 "Draw2DLayer is moved-from or empty.");
+    }
+
+    if (core::VoidResult live = ValidateLiveRegistry(m_state->token, "RenderDevice"); !live)
+    {
+        return live;
+    }
+
+    if (core::VoidResult usable = m_state->CheckDeviceUsable(); !usable)
+    {
+        return usable;
+    }
+
+    return ValidateCurrentThread(m_renderThread, "Draw2DLayer operation");
+}
+
+core::VoidResult Draw2DLayer::ValidateFrameAccess(RenderFrame& frame) const
+{
+    if (core::VoidResult layerThread = VerifyRenderThread(); !layerThread)
+    {
+        return layerThread;
+    }
+
+    if (core::VoidResult frameThread = frame.VerifyRenderThread(); !frameThread)
+    {
+        return frameThread;
+    }
+
+    RenderFrame::State& frameState = *frame.m_state;
+    RenderTarget::State& target = *frameState.targetState;
+    if (target.deviceState == nullptr || target.deviceState.get() != m_state.get())
+    {
+        return core::VoidResult::FromError(target.RecordFailure(
+            MakeRenderError(RenderErrorCode::InvalidState,
+                            "Draw2DLayer belongs to a different RenderDevice than the frame."),
+            "Draw2DStage"));
+    }
+
+    return Success();
+}
+core::VoidResult Draw2DLayer::Record(RenderFrame& frame, const Draw2DPacket& packet)
+{
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
+    if (core::VoidResult layerThread = VerifyRenderThread(); !layerThread)
+    {
+        return layerThread;
+    }
+
+    if (core::VoidResult frameThread = frame.VerifyRenderThread(); !frameThread)
+    {
+        return frameThread;
+    }
+
+    RenderFrame::State& frameState = *frame.m_state;
+    RenderTarget::State& target = *frameState.targetState;
+    if (target.deviceState == nullptr || target.deviceState.get() != m_state.get())
+    {
+        return core::VoidResult::FromError(target.RecordFailure(
+            MakeRenderError(RenderErrorCode::InvalidState,
+                            "Draw2DLayer belongs to a different RenderDevice than the frame."),
+            "Draw2DStage"));
+    }
+
+    if (IsNonRecordingFrameStatus(frameState.status))
+    {
+        return Success();
+    }
+
+    core::Result<Draw2DPacketStats> packetStats = ValidateDraw2DPacket(packet);
+    if (!packetStats)
+    {
+        return core::VoidResult::FromError(
+            target.RecordFailure(std::move(packetStats).GetError(), "Draw2DStagePacket"));
+    }
+
+    const Draw2DPixelExtent frameExtent = ToDraw2DPixelExtent(frame.GetMetrics().pixelSize);
+    if (packet.GetPixelExtent() != frameExtent)
+    {
+        return core::VoidResult::FromError(target.RecordFailure(
+            MakeRenderError(RenderErrorCode::InvalidArgument,
+                            "Draw2D packet extent does not match the active frame pixel extent."),
+            "Draw2DStageTarget"));
+    }
+
+    if (!frameState.clearRecorded)
+    {
+        return core::VoidResult::FromError(target.RecordFailure(
+            MakeRenderError(RenderErrorCode::InvalidState,
+                            "Draw2D stage recording requires a cleared active frame."),
+            "Draw2DStageFrame"));
+    }
+
+    core::VoidResult recorded = ::pond::render::detail::RecordVulkanDraw2DStage(
+        target.deviceState->vulkanDispatch, target.deviceState->vulkanDevice,
+        target.vulkanSwapchain, target.vulkanFrameResources,
+        target.deviceState->vulkanDraw2DPipelineCache, frameState.recording, packet);
+    if (!recorded)
+    {
+        ++target.frameFailures;
+        core::Error error = std::move(recorded).GetError();
+        if (IsRenderError(error, RenderErrorCode::DeviceLost))
+        {
+            target.deviceState->RecordDeviceFailure(
+                error, "RecordVulkanDraw2DStage",
+                ::pond::render::detail::VulkanDiagnosticScope::CopyCurrentLastFailure(),
+                target.targetSnapshot.GetWindowId(), target.targetLabel);
+        }
+        return core::VoidResult::FromError(target.RecordFailure(
+            std::move(error), "RecordVulkanDraw2DStage", diagnosticScope.TakeLastFailure()));
+    }
+
+    return Success();
+}
+
+void Draw2DLayer::Release() noexcept
+{
+    if (m_state == nullptr)
+    {
+        return;
+    }
+
+    PONDER_VERIFY(std::this_thread::get_id() == m_renderThread,
+                  "Draw2DLayer destruction must occur on its render thread");
+    m_state->ReleaseDraw2DLayer();
+    m_state.reset();
+    m_renderThread = {};
+}
+} // namespace draw2d
 PreparedSurface::PreparedSurface() noexcept = default;
 PreparedSurface::PreparedSurface(std::unique_ptr<State> state) noexcept : m_state{std::move(state)}
 {
@@ -2969,7 +3209,7 @@ RenderTargetDiagnostics RenderTarget::GetDiagnostics() const
 
 core::Result<RenderFrame> RenderTarget::AcquireFrame()
 {
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     if (core::VoidResult renderThread = VerifyRenderThread(); !renderThread)
     {
         return core::Result<RenderFrame>::FromError(std::move(renderThread).GetError());
@@ -3114,7 +3354,7 @@ core::Result<RenderFrame> RenderTarget::AcquireFrame()
 }
 core::VoidResult RenderTarget::UpdateTargetSnapshot(RenderTargetSnapshot latestSnapshot)
 {
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     if (core::VoidResult renderThread = VerifyRenderThread(); !renderThread)
     {
         return renderThread;
@@ -3252,7 +3492,7 @@ core::VoidResult RenderTarget::UpdateTargetSnapshot(RenderTargetSnapshot latestS
 }
 core::VoidResult RenderTarget::RecoverSurface(PreparedSurface&& preparedSurface)
 {
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     if (core::VoidResult renderThread = VerifyRenderThread(); !renderThread)
     {
         return renderThread;
@@ -3446,6 +3686,16 @@ TargetStatus RenderFrame::GetTargetStatus() const noexcept
     return m_state == nullptr ? TargetStatus::Suspended : m_state->targetStatus;
 }
 
+RenderFrameMetrics RenderFrame::GetMetrics() const noexcept
+{
+    if (m_state == nullptr || m_state->completed || m_state->targetState == nullptr)
+    {
+        return {};
+    }
+
+    return m_state->metrics;
+}
+
 bool RenderFrame::IsSkipped() const noexcept
 {
     return m_state != nullptr && m_state->status == FrameStatus::SkippedSuspended;
@@ -3510,7 +3760,7 @@ core::VoidResult RenderFrame::Clear()
 
 core::VoidResult RenderFrame::Clear(ClearColor clearColor)
 {
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     if (core::VoidResult renderThread = VerifyRenderThread(); !renderThread)
     {
         return renderThread;
@@ -3566,7 +3816,7 @@ core::VoidResult RenderFrame::Clear(ClearColor clearColor)
 
 core::Result<RenderFrameResult> RenderFrame::FinishAndPresent()
 {
-    detail::VulkanDiagnosticScope diagnosticScope;
+    ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     if (core::VoidResult renderThread = VerifyRenderThread(); !renderThread)
     {
         return core::Result<RenderFrameResult>::FromError(std::move(renderThread).GetError());

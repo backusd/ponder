@@ -10,8 +10,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <iomanip>
-#include <iostream>
+#include <print>
 #include <limits>
 #include <optional>
 #include <sstream>
@@ -22,6 +23,47 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+namespace
+{
+struct OptionalWindowId final
+{
+    const std::optional<pond::platform::WindowId>& value;
+};
+} // namespace
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::WindowId> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::WindowId id, FormatContext& context) const
+    {
+        if (!id.IsValid())
+        {
+            return formatter<string>::format("invalid", context);
+        }
+
+        return formatter<string>::format(std::to_string(id.GetValue()), context);
+    }
+};
+
+template <>
+struct formatter<OptionalWindowId> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const OptionalWindowId& id, FormatContext& context) const
+    {
+        if (!id.value)
+        {
+            return formatter<string>::format("none", context);
+        }
+
+        return formatter<string>::format(std::format("{}", *id.value), context);
+    }
+};
+} // namespace std
 
 namespace
 {
@@ -149,7 +191,7 @@ static_assert(kSystemCursorShapes.size() == kSystemCursorShapeNames.size());
 
 struct Options final
 {
-    std::optional<platform::PlatformTimestamp::Duration> autoCloseAfter;
+    std::optional<platform::Duration> autoCloseAfter;
     bool showHelp{};
 };
 
@@ -166,7 +208,7 @@ struct AppState final
 {
     platform::PlatformRuntime& runtime;
     std::vector<WindowSlot>& windows;
-    platform::PlatformTimestamp startTimestamp;
+    platform::Timestamp startTimestamp;
     std::size_t activeWindowIndex{};
     std::uint64_t eventCount{};
     bool quitRequested{};
@@ -185,21 +227,22 @@ struct AppState final
 
 void PrintUsage(std::string_view executableName)
 {
-    std::cout
-        << "Usage: " << executableName << " [--auto-close-ms <milliseconds>]\n\n"
-        << "Controls:\n"
-        << "  F1            Print this help text.\n"
-        << "  1 / 2         Select the active monitor window.\n"
-        << "  T             Toggle text input for the active window.\n"
-        << "  I / A         Set or clear a fixed logical IME candidate area.\n"
-        << "  X             Clear active text composition.\n"
-        << "  G / R         Toggle mouse grab or relative mouse mode on the active window.\n"
-        << "  P / M         Toggle global capture or query global mouse position.\n"
-        << "  S / V         Cycle system cursor shape or toggle cursor visibility.\n"
-        << "  Q / Escape    Quit.\n";
+    std::print(
+        "Usage: {} [--auto-close-ms <milliseconds>]\n\n"
+        "Controls:\n"
+        "  F1            Print this help text.\n"
+        "  1 / 2         Select the active monitor window.\n"
+        "  T             Toggle text input for the active window.\n"
+        "  I / A         Set or clear a fixed logical IME candidate area.\n"
+        "  X             Clear active text composition.\n"
+        "  G / R         Toggle mouse grab or relative mouse mode on the active window.\n"
+        "  P / M         Toggle global capture or query global mouse position.\n"
+        "  S / V         Cycle system cursor shape or toggle cursor visibility.\n"
+        "  Q / Escape    Quit.\n",
+        executableName);
 }
 
-[[nodiscard]] core::Result<platform::PlatformTimestamp::Duration> ParseMilliseconds(
+[[nodiscard]] core::Result<platform::Duration> ParseMilliseconds(
     std::string_view text)
 {
     std::uint64_t value{};
@@ -208,7 +251,7 @@ void PrintUsage(std::string_view executableName)
     const auto [next, error] = std::from_chars(begin, end, value);
     if (error != std::errc{} || next != end)
     {
-        return core::Result<platform::PlatformTimestamp::Duration>::FromError(
+        return core::Result<platform::Duration>::FromError(
             MakeOptionError("Expected a non-negative integer millisecond value."));
     }
 
@@ -217,11 +260,11 @@ void PrintUsage(std::string_view executableName)
         std::numeric_limits<Milliseconds::rep>::max());
     if (value > kMaxMilliseconds)
     {
-        return core::Result<platform::PlatformTimestamp::Duration>::FromError(
+        return core::Result<platform::Duration>::FromError(
             MakeOptionError("Auto-close duration is too large."));
     }
 
-    return platform::PlatformTimestamp::Duration{
+    return platform::Duration{
         Milliseconds{static_cast<Milliseconds::rep>(value)}};
 }
 
@@ -245,10 +288,7 @@ void PrintUsage(std::string_view executableName)
 
             ++index;
             auto duration = ParseMilliseconds(argv[index]);
-            if (!duration)
-            {
-                return core::Result<Options>::FromError(std::move(duration).GetError());
-            }
+            RETURN_ERROR_IF_FAILED(duration);
             options.autoCloseAfter = std::move(duration).GetValue();
         }
         else
@@ -261,48 +301,6 @@ void PrintUsage(std::string_view executableName)
     return options;
 }
 
-template <typename Id>
-[[nodiscard]] std::string FormatId(Id id)
-{
-    if (!id.IsValid())
-    {
-        return "invalid";
-    }
-    return std::to_string(id.GetValue());
-}
-
-template <typename Id>
-[[nodiscard]] std::string FormatOptionalId(const std::optional<Id>& id)
-{
-    if (!id)
-    {
-        return "none";
-    }
-    return FormatId(*id);
-}
-
-[[nodiscard]] std::string FormatDuration(platform::PlatformTimestamp::Duration duration)
-{
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
-    return std::to_string(milliseconds.count()) + " ms";
-}
-
-[[nodiscard]] std::string FormatTimestamp(platform::PlatformTimestamp timestamp)
-{
-    return std::to_string(timestamp.GetTimeSinceEpoch().count()) + " ns";
-}
-
-[[nodiscard]] std::string FormatFloat(float value)
-{
-    std::ostringstream stream;
-    stream << value;
-    return stream.str();
-}
-
-[[nodiscard]] std::string FormatLogicalPoint(platform::LogicalPoint point)
-{
-    return "(" + FormatFloat(point.x) + ", " + FormatFloat(point.y) + ")";
-}
 
 template <typename Enum, std::size_t Size>
 [[nodiscard]] std::string_view NameFromTable(Enum value,
@@ -473,45 +471,38 @@ template <typename Enum, std::size_t Size>
 
 void PrintError(std::string_view operation, const core::Error& error)
 {
-    std::cout << operation << " failed: " << core::FormatError(error) << '\n';
-}
-
-[[nodiscard]] bool IsPlatformError(const core::Error& error, platform::PlatformErrorCode code)
-{
-    return error.GetCode() == platform::ToErrorCode(code);
+    std::println("{} failed: {}", operation, error);
 }
 
 void PrintOperationResult(std::string_view operation, const core::VoidResult& result)
 {
     if (result)
     {
-        std::cout << operation << " succeeded.\n";
+        std::println("{} succeeded.", operation);
         return;
     }
 
-    if (IsPlatformError(result.GetError(), platform::PlatformErrorCode::Unsupported))
+    if (result.GetError() == platform::PlatformErrorCode::Unsupported)
     {
-        std::cout << operation << " is unsupported on this host: "
-                  << core::FormatError(result.GetError()) << '\n';
+        std::println("{} is unsupported on this host: {}", operation, result.GetError());
         return;
     }
 
     PrintError(operation, result.GetError());
 }
 
-template <typename Value, typename Formatter>
-void PrintQueryResult(std::string_view label, const core::Result<Value>& result,
-                      Formatter formatter)
+template <typename Value>
+void PrintQueryResult(std::string_view label, const core::Result<Value>& result)
 {
     if (result)
     {
-        std::cout << label << ": " << formatter(result.GetValue()) << '\n';
+        std::println("{}: {}", label, result.GetValue());
         return;
     }
 
-    if (IsPlatformError(result.GetError(), platform::PlatformErrorCode::Unsupported))
+    if (result.GetError() == platform::PlatformErrorCode::Unsupported)
     {
-        std::cout << label << " unsupported: " << core::FormatError(result.GetError()) << '\n';
+        std::println("{} unsupported: {}", label, result.GetError());
         return;
     }
 
@@ -535,12 +526,15 @@ void PrintLogicalKeyHelperExamples()
     static_assert(platform::HasAnyKeyModifier(combined, platform::KeyModifiers::Shift));
     static_assert(platform::HasAllKeyModifiers(combined, platform::KeyModifiers::LeftControl));
 
-    std::cout << "Logical key helper examples:\n"
-              << "  Unknown: " << FormatLogicalKey(unknown) << '\n'
-              << "  Character P: " << FormatLogicalKey(character) << '\n'
-              << "  Invalid null character: " << FormatLogicalKey(invalidCharacter) << '\n'
-              << "  Named Escape: " << FormatLogicalKey(named) << '\n'
-              << "  Combined modifiers: " << FormatModifiers(combined) << '\n';
+    std::println(
+        "Logical key helper examples:\n"
+        "  Unknown: {}\n"
+        "  Character P: {}\n"
+        "  Invalid null character: {}\n"
+        "  Named Escape: {}\n"
+        "  Combined modifiers: {}",
+        FormatLogicalKey(unknown), FormatLogicalKey(character), FormatLogicalKey(invalidCharacter),
+        FormatLogicalKey(named), FormatModifiers(combined));
 }
 
 [[nodiscard]] core::Result<WindowSlot> CreateWindowSlot(platform::PlatformRuntime& runtime,
@@ -548,10 +542,7 @@ void PrintLogicalKeyHelperExamples()
                                                         std::string label)
 {
     auto window = runtime.CreateWindow(desc);
-    if (!window)
-    {
-        return core::Result<WindowSlot>::FromError(std::move(window).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(window);
 
     return WindowSlot{std::move(window).GetValue(), std::move(label)};
 }
@@ -590,15 +581,14 @@ void SyncTextInput(WindowSlot& slot, bool shouldBeActive)
     }
 
     slot.textInputActive = shouldBeActive;
-    std::cout << operation << " succeeded; live active=" << slot.window.IsTextInputActive()
-              << ".\n";
+    std::println("{} succeeded; live active={}.", operation, slot.window.IsTextInputActive());
 }
 
 void SetActiveWindow(AppState& state, std::size_t index)
 {
     if (index >= state.windows.size())
     {
-        std::cout << "Window slot " << (index + 1U) << " is not available.\n";
+        std::println("Window slot {} is not available.", index + 1U);
         return;
     }
 
@@ -609,8 +599,8 @@ void SetActiveWindow(AppState& state, std::size_t index)
     }
 
     state.activeWindowIndex = index;
-    std::cout << "Active window is now " << state.windows[index].label << " (id "
-              << FormatId(state.windows[index].window.GetId()) << ").\n";
+    std::println("Active window is now {} (id {}).", state.windows[index].label,
+                 state.windows[index].window.GetId());
 
     if (state.textInputEnabled)
     {
@@ -646,7 +636,7 @@ void SetImeArea(WindowSlot& slot)
 
     if (!platform::IsValid(area))
     {
-        std::cout << "Fixed IME area is unexpectedly invalid.\n";
+        std::println("Fixed IME area is unexpectedly invalid.");
         return;
     }
 
@@ -658,11 +648,9 @@ void SetImeArea(WindowSlot& slot)
     }
 
     slot.imeAreaSet = true;
-    std::cout << slot.label << ".SetTextInputArea succeeded at origin "
-              << FormatLogicalPoint(area.rectangle.origin) << ", extent ("
-              << FormatFloat(area.rectangle.extent.width) << ", "
-              << FormatFloat(area.rectangle.extent.height)
-              << "), cursorOffset=" << FormatFloat(area.cursorOffset) << ".\n";
+    std::println("{}.SetTextInputArea succeeded at origin {}, extent ({}, {}), cursorOffset={}.",
+                 slot.label, area.rectangle.origin, area.rectangle.extent.width,
+                 area.rectangle.extent.height, area.cursorOffset);
 }
 
 void ClearImeArea(WindowSlot& slot)
@@ -675,7 +663,7 @@ void ClearImeArea(WindowSlot& slot)
     }
 
     slot.imeAreaSet = false;
-    std::cout << slot.label << ".ClearTextInputArea succeeded.\n";
+    std::println("{}.ClearTextInputArea succeeded.", slot.label);
 }
 
 void ToggleTextInput(AppState& state)
@@ -697,7 +685,7 @@ void ToggleMouseGrab(WindowSlot& slot)
     PrintOperationResult(slot.label + (target ? ".SetMouseGrab(true)" :
                                                ".SetMouseGrab(false)"),
                          result);
-    std::cout << "  live mouse grabbed=" << slot.window.IsMouseGrabbed() << '\n';
+    std::println("  live mouse grabbed={}", slot.window.IsMouseGrabbed());
 }
 
 void ToggleRelativeMouseMode(WindowSlot& slot)
@@ -707,7 +695,7 @@ void ToggleRelativeMouseMode(WindowSlot& slot)
     PrintOperationResult(slot.label + (target ? ".SetRelativeMouseMode(true)" :
                                                ".SetRelativeMouseMode(false)"),
                          result);
-    std::cout << "  live relative mouse mode=" << slot.window.IsRelativeMouseModeEnabled() << '\n';
+    std::println("  live relative mouse mode={}", slot.window.IsRelativeMouseModeEnabled());
 }
 
 void ToggleGlobalMouseCapture(AppState& state)
@@ -726,7 +714,7 @@ void ToggleGlobalMouseCapture(AppState& state)
 void QueryGlobalMousePosition(platform::PlatformRuntime& runtime)
 {
     const auto result = runtime.GetGlobalMousePosition();
-    PrintQueryResult("PlatformRuntime::GetGlobalMousePosition", result, FormatLogicalPoint);
+    PrintQueryResult("PlatformRuntime::GetGlobalMousePosition", result);
 }
 
 void CycleCursorShape(AppState& state)
@@ -748,7 +736,7 @@ void ToggleCursorVisibility(platform::PlatformRuntime& runtime)
     {
         PrintOperationResult("PlatformRuntime::ShowCursor", runtime.ShowCursor());
     }
-    std::cout << "  live cursor visible=" << runtime.IsCursorVisible() << '\n';
+    std::println("  live cursor visible={}", runtime.IsCursorVisible());
 }
 
 void CleanupWindow(WindowSlot& slot)
@@ -770,12 +758,12 @@ void ReleaseWindow(AppState& state, platform::WindowId id)
     const std::size_t index = FindWindowIndex(state, id);
     if (index >= state.windows.size())
     {
-        std::cout << "Close request did not match an owned window.\n";
+        std::println("Close request did not match an owned window.");
         return;
     }
 
     CleanupWindow(state.windows[index]);
-    std::cout << "Released application-owned window id " << FormatId(id) << ".\n";
+    std::println("Released application-owned window id {}.", id);
     state.windows.erase(state.windows.begin() + static_cast<std::ptrdiff_t>(index));
 
     if (state.windows.empty())
@@ -863,12 +851,11 @@ void HandleCommand(AppState& state, platform::PhysicalKey key)
     }
 }
 
-void PrintEventHeader(std::string_view name, platform::PlatformTimestamp timestamp,
+void PrintEventHeader(std::string_view name, platform::Timestamp timestamp,
                       const AppState& state)
 {
-    std::cout << "[event " << state.eventCount << "] " << name << " at "
-              << FormatTimestamp(timestamp) << " (+"
-              << FormatDuration(timestamp - state.startTimestamp) << ")";
+    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp,
+               timestamp - state.startTimestamp);
 }
 
 struct EventVisitor final
@@ -878,22 +865,21 @@ struct EventVisitor final
     void operator()(const platform::QuitRequestedEvent& event) const
     {
         PrintEventHeader("QuitRequested", event.timestamp, state);
-        std::cout << '\n';
+        std::println();
         state.quitRequested = true;
     }
 
     void operator()(const platform::WindowCloseRequestedEvent& event) const
     {
         PrintEventHeader("WindowCloseRequested", event.timestamp, state);
-        std::cout << " window=" << FormatId(event.windowId) << '\n';
+        std::println(" window={}", event.windowId);
         ReleaseWindow(state, event.windowId);
     }
 
     void operator()(const platform::WindowFocusChangedEvent& event) const
     {
         PrintEventHeader("WindowFocusChanged", event.timestamp, state);
-        std::cout << " window=" << FormatId(event.windowId) << " focused=" << event.focused
-                  << '\n';
+        std::println(" window={} focused={}", event.windowId, event.focused);
         if (event.focused)
         {
             const std::size_t index = FindWindowIndex(state, event.windowId);
@@ -907,23 +893,22 @@ struct EventVisitor final
     void operator()(const platform::WindowPointerEnteredEvent& event) const
     {
         PrintEventHeader("WindowPointerEntered", event.timestamp, state);
-        std::cout << " window=" << FormatId(event.windowId) << '\n';
+        std::println(" window={}", event.windowId);
     }
 
     void operator()(const platform::WindowPointerLeftEvent& event) const
     {
         PrintEventHeader("WindowPointerLeft", event.timestamp, state);
-        std::cout << " window=" << FormatId(event.windowId) << '\n';
+        std::println(" window={}", event.windowId);
     }
 
     void operator()(const platform::KeyboardKeyEvent& event) const
     {
         PrintEventHeader("KeyboardKey", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " physical=" << ToString(event.physicalKey)
-                  << " logical=" << FormatLogicalKey(event.logicalKey)
-                  << " modifiers=" << FormatModifiers(event.modifiers)
-                  << " pressed=" << event.pressed << " repeat=" << event.repeat << '\n';
+        std::println(" window={} physical={} logical={} modifiers={} pressed={} repeat={}",
+                     OptionalWindowId{event.windowId}, ToString(event.physicalKey),
+                     FormatLogicalKey(event.logicalKey), FormatModifiers(event.modifiers),
+                     event.pressed, event.repeat);
 
         if (event.pressed && !event.repeat)
         {
@@ -935,50 +920,45 @@ struct EventVisitor final
     {
         state.lastText = QuoteText(event.text);
         PrintEventHeader("TextInput", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " text=" << state.lastText << '\n';
+        std::println(" window={} text={}", OptionalWindowId{event.windowId}, state.lastText);
     }
 
     void operator()(const platform::TextCompositionEvent& event) const
     {
         PrintEventHeader("TextComposition", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " text=" << QuoteText(event.text)
-                  << " selection=" << FormatSelection(event.selection) << '\n';
+        std::println(" window={} text={} selection={}", OptionalWindowId{event.windowId},
+                     QuoteText(event.text), FormatSelection(event.selection));
     }
 
     void operator()(const platform::MouseMotionEvent& event) const
     {
         PrintEventHeader("MouseMotion", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " position=" << FormatLogicalPoint(event.position)
-                  << " relative=" << FormatLogicalPoint(event.relativeMovement) << '\n';
+        std::println(" window={} position={} relative={}", OptionalWindowId{event.windowId},
+                     event.position, event.relativeMovement);
     }
 
     void operator()(const platform::MouseButtonEvent& event) const
     {
         PrintEventHeader("MouseButton", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " position=" << FormatLogicalPoint(event.position)
-                  << " button=" << ToString(event.button) << " pressed=" << event.pressed
-                  << '\n';
+        std::println(" window={} position={} button={} pressed={}",
+                     OptionalWindowId{event.windowId}, event.position, ToString(event.button),
+                     event.pressed);
     }
 
     void operator()(const platform::MouseWheelEvent& event) const
     {
         PrintEventHeader("MouseWheel", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " position=" << FormatLogicalPoint(event.position)
-                  << " horizontal=" << FormatFloat(event.horizontal)
-                  << " vertical=" << FormatFloat(event.vertical) << '\n';
+        std::println(" window={} position={} horizontal={} vertical={}",
+                     OptionalWindowId{event.windowId}, event.position, event.horizontal,
+                     event.vertical);
     }
 
     void operator()(const platform::DropBeginEvent& event) const
     {
         state.lastDrop = "begin";
         PrintEventHeader("DropBegin", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " source=" << FormatSourceApplication(event.sourceApplication) << '\n';
+        std::println(" window={} source={}", OptionalWindowId{event.windowId},
+                     FormatSourceApplication(event.sourceApplication));
     }
 
     void operator()(const platform::DroppedFileEvent& event) const
@@ -986,45 +966,41 @@ struct EventVisitor final
         const std::string path = io::PathToUtf8(event.path);
         state.lastDrop = "file " + path;
         PrintEventHeader("DroppedFile", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " position=" << FormatLogicalPoint(event.position)
-                  << " path=" << QuoteText(path)
-                  << " source=" << FormatSourceApplication(event.sourceApplication) << '\n';
+        std::println(" window={} position={} path={} source={}",
+                     OptionalWindowId{event.windowId}, event.position, QuoteText(path),
+                     FormatSourceApplication(event.sourceApplication));
     }
 
     void operator()(const platform::DroppedTextEvent& event) const
     {
         state.lastDrop = "text " + QuoteText(event.text);
         PrintEventHeader("DroppedText", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " position=" << FormatLogicalPoint(event.position)
-                  << " text=" << QuoteText(event.text)
-                  << " source=" << FormatSourceApplication(event.sourceApplication) << '\n';
+        std::println(" window={} position={} text={} source={}",
+                     OptionalWindowId{event.windowId}, event.position, QuoteText(event.text),
+                     FormatSourceApplication(event.sourceApplication));
     }
 
     void operator()(const platform::DropPositionEvent& event) const
     {
-        state.lastDrop = "position " + FormatLogicalPoint(event.position);
+        state.lastDrop = std::format("position {}", event.position);
         PrintEventHeader("DropPosition", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " position=" << FormatLogicalPoint(event.position)
-                  << " source=" << FormatSourceApplication(event.sourceApplication) << '\n';
+        std::println(" window={} position={} source={}", OptionalWindowId{event.windowId},
+                     event.position, FormatSourceApplication(event.sourceApplication));
     }
 
     void operator()(const platform::DropCompleteEvent& event) const
     {
-        state.lastDrop = "complete " + FormatLogicalPoint(event.position);
+        state.lastDrop = std::format("complete {}", event.position);
         PrintEventHeader("DropComplete", event.timestamp, state);
-        std::cout << " window=" << FormatOptionalId(event.windowId)
-                  << " position=" << FormatLogicalPoint(event.position)
-                  << " source=" << FormatSourceApplication(event.sourceApplication) << '\n';
+        std::println(" window={} position={} source={}", OptionalWindowId{event.windowId},
+                     event.position, FormatSourceApplication(event.sourceApplication));
     }
 
     template <typename Event>
     void operator()(const Event& event) const
     {
         PrintEventHeader("Other platform event", event.timestamp, state);
-        std::cout << " observed by another example in the suite.\n";
+        std::println(" observed by another example in the suite.");
     }
 };
 
@@ -1060,10 +1036,7 @@ void Shutdown(AppState& state)
 [[nodiscard]] core::VoidResult RunInputDropMonitor(int argc, char** argv)
 {
     auto optionsResult = ParseOptions(argc, argv);
-    if (!optionsResult)
-    {
-        return core::VoidResult::FromError(std::move(optionsResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(optionsResult);
 
     const Options options = std::move(optionsResult).GetValue();
     if (options.showHelp)
@@ -1081,13 +1054,10 @@ void Shutdown(AppState& state)
     };
 
     auto runtimeResult = platform::PlatformRuntime::Create(runtimeDesc);
-    if (!runtimeResult)
-    {
-        return core::VoidResult::FromError(std::move(runtimeResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(runtimeResult);
 
     platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
-    const platform::PlatformTimestamp start = runtime.Now();
+    const platform::Timestamp start = runtime.Now();
 
     std::vector<WindowSlot> windows;
     windows.reserve(2);
@@ -1102,10 +1072,7 @@ void Shutdown(AppState& state)
         .graphicsCompatibility = platform::WindowGraphicsCompatibility::Default,
     };
     auto primary = CreateWindowSlot(runtime, primaryDesc, "primary");
-    if (!primary)
-    {
-        return core::VoidResult::FromError(std::move(primary).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(primary);
     windows.push_back(std::move(primary).GetValue());
 
     const platform::WindowDesc secondaryDesc{
@@ -1118,10 +1085,7 @@ void Shutdown(AppState& state)
         .graphicsCompatibility = platform::WindowGraphicsCompatibility::Default,
     };
     auto secondary = CreateWindowSlot(runtime, secondaryDesc, "secondary");
-    if (!secondary)
-    {
-        return core::VoidResult::FromError(std::move(secondary).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(secondary);
     windows.push_back(std::move(secondary).GetValue());
 
     AppState state{.runtime = runtime, .windows = windows, .startTimestamp = start};
@@ -1133,7 +1097,7 @@ void Shutdown(AppState& state)
     {
         DrainEvents(state);
 
-        const platform::PlatformTimestamp now = runtime.Now();
+        const platform::Timestamp now = runtime.Now();
         if (now - nextTitleUpdate >= std::chrono::milliseconds{250})
         {
             UpdateWindowTitles(state);
@@ -1142,8 +1106,7 @@ void Shutdown(AppState& state)
 
         if (options.autoCloseAfter && now - start >= *options.autoCloseAfter)
         {
-            std::cout << "Auto-close duration reached after " << FormatDuration(now - start)
-                      << ".\n";
+            std::println("Auto-close duration reached after {}.", now - start);
             break;
         }
 
@@ -1157,22 +1120,21 @@ void Shutdown(AppState& state)
 
 int main(int argc, char** argv)
 {
-    std::cout << std::boolalpha;
-
     try
     {
         const auto result = RunInputDropMonitor(argc, argv);
         if (!result)
         {
-            std::cerr << "ponder-platform-2-input-drop-monitor failed: "
-                      << core::FormatError(result.GetError()) << '\n';
+            std::println(stderr, "ponder-platform-2-input-drop-monitor failed: {}",
+                         result.GetError());
             return 1;
         }
     }
     catch (const std::exception& exception)
     {
-        std::cerr << "ponder-platform-2-input-drop-monitor terminated with an exception: "
-                  << exception.what() << '\n';
+        std::println(stderr,
+                     "ponder-platform-2-input-drop-monitor terminated with an exception: {}",
+                     exception.what());
         return 1;
     }
 

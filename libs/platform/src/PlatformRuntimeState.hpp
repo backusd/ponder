@@ -31,7 +31,7 @@ struct DialogRequestState;
 
 struct DialogCompletionRecord final
 {
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
     DialogRequestId requestId;
     DialogOutcome outcome;
 };
@@ -99,8 +99,8 @@ public:
     [[nodiscard]] std::optional<DisplayId> FindDisplayIdForRemoval(
         std::uint32_t backendDisplayId) const;
 
-    [[nodiscard]] PlatformTimestamp Now() const;
-    [[nodiscard]] PlatformTimestamp CaptureBackendTimestamp() const;
+    [[nodiscard]] Timestamp Now() const;
+    [[nodiscard]] Timestamp CaptureBackendTimestamp() const;
     [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
     [[nodiscard]] core::Result<DisplayInfo> GetDisplayInfo(DisplayId id);
@@ -124,9 +124,9 @@ public:
     [[nodiscard]] core::Result<DialogRequestId> ShowOpenFolderDialog(
         const OpenFolderDialogDesc& desc);
     [[nodiscard]] std::shared_ptr<DialogRequestState> AcquireDialogRequest(DialogRequestId id);
-    void EnqueueDialogCompletion(DialogRequestId id, PlatformTimestamp timestamp,
+    void EnqueueDialogCompletion(DialogRequestId id, Timestamp timestamp,
                                  DialogOutcome outcome);
-    void MarkDialogCallbackFailure(DialogRequestId id, PlatformTimestamp timestamp) noexcept;
+    void MarkDialogCallbackFailure(DialogRequestId id, Timestamp timestamp) noexcept;
 
 private:
     friend class WindowImpl;

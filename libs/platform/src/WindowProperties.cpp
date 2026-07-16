@@ -98,10 +98,7 @@ core::Result<BackendWindowProperties> WindowImpl::GetProperties(std::string_view
 core::Result<WindowPresentation> WindowImpl::GetPresentation() const
 {
     auto properties = GetProperties("presentation query");
-    if (!properties.HasValue())
-    {
-        return core::Result<WindowPresentation>::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     return properties.GetValue().desktopFullscreen ? WindowPresentation::DesktopFullscreen
                                                    : WindowPresentation::Windowed;
 }
@@ -124,10 +121,7 @@ core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
     }
 
     auto properties = GetProperties("presentation update");
-    if (!properties.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     const WindowPresentation observedPresentation = properties.GetValue().desktopFullscreen
                                                         ? WindowPresentation::DesktopFullscreen
                                                         : WindowPresentation::Windowed;
@@ -147,10 +141,7 @@ core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
         core::VoidResult modeResult = ConvertOperationResult(
             m_backend.setFullscreenModeToDesktop(m_backend.context, m_nativeWindow),
             "SDL_SetWindowFullscreenMode", context, false);
-        if (!modeResult.HasValue())
-        {
-            return modeResult;
-        }
+        RETURN_ERROR_IF_FAILED(modeResult);
     }
 
     core::VoidResult presentationResult = ConvertOperationResult(
@@ -166,10 +157,7 @@ core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
 core::Result<WindowDecoration> WindowImpl::GetDecoration() const
 {
     auto properties = GetProperties("decoration query");
-    if (!properties.HasValue())
-    {
-        return core::Result<WindowDecoration>::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     return properties.GetValue().borderless ? WindowDecoration::Borderless
                                             : WindowDecoration::System;
 }
@@ -192,10 +180,7 @@ core::VoidResult WindowImpl::SetDecoration(WindowDecoration decoration)
     }
 
     auto properties = GetProperties("decoration update");
-    if (!properties.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     if (properties.GetValue().borderless == borderless)
     {
         return core::VoidResult::Success();
@@ -216,27 +201,17 @@ core::VoidResult WindowImpl::SetDecoration(WindowDecoration decoration)
 core::Result<::pond::platform::WindowState> WindowImpl::GetState() const
 {
     auto properties = GetProperties("state query");
-    if (!properties.HasValue())
-    {
-        return core::Result<::pond::platform::WindowState>::FromError(
-            std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     return DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
 }
 
 core::VoidResult WindowImpl::Minimize()
 {
     auto properties = GetProperties("minimize");
-    if (!properties.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     SynchronizeStateRequestVisibility(properties.GetValue().hidden);
     auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
-    if (!state.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(state).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(state);
     if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
     {
         m_pendingVisibleStateRequest.reset();
@@ -256,10 +231,7 @@ core::VoidResult WindowImpl::Minimize()
         core::VoidResult restoreResult =
             ConvertOperationResult(m_backend.restore(m_backend.context, m_nativeWindow),
                                    "SDL_RestoreWindow", context, true);
-        if (!restoreResult.HasValue())
-        {
-            return restoreResult;
-        }
+        RETURN_ERROR_IF_FAILED(restoreResult);
         RecordStateRequest(::pond::platform::WindowState::Normal, true);
     }
     core::VoidResult minimizeResult = ConvertOperationResult(
@@ -274,16 +246,10 @@ core::VoidResult WindowImpl::Minimize()
 core::VoidResult WindowImpl::Maximize()
 {
     auto properties = GetProperties("maximize");
-    if (!properties.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     SynchronizeStateRequestVisibility(properties.GetValue().hidden);
     auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
-    if (!state.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(state).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(state);
     if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
     {
         m_pendingVisibleStateRequest.reset();
@@ -308,10 +274,7 @@ core::VoidResult WindowImpl::Maximize()
         core::VoidResult restoreResult =
             ConvertOperationResult(m_backend.restore(m_backend.context, m_nativeWindow),
                                    "SDL_RestoreWindow", context, true);
-        if (!restoreResult.HasValue())
-        {
-            return restoreResult;
-        }
+        RETURN_ERROR_IF_FAILED(restoreResult);
         RecordStateRequest(::pond::platform::WindowState::Normal, true);
     }
     core::VoidResult maximizeResult = ConvertOperationResult(
@@ -326,16 +289,10 @@ core::VoidResult WindowImpl::Maximize()
 core::VoidResult WindowImpl::Restore()
 {
     auto properties = GetProperties("restore");
-    if (!properties.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     SynchronizeStateRequestVisibility(properties.GetValue().hidden);
     auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
-    if (!state.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(state).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(state);
     if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
     {
         m_pendingVisibleStateRequest.reset();
@@ -361,30 +318,21 @@ core::VoidResult WindowImpl::Restore()
 core::Result<bool> WindowImpl::IsVisible() const
 {
     auto properties = GetProperties("visibility query");
-    if (!properties.HasValue())
-    {
-        return core::Result<bool>::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     return !properties.GetValue().hidden;
 }
 
 core::Result<bool> WindowImpl::IsResizable() const
 {
     auto properties = GetProperties("resizability query");
-    if (!properties.HasValue())
-    {
-        return core::Result<bool>::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     return properties.GetValue().resizable;
 }
 
 core::VoidResult WindowImpl::SetResizable(bool resizable)
 {
     auto properties = GetProperties("resizability update");
-    if (!properties.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     if (properties.GetValue().resizable == resizable)
     {
         return core::VoidResult::Success();
@@ -405,30 +353,21 @@ core::VoidResult WindowImpl::SetResizable(bool resizable)
 core::Result<bool> WindowImpl::IsFocused() const
 {
     auto properties = GetProperties("focus query");
-    if (!properties.HasValue())
-    {
-        return core::Result<bool>::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     return properties.GetValue().inputFocus;
 }
 
 core::Result<bool> WindowImpl::IsAlwaysOnTop() const
 {
     auto properties = GetProperties("always-on-top query");
-    if (!properties.HasValue())
-    {
-        return core::Result<bool>::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     return properties.GetValue().alwaysOnTop;
 }
 
 core::VoidResult WindowImpl::SetAlwaysOnTop(bool alwaysOnTop)
 {
     auto properties = GetProperties("always-on-top update");
-    if (!properties.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(properties).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(properties);
     if (properties.GetValue().alwaysOnTop == alwaysOnTop)
     {
         return core::VoidResult::Success();

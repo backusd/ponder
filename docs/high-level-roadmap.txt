@@ -395,8 +395,8 @@ Step 6: Build the project-owned rectangle rendering foundation
 --------------------------------------------------------------
 
 Implement enough `ponder_ui` and the generic render 2D layer to draw one rectangle
-through the production-shaped path. Do not design the public retained widget
-system in this step.
+through the production-shaped path described by ADR 0010. Do not design the
+public retained widget system in this step.
 
 - UI records semantic paint commands in logical coordinates and compiles them
   into owning pixel-space packets after exact frame metrics are known.

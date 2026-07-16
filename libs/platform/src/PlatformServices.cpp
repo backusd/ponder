@@ -78,10 +78,7 @@ core::VoidResult PlatformRuntimeState::SetClipboardText(std::string_view text)
 {
     VerifyOwnerThread("clipboard text update");
     core::VoidResult validation = ValidateNullTerminatedUtf8(text, "Clipboard text");
-    if (!validation.HasValue())
-    {
-        return validation;
-    }
+    RETURN_ERROR_IF_FAILED(validation);
     if (!m_backend.supportsClipboardText(m_backend.context))
     {
         return core::VoidResult::FromError(MakeUnsupportedClipboardError());
@@ -107,10 +104,7 @@ core::VoidResult PlatformRuntimeState::OpenExternalUri(std::string_view uri)
     }
 
     core::VoidResult validation = ValidateNullTerminatedUtf8(uri, "External URI");
-    if (!validation.HasValue())
-    {
-        return validation;
-    }
+    RETURN_ERROR_IF_FAILED(validation);
 
     const std::string ownedUri{uri};
     if (!m_backend.openExternalUri(m_backend.context, ownedUri.c_str()))

@@ -135,10 +135,7 @@ struct PreparedDialogRequest final
     }
 
     auto locationResult = ValidateDefaultLocation(defaultLocation);
-    if (!locationResult.HasValue())
-    {
-        return core::Result<PreparedDialogRequest>::FromError(std::move(locationResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(locationResult);
 
     PreparedDialogRequest prepared{.kind = kind,
                                    .parentWindowId = parentWindowId,
@@ -152,10 +149,7 @@ struct PreparedDialogRequest final
     for (std::size_t index = 0; index < filters.size(); ++index)
     {
         core::VoidResult validation = ValidateFilter(filters[index], index);
-        if (!validation.HasValue())
-        {
-            return core::Result<PreparedDialogRequest>::FromError(std::move(validation).GetError());
-        }
+        RETURN_ERROR_IF_FAILED(validation);
 
         prepared.filterNames.push_back(filters[index].name);
         prepared.filterPatterns.push_back(filters[index].pattern);
@@ -217,7 +211,7 @@ struct DialogRequestState final
     bool allowMultipleSelection{};
     std::optional<DialogCompletionRecord> completion;
     std::optional<DialogFailure> callbackFailure;
-    PlatformTimestamp callbackFailureTimestamp{};
+    Timestamp callbackFailureTimestamp{};
     DialogRequestState* nextCompleted{};
     bool completionEnqueued{};
     bool completionIsCallbackFailure{};
@@ -294,7 +288,7 @@ void SDLCALL OnDialogCompleted(void* userdata, const char* const* fileList,
                                int selectedFilter) noexcept
 {
     detail::DialogRequestState* rawRequest{};
-    PlatformTimestamp timestamp{};
+    Timestamp timestamp{};
 
     try
     {
@@ -360,10 +354,7 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
 
     auto preparedResult = PrepareDialogRequest(kind, parentWindowId, defaultLocation, filters,
                                                allowMultipleSelection);
-    if (!preparedResult.HasValue())
-    {
-        return core::Result<DialogRequestId>::FromError(std::move(preparedResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(preparedResult);
 
     PreparedDialogRequest prepared = std::move(preparedResult).GetValue();
     WindowImpl* parentWindow{};
@@ -481,7 +472,7 @@ std::shared_ptr<DialogRequestState> PlatformRuntimeState::AcquireDialogRequest(D
     return request != m_dialogRequests.end() ? request->second : nullptr;
 }
 
-void PlatformRuntimeState::EnqueueDialogCompletion(DialogRequestId id, PlatformTimestamp timestamp,
+void PlatformRuntimeState::EnqueueDialogCompletion(DialogRequestId id, Timestamp timestamp,
                                                    DialogOutcome outcome)
 {
     std::scoped_lock lock{m_dialogMutex};
@@ -508,7 +499,7 @@ void PlatformRuntimeState::EnqueueDialogCompletion(DialogRequestId id, PlatformT
 }
 
 void PlatformRuntimeState::MarkDialogCallbackFailure(DialogRequestId id,
-                                                     PlatformTimestamp timestamp) noexcept
+                                                     Timestamp timestamp) noexcept
 {
     try
     {

@@ -12,6 +12,7 @@
 #endif
 
 #include <ponder/core/Log.hpp>
+#include <ponder/render/draw2d/Draw2DPacket.hpp>
 
 #include <algorithm>
 #include <array>
@@ -1149,6 +1150,171 @@ void VolkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer,
 {
     vkDestroyFramebuffer(device, framebuffer, allocator);
 }
+[[nodiscard]] VkResult VolkCreateShaderModule(VkDevice device,
+                                              const VkShaderModuleCreateInfo* createInfo,
+                                              const VkAllocationCallbacks* allocator,
+                                              VkShaderModule* shaderModule) noexcept
+{
+    return vkCreateShaderModule(device, createInfo, allocator, shaderModule);
+}
+
+void VolkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule,
+                             const VkAllocationCallbacks* allocator) noexcept
+{
+    vkDestroyShaderModule(device, shaderModule, allocator);
+}
+
+[[nodiscard]] VkResult VolkCreatePipelineLayout(VkDevice device,
+                                                const VkPipelineLayoutCreateInfo* createInfo,
+                                                const VkAllocationCallbacks* allocator,
+                                                VkPipelineLayout* layout) noexcept
+{
+    return vkCreatePipelineLayout(device, createInfo, allocator, layout);
+}
+
+void VolkDestroyPipelineLayout(VkDevice device, VkPipelineLayout layout,
+                               const VkAllocationCallbacks* allocator) noexcept
+{
+    vkDestroyPipelineLayout(device, layout, allocator);
+}
+
+[[nodiscard]] VkResult VolkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache,
+                                                   std::uint32_t createInfoCount,
+                                                   const VkGraphicsPipelineCreateInfo* createInfos,
+                                                   const VkAllocationCallbacks* allocator,
+                                                   VkPipeline* pipelines) noexcept
+{
+    return vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, createInfos, allocator,
+                                     pipelines);
+}
+
+void VolkDestroyPipeline(VkDevice device, VkPipeline pipeline,
+                         const VkAllocationCallbacks* allocator) noexcept
+{
+    vkDestroyPipeline(device, pipeline, allocator);
+}
+
+[[nodiscard]] VkResult VmaCreateBufferDispatch(void* allocator,
+                                               const VkBufferCreateInfo* bufferInfo,
+                                               const VulkanHostBufferAllocationRequest* request,
+                                               VkBuffer* buffer, void** allocation,
+                                               VulkanHostBufferAllocationResult* output) noexcept
+{
+    if (allocator == nullptr || bufferInfo == nullptr || request == nullptr || buffer == nullptr ||
+        allocation == nullptr || output == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    VmaAllocationCreateInfo allocationInfo{};
+    allocationInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+    allocationInfo.requiredFlags = request->requiredMemoryProperties;
+    allocationInfo.preferredFlags = request->preferredMemoryProperties;
+
+    VmaAllocation createdAllocation{};
+    VmaAllocationInfo createdAllocationInfo{};
+    const VkResult result =
+        vmaCreateBuffer(static_cast<VmaAllocator>(allocator), bufferInfo, &allocationInfo, buffer,
+                        &createdAllocation, &createdAllocationInfo);
+    *allocation = result == VK_SUCCESS ? static_cast<void*>(createdAllocation) : nullptr;
+    output->memoryProperties = 0U;
+    output->allocationSize = 0U;
+    if (result == VK_SUCCESS)
+    {
+        vmaGetAllocationMemoryProperties(static_cast<VmaAllocator>(allocator), createdAllocation,
+                                         &output->memoryProperties);
+        output->allocationSize = createdAllocationInfo.size;
+    }
+    return result;
+}
+
+void VmaDestroyBufferDispatch(void* allocator, VkBuffer buffer, void* allocation) noexcept
+{
+    if (allocator != nullptr && buffer != VK_NULL_HANDLE && allocation != nullptr)
+    {
+        vmaDestroyBuffer(static_cast<VmaAllocator>(allocator), buffer,
+                         static_cast<VmaAllocation>(allocation));
+    }
+}
+
+[[nodiscard]] VkResult VmaMapMemoryDispatch(void* allocator, void* allocation, void** data) noexcept
+{
+    if (allocator == nullptr || allocation == nullptr || data == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return vmaMapMemory(static_cast<VmaAllocator>(allocator),
+                        static_cast<VmaAllocation>(allocation), data);
+}
+
+void VmaUnmapMemoryDispatch(void* allocator, void* allocation) noexcept
+{
+    if (allocator != nullptr && allocation != nullptr)
+    {
+        vmaUnmapMemory(static_cast<VmaAllocator>(allocator),
+                       static_cast<VmaAllocation>(allocation));
+    }
+}
+
+[[nodiscard]] VkResult VmaFlushAllocationDispatch(void* allocator, void* allocation,
+                                                  VkDeviceSize offset, VkDeviceSize size) noexcept
+{
+    if (allocator == nullptr || allocation == nullptr)
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return vmaFlushAllocation(static_cast<VmaAllocator>(allocator),
+                              static_cast<VmaAllocation>(allocation), offset, size);
+}
+
+void VolkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                         VkPipeline pipeline) noexcept
+{
+    vkCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline);
+}
+
+void VolkCmdSetViewport(VkCommandBuffer commandBuffer, std::uint32_t firstViewport,
+                        std::uint32_t viewportCount, const VkViewport* viewports) noexcept
+{
+    vkCmdSetViewport(commandBuffer, firstViewport, viewportCount, viewports);
+}
+
+void VolkCmdSetScissor(VkCommandBuffer commandBuffer, std::uint32_t firstScissor,
+                       std::uint32_t scissorCount, const VkRect2D* scissors) noexcept
+{
+    vkCmdSetScissor(commandBuffer, firstScissor, scissorCount, scissors);
+}
+
+void VolkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, std::uint32_t firstBinding,
+                              std::uint32_t bindingCount, const VkBuffer* buffers,
+                              const VkDeviceSize* offsets) noexcept
+{
+    vkCmdBindVertexBuffers(commandBuffer, firstBinding, bindingCount, buffers, offsets);
+}
+
+void VolkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                            VkIndexType indexType) noexcept
+{
+    vkCmdBindIndexBuffer(commandBuffer, buffer, offset, indexType);
+}
+
+void VolkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
+                          VkShaderStageFlags stageFlags, std::uint32_t offset, std::uint32_t size,
+                          const void* values) noexcept
+{
+    vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, values);
+}
+
+void VolkCmdDrawIndexed(VkCommandBuffer commandBuffer, std::uint32_t indexCount,
+                        std::uint32_t instanceCount, std::uint32_t firstIndex,
+                        std::int32_t vertexOffset, std::uint32_t firstInstance) noexcept
+{
+    vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset,
+                     firstInstance);
+}
 
 [[nodiscard]] VulkanGlobalDispatch BindInstanceDispatch(VulkanGlobalDispatch dispatch,
                                                         const VolkInstanceTable& table) noexcept
@@ -1197,6 +1363,19 @@ void VolkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer,
     dispatch.destroyRenderPass = table.vkDestroyRenderPass;
     dispatch.createFramebuffer = table.vkCreateFramebuffer;
     dispatch.destroyFramebuffer = table.vkDestroyFramebuffer;
+    dispatch.createShaderModule = table.vkCreateShaderModule;
+    dispatch.destroyShaderModule = table.vkDestroyShaderModule;
+    dispatch.createPipelineLayout = table.vkCreatePipelineLayout;
+    dispatch.destroyPipelineLayout = table.vkDestroyPipelineLayout;
+    dispatch.createGraphicsPipelines = table.vkCreateGraphicsPipelines;
+    dispatch.destroyPipeline = table.vkDestroyPipeline;
+    dispatch.cmdBindPipeline = table.vkCmdBindPipeline;
+    dispatch.cmdSetViewport = table.vkCmdSetViewport;
+    dispatch.cmdSetScissor = table.vkCmdSetScissor;
+    dispatch.cmdBindVertexBuffers = table.vkCmdBindVertexBuffers;
+    dispatch.cmdBindIndexBuffer = table.vkCmdBindIndexBuffer;
+    dispatch.cmdPushConstants = table.vkCmdPushConstants;
+    dispatch.cmdDrawIndexed = table.vkCmdDrawIndexed;
     dispatch.createCommandPool = table.vkCreateCommandPool;
     dispatch.destroyCommandPool = table.vkDestroyCommandPool;
     dispatch.allocateCommandBuffers = table.vkAllocateCommandBuffers;
@@ -2646,13 +2825,14 @@ VulkanDeviceOwner::VulkanDeviceOwner(
     VulkanGlobalDispatch::DeviceWaitIdleFn deviceWaitIdle,
     VulkanGlobalDispatch::QueueWaitIdleFn queueWaitIdle,
     VulkanGlobalDispatch::DestroyAllocatorFn destroyAllocator, VulkanGlobalDispatch dispatch,
-    std::optional<VolkDeviceTable> volkTable, VulkanDeviceInfo info) noexcept
+    std::optional<VolkDeviceTable> volkTable, VulkanDeviceInfo info,
+    std::shared_ptr<VulkanDeviceChildLifetime> childLifetime) noexcept
     : m_instance{std::move(instance)}, m_physicalDevice{physicalDevice}, m_device{device},
       m_allocator{allocator}, m_queues{std::move(queues)},
       m_queueSynchronization{std::move(queueSynchronization)}, m_destroyDevice{destroyDevice},
       m_deviceWaitIdle{deviceWaitIdle}, m_queueWaitIdle{queueWaitIdle},
       m_destroyAllocator{destroyAllocator}, m_dispatch{dispatch}, m_volkTable{std::move(volkTable)},
-      m_info{std::move(info)}
+      m_info{std::move(info)}, m_childLifetime{std::move(childLifetime)}
 {
 }
 
@@ -2663,7 +2843,7 @@ VulkanDeviceOwner::VulkanDeviceOwner(VulkanDeviceOwner&& other) noexcept
       m_destroyDevice{other.m_destroyDevice}, m_deviceWaitIdle{other.m_deviceWaitIdle},
       m_queueWaitIdle{other.m_queueWaitIdle}, m_destroyAllocator{other.m_destroyAllocator},
       m_dispatch{other.m_dispatch}, m_volkTable{std::move(other.m_volkTable)},
-      m_info{std::move(other.m_info)}
+      m_info{std::move(other.m_info)}, m_childLifetime{std::move(other.m_childLifetime)}
 {
     other.m_physicalDevice = VK_NULL_HANDLE;
     other.m_device = VK_NULL_HANDLE;
@@ -2695,6 +2875,7 @@ VulkanDeviceOwner& VulkanDeviceOwner::operator=(VulkanDeviceOwner&& other) noexc
         m_dispatch = other.m_dispatch;
         m_volkTable = std::move(other.m_volkTable);
         m_info = std::move(other.m_info);
+        m_childLifetime = std::move(other.m_childLifetime);
         other.m_physicalDevice = VK_NULL_HANDLE;
         other.m_device = VK_NULL_HANDLE;
         other.m_allocator = nullptr;
@@ -2717,7 +2898,8 @@ VulkanDeviceOwner::~VulkanDeviceOwner()
 
 bool VulkanDeviceOwner::IsValid() const noexcept
 {
-    return m_device != VK_NULL_HANDLE && m_instance != nullptr && m_instance->IsValid();
+    return m_device != VK_NULL_HANDLE && m_instance != nullptr && m_instance->IsValid() &&
+           m_childLifetime != nullptr && m_childLifetime->active.load(std::memory_order_acquire);
 }
 
 VkDevice VulkanDeviceOwner::GetHandle() const noexcept
@@ -2728,6 +2910,22 @@ VkDevice VulkanDeviceOwner::GetHandle() const noexcept
 VkPhysicalDevice VulkanDeviceOwner::GetPhysicalDevice() const noexcept
 {
     return m_physicalDevice;
+}
+
+void* VulkanDeviceOwner::GetAllocator() const noexcept
+{
+    return m_allocator;
+}
+
+VkDeviceSize VulkanDeviceOwner::GetNonCoherentAtomSize() const noexcept
+{
+    return std::max<VkDeviceSize>(m_info.nonCoherentAtomSize, 1U);
+}
+
+const std::shared_ptr<VulkanDeviceChildLifetime>& VulkanDeviceOwner::GetChildLifetime()
+    const noexcept
+{
+    return m_childLifetime;
 }
 
 const VulkanDeviceInfo& VulkanDeviceOwner::GetInfo() const noexcept
@@ -2805,6 +3003,17 @@ core::VoidResult VulkanDeviceOwner::WaitQueueIdle(std::uint32_t queueFamilyIndex
 
 void VulkanDeviceOwner::Reset() noexcept
 {
+    if (m_device != VK_NULL_HANDLE)
+    {
+        PONDER_VERIFY(m_childLifetime != nullptr,
+                      "A live Vulkan device must own child-lifetime state");
+        PONDER_VERIFY(
+            m_childLifetime->draw2DPipelineChildren.load(std::memory_order_acquire) == 0U,
+            "VulkanDeviceOwner destruction requires every Draw2D pipeline child to be destroyed "
+            "first");
+        m_childLifetime->active.store(false, std::memory_order_release);
+    }
+
     const auto destroyNativeResources = [this]() noexcept
     {
         if (m_allocator != nullptr && m_destroyAllocator != nullptr)
@@ -2841,6 +3050,7 @@ void VulkanDeviceOwner::Reset() noexcept
     m_dispatch = {};
     m_volkTable.reset();
     m_info = {};
+    m_childLifetime.reset();
 }
 VulkanSwapchainOwner::VulkanSwapchainOwner() noexcept = default;
 
@@ -3003,12 +3213,15 @@ VulkanFrameResourcesOwner::VulkanFrameResourcesOwner() noexcept = default;
 
 VulkanFrameResourcesOwner::VulkanFrameResourcesOwner(
     VkDevice device, VkCommandPool commandPool, std::vector<VulkanFrameSlotResources> slots,
-    std::vector<VkSemaphore> renderFinishedSemaphores,
+    std::vector<VkSemaphore> renderFinishedSemaphores, VulkanDraw2DUploadArena&& draw2DUploadArena,
+    std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines,
     VulkanGlobalDispatch::DestroyCommandPoolFn destroyCommandPool,
     VulkanGlobalDispatch::DestroySemaphoreFn destroySemaphore,
     VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept
     : m_device{device}, m_commandPool{commandPool}, m_slots{std::move(slots)},
       m_renderFinishedSemaphores{std::move(renderFinishedSemaphores)},
+      m_draw2DUploadArena{std::move(draw2DUploadArena)},
+      m_draw2DSubmissionPipelines{std::move(draw2DSubmissionPipelines)},
       m_destroyCommandPool{destroyCommandPool}, m_destroySemaphore{destroySemaphore},
       m_destroyFence{destroyFence}
 {
@@ -3019,6 +3232,8 @@ VulkanFrameResourcesOwner::VulkanFrameResourcesOwner(VulkanFrameResourcesOwner&&
       m_slots{std::move(other.m_slots)},
       m_renderFinishedSemaphores{std::move(other.m_renderFinishedSemaphores)},
       m_completedSubmissionSlots{std::move(other.m_completedSubmissionSlots)},
+      m_draw2DUploadArena{std::move(other.m_draw2DUploadArena)},
+      m_draw2DSubmissionPipelines{std::move(other.m_draw2DSubmissionPipelines)},
       m_poisoned{other.m_poisoned}, m_destroyCommandPool{other.m_destroyCommandPool},
       m_destroySemaphore{other.m_destroySemaphore}, m_destroyFence{other.m_destroyFence}
 {
@@ -3041,6 +3256,8 @@ VulkanFrameResourcesOwner& VulkanFrameResourcesOwner::operator=(
         m_slots = std::move(other.m_slots);
         m_renderFinishedSemaphores = std::move(other.m_renderFinishedSemaphores);
         m_completedSubmissionSlots = std::move(other.m_completedSubmissionSlots);
+        m_draw2DUploadArena = std::move(other.m_draw2DUploadArena);
+        m_draw2DSubmissionPipelines = std::move(other.m_draw2DSubmissionPipelines);
         m_poisoned = other.m_poisoned;
         m_destroyCommandPool = other.m_destroyCommandPool;
         m_destroySemaphore = other.m_destroySemaphore;
@@ -3065,7 +3282,9 @@ VulkanFrameResourcesOwner::~VulkanFrameResourcesOwner()
 bool VulkanFrameResourcesOwner::IsValid() const noexcept
 {
     if (m_device == VK_NULL_HANDLE || m_commandPool == VK_NULL_HANDLE || m_slots.empty() ||
-        m_renderFinishedSemaphores.empty())
+        m_renderFinishedSemaphores.empty() || !m_draw2DUploadArena.IsValid() ||
+        m_draw2DUploadArena.GetSlotCount() != static_cast<std::uint32_t>(m_slots.size()) ||
+        m_draw2DSubmissionPipelines.size() != m_slots.size())
     {
         return false;
     }
@@ -3166,7 +3385,12 @@ core::Result<bool> VulkanFrameResourcesOwner::PrepareFrameSlot(const VulkanGloba
         if (slot.submissionFencePending)
         {
             slot.submissionFencePending = false;
-            m_completedSubmissionSlots.push_back(slotIndex);
+            m_draw2DUploadArena.Complete(slotIndex);
+            m_draw2DSubmissionPipelines[slotIndex].reset();
+            PONDER_VERIFY(m_completedSubmissionSlots.count <
+                              m_completedSubmissionSlots.values.size(),
+                          "Completed Vulkan submission batch exceeds the frame-slot maximum");
+            m_completedSubmissionSlots.values[m_completedSubmissionSlots.count++] = slotIndex;
         }
     }
 
@@ -3198,7 +3422,49 @@ void VulkanFrameResourcesOwner::RecordSubmissionQueued(std::uint32_t slotIndex) 
     {
         VulkanFrameSlotResources& slot = m_slots[slotIndex];
         slot.submissionFencePending = true;
+        if (m_draw2DUploadArena.GetSlotSnapshot(slotIndex).state ==
+            VulkanDraw2DUploadSlotState::Reserved)
+        {
+            m_draw2DUploadArena.MarkSubmitted(slotIndex);
+        }
     }
+}
+
+VulkanDraw2DUploadArena& VulkanFrameResourcesOwner::GetDraw2DUploadArena() noexcept
+{
+    return m_draw2DUploadArena;
+}
+
+const VulkanDraw2DUploadArena& VulkanFrameResourcesOwner::GetDraw2DUploadArena() const noexcept
+{
+    return m_draw2DUploadArena;
+}
+
+core::VoidResult VulkanFrameResourcesOwner::AttachDraw2DPipeline(
+    std::uint32_t slotIndex, std::shared_ptr<const VulkanDraw2DPipelineOwner> pipeline)
+{
+    if (slotIndex >= m_draw2DSubmissionPipelines.size() || pipeline == nullptr ||
+        !pipeline->IsValid() ||
+        m_draw2DUploadArena.GetSlotSnapshot(slotIndex).state !=
+            VulkanDraw2DUploadSlotState::Reserved ||
+        m_draw2DSubmissionPipelines[slotIndex] != nullptr)
+    {
+        return core::VoidResult::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState,
+                            "Draw2D pipeline attachment requires one reserved completion slot."));
+    }
+    m_draw2DSubmissionPipelines[slotIndex] = std::move(pipeline);
+    return core::VoidResult::Success();
+}
+
+void VulkanFrameResourcesOwner::AbandonDraw2D(std::uint32_t slotIndex) noexcept
+{
+    if (slotIndex >= m_draw2DSubmissionPipelines.size())
+    {
+        return;
+    }
+    m_draw2DUploadArena.Abandon(slotIndex);
+    m_draw2DSubmissionPipelines[slotIndex].reset();
 }
 
 void VulkanFrameResourcesOwner::MarkPoisoned() noexcept
@@ -3206,7 +3472,7 @@ void VulkanFrameResourcesOwner::MarkPoisoned() noexcept
     m_poisoned = true;
 }
 
-std::vector<std::uint32_t> VulkanFrameResourcesOwner::ConsumeCompletedSubmissionSlots() noexcept
+VulkanCompletedSubmissionSlots VulkanFrameResourcesOwner::ConsumeCompletedSubmissionSlots() noexcept
 {
     return std::exchange(m_completedSubmissionSlots, {});
 }
@@ -3260,7 +3526,12 @@ core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(
             if (slot.submissionFencePending)
             {
                 slot.submissionFencePending = false;
-                m_completedSubmissionSlots.push_back(slotIndex);
+                m_draw2DUploadArena.Complete(slotIndex);
+                m_draw2DSubmissionPipelines[slotIndex].reset();
+                PONDER_VERIFY(m_completedSubmissionSlots.count <
+                                  m_completedSubmissionSlots.values.size(),
+                              "Completed Vulkan submission batch exceeds the frame-slot maximum");
+                m_completedSubmissionSlots.values[m_completedSubmissionSlots.count++] = slotIndex;
             }
         }
         return core::Result<bool>::FromValue(true);
@@ -3277,6 +3548,8 @@ core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(
 
 void VulkanFrameResourcesOwner::Reset() noexcept
 {
+    m_draw2DSubmissionPipelines.clear();
+    m_draw2DUploadArena.Reset();
     if (m_device != VK_NULL_HANDLE)
     {
         if (m_destroySemaphore != nullptr)
@@ -3323,7 +3596,8 @@ void VulkanFrameResourcesOwner::Reset() noexcept
     m_commandPool = VK_NULL_HANDLE;
     m_slots.clear();
     m_renderFinishedSemaphores.clear();
-    m_completedSubmissionSlots.clear();
+    m_completedSubmissionSlots = {};
+    m_draw2DSubmissionPipelines.clear();
     m_poisoned = false;
     m_destroyCommandPool = nullptr;
     m_destroySemaphore = nullptr;
@@ -3874,6 +4148,24 @@ VulkanGlobalDispatch CreateVolkGlobalDispatch() noexcept
         .destroyRenderPass = &VolkDestroyRenderPass,
         .createFramebuffer = &VolkCreateFramebuffer,
         .destroyFramebuffer = &VolkDestroyFramebuffer,
+        .createShaderModule = &VolkCreateShaderModule,
+        .destroyShaderModule = &VolkDestroyShaderModule,
+        .createPipelineLayout = &VolkCreatePipelineLayout,
+        .destroyPipelineLayout = &VolkDestroyPipelineLayout,
+        .createGraphicsPipelines = &VolkCreateGraphicsPipelines,
+        .destroyPipeline = &VolkDestroyPipeline,
+        .createBuffer = &VmaCreateBufferDispatch,
+        .destroyBuffer = &VmaDestroyBufferDispatch,
+        .mapMemory = &VmaMapMemoryDispatch,
+        .unmapMemory = &VmaUnmapMemoryDispatch,
+        .flushAllocation = &VmaFlushAllocationDispatch,
+        .cmdBindPipeline = &VolkCmdBindPipeline,
+        .cmdSetViewport = &VolkCmdSetViewport,
+        .cmdSetScissor = &VolkCmdSetScissor,
+        .cmdBindVertexBuffers = &VolkCmdBindVertexBuffers,
+        .cmdBindIndexBuffer = &VolkCmdBindIndexBuffer,
+        .cmdPushConstants = &VolkCmdPushConstants,
+        .cmdDrawIndexed = &VolkCmdDrawIndexed,
         .createCommandPool = &VolkCreateCommandPool,
         .destroyCommandPool = &VolkDestroyCommandPool,
         .allocateCommandBuffers = &VolkAllocateCommandBuffers,
@@ -4469,9 +4761,32 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
         static_cast<std::uint32_t>(featureSelection.enabledExtensions.size());
     createInfo.ppEnabledExtensionNames = featureSelection.enabledExtensions.data();
 
+    VkPhysicalDeviceProperties2 physicalDeviceProperties{};
+    physicalDeviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    dispatch.getPhysicalDeviceProperties2(candidate.device, &physicalDeviceProperties);
+    const VkDeviceSize nonCoherentAtomSize =
+        std::max<VkDeviceSize>(physicalDeviceProperties.properties.limits.nonCoherentAtomSize, 1U);
+    const std::array<std::uint32_t, 2U> maximumViewportDimensions{
+        physicalDeviceProperties.properties.limits.maxViewportDimensions[0],
+        physicalDeviceProperties.properties.limits.maxViewportDimensions[1]};
+
     VulkanDeviceInfo info{.selectedAdapter = std::move(candidate.snapshot),
                           .queuePlan = std::move(queuePlan).GetValue(),
-                          .optionalCapabilities = featureSelection.optionalCapabilities};
+                          .optionalCapabilities = featureSelection.optionalCapabilities,
+                          .nonCoherentAtomSize = nonCoherentAtomSize,
+                          .maximumViewportDimensions = maximumViewportDimensions};
+
+    std::shared_ptr<VulkanDeviceChildLifetime> childLifetime;
+    try
+    {
+        childLifetime = std::make_shared<VulkanDeviceChildLifetime>();
+    }
+    catch (const std::bad_alloc&)
+    {
+        return core::Result<VulkanDeviceOwner>::FromError(
+            MakeRenderError(RenderErrorCode::OutOfMemory,
+                            "Vulkan device child-lifetime state could not allocate host memory."));
+    }
 
     VkDevice device{VK_NULL_HANDLE};
     VkResult result = dispatch.createDevice(candidate.device, &createInfo, nullptr, &device);
@@ -4558,7 +4873,8 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
         std::move(instance), candidate.device, device, allocator, std::move(queues),
         std::move(queueSynchronization), deviceDispatch.destroyDevice,
         deviceDispatch.deviceWaitIdle, deviceDispatch.queueWaitIdle,
-        deviceDispatch.destroyAllocator, deviceDispatch, std::move(volkTable), std::move(info)});
+        deviceDispatch.destroyAllocator, deviceDispatch, std::move(volkTable), std::move(info),
+        std::move(childLifetime)});
 }
 core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(
     const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface)
@@ -5190,6 +5506,15 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
         std::vector<VulkanFrameSlotResources> slots(slotCount);
         std::vector<VkSemaphore> renderFinishedSemaphores(swapchainImageCount);
         std::vector<VkCommandBuffer> commandBuffers(slotCount);
+        std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines(
+            slotCount);
+        core::Result<VulkanDraw2DUploadArena> uploadArena = VulkanDraw2DUploadArena::Create(
+            dispatch, device, slotCount, draw2d::kDefaultDraw2DPacketLimits.maxUploadBytes);
+        if (!uploadArena)
+        {
+            return core::Result<VulkanFrameResourcesOwner>::FromError(
+                std::move(uploadArena).GetError());
+        }
 
         VkCommandPoolCreateInfo commandPoolCreateInfo{};
         commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -5209,6 +5534,8 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
                                                         commandPool,
                                                         std::move(slots),
                                                         std::move(renderFinishedSemaphores),
+                                                        std::move(uploadArena).GetValue(),
+                                                        std::move(draw2DSubmissionPipelines),
                                                         dispatch.destroyCommandPool,
                                                         dispatch.destroySemaphore,
                                                         dispatch.destroyFence};
@@ -5435,6 +5762,7 @@ void AbandonVulkanFrame(VulkanFrameResourcesOwner& frameResources,
     }
 
     presentationTracker.AbandonAcquiredFrame(recording.frameSlotIndex);
+    frameResources.AbandonDraw2D(recording.frameSlotIndex);
     frameResources.MarkPoisoned();
     recording.phase = VulkanFrameRecordingPhase::Terminal;
 }
@@ -5639,29 +5967,100 @@ core::VoidResult RecordVulkanFrameClear(const VulkanGlobalDispatch& dispatch,
     return core::VoidResult::Success();
 }
 
-core::VoidResult RecordVulkanIntermediateStageMarker(
-    const VulkanGlobalDispatch& dispatch, const VulkanFrameResourcesOwner& frameResources,
-    VulkanFrameRecordingState& recording)
+core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch,
+                                         const VulkanDeviceOwner& device,
+                                         const VulkanSwapchainOwner& swapchain,
+                                         VulkanFrameResourcesOwner& frameResources,
+                                         VulkanDraw2DPipelineCache& pipelineCache,
+                                         VulkanFrameRecordingState& recording,
+                                         const draw2d::Draw2DPacket& packet)
 {
-    if (!frameResources.IsValid() || frameResources.IsPoisoned())
+    if (!device.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() ||
+        frameResources.IsPoisoned())
     {
         return core::VoidResult::FromError(
             MakeRenderError(RenderErrorCode::InvalidState,
-                            "Intermediate recording requires live Vulkan frame resources."));
+                            "Draw2D stage recording requires live Vulkan frame resources."));
     }
 
     if (recording.phase != VulkanFrameRecordingPhase::ClearRecorded ||
-        recording.frameSlotIndex >= frameResources.GetSlotCount())
+        recording.frameSlotIndex >= frameResources.GetSlotCount() ||
+        recording.imageIndex >= swapchain.GetFramebufferCount())
     {
         return core::VoidResult::FromError(MakeRenderError(
             RenderErrorCode::InvalidState,
-            "The intermediate stage must be recorded exactly once after the clear stage."));
+            "The generic Draw2D stage must be recorded exactly once after the clear stage."));
+    }
+
+    core::Result<draw2d::Draw2DPacketStats> validation = draw2d::ValidateDraw2DPacket(packet);
+    if (!validation)
+    {
+        return core::VoidResult::FromError(std::move(validation).GetError());
+    }
+
+    const VulkanSwapchainConfig& config = swapchain.GetConfig();
+    if (packet.GetPixelExtent() !=
+        draw2d::Draw2DPixelExtent{config.extent.width, config.extent.height})
+    {
+        return core::VoidResult::FromError(MakeRenderError(
+            RenderErrorCode::InvalidArgument,
+            "Draw2D packet extent does not match the active Vulkan framebuffer extent."));
+    }
+    if (packet.IsEmpty())
+    {
+        return core::VoidResult::Success();
+    }
+
+    const VulkanDraw2DPipelineCompatibilityKey key =
+        MakeVulkanDraw2DPipelineCompatibilityKey(config);
+    core::Result<VulkanDraw2DPipelineCacheUpdate> pipeline =
+        pipelineCache.GetOrCreate(dispatch, device, swapchain, key);
+    if (!pipeline)
+    {
+        return core::VoidResult::FromError(std::move(pipeline).GetError());
+    }
+    std::shared_ptr<const VulkanDraw2DPipelineOwner> pipelineOwner =
+        pipelineCache.AcquireCurrentPipeline();
+    if (pipelineOwner == nullptr || !pipelineOwner->IsValid())
+    {
+        return core::VoidResult::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState,
+                            "Draw2D pipeline cache did not publish a usable pipeline."));
+    }
+    const VulkanDraw2DPipelineOwner& selectedPipeline = *pipelineOwner;
+
+    core::Result<VulkanDraw2DUploadReservation> upload =
+        frameResources.GetDraw2DUploadArena().ReserveAndUpload(recording.frameSlotIndex,
+                                                               std::as_bytes(packet.GetVertices()),
+                                                               std::as_bytes(packet.GetIndices()));
+    if (!upload)
+    {
+        return core::VoidResult::FromError(std::move(upload).GetError());
+    }
+    const VulkanDraw2DUploadReservation reservation = upload.GetValue();
+
+    core::VoidResult attached =
+        frameResources.AttachDraw2DPipeline(recording.frameSlotIndex, std::move(pipelineOwner));
+    if (!attached)
+    {
+        frameResources.AbandonDraw2D(recording.frameSlotIndex);
+        return attached;
     }
 
     const VulkanFrameSlotResources slot = frameResources.GetSlot(recording.frameSlotIndex);
-    TryBeginLabel(dispatch, slot.commandBuffer, "pond.render.intermediate");
-    TryEndLabel(dispatch, slot.commandBuffer);
-    recording.phase = VulkanFrameRecordingPhase::IntermediateRecorded;
+    core::VoidResult commands = RecordVulkanDraw2DPipelineCommands(
+        dispatch, slot.commandBuffer, selectedPipeline, reservation.buffer,
+        reservation.vertexOffset, reservation.buffer, reservation.indexOffset, config.extent,
+        VkExtent2D{.width = device.GetInfo().maximumViewportDimensions[0],
+                   .height = device.GetInfo().maximumViewportDimensions[1]},
+        packet.GetDrawRecords());
+    if (!commands)
+    {
+        frameResources.AbandonDraw2D(recording.frameSlotIndex);
+        return commands;
+    }
+
+    recording.phase = VulkanFrameRecordingPhase::Draw2DRecorded;
     return core::VoidResult::Success();
 }
 
@@ -5672,7 +6071,7 @@ core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(
     VulkanFrameRecordingState& recording)
 {
     if (recording.phase != VulkanFrameRecordingPhase::ClearRecorded &&
-        recording.phase != VulkanFrameRecordingPhase::IntermediateRecorded)
+        recording.phase != VulkanFrameRecordingPhase::Draw2DRecorded)
     {
         return core::Result<VulkanFramePresentationResult>::FromError(
             MakeRenderError(RenderErrorCode::InvalidState,

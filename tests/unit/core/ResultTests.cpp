@@ -52,6 +52,73 @@ static_assert(VoidResultObserversAreConstexpr());
 static_assert(ResultWithDormantRuntimeFailurePath(true).GetValue() == 7);
 static_assert(noexcept(std::declval<const pond::core::Result<int>&>().HasValue()));
 static_assert(noexcept(static_cast<bool>(std::declval<const pond::core::Result<int>&>())));
+
+constexpr pond::core::ErrorCode kMacroErrorCode{pond::core::ErrorCategory::Unsupported, 21};
+
+pond::core::Result<int> MakeMacroResult(bool succeed)
+{
+    if (succeed)
+    {
+        return 9;
+    }
+
+    return pond::core::Result<int>::FromError(pond::core::Error{kMacroErrorCode, "macro failed"});
+}
+
+pond::core::Result<int> MakeCountingMacroResult(int& callCount, bool succeed)
+{
+    ++callCount;
+    return MakeMacroResult(succeed);
+}
+
+pond::core::Result<int> ReturnErrorIfFailedMacro(bool succeed)
+{
+    auto result = MakeMacroResult(succeed);
+    RETURN_ERROR_IF_FAILED(result);
+
+    return result.GetValue() + 1;
+}
+
+pond::core::Result<int> ReturnErrorIfFailedMacroFromExpression(int& callCount, bool succeed)
+{
+    RETURN_ERROR_IF_FAILED(MakeCountingMacroResult(callCount, succeed));
+
+    return 10;
+}
+
+pond::core::Result<int> ReturnErrorIfFailedMacroWithCallback(std::string& observedMessage)
+{
+    auto result = MakeMacroResult(false);
+    RETURN_ERROR_IF_FAILED_FN(
+        result,
+        [&observedMessage, prefix = std::string{"observed"}](const pond::core::Error& error)
+        {
+            observedMessage = prefix + ": " + std::string{error.GetMessage()};
+        });
+
+    return 10;
+}
+
+void ReturnVoidIfFailedMacro(bool succeed, bool& reachedSuccessPath)
+{
+    auto result = MakeMacroResult(succeed);
+    RETURN_VOID_IF_FAILED(result);
+
+    reachedSuccessPath = true;
+}
+
+void ReturnVoidIfFailedMacroWithCallback(std::string& observedMessage, bool& reachedSuccessPath)
+{
+    auto result = MakeMacroResult(false);
+    RETURN_VOID_IF_FAILED_FN(
+        result,
+        [&observedMessage, prefix = std::string{"observed"}](const pond::core::Error& error)
+        {
+            observedMessage = prefix + ": " + std::string{error.GetMessage()};
+        });
+
+    reachedSuccessPath = true;
+}
 TEST(ResultTests, StoresValue)
 {
     pond::core::Result<int> result = 42;
@@ -145,5 +212,67 @@ TEST(VoidResultTests, StoresError)
 
     ASSERT_FALSE(result);
     EXPECT_EQ(result.GetError().GetMessage(), std::string_view{"void failed"});
+}
+
+TEST(ResultMacroTests, ReturnErrorIfFailedMacroContinuesOnSuccess)
+{
+    auto result = ReturnErrorIfFailedMacro(true);
+
+    ASSERT_TRUE(result);
+    EXPECT_EQ(result.GetValue(), 10);
+}
+
+TEST(ResultMacroTests, ReturnErrorIfFailedMacroPropagatesFailure)
+{
+    auto result = ReturnErrorIfFailedMacro(false);
+
+    ASSERT_FALSE(result);
+    EXPECT_TRUE(result.GetError() == kMacroErrorCode);
+    EXPECT_EQ(result.GetError().GetMessage(), std::string_view{"macro failed"});
+}
+
+TEST(ResultMacroTests, ReturnErrorIfFailedMacroEvaluatesExpressionOnce)
+{
+    int callCount{};
+
+    auto result = ReturnErrorIfFailedMacroFromExpression(callCount, false);
+
+    ASSERT_FALSE(result);
+    EXPECT_EQ(callCount, 1);
+    EXPECT_TRUE(result.GetError() == kMacroErrorCode);
+}
+
+TEST(ResultMacroTests, ReturnErrorIfFailedCallbackReceivesErrorBeforePropagation)
+{
+    std::string observedMessage;
+
+    auto result = ReturnErrorIfFailedMacroWithCallback(observedMessage);
+
+    ASSERT_FALSE(result);
+    EXPECT_EQ(observedMessage, "observed: macro failed");
+    EXPECT_TRUE(result.GetError() == kMacroErrorCode);
+}
+
+TEST(ResultMacroTests, ReturnVoidIfFailedMacroReturnsOnlyOnFailure)
+{
+    bool reachedSuccessPath{};
+
+    ReturnVoidIfFailedMacro(true, reachedSuccessPath);
+    EXPECT_TRUE(reachedSuccessPath);
+
+    reachedSuccessPath = false;
+    ReturnVoidIfFailedMacro(false, reachedSuccessPath);
+    EXPECT_FALSE(reachedSuccessPath);
+}
+
+TEST(ResultMacroTests, ReturnVoidIfFailedCallbackReceivesErrorBeforeReturn)
+{
+    std::string observedMessage;
+    bool reachedSuccessPath{};
+
+    ReturnVoidIfFailedMacroWithCallback(observedMessage, reachedSuccessPath);
+
+    EXPECT_EQ(observedMessage, "observed: macro failed");
+    EXPECT_FALSE(reachedSuccessPath);
 }
 } // namespace

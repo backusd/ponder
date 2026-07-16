@@ -68,15 +68,17 @@ namespace
         pond::render::PresentationEnvironmentRevision{1U})
 {
     const auto pixelSize = window.GetPixelSize();
+    const auto logicalSize = window.GetLogicalSize();
     const auto visible = window.IsVisible();
     const auto windowState = window.GetState();
-    if (!pixelSize || !visible || !windowState)
+    if (!pixelSize || !logicalSize || !visible || !windowState)
     {
         return {};
     }
 
     return pond::render::RenderTargetSnapshot{window.GetId(),
                                               pixelSize.GetValue(),
+                                              logicalSize.GetValue(),
                                               visible.GetValue(),
                                               windowState.GetValue(),
                                               presentationEnvironmentRevision,
@@ -112,7 +114,9 @@ void ExpectValidationClean(const pond::render::RenderBootstrap& bootstrap)
         pond::render::PresentationEnvironmentRevision{1U})
 {
     return pond::render::RenderTargetSnapshot{
-        window.GetId(), pixelSize, visible, windowState, presentationEnvironmentRevision, revision};
+        window.GetId(), pixelSize,   pond::platform::LogicalSize{pixelSize.width, pixelSize.height},
+        visible,        windowState, presentationEnvironmentRevision,
+        revision};
 }
 
 [[nodiscard]] constexpr pond::render::ClearColor MakeClearColor(float red, float green,
@@ -365,6 +369,7 @@ TEST(RenderOwnerThreadSurfaceIntegrationTests, CreatesDestroysAndTransfersOneLiv
     const pond::render::RenderTargetSnapshot zeroSizedSnapshot{
         window.GetId(),
         pond::platform::PixelSize{},
+        pond::platform::LogicalSize{},
         true,
         pond::platform::WindowState::Normal,
         pond::render::PresentationEnvironmentRevision{1U},
@@ -382,6 +387,7 @@ TEST(RenderOwnerThreadSurfaceIntegrationTests, CreatesDestroysAndTransfersOneLiv
     const pond::render::RenderTargetSnapshot activeSnapshot{
         window.GetId(),
         latestSnapshot.GetPixelSize(),
+        latestSnapshot.GetLogicalSize(),
         true,
         pond::platform::WindowState::Normal,
         pond::render::PresentationEnvironmentRevision{1U},
@@ -424,9 +430,9 @@ TEST(RenderOwnerThreadSurfaceIntegrationTests, CreatesDestroysAndTransfersOneLiv
 
     const pond::core::VoidResult wrongWindowUpdate =
         target.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
-            pond::platform::WindowId{9999}, latestSnapshot.GetPixelSize(), true,
-            pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U},
-            5});
+            pond::platform::WindowId{9999}, latestSnapshot.GetPixelSize(),
+            latestSnapshot.GetLogicalSize(), true, pond::platform::WindowState::Normal,
+            pond::render::PresentationEnvironmentRevision{1U}, 5});
     ASSERT_FALSE(wrongWindowUpdate);
     EXPECT_EQ(wrongWindowUpdate.GetError().GetCode(),
               pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidArgument));

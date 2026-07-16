@@ -104,10 +104,7 @@ core::VoidResult WindowImpl::SetTextInputArea(TextInputArea area)
 {
     VerifyUsable("text input area update");
     auto backendAreaResult = ToBackendTextInputArea(area);
-    if (!backendAreaResult.HasValue())
-    {
-        return core::VoidResult::FromError(std::move(backendAreaResult).GetError());
-    }
+    RETURN_ERROR_IF_FAILED(backendAreaResult);
 
     const BackendTextInputArea backendArea = std::move(backendAreaResult).GetValue();
     const std::string_view context = GetErrorContext();

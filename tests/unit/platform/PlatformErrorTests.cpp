@@ -61,4 +61,23 @@ TEST(PlatformErrorTests, MapsUnknownValuesToInternalWithoutChangingTheValue)
     EXPECT_EQ(kCoreCode.GetCategory(), pond::core::ErrorCategory::Internal);
     EXPECT_EQ(kCoreCode.GetValue(), kUnknownValue);
 }
+
+TEST(PlatformErrorTests, CoreErrorComparesDirectlyWithPlatformErrorCode)
+{
+    struct NotAnErrorCode final
+    {
+    };
+
+    static_assert(pond::core::ConvertToErrorCode<pond::platform::PlatformErrorCode>);
+    static_assert(!pond::core::ConvertToErrorCode<NotAnErrorCode>);
+
+    const pond::core::Error error{
+        pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported),
+        "unsupported"};
+
+    EXPECT_TRUE(error == pond::platform::PlatformErrorCode::Unsupported);
+    EXPECT_TRUE(pond::platform::PlatformErrorCode::Unsupported == error);
+    EXPECT_FALSE(error == pond::platform::PlatformErrorCode::BackendFailure);
+    EXPECT_TRUE(error != pond::platform::PlatformErrorCode::BackendFailure);
+}
 } // namespace

@@ -19,7 +19,7 @@ namespace pond::platform::detail
 {
 namespace
 {
-[[nodiscard]] std::optional<PlatformTimestamp> TranslateTimestamp(std::uint64_t timestamp) noexcept
+[[nodiscard]] std::optional<Timestamp> TranslateTimestamp(std::uint64_t timestamp) noexcept
 {
     constexpr auto kMaximumTimestamp =
         static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
@@ -28,7 +28,7 @@ namespace
         return std::nullopt;
     }
 
-    return PlatformTimestamp{std::chrono::nanoseconds{static_cast<std::int64_t>(timestamp)}};
+    return Timestamp{std::chrono::nanoseconds{static_cast<std::int64_t>(timestamp)}};
 }
 
 [[nodiscard]] std::optional<WindowId> ResolveWindowId(const SDL_WindowEvent& event,
@@ -715,7 +715,7 @@ struct OptionalUtf8Text final
 std::optional<PlatformEvent> TranslateSdlEvent(const SDL_Event& event,
                                                const EventTranslationContext& context)
 {
-    const std::optional<PlatformTimestamp> timestamp = TranslateTimestamp(event.common.timestamp);
+    const std::optional<Timestamp> timestamp = TranslateTimestamp(event.common.timestamp);
     if (!timestamp.has_value())
     {
         return std::nullopt;
