@@ -34,9 +34,10 @@ struct Draw2DPacketTestFactory final
         packet.m_drawRecords = std::move(drawRecords);
         packet.m_stats =
             InspectDraw2DPacketCounts(
-                Draw2DPacketCounts{static_cast<std::uint64_t>(packet.m_vertices.size()),
-                                   static_cast<std::uint64_t>(packet.m_indices.size()),
-                                   static_cast<std::uint64_t>(packet.m_drawRecords.size())})
+                Draw2DPacketCounts{
+                    .vertexCount = static_cast<std::uint64_t>(packet.m_vertices.size()),
+                    .indexCount = static_cast<std::uint64_t>(packet.m_indices.size()),
+                    .drawRecordCount = static_cast<std::uint64_t>(packet.m_drawRecords.size())})
                 .stats;
         return packet;
     }
@@ -132,8 +133,9 @@ struct ReferenceRect final
 {
     auto metrics = pond::ui::MakeUiTargetMetrics(
         pond::ui::UiTargetId{101U}, pond::ui::UiTargetRevision{103U},
-        pond::ui::UiMetricsRevision{107U}, pond::ui::LogicalSize{logicalWidth, logicalHeight},
-        pond::ui::FramebufferPixelSize{pixelWidth, pixelHeight});
+        pond::ui::UiMetricsRevision{107U},
+        pond::ui::LogicalSize{.width = logicalWidth, .height = logicalHeight},
+        pond::ui::FramebufferPixelSize{.width = pixelWidth, .height = pixelHeight});
     EXPECT_TRUE(metrics.HasValue()) << (metrics.HasValue() ? "" : metrics.GetError().GetMessage());
     return metrics.HasValue() ? *metrics : pond::ui::UiTargetMetrics{};
 }
@@ -162,14 +164,14 @@ struct ReferenceRect final
 
 [[nodiscard]] PaintListStats MakeExpectedStats(const RecorderModel& model) noexcept
 {
-    return PaintListStats{model.state,
-                          model.commandCount,
-                          model.fillRectangleCount,
-                          model.pushClipRectangleCount,
-                          model.popClipCount,
-                          model.payloadBytes,
-                          model.clipDepth,
-                          model.maxClipDepthObserved};
+    return PaintListStats{.state = model.state,
+                          .commandCount = model.commandCount,
+                          .fillRectangleCount = model.fillRectangleCount,
+                          .pushClipRectangleCount = model.pushClipRectangleCount,
+                          .popClipCount = model.popClipCount,
+                          .payloadBytes = model.payloadBytes,
+                          .clipDepth = model.clipDepth,
+                          .maxClipDepthObserved = model.maxClipDepthObserved};
 }
 
 void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderModel& model)
@@ -188,10 +190,10 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
 [[nodiscard]] ReferenceRect ToReferenceRect(pond::ui::LogicalRect rectangle, double scaleX,
                                             double scaleY) noexcept
 {
-    return ReferenceRect{static_cast<double>(pond::ui::GetLeft(rectangle)) * scaleX,
-                         static_cast<double>(pond::ui::GetTop(rectangle)) * scaleY,
-                         static_cast<double>(pond::ui::GetRight(rectangle)) * scaleX,
-                         static_cast<double>(pond::ui::GetBottom(rectangle)) * scaleY};
+    return ReferenceRect{.left = static_cast<double>(pond::ui::GetLeft(rectangle)) * scaleX,
+                         .top = static_cast<double>(pond::ui::GetTop(rectangle)) * scaleY,
+                         .right = static_cast<double>(pond::ui::GetRight(rectangle)) * scaleX,
+                         .bottom = static_cast<double>(pond::ui::GetBottom(rectangle)) * scaleY};
 }
 
 [[nodiscard]] bool IsEmpty(ReferenceRect rectangle) noexcept
@@ -201,21 +203,23 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
 
 [[nodiscard]] ReferenceRect Intersect(ReferenceRect lhs, ReferenceRect rhs) noexcept
 {
-    const ReferenceRect result{std::max(lhs.left, rhs.left), std::max(lhs.top, rhs.top),
-                               std::min(lhs.right, rhs.right), std::min(lhs.bottom, rhs.bottom)};
+    const ReferenceRect result{.left = std::max(lhs.left, rhs.left),
+                               .top = std::max(lhs.top, rhs.top),
+                               .right = std::min(lhs.right, rhs.right),
+                               .bottom = std::min(lhs.bottom, rhs.bottom)};
     return IsEmpty(result) ? ReferenceRect{} : result;
 }
 
-[[nodiscard]] draw2d::Draw2DScissor MakeReferenceScissor(
-    ReferenceRect clip, draw2d::Draw2DPixelExtent extent) noexcept
+[[nodiscard]] draw2d::Draw2DScissor MakeReferenceScissor(ReferenceRect clip,
+                                                         draw2d::Draw2DPixelExtent extent) noexcept
 {
     const double maxX = static_cast<double>(extent.width);
     const double maxY = static_cast<double>(extent.height);
     return draw2d::Draw2DScissor{
-        static_cast<std::uint32_t>(std::clamp(std::floor(clip.left), 0.0, maxX)),
-        static_cast<std::uint32_t>(std::clamp(std::floor(clip.top), 0.0, maxY)),
-        static_cast<std::uint32_t>(std::clamp(std::ceil(clip.right), 0.0, maxX)),
-        static_cast<std::uint32_t>(std::clamp(std::ceil(clip.bottom), 0.0, maxY))};
+        .left = static_cast<std::uint32_t>(std::clamp(std::floor(clip.left), 0.0, maxX)),
+        .top = static_cast<std::uint32_t>(std::clamp(std::floor(clip.top), 0.0, maxY)),
+        .right = static_cast<std::uint32_t>(std::clamp(std::ceil(clip.right), 0.0, maxX)),
+        .bottom = static_cast<std::uint32_t>(std::clamp(std::ceil(clip.bottom), 0.0, maxY))};
 }
 
 [[nodiscard]] SealedPaintList Seal(PaintRecorder& recorder)
@@ -229,10 +233,10 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
     draw2d::Draw2DPackedLinearPremultipliedRgba8 color =
         draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U))
 {
-    return {{0.0F, 0.0F, color},
-            {8.0F, 0.0F, color},
-            {8.0F, 8.0F, color},
-            {0.0F, 8.0F, color}};
+    return {{.x = 0.0F, .y = 0.0F, .color = color},
+            {.x = 8.0F, .y = 0.0F, .color = color},
+            {.x = 8.0F, .y = 8.0F, .color = color},
+            {.x = 0.0F, .y = 8.0F, .color = color}};
 }
 
 [[nodiscard]] std::vector<draw2d::Draw2DIndex> MakePacketIndices()
@@ -241,9 +245,11 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
 }
 
 [[nodiscard]] draw2d::Draw2DDrawRecord MakePacketDraw(
-    draw2d::Draw2DScissor scissor = draw2d::Draw2DScissor{0U, 0U, 64U, 48U}) noexcept
+    draw2d::Draw2DScissor scissor = draw2d::Draw2DScissor{
+        .left = 0U, .top = 0U, .right = 64U, .bottom = 48U}) noexcept
 {
-    return draw2d::Draw2DDrawRecord{0U, 6U, 0, scissor};
+    return draw2d::Draw2DDrawRecord{
+        .firstIndex = 0U, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
 }
 
 void ExpectPacketsEqual(const draw2d::Draw2DPacket& lhs, const draw2d::Draw2DPacket& rhs)
@@ -280,8 +286,7 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             const std::uint32_t stepSeed = rng.state;
             const auto before = recorder.GetSnapshot();
             const std::uint32_t operation = rng.NextBounded(6U);
-            SCOPED_TRACE("step=" + std::to_string(step) +
-                         " step_seed=" + std::to_string(stepSeed) +
+            SCOPED_TRACE("step=" + std::to_string(step) + " step_seed=" + std::to_string(stepSeed) +
                          " operation=" + std::to_string(operation));
 
             if (operation == 0U)
@@ -294,8 +299,7 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
                              << " color=" << color.red << ',' << color.green << ',' << color.blue
                              << ',' << color.alpha);
                 const auto result = recorder.FillRectangle(rectangle, color);
-                const bool expected =
-                    CanAppendCommand(model, limits, sizeof(FillRectangleCommand));
+                const bool expected = CanAppendCommand(model, limits, sizeof(FillRectangleCommand));
                 EXPECT_EQ(result.HasValue(), expected);
                 if (expected)
                 {
@@ -332,9 +336,9 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             else if (operation == 2U)
             {
                 const auto result = recorder.PopClip();
-                const bool expected =
-                    model.state == PaintRecorderState::Open && model.clipDepth > 1U &&
-                    model.commandCount + 1U <= limits.maxPaintCommandCount;
+                const bool expected = model.state == PaintRecorderState::Open &&
+                                      model.clipDepth > 1U &&
+                                      model.commandCount + 1U <= limits.maxPaintCommandCount;
                 EXPECT_EQ(result.HasValue(), expected);
                 if (expected)
                 {
@@ -372,8 +376,9 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             else
             {
                 const auto result = recorder.FillRectangle(
-                    pond::ui::LogicalRect{pond::ui::LogicalPoint{0.0F, 0.0F},
-                                          pond::ui::LogicalSize{-1.0F, 1.0F}},
+                    pond::ui::LogicalRect{
+                        .origin = pond::ui::LogicalPoint{.x = 0.0F, .y = 0.0F},
+                        .size = pond::ui::LogicalSize{.width = -1.0F, .height = 1.0F}},
                     MakeFuzzColor(rng));
                 EXPECT_FALSE(result.HasValue());
                 EXPECT_EQ(recorder.GetSnapshot(), before);
@@ -414,16 +419,17 @@ TEST(UiCpuPacketVerificationTests, FractionalClipAndScalePropertyMatchesIndepend
         const float rectBottom = rng.NextFloat(logicalHeight * 0.55F, logicalHeight + 1.0F);
         const auto rect = MakeRect(rectLeft, rectTop, rectRight, rectBottom);
         SCOPED_TRACE(::testing::Message()
-                     << "metrics=" << logicalWidth << 'x' << logicalHeight << " -> "
-                     << pixelWidth << 'x' << pixelHeight << " clip=" << clipLeft << ','
-                     << clipTop << ',' << clipRight << ',' << clipBottom << " rect=" << rectLeft
-                     << ',' << rectTop << ',' << rectRight << ',' << rectBottom);
+                     << "metrics=" << logicalWidth << 'x' << logicalHeight << " -> " << pixelWidth
+                     << 'x' << pixelHeight << " clip=" << clipLeft << ',' << clipTop << ','
+                     << clipRight << ',' << clipBottom << " rect=" << rectLeft << ',' << rectTop
+                     << ',' << rectRight << ',' << rectBottom);
 
-        const draw2d::Draw2DPixelExtent extent{pixelWidth, pixelHeight};
-        const ReferenceRect root{0.0, 0.0, static_cast<double>(pixelWidth),
-                                 static_cast<double>(pixelHeight)};
-        const ReferenceRect effectiveClip =
-            Intersect(root, ToReferenceRect(clip, scaleX, scaleY));
+        const draw2d::Draw2DPixelExtent extent{.width = pixelWidth, .height = pixelHeight};
+        const ReferenceRect root{.left = 0.0,
+                                 .top = 0.0,
+                                 .right = static_cast<double>(pixelWidth),
+                                 .bottom = static_cast<double>(pixelHeight)};
+        const ReferenceRect effectiveClip = Intersect(root, ToReferenceRect(clip, scaleX, scaleY));
         const ReferenceRect expectedGeometry =
             Intersect(ToReferenceRect(rect, scaleX, scaleY), effectiveClip);
         ASSERT_FALSE(IsEmpty(expectedGeometry));
@@ -466,8 +472,7 @@ TEST(UiCpuPacketVerificationTests, CompilerOutputInvariantsAreDeterministicAcros
         {
             const std::uint32_t stepSeed = rng.state;
             const std::uint32_t operation = rng.NextBounded(5U);
-            SCOPED_TRACE("step=" + std::to_string(step) +
-                         " step_seed=" + std::to_string(stepSeed) +
+            SCOPED_TRACE("step=" + std::to_string(step) + " step_seed=" + std::to_string(stepSeed) +
                          " operation=" + std::to_string(operation));
             if (operation == 0U && openClips < 4U)
             {
@@ -530,9 +535,9 @@ TEST(UiCpuPacketVerificationTests, CompilerOutputInvariantsAreDeterministicAcros
 TEST(UiCpuPacketVerificationTests, HostilePacketMutationsProjectStableDiagnostics)
 {
     constexpr std::uint32_t kSeed{0xBAD0'1604U};
-    constexpr draw2d::Draw2DPixelExtent kExtent{64U, 48U};
-    const auto white = draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U,
-                                                                                  255U, 255U);
+    constexpr draw2d::Draw2DPixelExtent kExtent{.width = 64U, .height = 48U};
+    const auto white =
+        draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U);
 
     for (std::uint32_t caseIndex = 0U; caseIndex < 120U; ++caseIndex)
     {
@@ -611,46 +616,57 @@ TEST(UiCpuPacketVerificationTests, PacketValidationIssueNamesAreStableDiagnostic
     };
 
     constexpr std::array kCases{
-        NameCase{draw2d::Draw2DPacketValidationIssue::None, "none"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::InvalidLimits, "invalid_limits"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::InvalidExtent, "invalid_extent"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::SchemaFingerprintMismatch,
-                 "schema_fingerprint_mismatch"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::VertexByteOverflow,
-                 "vertex_byte_overflow"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::IndexByteOverflow, "index_byte_overflow"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::DrawRecordByteOverflow,
-                 "draw_record_byte_overflow"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::UploadByteOverflow,
-                 "upload_byte_overflow"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::PacketByteOverflow,
-                 "packet_byte_overflow"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::VertexCountUnrepresentable,
-                 "vertex_count_unrepresentable"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::IndexCountUnrepresentable,
-                 "index_count_unrepresentable"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::VertexCountLimit, "vertex_count_limit"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::IndexCountLimit, "index_count_limit"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::DrawRecordCountLimit,
-                 "draw_record_count_limit"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::PacketByteLimit, "packet_byte_limit"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::UploadByteLimit, "upload_byte_limit"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::NonCanonicalEmptyPacket,
-                 "non_canonical_empty_packet"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::NonFiniteVertex, "non_finite_vertex"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::InvalidPackedColor,
-                 "invalid_packed_color"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::IndexOutOfRange, "index_out_of_range"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::EmptyDrawRange, "empty_draw_range"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::NonTriangleDrawRange,
-                 "non_triangle_draw_range"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::DrawRangeOutOfRange,
-                 "draw_range_out_of_range"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::BaseVertexOutOfRange,
-                 "base_vertex_out_of_range"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::BaseVertexValidationIndexCountLimit,
-                 "base_vertex_validation_index_count_limit"},
-        NameCase{draw2d::Draw2DPacketValidationIssue::InvalidScissor, "invalid_scissor"}};
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::None, .name = "none"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidLimits,
+                 .name = "invalid_limits"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidExtent,
+                 .name = "invalid_extent"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::SchemaFingerprintMismatch,
+                 .name = "schema_fingerprint_mismatch"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexByteOverflow,
+                 .name = "vertex_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexByteOverflow,
+                 .name = "index_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRecordByteOverflow,
+                 .name = "draw_record_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::UploadByteOverflow,
+                 .name = "upload_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::PacketByteOverflow,
+                 .name = "packet_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexCountUnrepresentable,
+                 .name = "vertex_count_unrepresentable"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexCountUnrepresentable,
+                 .name = "index_count_unrepresentable"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexCountLimit,
+                 .name = "vertex_count_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexCountLimit,
+                 .name = "index_count_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRecordCountLimit,
+                 .name = "draw_record_count_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::PacketByteLimit,
+                 .name = "packet_byte_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::UploadByteLimit,
+                 .name = "upload_byte_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonCanonicalEmptyPacket,
+                 .name = "non_canonical_empty_packet"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonFiniteVertex,
+                 .name = "non_finite_vertex"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidPackedColor,
+                 .name = "invalid_packed_color"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexOutOfRange,
+                 .name = "index_out_of_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::EmptyDrawRange,
+                 .name = "empty_draw_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonTriangleDrawRange,
+                 .name = "non_triangle_draw_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRangeOutOfRange,
+                 .name = "draw_range_out_of_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::BaseVertexOutOfRange,
+                 .name = "base_vertex_out_of_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::BaseVertexValidationIndexCountLimit,
+                 .name = "base_vertex_validation_index_count_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidScissor,
+                 .name = "invalid_scissor"}};
 
     for (const NameCase& testCase : kCases)
     {

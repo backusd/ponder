@@ -13,9 +13,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
-#include <cstring>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <limits>
 #include <memory>
@@ -30,6 +30,7 @@
 #include <utility>
 #include <vector>
 
+#include "RenderLiveTestAccess.hpp"
 #include "VulkanBootstrap.hpp"
 #include "VulkanDiagnostics.hpp"
 
@@ -175,6 +176,7 @@ struct FakeVulkanState final
         pond::render::detail::GetVulkanWsiExtensionName(pond::render::detail::VulkanWsiKind::X11),
         pond::render::detail::GetVulkanWsiExtensionName(
             pond::render::detail::VulkanWsiKind::Wayland)};
+    std::vector<std::string> validationLayerExtensions;
     std::vector<std::string> layers;
     std::vector<std::string> lastEnabledExtensions;
     std::vector<std::string> lastEnabledLayers;
@@ -199,6 +201,8 @@ struct FakeVulkanState final
     VkSharingMode lastSwapchainSharingMode{VK_SHARING_MODE_EXCLUSIVE};
     std::uint32_t lastSwapchainMinImageCount{};
     std::vector<std::uint32_t> lastSwapchainQueueFamilyIndices{};
+    std::vector<VkPresentModeKHR> lastSwapchainAllowedPresentModes{};
+    bool swapchainPresentModesCreateInfoChained{};
     VkSwapchainKHR lastOldSwapchain{VK_NULL_HANDLE};
     std::uint32_t lastWaitForFencesFenceCount{};
     VkBool32 lastWaitForFencesWaitAll{};
@@ -420,7 +424,7 @@ void AddValidationSupport(FakeVulkanState& state)
 
 void AddValidationFeaturesSupport(FakeVulkanState& state)
 {
-    state.extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+    state.validationLayerExtensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
 }
 void AddSurfaceMaintenanceSupport(FakeVulkanState& state)
 {
@@ -535,8 +539,6 @@ void CopyStringToFixedArray(std::string_view source, char* destination,
                                                        std::uint32_t* propertyCount,
                                                        VkExtensionProperties* properties) noexcept
 {
-    (void)layerName;
-
     ++g_fakeVulkanState->enumerateExtensionsCalls;
     if (propertyCount == nullptr)
     {
@@ -548,9 +550,14 @@ void CopyStringToFixedArray(std::string_view source, char* destination,
         return g_fakeVulkanState->enumerateExtensionsResult;
     }
 
+    const std::vector<std::string>& extensions =
+        layerName != nullptr && std::string_view{layerName} == "VK_LAYER_KHRONOS_validation"
+            ? g_fakeVulkanState->validationLayerExtensions
+            : g_fakeVulkanState->extensions;
+
     if (properties == nullptr)
     {
-        *propertyCount = static_cast<std::uint32_t>(g_fakeVulkanState->extensions.size());
+        *propertyCount = static_cast<std::uint32_t>(extensions.size());
         return VK_SUCCESS;
     }
     if (g_fakeVulkanState->enumerateExtensionsReadResult != VK_SUCCESS)
@@ -559,11 +566,11 @@ void CopyStringToFixedArray(std::string_view source, char* destination,
     }
 
     const std::uint32_t writableCount =
-        std::min(*propertyCount, static_cast<std::uint32_t>(g_fakeVulkanState->extensions.size()));
+        std::min(*propertyCount, static_cast<std::uint32_t>(extensions.size()));
     for (std::uint32_t index = 0; index < writableCount; ++index)
     {
         properties[index] = {};
-        const std::string& extension = g_fakeVulkanState->extensions[index];
+        const std::string& extension = extensions[index];
         const std::size_t copyCount =
             std::min(extension.size(), sizeof(properties[index].extensionName) - 1U);
         std::copy_n(extension.data(), copyCount, properties[index].extensionName);
@@ -571,7 +578,7 @@ void CopyStringToFixedArray(std::string_view source, char* destination,
     }
 
     *propertyCount = writableCount;
-    return writableCount == g_fakeVulkanState->extensions.size() ? VK_SUCCESS : VK_INCOMPLETE;
+    return writableCount == extensions.size() ? VK_SUCCESS : VK_INCOMPLETE;
 }
 
 [[nodiscard]] VkResult FakeEnumerateInstanceLayers(std::uint32_t* propertyCount,
@@ -1402,6 +1409,8 @@ void FakeDestroyAllocator(void* allocator) noexcept
     (void)device;
     (void)allocator;
     ++g_fakeVulkanState->createSwapchainCalls;
+    g_fakeVulkanState->swapchainPresentModesCreateInfoChained = false;
+    g_fakeVulkanState->lastSwapchainAllowedPresentModes.clear();
     if (createInfo != nullptr)
     {
         g_fakeVulkanState->lastSwapchainExtent = createInfo->imageExtent;
@@ -1419,6 +1428,24 @@ void FakeDestroyAllocator(void* allocator) noexcept
             const std::uint32_t* begin = createInfo->pQueueFamilyIndices;
             const std::uint32_t* end = begin + createInfo->queueFamilyIndexCount;
             g_fakeVulkanState->lastSwapchainQueueFamilyIndices.assign(begin, end);
+        }
+
+        const auto* next = reinterpret_cast<const VkBaseInStructure*>(createInfo->pNext);
+        while (next != nullptr)
+        {
+            if (next->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR)
+            {
+                const auto* presentModes =
+                    reinterpret_cast<const VkSwapchainPresentModesCreateInfoKHR*>(next);
+                g_fakeVulkanState->swapchainPresentModesCreateInfoChained = true;
+                if (presentModes->pPresentModes != nullptr)
+                {
+                    const VkPresentModeKHR* begin = presentModes->pPresentModes;
+                    const VkPresentModeKHR* end = begin + presentModes->presentModeCount;
+                    g_fakeVulkanState->lastSwapchainAllowedPresentModes.assign(begin, end);
+                }
+            }
+            next = next->pNext;
         }
     }
 
@@ -3074,15 +3101,13 @@ void ExpectUiError(const pond::core::Result<ValueType>& result, pond::ui::UiErro
 
 [[nodiscard]] pond::ui::experimental::RectanglePaint MakeExperimentalRectangle(
     float left = 10.0F, float top = 20.0F, float right = 110.0F, float bottom = 70.0F,
-    pond::ui::SrgbStraightAlphaColor color = {.red = 0.5F,
-                                              .green = 1.0F,
-                                              .blue = 0.0F,
-                                              .alpha = 0.5F}) noexcept
+    pond::ui::SrgbStraightAlphaColor color = {
+        .red = 0.5F, .green = 1.0F, .blue = 0.0F, .alpha = 0.5F}) noexcept
 {
     return pond::ui::experimental::RectanglePaint{
         .rectangle = pond::ui::LogicalRect{.origin = pond::ui::LogicalPoint{.x = left, .y = top},
-                                          .size = pond::ui::LogicalSize{.width = right - left,
-                                                                       .height = bottom - top}},
+                                           .size = pond::ui::LogicalSize{.width = right - left,
+                                                                         .height = bottom - top}},
         .color = color};
 }
 
@@ -3527,6 +3552,11 @@ TEST(RenderVulkanBootstrapTests, ValidationReportCapturesBoundedUnexpectedMessag
               pond::render::RenderValidationMessageSeverity::Warning);
     EXPECT_EQ(report.capturedMessages.front().messageIdNumber, 1);
     EXPECT_EQ(report.capturedMessages.front().GetMessageIdName(), "BOUNDED-VALIDATION-ID");
+    EXPECT_EQ(report.capturedMessages.front().GetOperationContext(), "vulkan-runtime-validation");
+    EXPECT_EQ(report.capturedMessages.front().GetMessageText(),
+              "synthetic bounded validation warning");
+    EXPECT_FALSE(report.capturedMessages.front().operationContextTruncated);
+    EXPECT_FALSE(report.capturedMessages.front().messageTextTruncated);
     EXPECT_EQ(
         report.capturedMessages[report.capturedMessageCount - 1U].messageIdNumber,
         static_cast<std::int32_t>(pond::render::RenderValidationReport::kMaximumCapturedMessages));
@@ -3661,6 +3691,7 @@ TEST(RenderVulkanBootstrapTests, FeatureModesEnableExpectedValidationFeatures)
             ContainsString(state.lastEnabledExtensions, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME));
         EXPECT_TRUE(
             ContainsValidationFeature(state.lastEnabledValidationFeatures, featureCase.feature));
+        EXPECT_EQ(state.enumerateExtensionsCalls, 4U);
     }
 }
 
@@ -3739,6 +3770,43 @@ TEST(RenderVulkanBootstrapTests, DebugCallbackRoutesWarningWithContextAndMarksFa
     EXPECT_NE(g_capturedLogEntries[0].GetMessage().find("unit-object"), std::string_view::npos);
     EXPECT_NE(g_capturedLogEntries[0].GetMessage().find("synthetic warning"),
               std::string_view::npos);
+}
+
+TEST(RenderVulkanBootstrapTests, DebugCallbackRetainsBoundedOperationAndMessageText)
+{
+    const pond::core::ScopedMinimumLogLevel minimumLogLevel{pond::core::LogLevel::Fatal};
+    pond::render::detail::VulkanDebugMessengerContext context;
+    const std::string operation(
+        pond::render::RenderValidationMessage::kMaximumOperationContextLength + 17U, 'o');
+    const std::string message(
+        pond::render::RenderValidationMessage::kMaximumMessageTextLength + 23U, 'm');
+    context.currentOperation = operation;
+
+    VkDebugUtilsMessengerCallbackDataEXT callbackData{};
+    callbackData.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CALLBACK_DATA_EXT;
+    callbackData.pMessageIdName = "BOUNDED-CONTEXT";
+    callbackData.messageIdNumber = 789;
+    callbackData.pMessage = message.c_str();
+
+    EXPECT_EQ(pond::render::detail::HandleVulkanDebugUtilsMessage(
+                  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+                  VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT, &callbackData, &context),
+              VK_FALSE);
+
+    ASSERT_EQ(context.reservedMessageCount.load(std::memory_order_acquire), 1U);
+    ASSERT_TRUE(context.capturedMessages.front().ready.load(std::memory_order_acquire));
+    const pond::render::RenderValidationMessage& captured =
+        context.capturedMessages.front().message;
+    EXPECT_EQ(captured.GetMessageIdName(), "BOUNDED-CONTEXT");
+    EXPECT_EQ(captured.messageIdNumber, 789);
+    EXPECT_EQ(captured.GetOperationContext(),
+              std::string_view{operation}.substr(
+                  0U, pond::render::RenderValidationMessage::kMaximumOperationContextLength));
+    EXPECT_EQ(captured.GetMessageText(),
+              std::string_view{message}.substr(
+                  0U, pond::render::RenderValidationMessage::kMaximumMessageTextLength));
+    EXPECT_TRUE(captured.operationContextTruncated);
+    EXPECT_TRUE(captured.messageTextTruncated);
 }
 
 TEST(RenderVulkanBootstrapTests, ExactDebugMessageFilterSuppressesFailureAndLog)
@@ -4979,6 +5047,8 @@ TEST(RenderVulkanBootstrapTests, CreatesSwapchainResourcesAndRollsBackPartialFai
         EXPECT_EQ(state.lastSwapchainFormat, VK_FORMAT_B8G8R8A8_SRGB);
         EXPECT_EQ(state.lastSwapchainColorSpace, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
         EXPECT_EQ(state.lastSwapchainCompositeAlpha, VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
+        EXPECT_FALSE(state.swapchainPresentModesCreateInfoChained);
+        EXPECT_TRUE(state.lastSwapchainAllowedPresentModes.empty());
         EXPECT_EQ(swapchain.GetFramebufferCount(), state.swapchainImageCount);
         ASSERT_TRUE(pond::render::IsValid(swapchain.GetConfig().presentation));
     }
@@ -5165,8 +5235,8 @@ TEST(RenderVulkanBootstrapTests, Draw2DLayerValidatesDeviceExtentThreadAndClearO
     const auto firstFinish = firstFrame.FinishAndPresent();
     ASSERT_TRUE(firstFinish) << firstFinish.GetError().GetMessage();
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
-                                        "endCommandBuffer", "submit", "present"}));
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass", "endCommandBuffer",
+                                        "submit", "present"}));
 
     state.frameTrace.clear();
     auto secondFrameResult = second->owners.target.AcquireFrame();
@@ -5178,8 +5248,8 @@ TEST(RenderVulkanBootstrapTests, Draw2DLayerValidatesDeviceExtentThreadAndClearO
     const auto secondFinish = secondFrame.FinishAndPresent();
     ASSERT_TRUE(secondFinish) << secondFinish.GetError().GetMessage();
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
-                                        "endCommandBuffer", "submit", "present"}));
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass", "endCommandBuffer",
+                                        "submit", "present"}));
 }
 
 TEST(RenderVulkanBootstrapTests, Draw2DLayerServesTwoTargetsSequentiallyWithoutAmbientTargetState)
@@ -5228,17 +5298,20 @@ TEST(RenderVulkanBootstrapTests, Draw2DLayerServesTwoTargetsSequentiallyWithoutA
     ASSERT_TRUE(layer.Record(secondFrame, secondPacket));
     ASSERT_TRUE(secondFrame.FinishAndPresent());
 
-    EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire",         "clear",         "draw2d",
-                                        "bindPipeline",    "setViewport",   "bindVertexBuffers",
-                                        "bindIndexBuffer", "pushConstants", "setScissor",
-                                        "drawIndexed",     "endRenderPass", "endCommandBuffer",
-                                        "submit",          "present",
-                                        "acquire",         "clear",         "draw2d",
-                                        "bindPipeline",    "setViewport",   "bindVertexBuffers",
-                                        "bindIndexBuffer", "pushConstants", "setScissor",
-                                        "drawIndexed",     "endRenderPass", "endCommandBuffer",
-                                        "submit",          "present"}));
+    EXPECT_EQ(state.frameTrace, (std::vector<std::string>{"acquire",         "clear",
+                                                          "draw2d",          "bindPipeline",
+                                                          "setViewport",     "bindVertexBuffers",
+                                                          "bindIndexBuffer", "pushConstants",
+                                                          "setScissor",      "drawIndexed",
+                                                          "endRenderPass",   "endCommandBuffer",
+                                                          "submit",          "present",
+                                                          "acquire",         "clear",
+                                                          "draw2d",          "bindPipeline",
+                                                          "setViewport",     "bindVertexBuffers",
+                                                          "bindIndexBuffer", "pushConstants",
+                                                          "setScissor",      "drawIndexed",
+                                                          "endRenderPass",   "endCommandBuffer",
+                                                          "submit",          "present"}));
     ASSERT_EQ(state.vertexBufferBindCount, 2U);
     EXPECT_NE(state.vertexBuffers[0], state.vertexBuffers[1]);
     const FakeUploadAllocation* firstUpload =
@@ -5284,9 +5357,9 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsThroughPaintA
     ASSERT_TRUE(outcome) << outcome.GetError().GetMessage();
     EXPECT_EQ(outcome.GetValue(), RectangleRecordOutcome::Recorded);
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline",
-                                        "setViewport", "bindVertexBuffers", "bindIndexBuffer",
-                                        "pushConstants", "setScissor", "drawIndexed"}));
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline", "setViewport",
+                                        "bindVertexBuffers", "bindIndexBuffer", "pushConstants",
+                                        "setScissor", "drawIndexed"}));
     EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
     EXPECT_EQ(state.createBufferCalls, 1U);
     EXPECT_EQ(state.mapMemoryCalls, 1U);
@@ -5297,8 +5370,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsThroughPaintA
     EXPECT_EQ(state.lastScissor.extent.height, 600U);
     EXPECT_EQ(state.lastIndexBuffer, state.lastVertexBuffer);
 
-    const auto packedColor = pond::ui::PackLinearPremultipliedRgba8(
-        pond::ui::ToLinearPremultiplied(rectangle.color));
+    const auto packedColor =
+        pond::ui::PackLinearPremultipliedRgba8(pond::ui::ToLinearPremultiplied(rectangle.color));
     ASSERT_TRUE(packedColor) << packedColor.GetError().GetMessage();
     const pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8 expectedColor =
         pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(
@@ -5311,8 +5384,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsThroughPaintA
         pond::render::draw2d::Draw2DVertex{.x = 10.0F, .y = 70.0F, .color = expectedColor}};
     constexpr std::array<pond::render::draw2d::Draw2DIndex, 6U> kExpectedIndices{0U, 1U, 2U,
                                                                                  0U, 2U, 3U};
-    const FakeUploadAllocation* upload = FindFakeUploadAllocationByBuffer(
-        state, state.lastVertexBuffer);
+    const FakeUploadAllocation* upload =
+        FindFakeUploadAllocationByBuffer(state, state.lastVertexBuffer);
     ASSERT_NE(upload, nullptr);
     ExpectUploadedBytes(*upload, state.lastVertexOffset,
                         std::as_bytes(std::span{expectedVertices}));
@@ -5340,15 +5413,12 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsOrderedBatchI
     RectangleRenderer renderer = std::move(rendererResult).GetValue();
 
     const std::array rectangles{
-        MakeExperimentalRectangle(
-            10.0F, 20.0F, 210.0F, 180.0F,
-            {.red = 0.1F, .green = 0.4F, .blue = 0.9F, .alpha = 1.0F}),
-        MakeExperimentalRectangle(
-            60.0F, 50.0F, 250.0F, 220.0F,
-            {.red = 1.0F, .green = 0.2F, .blue = 0.1F, .alpha = 0.5F}),
-        MakeExperimentalRectangle(
-            120.0F, 80.0F, 280.0F, 240.0F,
-            {.red = 0.1F, .green = 0.9F, .blue = 0.5F, .alpha = 0.625F})};
+        MakeExperimentalRectangle(10.0F, 20.0F, 210.0F, 180.0F,
+                                  {.red = 0.1F, .green = 0.4F, .blue = 0.9F, .alpha = 1.0F}),
+        MakeExperimentalRectangle(60.0F, 50.0F, 250.0F, 220.0F,
+                                  {.red = 1.0F, .green = 0.2F, .blue = 0.1F, .alpha = 0.5F}),
+        MakeExperimentalRectangle(120.0F, 80.0F, 280.0F, 240.0F,
+                                  {.red = 0.1F, .green = 0.9F, .blue = 0.5F, .alpha = 0.625F})};
 
     state.frameTrace.clear();
     auto frameResult = fixture->owners.target.AcquireFrame();
@@ -5362,9 +5432,9 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsOrderedBatchI
     ASSERT_TRUE(outcome) << outcome.GetError().GetMessage();
     EXPECT_EQ(outcome.GetValue(), RectangleRecordOutcome::Recorded);
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline",
-                                        "setViewport", "bindVertexBuffers", "bindIndexBuffer",
-                                        "pushConstants", "setScissor", "drawIndexed"}));
+              (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline", "setViewport",
+                                        "bindVertexBuffers", "bindIndexBuffer", "pushConstants",
+                                        "setScissor", "drawIndexed"}));
     EXPECT_EQ(state.cmdDrawIndexedCalls, 1U);
     EXPECT_EQ(state.lastDrawIndexCount, 18U);
 
@@ -5374,9 +5444,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsOrderedBatchI
         const auto packed = pond::ui::PackLinearPremultipliedRgba8(
             pond::ui::ToLinearPremultiplied(rectangles[index].color));
         ASSERT_TRUE(packed) << packed.GetError().GetMessage();
-        colors[index] =
-            pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(
-                packed->GetRed(), packed->GetGreen(), packed->GetBlue(), packed->GetAlpha());
+        colors[index] = pond::render::draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(
+            packed->GetRed(), packed->GetGreen(), packed->GetBlue(), packed->GetAlpha());
     }
 
     const std::array expectedVertices{
@@ -5407,7 +5476,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRecordsOrderedBatchI
     EXPECT_EQ(finish.GetValue().status, pond::render::FrameStatus::Presented);
 }
 
-TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeSkipsEmptyBeforeGpuWorkAndCanRecordLater)
+TEST(RenderVulkanBootstrapTests,
+     ExperimentalRectangleFacadeSkipsEmptyBeforeGpuWorkAndCanRecordLater)
 {
     using pond::ui::experimental::RectangleRecordOutcome;
     using pond::ui::experimental::RectangleRenderer;
@@ -5455,7 +5525,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeSkipsEmptyBeforeGpuW
     ASSERT_TRUE(frame.FinishAndPresent());
 }
 
-TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeSkipsSuspendedBeforeCompilationAndGpuWork)
+TEST(RenderVulkanBootstrapTests,
+     ExperimentalRectangleFacadeSkipsSuspendedBeforeCompilationAndGpuWork)
 {
     using pond::ui::experimental::RectangleRecordOutcome;
     using pond::ui::experimental::RectangleRenderer;
@@ -5482,7 +5553,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeSkipsSuspendedBefore
     auto metrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(suspended);
     ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
 
-    const auto skipped = renderer.Record(suspended, metrics.GetValue(), MakeExperimentalRectangle());
+    const auto skipped =
+        renderer.Record(suspended, metrics.GetValue(), MakeExperimentalRectangle());
     ASSERT_TRUE(skipped) << skipped.GetError().GetMessage();
     EXPECT_EQ(skipped.GetValue(), RectangleRecordOutcome::SkippedSuspended);
     EXPECT_TRUE(state.frameTrace.empty());
@@ -5537,9 +5609,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeValidatesAndRecovers
                   pond::ui::UiErrorCode::InvalidPaintValue);
 
     ASSERT_TRUE(firstFrame.Clear());
-    const std::array invalidBatch{
-        MakeExperimentalRectangle(),
-        MakeExperimentalRectangle(10.0F, 20.0F, 5.0F, 70.0F)};
+    const std::array invalidBatch{MakeExperimentalRectangle(),
+                                  MakeExperimentalRectangle(10.0F, 20.0F, 5.0F, 70.0F)};
     ExpectUiError(renderer.Record(firstFrame, metrics.GetValue(), invalidBatch),
                   pond::ui::UiErrorCode::InvalidPaintValue);
 
@@ -5554,15 +5625,14 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeValidatesAndRecovers
     const auto firstFinish = firstFrame.FinishAndPresent();
     ASSERT_TRUE(firstFinish) << firstFinish.GetError().GetMessage();
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
-                                        "endCommandBuffer", "submit", "present"}));
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass", "endCommandBuffer",
+                                        "submit", "present"}));
 
     state.frameTrace.clear();
     auto wrongDeviceFrameResult = second->owners.target.AcquireFrame();
     ASSERT_TRUE(wrongDeviceFrameResult) << wrongDeviceFrameResult.GetError().GetMessage();
     pond::render::RenderFrame wrongDeviceFrame = std::move(wrongDeviceFrameResult).GetValue();
-    auto wrongDeviceMetrics =
-        pond::ui::experimental::MakeUiTargetMetricsForFrame(wrongDeviceFrame);
+    auto wrongDeviceMetrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(wrongDeviceFrame);
     ASSERT_TRUE(wrongDeviceMetrics) << wrongDeviceMetrics.GetError().GetMessage();
     ASSERT_TRUE(wrongDeviceFrame.Clear());
     ExpectRenderError(renderer.Record(wrongDeviceFrame, wrongDeviceMetrics.GetValue(),
@@ -5571,8 +5641,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeValidatesAndRecovers
     const auto wrongDeviceFinish = wrongDeviceFrame.FinishAndPresent();
     ASSERT_TRUE(wrongDeviceFinish) << wrongDeviceFinish.GetError().GetMessage();
     EXPECT_EQ(state.frameTrace,
-              (std::vector<std::string>{"acquire", "clear", "endRenderPass",
-                                        "endCommandBuffer", "submit", "present"}));
+              (std::vector<std::string>{"acquire", "clear", "endRenderPass", "endCommandBuffer",
+                                        "submit", "present"}));
 
     state.frameTrace.clear();
     auto recoveredFrameResult = first->owners.target.AcquireFrame();
@@ -5581,8 +5651,8 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeValidatesAndRecovers
     auto recoveredMetrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(recoveredFrame);
     ASSERT_TRUE(recoveredMetrics) << recoveredMetrics.GetError().GetMessage();
     ASSERT_TRUE(recoveredFrame.Clear());
-    const auto recovered = renderer.Record(recoveredFrame, recoveredMetrics.GetValue(),
-                                           MakeExperimentalRectangle());
+    const auto recovered =
+        renderer.Record(recoveredFrame, recoveredMetrics.GetValue(), MakeExperimentalRectangle());
     ASSERT_TRUE(recovered) << recovered.GetError().GetMessage();
     EXPECT_EQ(recovered.GetValue(), RectangleRecordOutcome::Recorded);
     ASSERT_TRUE(recoveredFrame.FinishAndPresent());
@@ -5641,8 +5711,9 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRejectsWrongFramePha
     ASSERT_TRUE(metrics) << metrics.GetError().GetMessage();
 
     pond::render::RenderFrame defaultFrame;
-    ExpectRenderError(renderer.Record(defaultFrame, metrics.GetValue(), MakeExperimentalRectangle()),
-                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(
+        renderer.Record(defaultFrame, metrics.GetValue(), MakeExperimentalRectangle()),
+        pond::render::RenderErrorCode::InvalidState);
     ExpectRenderError(renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle()),
                       pond::render::RenderErrorCode::InvalidState);
 
@@ -5662,8 +5733,9 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRejectsWrongFramePha
     auto movedMetrics = pond::ui::experimental::MakeUiTargetMetricsForFrame(movedFrom);
     ASSERT_TRUE(movedMetrics) << movedMetrics.GetError().GetMessage();
     pond::render::RenderFrame activeFrame = std::move(movedFrom);
-    ExpectRenderError(renderer.Record(movedFrom, movedMetrics.GetValue(), MakeExperimentalRectangle()),
-                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(
+        renderer.Record(movedFrom, movedMetrics.GetValue(), MakeExperimentalRectangle()),
+        pond::render::RenderErrorCode::InvalidState);
     ASSERT_TRUE(activeFrame.Clear());
     const auto recovered =
         renderer.Record(activeFrame, movedMetrics.GetValue(), MakeExperimentalRectangle());
@@ -5690,11 +5762,10 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRetriesRecoverableGp
         const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
         std::unique_ptr<FakePublicLifecycle> fixture = CreateFakePublicLifecycle(dispatch);
         ASSERT_NE(fixture, nullptr);
-        auto rendererResult = pond::ui::experimental::RectangleRenderer::Create(
-            fixture->owners.device);
+        auto rendererResult =
+            pond::ui::experimental::RectangleRenderer::Create(fixture->owners.device);
         ASSERT_TRUE(rendererResult) << rendererResult.GetError().GetMessage();
-        pond::ui::experimental::RectangleRenderer renderer =
-            std::move(rendererResult).GetValue();
+        pond::ui::experimental::RectangleRenderer renderer = std::move(rendererResult).GetValue();
 
         auto frameResult = fixture->owners.target.AcquireFrame();
         ASSERT_TRUE(frameResult) << frameResult.GetError().GetMessage();
@@ -5719,8 +5790,7 @@ TEST(RenderVulkanBootstrapTests, ExperimentalRectangleFacadeRetriesRecoverableGp
         const auto recovered =
             renderer.Record(frame, metrics.GetValue(), MakeExperimentalRectangle());
         ASSERT_TRUE(recovered) << recovered.GetError().GetMessage();
-        EXPECT_EQ(recovered.GetValue(),
-                  pond::ui::experimental::RectangleRecordOutcome::Recorded);
+        EXPECT_EQ(recovered.GetValue(), pond::ui::experimental::RectangleRecordOutcome::Recorded);
         ASSERT_TRUE(frame.FinishAndPresent());
     }
 }
@@ -5760,8 +5830,8 @@ TEST(RenderVulkanBootstrapTests,
 
         for (std::uint32_t index = 0U; index < 2U; ++index)
         {
-            ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(renderer, firstTarget,
-                                                                 MakeExperimentalRectangle()));
+            ASSERT_NO_FATAL_FAILURE(
+                PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
             ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(
                 renderer, secondTarget, MakeExperimentalRectangle(12.0F, 14.0F, 72.0F, 44.0F)));
         }
@@ -5779,23 +5849,62 @@ TEST(RenderVulkanBootstrapTests,
         EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
         EXPECT_EQ(state.queueWaitIdleCalls, 0U);
 
+        const pond::render::detail::Draw2DDeviceLiveStats warmDeviceStats =
+            pond::render::detail::RenderLiveTestAccess::GetDraw2DDeviceStats(
+                fixture->owners.device);
+        EXPECT_EQ(warmDeviceStats.pipelineCreationCount, 1U);
+        EXPECT_EQ(warmDeviceStats.pipelineReuseCount, 3U);
+        EXPECT_EQ(warmDeviceStats.pipelineReplacementCount, 0U);
+        EXPECT_EQ(warmDeviceStats.activeLayerCount, 1U);
+        EXPECT_TRUE(warmDeviceStats.hasPipeline);
+
+        const auto expectWarmUploadArena =
+            [](const pond::render::detail::Draw2DTargetLiveStats& stats)
+        {
+            EXPECT_TRUE(stats.hasUploadArena);
+            EXPECT_GT(stats.currentCapacityBytes, 0U);
+            EXPECT_EQ(stats.reservedBytes, 0U);
+            EXPECT_GT(stats.uploadedBytes, 0U);
+            EXPECT_GE(stats.highWaterReservedBytes, stats.uploadedBytes);
+            EXPECT_GT(stats.allocationCount, 0U);
+            EXPECT_EQ(stats.growthCount, 0U);
+            EXPECT_EQ(stats.generationCount, stats.allocationCount);
+            EXPECT_EQ(stats.retirementCount, 0U);
+            EXPECT_GT(stats.slotCount, 0U);
+            EXPECT_EQ(stats.idleSlotCount + stats.reservedSlotCount + stats.submittedSlotCount,
+                      stats.slotCount);
+            EXPECT_EQ(stats.reservedSlotCount, 0U);
+            EXPECT_GT(stats.submittedSlotCount, 0U);
+        };
+        const pond::render::detail::Draw2DTargetLiveStats warmFirstTargetStats =
+            pond::render::detail::RenderLiveTestAccess::GetDraw2DTargetStats(firstTarget);
+        const pond::render::detail::Draw2DTargetLiveStats warmSecondTargetStats =
+            pond::render::detail::RenderLiveTestAccess::GetDraw2DTargetStats(secondTarget);
+        expectWarmUploadArena(warmFirstTargetStats);
+        expectWarmUploadArena(warmSecondTargetStats);
+        EXPECT_EQ(warmFirstTargetStats, warmSecondTargetStats);
+
         state.frameTrace.clear();
-        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(renderer, firstTarget,
-                                                             MakeExperimentalRectangle()));
+        ASSERT_NO_FATAL_FAILURE(
+            PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
         ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(
             renderer, secondTarget, MakeExperimentalRectangle(12.0F, 14.0F, 72.0F, 44.0F)));
 
         EXPECT_EQ(state.frameTrace,
-                  (std::vector<std::string>{"acquire",         "clear",         "draw2d",
-                                            "bindPipeline",    "setViewport",   "bindVertexBuffers",
-                                            "bindIndexBuffer", "pushConstants", "setScissor",
-                                            "drawIndexed",     "endRenderPass",
-                                            "endCommandBuffer", "submit",        "present",
-                                            "acquire",         "clear",         "draw2d",
-                                            "bindPipeline",    "setViewport",   "bindVertexBuffers",
-                                            "bindIndexBuffer", "pushConstants", "setScissor",
-                                            "drawIndexed",     "endRenderPass",
-                                            "endCommandBuffer", "submit",        "present"}));
+                  (std::vector<std::string>{"acquire",         "clear",
+                                            "draw2d",          "bindPipeline",
+                                            "setViewport",     "bindVertexBuffers",
+                                            "bindIndexBuffer", "pushConstants",
+                                            "setScissor",      "drawIndexed",
+                                            "endRenderPass",   "endCommandBuffer",
+                                            "submit",          "present",
+                                            "acquire",         "clear",
+                                            "draw2d",          "bindPipeline",
+                                            "setViewport",     "bindVertexBuffers",
+                                            "bindIndexBuffer", "pushConstants",
+                                            "setScissor",      "drawIndexed",
+                                            "endRenderPass",   "endCommandBuffer",
+                                            "submit",          "present"}));
         EXPECT_EQ(state.createShaderModuleCalls, shaderModuleCalls);
         EXPECT_EQ(state.createPipelineLayoutCalls, pipelineLayoutCalls);
         EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCalls);
@@ -5808,6 +5917,20 @@ TEST(RenderVulkanBootstrapTests,
         EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
         EXPECT_EQ(state.queueWaitIdleCalls, 0U);
 
+        const pond::render::detail::Draw2DDeviceLiveStats steadyDeviceStats =
+            pond::render::detail::RenderLiveTestAccess::GetDraw2DDeviceStats(
+                fixture->owners.device);
+        EXPECT_EQ(steadyDeviceStats.pipelineCreationCount, warmDeviceStats.pipelineCreationCount);
+        EXPECT_EQ(steadyDeviceStats.pipelineReuseCount, warmDeviceStats.pipelineReuseCount + 2U);
+        EXPECT_EQ(steadyDeviceStats.pipelineReplacementCount,
+                  warmDeviceStats.pipelineReplacementCount);
+        EXPECT_EQ(steadyDeviceStats.activeLayerCount, warmDeviceStats.activeLayerCount);
+        EXPECT_EQ(steadyDeviceStats.hasPipeline, warmDeviceStats.hasPipeline);
+        EXPECT_EQ(pond::render::detail::RenderLiveTestAccess::GetDraw2DTargetStats(firstTarget),
+                  warmFirstTargetStats);
+        EXPECT_EQ(pond::render::detail::RenderLiveTestAccess::GetDraw2DTargetStats(secondTarget),
+                  warmSecondTargetStats);
+
         fixture->additionalTarget.reset();
         EXPECT_EQ(fixture->owners.device.GetActiveTargetCount(), 1U);
         const FakeLiveResourceCounts afterSecondTargetDestroy = GetLiveResourceCounts(state);
@@ -5818,14 +5941,13 @@ TEST(RenderVulkanBootstrapTests,
         state.frameTrace.clear();
         const std::uint32_t submitCallsAfterDestroy = state.queueSubmitCalls;
         const std::uint32_t presentCallsAfterDestroy = state.queuePresentCalls;
-        ASSERT_NO_FATAL_FAILURE(PresentExperimentalRectangle(renderer, firstTarget,
-                                                             MakeExperimentalRectangle()));
+        ASSERT_NO_FATAL_FAILURE(
+            PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
         EXPECT_EQ(state.frameTrace,
-                  (std::vector<std::string>{"acquire", "clear", "draw2d", "bindPipeline",
-                                            "setViewport", "bindVertexBuffers", "bindIndexBuffer",
-                                            "pushConstants", "setScissor", "drawIndexed",
-                                            "endRenderPass", "endCommandBuffer", "submit",
-                                            "present"}));
+                  (std::vector<std::string>{
+                      "acquire", "clear", "draw2d", "bindPipeline", "setViewport",
+                      "bindVertexBuffers", "bindIndexBuffer", "pushConstants", "setScissor",
+                      "drawIndexed", "endRenderPass", "endCommandBuffer", "submit", "present"}));
         EXPECT_EQ(state.createShaderModuleCalls, shaderModuleCalls);
         EXPECT_EQ(state.createPipelineLayoutCalls, pipelineLayoutCalls);
         EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCalls);
@@ -5837,6 +5959,20 @@ TEST(RenderVulkanBootstrapTests,
         EXPECT_EQ(GetLiveResourceCounts(state), afterSecondTargetDestroy);
         EXPECT_EQ(state.deviceWaitIdleCalls, 0U);
         EXPECT_EQ(state.queueWaitIdleCalls, 0U);
+
+        const pond::render::detail::Draw2DDeviceLiveStats survivingTargetDeviceStats =
+            pond::render::detail::RenderLiveTestAccess::GetDraw2DDeviceStats(
+                fixture->owners.device);
+        EXPECT_EQ(survivingTargetDeviceStats.pipelineCreationCount,
+                  steadyDeviceStats.pipelineCreationCount);
+        EXPECT_EQ(survivingTargetDeviceStats.pipelineReuseCount,
+                  steadyDeviceStats.pipelineReuseCount + 1U);
+        EXPECT_EQ(survivingTargetDeviceStats.pipelineReplacementCount,
+                  steadyDeviceStats.pipelineReplacementCount);
+        EXPECT_EQ(survivingTargetDeviceStats.activeLayerCount, 1U);
+        EXPECT_TRUE(survivingTargetDeviceStats.hasPipeline);
+        EXPECT_EQ(pond::render::detail::RenderLiveTestAccess::GetDraw2DTargetStats(firstTarget),
+                  warmFirstTargetStats);
     }
 
     ExpectNoLiveResources(state);
@@ -5963,8 +6099,7 @@ TEST(RenderVulkanBootstrapTests,
         EXPECT_FLOAT_EQ(state.lastViewport.height, 600.0F);
 
         state.physicalDevices[0].surfaceFormats = {VkSurfaceFormatKHR{
-            .format = VK_FORMAT_R8G8B8A8_SRGB,
-            .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}};
+            .format = VK_FORMAT_R8G8B8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}};
         const std::uint32_t pipelineCallsBeforeRestore = state.createGraphicsPipelinesCalls;
         ASSERT_TRUE(secondTarget.UpdateTargetSnapshot(pond::render::RenderTargetSnapshot{
             pond::platform::WindowId{84U}, pond::platform::PixelSize{720U, 512U},
@@ -5983,8 +6118,7 @@ TEST(RenderVulkanBootstrapTests,
             state.createGraphicsPipelinesCalls;
         ASSERT_NO_FATAL_FAILURE(
             PresentExperimentalRectangle(renderer, firstTarget, MakeExperimentalRectangle()));
-        EXPECT_EQ(state.createGraphicsPipelinesCalls,
-                  pipelineCallsBeforeCompatibilitySwitch + 1U);
+        EXPECT_EQ(state.createGraphicsPipelinesCalls, pipelineCallsBeforeCompatibilitySwitch + 1U);
         EXPECT_EQ(firstTarget.GetSwapchainGeneration(), firstGeneration);
         EXPECT_EQ(firstTarget.GetDiagnostics().framesPresented, firstFrames + 3U);
         EXPECT_FLOAT_EQ(state.lastViewport.width, 800.0F);
@@ -7568,8 +7702,7 @@ TEST(RenderVulkanBootstrapTests, Draw2DUploadArenaCopiesAlignedCoherentStreamsAn
         EXPECT_EQ(state.createBufferCalls, 1U);
         EXPECT_EQ(state.mapMemoryCalls, 1U);
         EXPECT_EQ(state.flushAllocationCalls, 0U);
-        EXPECT_EQ(state.resourceTrace,
-                  (std::vector<std::string>{"createBuffer", "mapMemory"}));
+        EXPECT_EQ(state.resourceTrace, (std::vector<std::string>{"createBuffer", "mapMemory"}));
         EXPECT_EQ(state.lastBufferAllocationRequest.requiredMemoryProperties,
                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
         EXPECT_EQ(state.lastBufferAllocationRequest.preferredMemoryProperties,
@@ -7622,9 +7755,8 @@ TEST(RenderVulkanBootstrapTests, Draw2DUploadArenaCopiesAlignedCoherentStreamsAn
     EXPECT_EQ(state.unmapMemoryCalls, 1U);
     EXPECT_EQ(state.destroyBufferCalls, 1U);
     EXPECT_TRUE(state.uploadAllocations.empty());
-    EXPECT_EQ(state.resourceTrace,
-              (std::vector<std::string>{"createBuffer", "mapMemory", "unmapMemory",
-                                        "destroyBuffer"}));
+    EXPECT_EQ(state.resourceTrace, (std::vector<std::string>{"createBuffer", "mapMemory",
+                                                             "unmapMemory", "destroyBuffer"}));
 }
 
 TEST(RenderVulkanBootstrapTests,
@@ -8376,12 +8508,18 @@ TEST(RenderVulkanBootstrapTests, Draw2DPipelineCacheHitsExtentReuseAndReplacesIn
     EXPECT_FALSE(first.GetValue().replaced);
     const VkPipeline firstPipeline = first.GetValue().pipeline;
     EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+    EXPECT_EQ(cache.GetStats(),
+              (pond::render::detail::VulkanDraw2DPipelineCacheStats{
+                  .creationCount = 1U, .reuseCount = 0U, .replacementCount = 0U}));
 
     auto second = cache.GetOrCreate(dispatch, owners->device, owners->swapchain, key);
     ASSERT_TRUE(second) << second.GetError().GetMessage();
     EXPECT_TRUE(second.GetValue().cacheHit);
     EXPECT_EQ(second.GetValue().pipeline, firstPipeline);
     EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+    EXPECT_EQ(cache.GetStats(),
+              (pond::render::detail::VulkanDraw2DPipelineCacheStats{
+                  .creationCount = 1U, .reuseCount = 1U, .replacementCount = 0U}));
 
     pond::render::detail::VulkanSwapchainConfig resizedConfig = owners->swapchain.GetConfig();
     resizedConfig.extent.width += 100U;
@@ -8392,6 +8530,9 @@ TEST(RenderVulkanBootstrapTests, Draw2DPipelineCacheHitsExtentReuseAndReplacesIn
     EXPECT_TRUE(resized.GetValue().cacheHit);
     EXPECT_EQ(resized.GetValue().pipeline, firstPipeline);
     EXPECT_EQ(state.createGraphicsPipelinesCalls, 1U);
+    EXPECT_EQ(cache.GetStats(),
+              (pond::render::detail::VulkanDraw2DPipelineCacheStats{
+                  .creationCount = 1U, .reuseCount = 2U, .replacementCount = 0U}));
 
     pond::render::detail::VulkanSwapchainConfig incompatibleConfig = owners->swapchain.GetConfig();
     incompatibleConfig.format = VK_FORMAT_R8G8B8A8_SRGB;
@@ -8412,6 +8553,9 @@ TEST(RenderVulkanBootstrapTests, Draw2DPipelineCacheHitsExtentReuseAndReplacesIn
     EXPECT_FALSE(failed);
     EXPECT_EQ(cache.GetCurrentPipeline().GetPipeline(), firstPipeline);
     EXPECT_EQ(state.destroyPipelineCalls, 0U);
+    EXPECT_EQ(cache.GetStats(),
+              (pond::render::detail::VulkanDraw2DPipelineCacheStats{
+                  .creationCount = 1U, .reuseCount = 2U, .replacementCount = 0U}));
 
     state.createGraphicsPipelinesResult = VK_SUCCESS;
     auto replacement =
@@ -8422,6 +8566,13 @@ TEST(RenderVulkanBootstrapTests, Draw2DPipelineCacheHitsExtentReuseAndReplacesIn
     EXPECT_NE(replacement.GetValue().pipeline, firstPipeline);
     EXPECT_EQ(state.createGraphicsPipelinesCalls, 3U);
     EXPECT_EQ(state.destroyPipelineCalls, 1U);
+    const pond::render::detail::VulkanDraw2DPipelineCacheStats finalStats = cache.GetStats();
+    EXPECT_EQ(finalStats, (pond::render::detail::VulkanDraw2DPipelineCacheStats{
+                              .creationCount = 2U, .reuseCount = 2U, .replacementCount = 1U}));
+
+    cache.Reset();
+    EXPECT_FALSE(cache.IsValid());
+    EXPECT_EQ(cache.GetStats(), finalStats);
 }
 
 TEST(RenderVulkanBootstrapTests, Draw2DPipelineCacheRejectsReuseAcrossDevices)
@@ -8601,8 +8752,7 @@ TEST(RenderVulkanBootstrapTests, MovesAndShutsDownDraw2DPipelineOwnerOnce)
         auto sourceResult = pond::render::detail::CreateVulkanDraw2DPipeline(
             dispatch, owners->device, owners->swapchain, key);
         ASSERT_TRUE(sourceResult) << sourceResult.GetError().GetMessage();
-        pond::render::detail::VulkanDraw2DPipelineOwner source =
-            std::move(sourceResult).GetValue();
+        pond::render::detail::VulkanDraw2DPipelineOwner source = std::move(sourceResult).GetValue();
         const VkPipeline pipelineHandle = source.GetPipeline();
         pond::render::detail::VulkanDraw2DPipelineOwner moved{std::move(source)};
         EXPECT_FALSE(source.IsValid());
@@ -9203,6 +9353,9 @@ TEST(RenderVulkanBootstrapTests, MaintenancePresentFencePollsIndependentlyFromGr
     const pond::render::detail::VulkanGlobalDispatch dispatch = MakeFakeDispatch(state);
     std::unique_ptr<FakeFrameTestOwners> owners = CreateFakeFrameTestOwners(dispatch);
     ASSERT_NE(owners, nullptr);
+    EXPECT_TRUE(state.swapchainPresentModesCreateInfoChained);
+    ASSERT_EQ(state.lastSwapchainAllowedPresentModes.size(), 1U);
+    EXPECT_EQ(state.lastSwapchainAllowedPresentModes.front(), state.lastSwapchainPresentMode);
 
     ASSERT_FALSE(state.debugObjectNames.empty());
     for (const std::string& objectName : state.debugObjectNames)

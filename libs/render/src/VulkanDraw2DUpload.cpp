@@ -16,7 +16,7 @@ namespace pond::render::detail
 {
 namespace
 {
-constexpr VkDeviceSize kInitialUploadCapacity{4U * 1024U};
+constexpr VkDeviceSize kInitialUploadCapacity{VkDeviceSize{4U} * VkDeviceSize{1024U}};
 constexpr VkDeviceSize kIndexAlignment{sizeof(std::uint32_t)};
 
 [[nodiscard]] core::Error MakeUploadError(
@@ -104,7 +104,10 @@ core::Result<VulkanDraw2DUploadLayout> ComputeVulkanDraw2DUploadLayout(
     }
 
     return core::Result<VulkanDraw2DUploadLayout>::FromValue(
-        VulkanDraw2DUploadLayout{vertexBytes, indexOffset, indexBytes, requiredCapacity});
+        VulkanDraw2DUploadLayout{.vertexBytes = vertexBytes,
+                                 .indexOffset = indexOffset,
+                                 .indexBytes = indexBytes,
+                                 .uploadBytes = requiredCapacity});
 }
 
 VulkanDraw2DUploadBufferOwner::VulkanDraw2DUploadBufferOwner() noexcept = default;
@@ -581,7 +584,9 @@ void VulkanDraw2DUploadArena::MarkSubmitted(std::uint32_t slotIndex) noexcept
 
 void VulkanDraw2DUploadArena::Abandon(std::uint32_t slotIndex) noexcept
 {
-    PONDER_VERIFY(m_allocator == nullptr || std::this_thread::get_id() == m_ownerThread,
+    const bool canAccessOnCurrentThread =
+        m_allocator == nullptr || std::this_thread::get_id() == m_ownerThread;
+    PONDER_VERIFY(canAccessOnCurrentThread,
                   "Draw2D upload abandonment must occur on the arena owner thread");
     if (slotIndex >= m_slots.size())
     {
@@ -598,7 +603,9 @@ void VulkanDraw2DUploadArena::Abandon(std::uint32_t slotIndex) noexcept
 
 void VulkanDraw2DUploadArena::Complete(std::uint32_t slotIndex) noexcept
 {
-    PONDER_VERIFY(m_allocator == nullptr || std::this_thread::get_id() == m_ownerThread,
+    const bool canAccessOnCurrentThread =
+        m_allocator == nullptr || std::this_thread::get_id() == m_ownerThread;
+    PONDER_VERIFY(canAccessOnCurrentThread,
                   "Draw2D upload completion must occur on the arena owner thread");
     if (slotIndex >= m_slots.size())
     {

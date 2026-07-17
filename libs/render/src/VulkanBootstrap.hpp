@@ -27,6 +27,9 @@ struct Draw2DDrawRecord;
 
 namespace pond::render::detail
 {
+struct Draw2DDeviceLiveStats;
+struct Draw2DTargetLiveStats;
+
 enum class VulkanWsiKind : std::uint8_t
 {
     Win32 = 0,
@@ -494,7 +497,7 @@ private:
 struct VulkanDeviceChildLifetime final
 {
     std::atomic_bool active{true};
-    std::atomic_uint32_t draw2DPipelineChildren{};
+    std::atomic_uint32_t draw2DPipelineChildren;
 };
 
 class VulkanDeviceOwner final
@@ -574,7 +577,17 @@ struct VulkanSwapchainConfig final
     bool usesSurfaceCurrentExtent{};
 
     [[nodiscard]] friend bool operator==(const VulkanSwapchainConfig& lhs,
-                                         const VulkanSwapchainConfig& rhs) = default;
+                                         const VulkanSwapchainConfig& rhs) noexcept
+    {
+        return lhs.presentation == rhs.presentation && lhs.windowId == rhs.windowId &&
+               lhs.format == rhs.format && lhs.colorSpace == rhs.colorSpace &&
+               lhs.extent.width == rhs.extent.width && lhs.extent.height == rhs.extent.height &&
+               lhs.compositeAlpha == rhs.compositeAlpha && lhs.preTransform == rhs.preTransform &&
+               lhs.presentMode == rhs.presentMode && lhs.imageCount == rhs.imageCount &&
+               lhs.sharingMode == rhs.sharingMode &&
+               lhs.sharingQueueFamilyIndices == rhs.sharingQueueFamilyIndices &&
+               lhs.usesSurfaceCurrentExtent == rhs.usesSurfaceCurrentExtent;
+    }
 };
 
 enum class VulkanSwapchainCreationOutcome : std::uint8_t
@@ -669,8 +682,16 @@ struct VulkanDraw2DCommandDraw final
     std::uint32_t indexCount{};
     std::int32_t baseVertex{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDraw2DCommandDraw& lhs, const VulkanDraw2DCommandDraw& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DCommandDraw& lhs,
+                                                   const VulkanDraw2DCommandDraw& rhs) noexcept
+    {
+        return lhs.scissor.offset.x == rhs.scissor.offset.x &&
+               lhs.scissor.offset.y == rhs.scissor.offset.y &&
+               lhs.scissor.extent.width == rhs.scissor.extent.width &&
+               lhs.scissor.extent.height == rhs.scissor.extent.height &&
+               lhs.firstIndex == rhs.firstIndex && lhs.indexCount == rhs.indexCount &&
+               lhs.baseVertex == rhs.baseVertex;
+    }
 };
 
 struct VulkanDraw2DPipelineCacheUpdate final
@@ -683,6 +704,17 @@ struct VulkanDraw2DPipelineCacheUpdate final
     [[nodiscard]] friend constexpr bool operator==(
         const VulkanDraw2DPipelineCacheUpdate& lhs,
         const VulkanDraw2DPipelineCacheUpdate& rhs) noexcept = default;
+};
+
+struct VulkanDraw2DPipelineCacheStats final
+{
+    std::uint64_t creationCount{};
+    std::uint64_t reuseCount{};
+    std::uint64_t replacementCount{};
+
+    [[nodiscard]] friend constexpr bool operator==(
+        const VulkanDraw2DPipelineCacheStats& lhs,
+        const VulkanDraw2DPipelineCacheStats& rhs) noexcept = default;
 };
 
 class VulkanDraw2DPipelineOwner final
@@ -745,6 +777,7 @@ public:
     [[nodiscard]] const VulkanDraw2DPipelineOwner& GetCurrentPipeline() const noexcept;
     [[nodiscard]] std::shared_ptr<const VulkanDraw2DPipelineOwner> AcquireCurrentPipeline()
         const noexcept;
+    [[nodiscard]] VulkanDraw2DPipelineCacheStats GetStats() const noexcept;
     [[nodiscard]] core::Result<VulkanDraw2DPipelineCacheUpdate> GetOrCreate(
         const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
         const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key);
@@ -754,6 +787,7 @@ public:
 private:
     VkDevice m_device{VK_NULL_HANDLE};
     std::shared_ptr<VulkanDraw2DPipelineOwner> m_pipeline;
+    VulkanDraw2DPipelineCacheStats m_stats{};
 };
 
 enum class VulkanDraw2DUploadSlotState : std::uint8_t
@@ -896,7 +930,7 @@ public:
 private:
     struct Slot final
     {
-        VulkanDraw2DUploadBufferOwner buffer{};
+        VulkanDraw2DUploadBufferOwner buffer;
         VulkanDraw2DUploadSlotState state{VulkanDraw2DUploadSlotState::Idle};
         VkDeviceSize reservedBytes{};
     };
@@ -917,7 +951,7 @@ private:
     void* m_allocator{};
     VkDeviceSize m_nonCoherentAtomSize{1U};
     VkDeviceSize m_maximumUploadBytes{};
-    std::vector<Slot> m_slots{};
+    std::vector<Slot> m_slots;
     VulkanDraw2DUploadStats m_stats{};
     std::thread::id m_ownerThread{};
 };
@@ -944,11 +978,13 @@ struct VulkanCompletedSubmissionSlots final
     std::array<std::uint32_t, QueuedFrameLatency::kMaximumFrames> values{};
     std::uint32_t count{};
 
+    // NOLINTNEXTLINE(readability-identifier-naming) -- Required by range-based iteration.
     [[nodiscard]] constexpr const std::uint32_t* begin() const noexcept
     {
         return values.data();
     }
 
+    // NOLINTNEXTLINE(readability-identifier-naming) -- Required by range-based iteration.
     [[nodiscard]] constexpr const std::uint32_t* end() const noexcept
     {
         return values.data() + count;
@@ -1004,11 +1040,11 @@ private:
 
     VkDevice m_device{VK_NULL_HANDLE};
     VkCommandPool m_commandPool{VK_NULL_HANDLE};
-    std::vector<VulkanFrameSlotResources> m_slots{};
+    std::vector<VulkanFrameSlotResources> m_slots;
     std::vector<VkSemaphore> m_renderFinishedSemaphores{};
     VulkanCompletedSubmissionSlots m_completedSubmissionSlots{};
     VulkanDraw2DUploadArena m_draw2DUploadArena{};
-    std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> m_draw2DSubmissionPipelines{};
+    std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> m_draw2DSubmissionPipelines;
     bool m_poisoned{};
     VulkanGlobalDispatch::DestroyCommandPoolFn m_destroyCommandPool{};
     VulkanGlobalDispatch::DestroySemaphoreFn m_destroySemaphore{};
@@ -1147,6 +1183,10 @@ public:
     static void FailNextFrameStateAllocation() noexcept;
     static void FailNextRetirementAllocation() noexcept;
     [[nodiscard]] static std::uint32_t GetBootstrapTargetCount(const RenderDevice& device) noexcept;
+    [[nodiscard]] static Draw2DDeviceLiveStats GetDraw2DDeviceStats(
+        const RenderDevice& device) noexcept;
+    [[nodiscard]] static Draw2DTargetLiveStats GetDraw2DTargetStats(
+        const RenderTarget& target) noexcept;
     [[nodiscard]] static core::VoidResult DrainOrphanedPresentationResources(RenderDevice& device);
     [[nodiscard]] static core::VoidResult WaitPresentationQueueIdle(RenderDevice& device);
     [[nodiscard]] static core::Result<RenderTarget> CreateTarget(

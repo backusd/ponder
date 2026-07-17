@@ -73,8 +73,9 @@ public:
     /// preflight failures do not consume the frame's 2D stage, so the caller may retry or finish it
     /// clear-only.
     /// Device loss remains terminal according to the render-device contract.
-    [[nodiscard]] core::Result<RectangleRecordOutcome> Record(
-        render::RenderFrame& frame, const UiTargetMetrics& metrics, RectanglePaint rectangle);
+    [[nodiscard]] core::Result<RectangleRecordOutcome> Record(render::RenderFrame& frame,
+                                                              const UiTargetMetrics& metrics,
+                                                              RectanglePaint rectangle);
 
     /// Records an ordered rectangle batch into one active-frame 2D stage.
     ///

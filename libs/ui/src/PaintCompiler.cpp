@@ -81,9 +81,10 @@ template <typename Value>
 [[nodiscard]] FractionalPixelRect Intersect(FractionalPixelRect lhs,
                                             FractionalPixelRect rhs) noexcept
 {
-    const FractionalPixelRect intersection{std::max(lhs.left, rhs.left), std::max(lhs.top, rhs.top),
-                                           std::min(lhs.right, rhs.right),
-                                           std::min(lhs.bottom, rhs.bottom)};
+    const FractionalPixelRect intersection{.left = std::max(lhs.left, rhs.left),
+                                           .top = std::max(lhs.top, rhs.top),
+                                           .right = std::min(lhs.right, rhs.right),
+                                           .bottom = std::min(lhs.bottom, rhs.bottom)};
     if (IsEmpty(intersection))
     {
         return FractionalPixelRect{};
@@ -94,10 +95,11 @@ template <typename Value>
 [[nodiscard]] core::Result<FractionalPixelRect> Transform(LogicalRect rectangle, double scaleX,
                                                           double scaleY)
 {
-    const FractionalPixelRect transformed{static_cast<double>(GetLeft(rectangle)) * scaleX,
-                                          static_cast<double>(GetTop(rectangle)) * scaleY,
-                                          static_cast<double>(GetRight(rectangle)) * scaleX,
-                                          static_cast<double>(GetBottom(rectangle)) * scaleY};
+    const FractionalPixelRect transformed{
+        .left = static_cast<double>(GetLeft(rectangle)) * scaleX,
+        .top = static_cast<double>(GetTop(rectangle)) * scaleY,
+        .right = static_cast<double>(GetRight(rectangle)) * scaleX,
+        .bottom = static_cast<double>(GetBottom(rectangle)) * scaleY};
     if (!std::isfinite(transformed.left) || !std::isfinite(transformed.top) ||
         !std::isfinite(transformed.right) || !std::isfinite(transformed.bottom))
     {
@@ -122,8 +124,10 @@ template <typename Value>
     const double top = std::clamp(std::floor(clip.top), 0.0, maximumY);
     const double right = std::clamp(std::ceil(clip.right), 0.0, maximumX);
     const double bottom = std::clamp(std::ceil(clip.bottom), 0.0, maximumY);
-    return Draw2DScissor{static_cast<std::uint32_t>(left), static_cast<std::uint32_t>(top),
-                         static_cast<std::uint32_t>(right), static_cast<std::uint32_t>(bottom)};
+    return Draw2DScissor{.left = static_cast<std::uint32_t>(left),
+                         .top = static_cast<std::uint32_t>(top),
+                         .right = static_cast<std::uint32_t>(right),
+                         .bottom = static_cast<std::uint32_t>(bottom)};
 }
 
 [[nodiscard]] bool IsSameScissor(Draw2DScissor lhs, Draw2DScissor rhs) noexcept
@@ -280,8 +284,10 @@ struct PassSummary final
     progress = PassSummary{};
     PassSummary& summary = progress;
     clipStack.clear();
-    clipStack.push_back(FractionalPixelRect{0.0, 0.0, static_cast<double>(extent.width),
-                                            static_cast<double>(extent.height)});
+    clipStack.push_back(FractionalPixelRect{.left = 0.0,
+                                            .top = 0.0,
+                                            .right = static_cast<double>(extent.width),
+                                            .bottom = static_cast<double>(extent.height)});
 
     std::optional<Draw2DDrawRecord> pendingDraw;
     const auto flushPending = [&]() -> core::VoidResult
@@ -396,8 +402,10 @@ struct PassSummary final
 
         const std::uint32_t vertexBase = static_cast<std::uint32_t>(vertexBaseWide);
         const std::array<Draw2DVertex, 4U> vertices{
-            Draw2DVertex{left, top, packetColor}, Draw2DVertex{right, top, packetColor},
-            Draw2DVertex{right, bottom, packetColor}, Draw2DVertex{left, bottom, packetColor}};
+            Draw2DVertex{.x = left, .y = top, .color = packetColor},
+            Draw2DVertex{.x = right, .y = top, .color = packetColor},
+            Draw2DVertex{.x = right, .y = bottom, .color = packetColor},
+            Draw2DVertex{.x = left, .y = bottom, .color = packetColor}};
         const std::array<Draw2DIndex, 6U> indices{vertexBase, vertexBase + 1U, vertexBase + 2U,
                                                   vertexBase, vertexBase + 2U, vertexBase + 3U};
 
@@ -440,13 +448,15 @@ struct PassSummary final
             {
                 return core::Result<PassSummary>::FromError(std::move(flushed).GetError());
             }
-            pendingDraw = Draw2DDrawRecord{firstIndex, 6U, 0, scissor};
+            pendingDraw = Draw2DDrawRecord{
+                .firstIndex = firstIndex, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
             ++summary.drawRecordCount;
         }
 
         if (!summary.bounds.hasValue)
         {
-            summary.bounds = CompiledPixelBounds{left, top, right, bottom, true};
+            summary.bounds = CompiledPixelBounds{
+                .left = left, .top = top, .right = right, .bottom = bottom, .hasValue = true};
         }
         else
         {
@@ -539,8 +549,9 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
         inspection.issue = PaintCompileCountIssue::VertexCountOverflow;
         inspection.hasRejectedLimit = true;
         inspection.rejectedLimit = UiLimitExceeded{
-            UiHardLimitKind::CompiledVertexCount, std::numeric_limits<std::uint64_t>::max(),
-            std::min(uiLimits.maxCompiledVertexCount, packetLimits.maxVertexCount)};
+            .kind = UiHardLimitKind::CompiledVertexCount,
+            .requested = std::numeric_limits<std::uint64_t>::max(),
+            .allowed = std::min(uiLimits.maxCompiledVertexCount, packetLimits.maxVertexCount)};
         return inspection;
     }
     if (!CheckedMultiply(visibleRectangleCount, 6U, inspection.counts.indexCount))
@@ -548,16 +559,19 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
         inspection.issue = PaintCompileCountIssue::IndexCountOverflow;
         inspection.hasRejectedLimit = true;
         inspection.rejectedLimit = UiLimitExceeded{
-            UiHardLimitKind::CompiledIndexCount, std::numeric_limits<std::uint64_t>::max(),
-            std::min(uiLimits.maxCompiledIndexCount, packetLimits.maxIndexCount)};
+            .kind = UiHardLimitKind::CompiledIndexCount,
+            .requested = std::numeric_limits<std::uint64_t>::max(),
+            .allowed = std::min(uiLimits.maxCompiledIndexCount, packetLimits.maxIndexCount)};
         return inspection;
     }
     inspection.counts.drawRecordCount = drawRecordCount;
 
     const Draw2DPacketLimits arithmeticLimits{
-        std::numeric_limits<std::uint64_t>::max(), std::numeric_limits<std::uint64_t>::max(),
-        std::numeric_limits<std::uint64_t>::max(), std::numeric_limits<std::uint64_t>::max(),
-        std::numeric_limits<std::uint64_t>::max()};
+        .maxVertexCount = std::numeric_limits<std::uint64_t>::max(),
+        .maxIndexCount = std::numeric_limits<std::uint64_t>::max(),
+        .maxDrawRecordCount = std::numeric_limits<std::uint64_t>::max(),
+        .maxPacketBytes = std::numeric_limits<std::uint64_t>::max(),
+        .maxUploadBytes = std::numeric_limits<std::uint64_t>::max()};
     const render::draw2d::Draw2DPacketValidation arithmetic =
         render::draw2d::InspectDraw2DPacketCounts(inspection.counts, arithmeticLimits);
     inspection.packetStats = arithmetic.stats;
@@ -566,11 +580,11 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
         inspection.issue = PaintCompileCountIssue::LimitExceeded;
         inspection.hasRejectedLimit = true;
         const UiHardLimitKind kind = MapPacketIssueToUiLimit(arithmetic.issue);
-        inspection.rejectedLimit =
-            UiLimitExceeded{kind,
-                            arithmetic.requested == 0U ? std::numeric_limits<std::uint64_t>::max()
-                                                       : arithmetic.requested,
-                            arithmetic.allowed};
+        inspection.rejectedLimit = UiLimitExceeded{
+            .kind = kind,
+            .requested = arithmetic.requested == 0U ? std::numeric_limits<std::uint64_t>::max()
+                                                    : arithmetic.requested,
+            .allowed = arithmetic.allowed};
         return inspection;
     }
 
@@ -578,7 +592,8 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
     {
         inspection.issue = PaintCompileCountIssue::LimitExceeded;
         inspection.hasRejectedLimit = true;
-        inspection.rejectedLimit = UiLimitExceeded{kind, requested, allowed};
+        inspection.rejectedLimit =
+            UiLimitExceeded{.kind = kind, .requested = requested, .allowed = allowed};
     };
 
     const std::uint64_t vertexLimit =
@@ -690,7 +705,8 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
             return true;
         }
         m_inspection.hasRejectedLimit = true;
-        m_inspection.rejectedLimit = UiLimitExceeded{kind, requested, allowed};
+        m_inspection.rejectedLimit =
+            UiLimitExceeded{.kind = kind, .requested = requested, .allowed = allowed};
         return false;
     };
     const std::uint64_t commandCount = static_cast<std::uint64_t>(paintList.GetCommands().size());
@@ -754,9 +770,10 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
     {
         m_inspection.hasRejectedLimit = true;
         m_inspection.rejectedLimit = UiLimitExceeded{
-            UiHardLimitKind::CompilerScratchBytes,
-            scratchBytes == 0U ? std::numeric_limits<std::uint64_t>::max() : scratchBytes,
-            m_limits.maxCompilerScratchBytes};
+            .kind = UiHardLimitKind::CompilerScratchBytes,
+            .requested =
+                scratchBytes == 0U ? std::numeric_limits<std::uint64_t>::max() : scratchBytes,
+            .allowed = m_limits.maxCompilerScratchBytes};
         return fail(PaintCompileStage::ScratchPreflight, UiErrorCode::LimitExceeded,
                     "UI paint compiler clip-stack scratch exceeds its hard limit.",
                     kNoRejectedPaintCommand);
@@ -781,7 +798,8 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
     }
     m_inspection.clipStackCapacity = static_cast<std::uint64_t>(m_clipStack.capacity());
 
-    const Draw2DPixelExtent packetExtent{framebufferSize.width, framebufferSize.height};
+    const Draw2DPixelExtent packetExtent{.width = framebufferSize.width,
+                                         .height = framebufferSize.height};
     PassSummary preflightProgress;
     const core::Result<PassSummary> preflight =
         RunCompilationPass(paintList, scaleX, scaleY, packetExtent, m_clipStack, m_limits,

@@ -7,7 +7,6 @@
 #include <string_view>
 #include <type_traits>
 
-
 namespace pond::ui::detail
 {
 core::Result<UiTargetMetrics> MakeUiTargetMetricsForFrame(
@@ -23,9 +22,10 @@ core::Result<UiTargetMetrics> MakeUiTargetMetricsForFrame(
     return MakeUiTargetMetrics(
         UiTargetId{frameMetrics.windowId.GetValue()}, UiTargetRevision{frameMetrics.targetRevision},
         UiMetricsRevision{frameMetrics.metricsRevision.GetValue()},
-        LogicalSize{static_cast<float>(frameMetrics.logicalSize.width),
-                    static_cast<float>(frameMetrics.logicalSize.height)},
-        FramebufferPixelSize{frameMetrics.pixelSize.width, frameMetrics.pixelSize.height});
+        LogicalSize{.width = static_cast<float>(frameMetrics.logicalSize.width),
+                    .height = static_cast<float>(frameMetrics.logicalSize.height)},
+        FramebufferPixelSize{.width = frameMetrics.pixelSize.width,
+                             .height = frameMetrics.pixelSize.height});
 }
 
 core::VoidResult ValidateUiTargetMetricsForFrame(

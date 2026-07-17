@@ -12,8 +12,7 @@
 int main()
 {
     static_assert(!std::is_copy_constructible_v<pond::ui::experimental::RectangleRenderer>);
-    static_assert(std::is_nothrow_move_constructible_v<
-                  pond::ui::experimental::RectangleRenderer>);
+    static_assert(std::is_nothrow_move_constructible_v<pond::ui::experimental::RectangleRenderer>);
 
     if (pond::core::GetBuildInfo().GetProjectName() != "ponder" ||
         pond::ui::GetLibraryName() != std::string_view{"ui"})
@@ -41,8 +40,7 @@ int main()
     }
 
     pond::render::RenderDevice emptyDevice;
-    const auto created =
-        pond::ui::experimental::RectangleRenderer::Create(emptyDevice);
+    const auto created = pond::ui::experimental::RectangleRenderer::Create(emptyDevice);
     if (created.HasValue() ||
         created.GetError().GetCode() !=
             pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidState))

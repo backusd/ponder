@@ -52,7 +52,7 @@ inline constexpr auto kNoWorkDelay = std::chrono::milliseconds{16};
 
 struct WindowEventBatch final
 {
-    platform::WindowId windowId{};
+    platform::WindowId windowId;
     bool snapshotRequested{};
     bool presentationEnvironmentChanged{};
     bool closeRequested{};
@@ -72,7 +72,6 @@ enum class FrameAction : std::uint8_t
     NoWork,
     RecoverSurface
 };
-
 
 [[nodiscard]] core::Result<render::RenderTargetSnapshot> CaptureWindowSnapshot(
     const platform::Window& window, std::uint64_t snapshotRevision,
@@ -225,13 +224,13 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
 
     render::RenderFrame frame = std::move(frameResult).GetValue();
     core::VoidResult clear = frame.Clear();
-    RETURN_ERROR_IF_FAILED_FN(
-        clear,
-        [&frame](const core::Error&)
-        {
-            // Releasing an unfinished frame explicitly abandons its acquired work safely.
-            frame = render::RenderFrame{};
-        });
+    RETURN_ERROR_IF_FAILED_FN(clear,
+                              [&frame](const core::Error&)
+                              {
+                                  // Releasing an unfinished frame explicitly abandons its acquired
+                                  // work safely.
+                                  frame = render::RenderFrame{};
+                              });
 
     auto presentResult = frame.FinishAndPresent();
     if (!presentResult && presentResult.GetError() == render::RenderErrorCode::SurfaceLost)
@@ -374,14 +373,8 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
                                                                 .targetSnapshot = initialSnapshot,
                                                                 .clearColor = kClearColor,
                                                             });
-    RETURN_ERROR_IF_FAILED_FN(
-        targetResult,
-        [&targetSurface, &device](const core::Error&)
-        {
-            // A failed target creation may leave the prepared surface unconsumed.
-            targetSurface = render::PreparedSurface{};
-            device = render::RenderDevice{};
-        });
+    // On failure, targetSurface's later declaration guarantees that it is retired before device.
+    RETURN_ERROR_IF_FAILED(targetResult);
     render::RenderTarget target = std::move(targetResult).GetValue();
 
     LOG_INFO_CATEGORY(kLogCategory, "renderer_ready adapter={} window={}",
@@ -426,11 +419,11 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
     {
         const platform::WindowDesc windowDesc{
             .title = "Ponder Render - Clear Window",
-            .logicalSize = {960, 640},
+            .logicalSize = {.width = 960, .height = 640},
             .visible = false,
             .resizable = true,
             .highPixelDensity = true,
-            .minimumLogicalSize = platform::LogicalSize{320, 240},
+            .minimumLogicalSize = platform::LogicalSize{.width = 320, .height = 240},
             .graphicsCompatibility = render::GetRequiredWindowGraphicsCompatibility(),
         };
         auto windowResult = runtime.CreateWindow(windowDesc);

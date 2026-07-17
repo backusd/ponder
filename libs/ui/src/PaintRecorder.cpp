@@ -149,14 +149,14 @@ PaintListStats SealedPaintList::GetStats() const noexcept
         }
     }
 
-    return PaintListStats{PaintRecorderState::Sealed,
-                          ToCount(m_commands.size()),
-                          ToCount(m_fillRectangles.size()),
-                          ToCount(m_pushClipRectangles.size()),
-                          popClipCount,
-                          m_payloadBytes,
-                          1U,
-                          m_maxClipDepthObserved};
+    return PaintListStats{.state = PaintRecorderState::Sealed,
+                          .commandCount = ToCount(m_commands.size()),
+                          .fillRectangleCount = ToCount(m_fillRectangles.size()),
+                          .pushClipRectangleCount = ToCount(m_pushClipRectangles.size()),
+                          .popClipCount = popClipCount,
+                          .payloadBytes = m_payloadBytes,
+                          .clipDepth = 1U,
+                          .maxClipDepthObserved = m_maxClipDepthObserved};
 }
 
 bool SealedPaintList::IsEmpty() const noexcept
@@ -241,10 +241,13 @@ core::VoidResult PaintRecorder::FillRectangle(LogicalRect rectangle, SrgbStraigh
     const PaintCommandIndex commandIndex = ToCount(m_commands.size());
     const std::uint64_t payloadIndex = ToCount(m_fillRectangles.size());
     const LinearPremultipliedColor semanticColor = ToLinearPremultiplied(color);
-    m_fillRectangles.push_back(FillRectangleCommand{rectangle, semanticColor, IsEmpty(rectangle),
-                                                    IsTransparent(semanticColor)});
-    m_commands.push_back(
-        PaintCommandRecord{commandIndex, PaintCommandKind::FillRectangle, payloadIndex});
+    m_fillRectangles.push_back(FillRectangleCommand{.rectangle = rectangle,
+                                                    .color = semanticColor,
+                                                    .isZeroArea = IsEmpty(rectangle),
+                                                    .isTransparent = IsTransparent(semanticColor)});
+    m_commands.push_back(PaintCommandRecord{.index = commandIndex,
+                                            .kind = PaintCommandKind::FillRectangle,
+                                            .payloadIndex = payloadIndex});
     m_payloadBytes = nextPayloadBytes;
     return core::VoidResult::Success();
 }
@@ -297,9 +300,11 @@ core::VoidResult PaintRecorder::PushClipRectangle(LogicalRect rectangle)
 
     const PaintCommandIndex commandIndex = ToCount(m_commands.size());
     const std::uint64_t payloadIndex = ToCount(m_pushClipRectangles.size());
-    m_pushClipRectangles.push_back(PushClipRectangleCommand{rectangle, IsEmpty(rectangle)});
-    m_commands.push_back(
-        PaintCommandRecord{commandIndex, PaintCommandKind::PushClipRectangle, payloadIndex});
+    m_pushClipRectangles.push_back(
+        PushClipRectangleCommand{.rectangle = rectangle, .isZeroArea = IsEmpty(rectangle)});
+    m_commands.push_back(PaintCommandRecord{.index = commandIndex,
+                                            .kind = PaintCommandKind::PushClipRectangle,
+                                            .payloadIndex = payloadIndex});
     m_payloadBytes = nextPayloadBytes;
     m_clipDepth = nextClipDepth;
     m_maxClipDepthObserved = std::max(m_maxClipDepthObserved, m_clipDepth);
@@ -338,8 +343,9 @@ core::VoidResult PaintRecorder::PopClip()
     }
 
     const PaintCommandIndex commandIndex = ToCount(m_commands.size());
-    m_commands.push_back(
-        PaintCommandRecord{commandIndex, PaintCommandKind::PopClip, kNoPaintPayloadIndex});
+    m_commands.push_back(PaintCommandRecord{.index = commandIndex,
+                                            .kind = PaintCommandKind::PopClip,
+                                            .payloadIndex = kNoPaintPayloadIndex});
     --m_clipDepth;
     return core::VoidResult::Success();
 }
@@ -379,21 +385,19 @@ core::VoidResult PaintRecorder::SealInto(SealedPaintList& reusableList)
     }
     catch (const std::bad_alloc&)
     {
-        return MakePaintFailure(
-            UiErrorCode::CompilationFailure,
-            "UI paint recorder could not allocate sealed paint list storage.");
+        return MakePaintFailure(UiErrorCode::CompilationFailure,
+                                "UI paint recorder could not allocate sealed paint list storage.");
     }
     catch (const std::length_error&)
     {
-        return MakePaintFailure(
-            UiErrorCode::CompilationFailure,
-            "UI sealed paint list exceeds the host container maximum.");
+        return MakePaintFailure(UiErrorCode::CompilationFailure,
+                                "UI sealed paint list exceeds the host container maximum.");
     }
 
     reusableList.m_commands.assign(m_commands.begin(), m_commands.end());
     reusableList.m_fillRectangles.assign(m_fillRectangles.begin(), m_fillRectangles.end());
     reusableList.m_pushClipRectangles.assign(m_pushClipRectangles.begin(),
-                                              m_pushClipRectangles.end());
+                                             m_pushClipRectangles.end());
     reusableList.m_payloadBytes = m_payloadBytes;
     reusableList.m_maxClipDepthObserved = m_maxClipDepthObserved;
     m_state = PaintRecorderState::Sealed;
@@ -428,9 +432,11 @@ bool PaintRecorder::IsSealed() const noexcept
 
 PaintRecorderSnapshot PaintRecorder::GetSnapshot() const noexcept
 {
-    return PaintRecorderSnapshot{MakeStats(), ToCount(m_commands.capacity()),
-                                 ToCount(m_fillRectangles.capacity()),
-                                 ToCount(m_pushClipRectangles.capacity())};
+    return PaintRecorderSnapshot{.stats = MakeStats(),
+                                 .commandCapacity = ToCount(m_commands.capacity()),
+                                 .fillRectangleCapacity = ToCount(m_fillRectangles.capacity()),
+                                 .pushClipRectangleCapacity =
+                                     ToCount(m_pushClipRectangles.capacity())};
 }
 
 UiHardLimits PaintRecorder::GetLimits() const noexcept
@@ -507,13 +513,13 @@ PaintListStats PaintRecorder::MakeStats() const noexcept
         }
     }
 
-    return PaintListStats{m_state,
-                          ToCount(m_commands.size()),
-                          ToCount(m_fillRectangles.size()),
-                          ToCount(m_pushClipRectangles.size()),
-                          popClipCount,
-                          m_payloadBytes,
-                          m_clipDepth,
-                          m_maxClipDepthObserved};
+    return PaintListStats{.state = m_state,
+                          .commandCount = ToCount(m_commands.size()),
+                          .fillRectangleCount = ToCount(m_fillRectangles.size()),
+                          .pushClipRectangleCount = ToCount(m_pushClipRectangles.size()),
+                          .popClipCount = popClipCount,
+                          .payloadBytes = m_payloadBytes,
+                          .clipDepth = m_clipDepth,
+                          .maxClipDepthObserved = m_maxClipDepthObserved};
 }
 } // namespace pond::ui::paint

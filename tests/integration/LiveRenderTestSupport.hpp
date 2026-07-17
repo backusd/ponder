@@ -7,6 +7,7 @@
 #include <ponder/render/Bootstrap.hpp>
 #include <ponder/render/RenderError.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -23,8 +24,46 @@
 #define PONDER_RENDER_REQUIRE_LIVE_TESTS 0
 #endif
 
+#ifndef PONDER_RENDER_LIVE_VALIDATION_MODE
+#define PONDER_RENDER_LIVE_VALIDATION_MODE "Default"
+#endif
+
 namespace pond::render::test
 {
+[[nodiscard]] constexpr RenderValidationMode GetLiveRenderValidationMode() noexcept
+{
+    constexpr std::string_view kMode{PONDER_RENDER_LIVE_VALIDATION_MODE};
+    if constexpr (kMode == "Disabled")
+    {
+        return RenderValidationMode::Disabled;
+    }
+    else if constexpr (kMode == "Standard")
+    {
+        return RenderValidationMode::Standard;
+    }
+    else if constexpr (kMode == "Synchronization")
+    {
+        return RenderValidationMode::Synchronization;
+    }
+    else if constexpr (kMode == "BestPractices")
+    {
+        return RenderValidationMode::BestPractices;
+    }
+    else if constexpr (kMode == "GpuAssisted")
+    {
+        return RenderValidationMode::GpuAssisted;
+    }
+    else
+    {
+        return RenderValidationMode::Default;
+    }
+}
+
+[[nodiscard]] constexpr RenderBootstrapDesc MakeLiveRenderBootstrapDesc() noexcept
+{
+    return RenderBootstrapDesc{.validationMode = GetLiveRenderValidationMode()};
+}
+
 enum class LivePrerequisiteOperation : std::uint8_t
 {
     PlatformRuntime = 0,
@@ -40,10 +79,11 @@ enum class MissingLivePrerequisite : std::uint8_t
 {
     Display = 0,
     VulkanLoader = 1,
-    InstanceLayerOrExtension = 2,
-    PresentationSurface = 3,
-    CompatibleAdapter = 4,
-    DeviceCapability = 5
+    VulkanVersion = 2,
+    InstanceLayerOrExtension = 3,
+    PresentationSurface = 4,
+    CompatibleAdapter = 5,
+    DeviceCapability = 6
 };
 
 [[nodiscard]] constexpr std::string_view GetMissingLivePrerequisiteName(
@@ -55,6 +95,8 @@ enum class MissingLivePrerequisite : std::uint8_t
         return "display";
     case MissingLivePrerequisite::VulkanLoader:
         return "Vulkan loader";
+    case MissingLivePrerequisite::VulkanVersion:
+        return "required Vulkan API version";
     case MissingLivePrerequisite::InstanceLayerOrExtension:
         return "required Vulkan instance layer or extension";
     case MissingLivePrerequisite::PresentationSurface:
@@ -68,15 +110,16 @@ enum class MissingLivePrerequisite : std::uint8_t
     return "unknown live prerequisite";
 }
 
-[[nodiscard]] inline std::optional<MissingLivePrerequisite> ClassifyMissingLivePrerequisite(
-    const core::Error& error, LivePrerequisiteOperation operation) noexcept
+[[nodiscard]] constexpr bool ContainsLivePrerequisiteText(std::string_view text,
+                                                          std::string_view expected) noexcept
 {
-#if PONDER_RENDER_REQUIRE_LIVE_TESTS != 0
-    (void)error;
-    (void)operation;
-    return std::nullopt;
-#else
-    const core::ErrorCode code = error.GetCode();
+    return text.find(expected) != std::string_view::npos;
+}
+
+[[nodiscard]] constexpr std::optional<MissingLivePrerequisite>
+ClassifyOptionalMissingLivePrerequisite(core::ErrorCode code, LivePrerequisiteOperation operation,
+                                        std::string_view message) noexcept
+{
     if ((operation == LivePrerequisiteOperation::PlatformRuntime ||
          operation == LivePrerequisiteOperation::PlatformWindow) &&
         (code == platform::ToErrorCode(platform::PlatformErrorCode::NotFound) ||
@@ -94,29 +137,85 @@ enum class MissingLivePrerequisite : std::uint8_t
     {
         return MissingLivePrerequisite::CompatibleAdapter;
     }
+
     if (code == ToErrorCode(RenderErrorCode::UnsupportedSurface) &&
         (operation == LivePrerequisiteOperation::Surface ||
          operation == LivePrerequisiteOperation::Target))
     {
-        return MissingLivePrerequisite::PresentationSurface;
-    }
-    if (code == ToErrorCode(RenderErrorCode::UnsupportedCapability))
-    {
-        if (operation == LivePrerequisiteOperation::Bootstrap ||
-            operation == LivePrerequisiteOperation::Surface)
+        constexpr std::array<std::string_view, 8U> kMissingPresentationCapabilities{
+            "does not expose required instance extension",
+            "surface reported no supported swapchain formats",
+            "surface does not support the required SDR sRGB presentation format",
+            "surface does not support required opaque composition",
+            "surface does not support color-attachment swapchain images",
+            "required presentation policy is unavailable",
+            "no presentation queue for the surface",
+            "queued-frame latency is unavailable"};
+        for (const std::string_view capability : kMissingPresentationCapabilities)
         {
-            return MissingLivePrerequisite::InstanceLayerOrExtension;
-        }
-        if (operation == LivePrerequisiteOperation::Adapter ||
-            operation == LivePrerequisiteOperation::Device ||
-            operation == LivePrerequisiteOperation::Target)
-        {
-            return MissingLivePrerequisite::DeviceCapability;
+            if (ContainsLivePrerequisiteText(message, capability))
+            {
+                return MissingLivePrerequisite::PresentationSurface;
+            }
         }
     }
 
-    // BackendFailure is deliberately absent: an unclassified backend failure is a test failure.
+    if (code != ToErrorCode(RenderErrorCode::UnsupportedCapability))
+    {
+        return std::nullopt;
+    }
+
+    if (operation == LivePrerequisiteOperation::Bootstrap ||
+        operation == LivePrerequisiteOperation::Surface)
+    {
+        if (ContainsLivePrerequisiteText(message, "installed Vulkan loader reports API ") &&
+            ContainsLivePrerequisiteText(message, "requires at least Vulkan "))
+        {
+            return MissingLivePrerequisite::VulkanVersion;
+        }
+        if (ContainsLivePrerequisiteText(message, "requires missing instance layer ") ||
+            ContainsLivePrerequisiteText(message, "requires missing instance extension ") ||
+            ContainsLivePrerequisiteText(message, "symbolicName=VK_ERROR_LAYER_NOT_PRESENT") ||
+            ContainsLivePrerequisiteText(message, "symbolicName=VK_ERROR_EXTENSION_NOT_PRESENT"))
+        {
+            return MissingLivePrerequisite::InstanceLayerOrExtension;
+        }
+    }
+
+    if ((operation == LivePrerequisiteOperation::Device ||
+         operation == LivePrerequisiteOperation::Target) &&
+        (ContainsLivePrerequisiteText(message, "symbolicName=VK_ERROR_EXTENSION_NOT_PRESENT") ||
+         ContainsLivePrerequisiteText(message, "symbolicName=VK_ERROR_FEATURE_NOT_PRESENT")))
+    {
+        return MissingLivePrerequisite::DeviceCapability;
+    }
+
+    // Missing dispatch and generic backend failures are implementation failures, not prerequisites.
     return std::nullopt;
+}
+
+static_assert(ClassifyOptionalMissingLivePrerequisite(
+                  ToErrorCode(RenderErrorCode::UnsupportedCapability),
+                  LivePrerequisiteOperation::Surface,
+                  "Explicit Vulkan validation requires missing instance layer "
+                  "VK_LAYER_KHRONOS_validation.") ==
+              MissingLivePrerequisite::InstanceLayerOrExtension);
+static_assert(!ClassifyOptionalMissingLivePrerequisite(
+    ToErrorCode(RenderErrorCode::UnsupportedCapability), LivePrerequisiteOperation::Surface,
+    "vkCreateWin32SurfaceKHR dispatch is unavailable."));
+static_assert(!ClassifyOptionalMissingLivePrerequisite(
+    ToErrorCode(RenderErrorCode::BackendFailure), LivePrerequisiteOperation::Bootstrap,
+    "A generic backend failure must never become a missing-capability skip."));
+
+[[nodiscard]] inline std::optional<MissingLivePrerequisite> ClassifyMissingLivePrerequisite(
+    const core::Error& error, LivePrerequisiteOperation operation) noexcept
+{
+#if PONDER_RENDER_REQUIRE_LIVE_TESTS != 0
+    (void)error;
+    (void)operation;
+    return std::nullopt;
+#else
+    return ClassifyOptionalMissingLivePrerequisite(error.GetCode(), operation, error.GetMessage());
 #endif
 }
 
@@ -266,7 +365,14 @@ template <typename Predicate>
             output << ", ";
         }
         const RenderValidationMessage& message = report.capturedMessages[index];
-        output << message.GetMessageIdName() << '(' << message.messageIdNumber << ')';
+        output << message.GetMessageIdName() << '(' << message.messageIdNumber
+               << ") operation=" << message.GetOperationContext()
+               << " message=" << message.GetMessageText();
+        if (message.operationContextTruncated || message.messageTextTruncated)
+        {
+            output << " truncated=[operation=" << message.operationContextTruncated
+                   << ", message=" << message.messageTextTruncated << ']';
+        }
     }
     output << ']';
     return output.str();

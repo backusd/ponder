@@ -15,12 +15,12 @@ namespace
 {
 [[nodiscard]] pond::render::RenderFrameMetrics MakeFrameMetrics()
 {
-    return pond::render::RenderFrameMetrics{.windowId = pond::platform::WindowId{17U},
-                                            .logicalSize = pond::platform::LogicalSize{800U, 600U},
-                                            .pixelSize = pond::platform::PixelSize{1200U, 900U},
-                                            .metricsRevision =
-                                                pond::render::PresentationEnvironmentRevision{23U},
-                                            .targetRevision = 29U};
+    return pond::render::RenderFrameMetrics{
+        .windowId = pond::platform::WindowId{17U},
+        .logicalSize = pond::platform::LogicalSize{.width = 800U, .height = 600U},
+        .pixelSize = pond::platform::PixelSize{.width = 1200U, .height = 900U},
+        .metricsRevision = pond::render::PresentationEnvironmentRevision{23U},
+        .targetRevision = 29U};
 }
 
 void ExpectUiError(const auto& result, pond::ui::UiErrorCode expected)

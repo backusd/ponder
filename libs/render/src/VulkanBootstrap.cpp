@@ -416,11 +416,11 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
     }
 }
 [[nodiscard]] core::Result<std::vector<VkExtensionProperties>> EnumerateInstanceExtensions(
-    const VulkanGlobalDispatch& dispatch)
+    const VulkanGlobalDispatch& dispatch, const char* layerName = nullptr)
 {
     std::uint32_t extensionCount{};
     VkResult result =
-        dispatch.enumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+        dispatch.enumerateInstanceExtensionProperties(layerName, &extensionCount, nullptr);
     if (result != VK_SUCCESS)
     {
         return core::Result<std::vector<VkExtensionProperties>>::FromError(
@@ -434,8 +434,8 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
         return core::Result<std::vector<VkExtensionProperties>>::FromValue(std::move(extensions));
     }
 
-    result =
-        dispatch.enumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+    result = dispatch.enumerateInstanceExtensionProperties(layerName, &extensionCount,
+                                                           extensions.data());
     if (result != VK_SUCCESS && result != VK_INCOMPLETE)
     {
         return core::Result<std::vector<VkExtensionProperties>>::FromError(
@@ -2563,6 +2563,38 @@ bool VulkanValidationMessageFilter::Matches(std::string_view inputName,
 
 namespace
 {
+template <std::size_t Size>
+[[nodiscard]] bool CopyBoundedValidationText(std::array<char, Size>& destination,
+                                             std::string_view source) noexcept
+{
+    static_assert(Size > 0U);
+    const std::size_t characterCount = std::min(source.size(), Size - 1U);
+    std::copy_n(source.begin(), characterCount, destination.begin());
+    destination[characterCount] = '\0';
+    return source.size() > characterCount;
+}
+
+template <std::size_t Size>
+[[nodiscard]] bool CopyBoundedValidationText(std::array<char, Size>& destination,
+                                             const char* source) noexcept
+{
+    static_assert(Size > 0U);
+    if (source == nullptr)
+    {
+        destination[0] = '\0';
+        return false;
+    }
+
+    std::size_t characterCount{};
+    while (characterCount < Size - 1U && source[characterCount] != '\0')
+    {
+        destination[characterCount] = source[characterCount];
+        ++characterCount;
+    }
+    destination[characterCount] = '\0';
+    return source[characterCount] != '\0';
+}
+
 void CaptureValidationMessage(VulkanDebugMessengerContext& context,
                               VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                               const VkDebugUtilsMessengerCallbackDataEXT* callbackData) noexcept
@@ -2592,14 +2624,18 @@ void CaptureValidationMessage(VulkanDebugMessengerContext& context,
         callbackData != nullptr && callbackData->pMessageIdName != nullptr
             ? callbackData->pMessageIdName
             : "unknown-message";
-    std::size_t characterIndex{};
-    for (; characterIndex < RenderValidationMessage::kMaximumMessageIdNameLength &&
-           sourceName[characterIndex] != '\0';
-         ++characterIndex)
-    {
-        captured.message.messageIdName[characterIndex] = sourceName[characterIndex];
-    }
-    captured.message.messageIdName[characterIndex] = '\0';
+    (void)CopyBoundedValidationText(captured.message.messageIdName, sourceName);
+
+    const std::string_view operationContext =
+        context.currentOperation.empty() ? std::string_view{"unknown"} : context.currentOperation;
+    captured.message.operationContextTruncated =
+        CopyBoundedValidationText(captured.message.operationContext, operationContext);
+
+    const char* const sourceMessage = callbackData != nullptr && callbackData->pMessage != nullptr
+                                          ? callbackData->pMessage
+                                          : "no message";
+    captured.message.messageTextTruncated =
+        CopyBoundedValidationText(captured.message.messageText, sourceMessage);
     captured.ready.store(true, std::memory_order_release);
 }
 } // namespace
@@ -4243,6 +4279,26 @@ core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalD
         return core::Result<VulkanInstanceOwner>::FromError(std::move(layers).GetError());
     }
 
+    if (IsValidationFeatureMode(validationMode) &&
+        ContainsLayer(layers.GetValue(), kValidationLayerName))
+    {
+        core::Result<std::vector<VkExtensionProperties>> validationLayerExtensions =
+            EnumerateInstanceExtensions(dispatch, kValidationLayerName);
+        if (!validationLayerExtensions)
+        {
+            return core::Result<VulkanInstanceOwner>::FromError(
+                std::move(validationLayerExtensions).GetError());
+        }
+
+        for (const VkExtensionProperties& extension : validationLayerExtensions.GetValue())
+        {
+            if (!ContainsExtension(extensions.GetValue(), extension.extensionName))
+            {
+                extensions.GetValue().push_back(extension);
+            }
+        }
+    }
+
     const char* const wsiExtension = GetVulkanWsiExtensionName(wsiKind);
     const std::array requiredSurfaceExtensions{kSurfaceExtensionName, wsiExtension};
     for (const char* const requiredExtension : requiredSurfaceExtensions)
@@ -4869,12 +4925,12 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
 
     info.optionalCapabilities.vmaAllocator = true;
 
-    return core::Result<VulkanDeviceOwner>::FromValue(VulkanDeviceOwner{
-        std::move(instance), candidate.device, device, allocator, std::move(queues),
-        std::move(queueSynchronization), deviceDispatch.destroyDevice,
-        deviceDispatch.deviceWaitIdle, deviceDispatch.queueWaitIdle,
-        deviceDispatch.destroyAllocator, deviceDispatch, std::move(volkTable), std::move(info),
-        std::move(childLifetime)});
+    return core::Result<VulkanDeviceOwner>::FromValue(
+        VulkanDeviceOwner{std::move(instance), candidate.device, device, allocator,
+                          std::move(queues), std::move(queueSynchronization),
+                          deviceDispatch.destroyDevice, deviceDispatch.deviceWaitIdle,
+                          deviceDispatch.queueWaitIdle, deviceDispatch.destroyAllocator,
+                          deviceDispatch, volkTable, std::move(info), std::move(childLifetime)});
 }
 core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(
     const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface)
@@ -5172,7 +5228,8 @@ core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(
         .actualQueuedLatency = selectedLatency,
         .queuedLatencyFallback = latencyFallback,
         .output = PresentationOutput::OpaqueSdrSrgb,
-        .pixelExtent = platform::PixelSize{selectedExtent.width, selectedExtent.height}};
+        .pixelExtent =
+            platform::PixelSize{.width = selectedExtent.width, .height = selectedExtent.height}};
 
     if (!pond::render::IsValid(config.presentation))
     {
@@ -5225,7 +5282,8 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
         selectedPolicy.has_value() && selectedConfig.presentation.actualPolicy == *selectedPolicy &&
         selectedConfig.presentation.output == PresentationOutput::OpaqueSdrSrgb &&
         selectedConfig.presentation.pixelExtent ==
-            platform::PixelSize{selectedConfig.extent.width, selectedConfig.extent.height};
+            platform::PixelSize{.width = selectedConfig.extent.width,
+                                .height = selectedConfig.extent.height};
 
     if (!IsValid(selectedConfig.presentation) || !presentationMetadataMatchesNativeConfig ||
         !IsRequiredSdrSrgbSurfaceFormat(selectedConfig.format, selectedConfig.colorSpace) ||
@@ -5263,6 +5321,16 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
         createInfo.presentMode = config.presentMode;
         createInfo.clipped = VK_TRUE;
         createInfo.oldSwapchain = oldSwapchain;
+
+        VkSwapchainPresentModesCreateInfoKHR presentModesCreateInfo{};
+        if (device.GetInfo().optionalCapabilities.swapchainMaintenance1)
+        {
+            presentModesCreateInfo.sType =
+                VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR;
+            presentModesCreateInfo.presentModeCount = 1U;
+            presentModesCreateInfo.pPresentModes = &config.presentMode;
+            createInfo.pNext = &presentModesCreateInfo;
+        }
 
         VkSwapchainKHR swapchain{VK_NULL_HANDLE};
         creationState.nativeCallAttempted = true;
@@ -6000,7 +6068,7 @@ core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch,
 
     const VulkanSwapchainConfig& config = swapchain.GetConfig();
     if (packet.GetPixelExtent() !=
-        draw2d::Draw2DPixelExtent{config.extent.width, config.extent.height})
+        draw2d::Draw2DPixelExtent{.width = config.extent.width, .height = config.extent.height})
     {
         return core::VoidResult::FromError(MakeRenderError(
             RenderErrorCode::InvalidArgument,

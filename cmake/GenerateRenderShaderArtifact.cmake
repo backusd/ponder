@@ -398,6 +398,8 @@ file(APPEND "${temp_header}" "namespace pond::render::shaders\n{\n")
 file(APPEND "${temp_header}"
     "inline constexpr std::string_view k${symbol_prefix}Name{\"${shader_name_cpp}\"};\n")
 file(APPEND "${temp_header}"
+    "inline constexpr char k${symbol_prefix}EntryPointCString[]{\"${entry_point_cpp}\"};\n")
+file(APPEND "${temp_header}"
     "inline constexpr std::string_view k${symbol_prefix}EntryPoint{\"${entry_point_cpp}\"};\n")
 file(APPEND "${temp_header}"
     "inline constexpr std::string_view k${symbol_prefix}Profile{\"${profile_cpp}\"};\n")

@@ -12,7 +12,7 @@
 #include <thread>
 #include <utility>
 
-#include "LiveRenderTestSupport.hpp"
+#include "../LiveRenderTestSupport.hpp"
 
 #if defined(_WIN32)
 #define NOMINMAX
@@ -24,44 +24,6 @@
 
 namespace
 {
-#ifndef PONDER_RENDER_LIVE_VALIDATION_MODE
-#define PONDER_RENDER_LIVE_VALIDATION_MODE "Default"
-#endif
-
-[[nodiscard]] constexpr pond::render::RenderValidationMode GetLiveRenderValidationMode() noexcept
-{
-    constexpr std::string_view kMode{PONDER_RENDER_LIVE_VALIDATION_MODE};
-    if constexpr (kMode == "Disabled")
-    {
-        return pond::render::RenderValidationMode::Disabled;
-    }
-    else if constexpr (kMode == "Standard")
-    {
-        return pond::render::RenderValidationMode::Standard;
-    }
-    else if constexpr (kMode == "Synchronization")
-    {
-        return pond::render::RenderValidationMode::Synchronization;
-    }
-    else if constexpr (kMode == "BestPractices")
-    {
-        return pond::render::RenderValidationMode::BestPractices;
-    }
-    else if constexpr (kMode == "GpuAssisted")
-    {
-        return pond::render::RenderValidationMode::GpuAssisted;
-    }
-    else
-    {
-        return pond::render::RenderValidationMode::Default;
-    }
-}
-
-[[nodiscard]] constexpr pond::render::RenderBootstrapDesc MakeLiveRenderBootstrapDesc() noexcept
-{
-    return pond::render::RenderBootstrapDesc{.validationMode = GetLiveRenderValidationMode()};
-}
-
 [[nodiscard]] pond::render::RenderTargetSnapshot MakeSnapshot(
     const pond::platform::Window& window, std::uint64_t revision,
     pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision =
@@ -230,7 +192,8 @@ TEST(RenderOwnerThreadSurfaceIntegrationTests, CreatesDestroysAndTransfersOneLiv
     const pond::render::RenderTargetSnapshot initialSnapshot = MakeSnapshot(window, 1);
     ASSERT_TRUE(pond::render::IsValid(initialSnapshot));
 
-    auto bootstrapResult = pond::render::RenderBootstrap::Create(MakeLiveRenderBootstrapDesc());
+    auto bootstrapResult =
+        pond::render::RenderBootstrap::Create(pond::render::test::MakeLiveRenderBootstrapDesc());
     if (!bootstrapResult)
     {
         if (auto reason = pond::render::test::MakeOptionalLiveSkipReason(
@@ -559,7 +522,8 @@ TEST(RenderOwnerThreadSurfaceIntegrationTests, KeepsTwoLiveWindowsIndependentOnO
     ASSERT_TRUE(pond::render::IsValid(secondActive));
     ASSERT_NE(firstActive.GetPixelSize(), secondActive.GetPixelSize());
 
-    auto bootstrapResult = pond::render::RenderBootstrap::Create(MakeLiveRenderBootstrapDesc());
+    auto bootstrapResult =
+        pond::render::RenderBootstrap::Create(pond::render::test::MakeLiveRenderBootstrapDesc());
     if (!bootstrapResult)
     {
         if (auto reason = pond::render::test::MakeOptionalLiveSkipReason(
@@ -960,7 +924,8 @@ TEST(RenderOwnerThreadSurfaceIntegrationTests, ShutsDownRendererChildrenOnDedica
     ASSERT_TRUE(snapshotResult) << snapshotResult.GetError().GetMessage();
     const pond::render::RenderTargetSnapshot snapshot = std::move(snapshotResult).GetValue();
 
-    auto bootstrapResult = pond::render::RenderBootstrap::Create(MakeLiveRenderBootstrapDesc());
+    auto bootstrapResult =
+        pond::render::RenderBootstrap::Create(pond::render::test::MakeLiveRenderBootstrapDesc());
     if (!bootstrapResult)
     {
         if (auto reason = pond::render::test::MakeOptionalLiveSkipReason(

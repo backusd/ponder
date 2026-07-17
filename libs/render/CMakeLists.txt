@@ -34,6 +34,7 @@ ponder_add_project_library(render
     SOURCES
         src/Bootstrap.cpp
         src/RenderBootstrapTestAccess.hpp
+        src/RenderLiveTestAccess.hpp
         src/VulkanBootstrap.cpp
         src/VulkanBootstrap.hpp
         src/VulkanDiagnostics.hpp

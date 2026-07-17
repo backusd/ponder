@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "RenderBootstrapTestAccess.hpp"
+#include "RenderLiveTestAccess.hpp"
 #include "VulkanBootstrap.hpp"
 #include "VulkanDiagnostics.hpp"
 
@@ -643,7 +644,7 @@ struct RenderDevice::State final
 
         constexpr std::uint64_t kInfiniteTimeout = std::numeric_limits<std::uint64_t>::max();
         bool requiresPracticalFallback = false;
-        const auto pollPresentation = [this, &requiresPracticalFallback, kInfiniteTimeout](
+        const auto pollPresentation = [this, &requiresPracticalFallback](
                                           RetiredPresentationResources& retired) -> core::VoidResult
         {
             if (!HasPresentationResources(retired))
@@ -708,7 +709,7 @@ struct RenderDevice::State final
         }
 
         const auto waitForGraphics =
-            [this, kInfiniteTimeout](RetiredPresentationResources& retired) -> core::VoidResult
+            [this](RetiredPresentationResources& retired) -> core::VoidResult
         {
             if (!retired.vulkanFrameResources.IsValid())
             {
@@ -845,7 +846,7 @@ struct RenderDevice::State final
     std::thread::id renderThread;
     detail::VulkanGlobalDispatch vulkanDispatch{};
     detail::VulkanDeviceOwner vulkanDevice;
-    detail::VulkanDraw2DPipelineCache vulkanDraw2DPipelineCache{};
+    detail::VulkanDraw2DPipelineCache vulkanDraw2DPipelineCache;
     mutable std::mutex targetMutex;
     mutable std::mutex draw2DLayerMutex;
     mutable std::mutex retirementMutex;
@@ -1026,7 +1027,7 @@ struct RenderFrame::State final
             if (recording.IsActive() && targetState->vulkanSwapchain.IsValid())
             {
                 const VkExtent2D extent = targetState->vulkanSwapchain.GetConfig().extent;
-                pixelSize = platform::PixelSize{extent.width, extent.height};
+                pixelSize = platform::PixelSize{.width = extent.width, .height = extent.height};
             }
             metrics =
                 RenderFrameMetrics{.windowId = snapshot.GetWindowId(),
@@ -1280,6 +1281,82 @@ std::uint32_t detail::RenderBackendTestAccess::GetBootstrapTargetCount(
     }
 
     return device.m_state->token.registry->GetTargetCount();
+}
+
+detail::Draw2DDeviceLiveStats detail::RenderBackendTestAccess::GetDraw2DDeviceStats(
+    const RenderDevice& device) noexcept
+{
+    if (device.m_state == nullptr)
+    {
+        return {};
+    }
+
+    const detail::VulkanDraw2DPipelineCacheStats pipelineStats =
+        device.m_state->vulkanDraw2DPipelineCache.GetStats();
+    return detail::Draw2DDeviceLiveStats{.pipelineCreationCount = pipelineStats.creationCount,
+                                         .pipelineReuseCount = pipelineStats.reuseCount,
+                                         .pipelineReplacementCount = pipelineStats.replacementCount,
+                                         .activeLayerCount = device.m_state->GetDraw2DLayerCount(),
+                                         .hasPipeline =
+                                             device.m_state->vulkanDraw2DPipelineCache.IsValid()};
+}
+
+detail::Draw2DTargetLiveStats detail::RenderBackendTestAccess::GetDraw2DTargetStats(
+    const RenderTarget& target) noexcept
+{
+    if (target.m_state == nullptr || !target.m_state->vulkanFrameResources.IsValid())
+    {
+        return {};
+    }
+
+    const detail::VulkanDraw2DUploadArena& arena =
+        target.m_state->vulkanFrameResources.GetDraw2DUploadArena();
+    if (!arena.IsValid())
+    {
+        return {};
+    }
+
+    const detail::VulkanDraw2DUploadStats uploadStats = arena.GetStats();
+    detail::Draw2DTargetLiveStats stats{
+        .currentCapacityBytes = static_cast<std::uint64_t>(uploadStats.currentCapacityBytes),
+        .reservedBytes = static_cast<std::uint64_t>(uploadStats.reservedBytes),
+        .uploadedBytes = static_cast<std::uint64_t>(uploadStats.uploadedBytes),
+        .highWaterReservedBytes = static_cast<std::uint64_t>(uploadStats.highWaterReservedBytes),
+        .allocationCount = uploadStats.allocationCount,
+        .growthCount = uploadStats.growthCount,
+        .generationCount = uploadStats.generationCount,
+        .flushCount = uploadStats.flushCount,
+        .retirementCount = uploadStats.retirementCount,
+        .slotCount = arena.GetSlotCount(),
+        .hasUploadArena = true};
+    for (std::uint32_t slotIndex = 0U; slotIndex < stats.slotCount; ++slotIndex)
+    {
+        switch (arena.GetSlotSnapshot(slotIndex).state)
+        {
+        case detail::VulkanDraw2DUploadSlotState::Idle:
+            ++stats.idleSlotCount;
+            break;
+        case detail::VulkanDraw2DUploadSlotState::Reserved:
+            ++stats.reservedSlotCount;
+            break;
+        case detail::VulkanDraw2DUploadSlotState::Submitted:
+            ++stats.submittedSlotCount;
+            break;
+        }
+    }
+    return stats;
+}
+
+detail::Draw2DDeviceLiveStats detail::RenderLiveTestAccess::GetDraw2DDeviceStats(
+    const RenderDevice& device) noexcept
+{
+    return detail::RenderBackendTestAccess::GetDraw2DDeviceStats(device);
+}
+
+detail::Draw2DTargetLiveStats detail::RenderLiveTestAccess::GetDraw2DTargetStats(
+    const RenderTarget& target) noexcept
+{
+    return detail::RenderBackendTestAccess::GetDraw2DTargetStats(target);
 }
 
 core::VoidResult detail::RenderBackendTestAccess::DrainOrphanedPresentationResources(
@@ -2746,7 +2823,7 @@ namespace
 
 [[nodiscard]] Draw2DPixelExtent ToDraw2DPixelExtent(platform::PixelSize extent) noexcept
 {
-    return Draw2DPixelExtent{extent.width, extent.height};
+    return Draw2DPixelExtent{.width = extent.width, .height = extent.height};
 }
 } // namespace
 

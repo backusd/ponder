@@ -480,10 +480,16 @@ enum class RenderValidationMessageSeverity : std::uint8_t
 struct RenderValidationMessage final
 {
     static constexpr std::size_t kMaximumMessageIdNameLength = 95U;
+    static constexpr std::size_t kMaximumOperationContextLength = 95U;
+    static constexpr std::size_t kMaximumMessageTextLength = 511U;
 
     RenderValidationMessageSeverity severity{RenderValidationMessageSeverity::Warning};
     std::int32_t messageIdNumber{};
     std::array<char, kMaximumMessageIdNameLength + 1U> messageIdName{};
+    std::array<char, kMaximumOperationContextLength + 1U> operationContext{};
+    std::array<char, kMaximumMessageTextLength + 1U> messageText{};
+    bool operationContextTruncated{};
+    bool messageTextTruncated{};
 
     [[nodiscard]] std::string_view GetMessageIdName() const noexcept
     {
@@ -493,6 +499,26 @@ struct RenderValidationMessage final
             ++length;
         }
         return {messageIdName.data(), length};
+    }
+
+    [[nodiscard]] std::string_view GetOperationContext() const noexcept
+    {
+        std::size_t length{};
+        while (length < operationContext.size() && operationContext[length] != '\0')
+        {
+            ++length;
+        }
+        return {operationContext.data(), length};
+    }
+
+    [[nodiscard]] std::string_view GetMessageText() const noexcept
+    {
+        std::size_t length{};
+        while (length < messageText.size() && messageText[length] != '\0')
+        {
+            ++length;
+        }
+        return {messageText.data(), length};
     }
 
     [[nodiscard]] friend constexpr bool operator==(

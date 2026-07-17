@@ -1,9 +1,8 @@
-#include <ponder/ui/experimental/RectangleRenderer.hpp>
-
 #include <ponder/render/Bootstrap.hpp>
 #include <ponder/render/RenderError.hpp>
 #include <ponder/render/draw2d/Draw2DLayer.hpp>
 #include <ponder/ui/Error.hpp>
+#include <ponder/ui/experimental/RectangleRenderer.hpp>
 #include <ponder/ui/paint/PaintCompiler.hpp>
 #include <ponder/ui/paint/PaintRecorder.hpp>
 #include <ponder/ui/render/FrameMetricsRendezvous.hpp>
@@ -91,8 +90,8 @@ core::Result<RectangleRenderer> RectangleRenderer::Create(render::RenderDevice& 
 
     try
     {
-        auto state = std::make_unique<State>(std::move(layerResult).GetValue(),
-                                             kDefaultUiHardLimits);
+        auto state =
+            std::make_unique<State>(std::move(layerResult).GetValue(), kDefaultUiHardLimits);
         return core::Result<RectangleRenderer>::FromValue(RectangleRenderer{std::move(state)});
     }
     catch (const std::bad_alloc&)
@@ -108,8 +107,9 @@ bool RectangleRenderer::IsValid() const noexcept
     return m_state != nullptr && m_state->drawLayer.IsValid();
 }
 
-core::Result<RectangleRecordOutcome> RectangleRenderer::Record(
-    render::RenderFrame& frame, const UiTargetMetrics& metrics, RectanglePaint rectangle)
+core::Result<RectangleRecordOutcome> RectangleRenderer::Record(render::RenderFrame& frame,
+                                                               const UiTargetMetrics& metrics,
+                                                               RectanglePaint rectangle)
 {
     return Record(frame, metrics, std::span<const RectanglePaint>{&rectangle, 1U});
 }

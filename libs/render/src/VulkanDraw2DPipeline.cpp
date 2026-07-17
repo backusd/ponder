@@ -25,7 +25,7 @@ namespace
 inline constexpr std::uint64_t kFnvOffset{0xcbf29ce484222325ULL};
 inline constexpr std::uint64_t kFnvPrime{0x100000001b3ULL};
 inline constexpr std::uint64_t kDraw2DFixedStateSignature{0x9d7f81ec2c9b6a41ULL};
-inline constexpr std::string_view kDraw2DPipelineLabel{"pond.render.draw2d"};
+inline constexpr auto kDraw2DPipelineLabel{std::to_array("pond.render.draw2d")};
 
 [[nodiscard]] core::Error MakePipelineRenderError(RenderErrorCode code, std::string message)
 {
@@ -400,7 +400,7 @@ void VulkanDraw2DPipelineOwner::Reset() noexcept
 VulkanDraw2DPipelineCache::VulkanDraw2DPipelineCache() noexcept = default;
 VulkanDraw2DPipelineCache::VulkanDraw2DPipelineCache(VulkanDraw2DPipelineCache&& other) noexcept
     : m_device{std::exchange(other.m_device, VK_NULL_HANDLE)},
-      m_pipeline{std::move(other.m_pipeline)}
+      m_pipeline{std::move(other.m_pipeline)}, m_stats{std::exchange(other.m_stats, {})}
 {
 }
 
@@ -412,6 +412,7 @@ VulkanDraw2DPipelineCache& VulkanDraw2DPipelineCache::operator=(
         Reset();
         m_device = std::exchange(other.m_device, VK_NULL_HANDLE);
         m_pipeline = std::move(other.m_pipeline);
+        m_stats = std::exchange(other.m_stats, {});
     }
     return *this;
 }
@@ -434,6 +435,11 @@ std::shared_ptr<const VulkanDraw2DPipelineOwner> VulkanDraw2DPipelineCache::Acqu
     return m_pipeline;
 }
 
+VulkanDraw2DPipelineCacheStats VulkanDraw2DPipelineCache::GetStats() const noexcept
+{
+    return m_stats;
+}
+
 core::Result<VulkanDraw2DPipelineCacheUpdate> VulkanDraw2DPipelineCache::GetOrCreate(
     const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
     const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key)
@@ -453,6 +459,10 @@ core::Result<VulkanDraw2DPipelineCacheUpdate> VulkanDraw2DPipelineCache::GetOrCr
     }
     if (IsValid() && m_pipeline->GetKey() == key)
     {
+        if (m_stats.reuseCount < std::numeric_limits<std::uint64_t>::max())
+        {
+            ++m_stats.reuseCount;
+        }
         return core::Result<VulkanDraw2DPipelineCacheUpdate>::FromValue(
             VulkanDraw2DPipelineCacheUpdate{.cacheHit = true,
                                             .replaced = false,
@@ -468,6 +478,11 @@ core::Result<VulkanDraw2DPipelineCacheUpdate> VulkanDraw2DPipelineCache::GetOrCr
             std::move(candidate).GetError());
     }
 
+    if (m_stats.creationCount < std::numeric_limits<std::uint64_t>::max())
+    {
+        ++m_stats.creationCount;
+    }
+
     const bool replaced = IsValid();
     try
     {
@@ -480,6 +495,10 @@ core::Result<VulkanDraw2DPipelineCacheUpdate> VulkanDraw2DPipelineCache::GetOrCr
             "Draw2D pipeline cache could not allocate pipeline ownership state."));
     }
     m_device = device.GetHandle();
+    if (replaced && m_stats.replacementCount < std::numeric_limits<std::uint64_t>::max())
+    {
+        ++m_stats.replacementCount;
+    }
     return core::Result<VulkanDraw2DPipelineCacheUpdate>::FromValue(
         VulkanDraw2DPipelineCacheUpdate{.cacheHit = false,
                                         .replaced = replaced,
@@ -600,12 +619,12 @@ core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_VERTEX_BIT,
             .module = vertexShader,
-            .pName = shaders::kDraw2DRectangleVertexShaderEntryPoint.data()},
+            .pName = shaders::kDraw2DRectangleVertexShaderEntryPointCString},
         VkPipelineShaderStageCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
             .module = fragmentShader,
-            .pName = shaders::kDraw2DRectangleFragmentShaderEntryPoint.data()}};
+            .pName = shaders::kDraw2DRectangleFragmentShaderEntryPointCString}};
 
     const VkVertexInputBindingDescription binding{.binding = draw2d::kDraw2DRectangleVertexBinding,
                                                   .stride = draw2d::kDraw2DRectangleVertexStride,
@@ -648,10 +667,10 @@ core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(
     rasterization.depthBiasEnable = VK_FALSE;
     rasterization.lineWidth = 1.0F;
 
-    VkPipelineMultisampleStateCreateInfo multisample{};
-    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-    multisample.sampleShadingEnable = VK_FALSE;
+    VkPipelineMultisampleStateCreateInfo multisample{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        .sampleShadingEnable = VK_FALSE};
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;

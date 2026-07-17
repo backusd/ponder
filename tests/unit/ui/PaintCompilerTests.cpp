@@ -64,8 +64,8 @@ static_assert(sizeof(draw2d::Draw2DDrawRecord) == 28U);
 {
     const auto result = pond::ui::MakeUiTargetMetrics(
         pond::ui::UiTargetId{7U}, pond::ui::UiTargetRevision{11U}, pond::ui::UiMetricsRevision{13U},
-        pond::ui::LogicalSize{logicalWidth, logicalHeight},
-        pond::ui::FramebufferPixelSize{pixelWidth, pixelHeight});
+        pond::ui::LogicalSize{.width = logicalWidth, .height = logicalHeight},
+        pond::ui::FramebufferPixelSize{.width = pixelWidth, .height = pixelHeight});
     if (!result.HasValue())
     {
         ADD_FAILURE() << "Failed to make target metrics: " << result.GetError().GetMessage();
@@ -249,34 +249,34 @@ TEST(UiPaintCompilerTests, PreservesFractionalCoordinatesUnderIndependentAxisSca
         std::array<float, 4U> expectedBounds;
     };
 
-    const std::array cases{ScaleCase{"identity",
-                                     20.0F,
-                                     20.0F,
-                                     20U,
-                                     20U,
-                                     MakeRect(0.5F, 1.5F, 8.5F, 9.5F),
-                                     {0.5F, 1.5F, 8.5F, 9.5F}},
-                           ScaleCase{"asymmetric",
-                                     10.0F,
-                                     20.0F,
-                                     25U,
-                                     30U,
-                                     MakeRect(1.25F, 2.5F, 4.5F, 6.75F),
-                                     {3.125F, 3.75F, 11.25F, 10.125F}},
-                           ScaleCase{"fractional-scale",
-                                     80.0F,
-                                     40.0F,
-                                     100U,
-                                     50U,
-                                     MakeRect(0.5F, 1.5F, 8.5F, 9.5F),
-                                     {0.625F, 1.875F, 10.625F, 11.875F}},
-                           ScaleCase{"double-scale",
-                                     16.0F,
-                                     12.0F,
-                                     32U,
-                                     24U,
-                                     MakeRect(0.5F, 1.25F, 7.5F, 8.75F),
-                                     {1.0F, 2.5F, 15.0F, 17.5F}}};
+    const std::array cases{ScaleCase{.name = "identity",
+                                     .logicalWidth = 20.0F,
+                                     .logicalHeight = 20.0F,
+                                     .pixelWidth = 20U,
+                                     .pixelHeight = 20U,
+                                     .rectangle = MakeRect(0.5F, 1.5F, 8.5F, 9.5F),
+                                     .expectedBounds = {0.5F, 1.5F, 8.5F, 9.5F}},
+                           ScaleCase{.name = "asymmetric",
+                                     .logicalWidth = 10.0F,
+                                     .logicalHeight = 20.0F,
+                                     .pixelWidth = 25U,
+                                     .pixelHeight = 30U,
+                                     .rectangle = MakeRect(1.25F, 2.5F, 4.5F, 6.75F),
+                                     .expectedBounds = {3.125F, 3.75F, 11.25F, 10.125F}},
+                           ScaleCase{.name = "fractional-scale",
+                                     .logicalWidth = 80.0F,
+                                     .logicalHeight = 40.0F,
+                                     .pixelWidth = 100U,
+                                     .pixelHeight = 50U,
+                                     .rectangle = MakeRect(0.5F, 1.5F, 8.5F, 9.5F),
+                                     .expectedBounds = {0.625F, 1.875F, 10.625F, 11.875F}},
+                           ScaleCase{.name = "double-scale",
+                                     .logicalWidth = 16.0F,
+                                     .logicalHeight = 12.0F,
+                                     .pixelWidth = 32U,
+                                     .pixelHeight = 24U,
+                                     .rectangle = MakeRect(0.5F, 1.25F, 7.5F, 8.75F),
+                                     .expectedBounds = {1.0F, 2.5F, 15.0F, 17.5F}}};
 
     for (const ScaleCase& testCase : cases)
     {
@@ -312,8 +312,10 @@ TEST(UiPaintCompilerTests, AcceptsOnePixelAndLargeExactlyRepresentableTargets)
         float logicalExtent;
         std::uint32_t pixelExtent;
     };
-    constexpr std::array cases{ExtentCase{"one-pixel", 1.0F, 1U},
-                               ExtentCase{"large-exact", 16'777'216.0F, 16'777'216U}};
+    constexpr std::array cases{
+        ExtentCase{.name = "one-pixel", .logicalExtent = 1.0F, .pixelExtent = 1U},
+        ExtentCase{
+            .name = "large-exact", .logicalExtent = 16'777'216.0F, .pixelExtent = 16'777'216U}};
 
     for (const ExtentCase& testCase : cases)
     {
@@ -321,9 +323,9 @@ TEST(UiPaintCompilerTests, AcceptsOnePixelAndLargeExactlyRepresentableTargets)
         const SealedPaintList paint = MakeSingleRectanglePaint(
             MakeRect(0.0F, 0.0F, testCase.logicalExtent, testCase.logicalExtent));
         PaintCompiler compiler;
-        auto result = compiler.Compile(
-            paint, MakeMetrics(testCase.logicalExtent, testCase.logicalExtent,
-                               testCase.pixelExtent, testCase.pixelExtent));
+        auto result =
+            compiler.Compile(paint, MakeMetrics(testCase.logicalExtent, testCase.logicalExtent,
+                                                testCase.pixelExtent, testCase.pixelExtent));
         ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
         ASSERT_EQ(result->GetVertices().size(), 4U);
         EXPECT_FLOAT_EQ(result->GetVertices()[0].x, 0.0F);
@@ -331,8 +333,7 @@ TEST(UiPaintCompilerTests, AcceptsOnePixelAndLargeExactlyRepresentableTargets)
         EXPECT_FLOAT_EQ(result->GetVertices()[2].x, testCase.logicalExtent);
         EXPECT_FLOAT_EQ(result->GetVertices()[2].y, testCase.logicalExtent);
         EXPECT_EQ(result->GetDrawRecords()[0].scissor,
-                  (draw2d::Draw2DScissor{0U, 0U, testCase.pixelExtent,
-                                         testCase.pixelExtent}));
+                  (draw2d::Draw2DScissor{0U, 0U, testCase.pixelExtent, testCase.pixelExtent}));
         EXPECT_TRUE(draw2d::InspectDraw2DPacket(*result).IsValid());
     }
 }

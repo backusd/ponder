@@ -17,10 +17,10 @@ namespace
 {
 constexpr bool FoundationValuesAreConstexpr()
 {
-    constexpr pond::ui::LogicalPoint kPoint{-4.5F, 8.25F};
-    constexpr pond::ui::LogicalSize kSize{64.0F, 32.0F};
-    constexpr pond::ui::LogicalRect kRect{kPoint, kSize};
-    constexpr pond::ui::FramebufferPixelSize kPixelSize{1280U, 720U};
+    constexpr pond::ui::LogicalPoint kPoint{.x = -4.5F, .y = 8.25F};
+    constexpr pond::ui::LogicalSize kSize{.width = 64.0F, .height = 32.0F};
+    constexpr pond::ui::LogicalRect kRect{.origin = kPoint, .size = kSize};
+    constexpr pond::ui::FramebufferPixelSize kPixelSize{.width = 1280U, .height = 720U};
     constexpr pond::ui::UiTargetId kTargetId{17U};
     constexpr pond::ui::UiTargetRevision kTargetRevision{19U};
     constexpr pond::ui::UiMetricsRevision kMetricsRevision{23U};
@@ -37,11 +37,13 @@ static_assert(std::is_trivially_copyable_v<pond::ui::LogicalRect>);
 static_assert(std::is_trivially_copyable_v<pond::ui::FramebufferPixelSize>);
 static_assert(std::is_trivially_copyable_v<pond::ui::UiDrawCounters>);
 static_assert(!std::same_as<pond::ui::LogicalSize, pond::ui::FramebufferPixelSize>);
-static_assert(pond::ui::IsValid(pond::ui::LogicalPoint{-1.0F, 2.0F}));
-static_assert(pond::ui::IsValid(pond::ui::LogicalSize{0.0F, 2.0F}));
-static_assert(!pond::ui::IsValid(pond::ui::LogicalSize{-1.0F, 2.0F}));
-static_assert(pond::ui::IsEmpty(pond::ui::LogicalRect{{0.0F, 0.0F}, {0.0F, 4.0F}}));
-static_assert(!pond::ui::HasPositiveArea(pond::ui::FramebufferPixelSize{0U, 4U}));
+static_assert(pond::ui::IsValid(pond::ui::LogicalPoint{.x = -1.0F, .y = 2.0F}));
+static_assert(pond::ui::IsValid(pond::ui::LogicalSize{.width = 0.0F, .height = 2.0F}));
+static_assert(!pond::ui::IsValid(pond::ui::LogicalSize{.width = -1.0F, .height = 2.0F}));
+static_assert(pond::ui::IsEmpty(pond::ui::LogicalRect{.origin = {.x = 0.0F, .y = 0.0F},
+                                                      .size = {.width = 0.0F, .height = 4.0F}}));
+static_assert(!pond::ui::HasPositiveArea(pond::ui::FramebufferPixelSize{.width = 0U,
+                                                                        .height = 4U}));
 static_assert(pond::ui::IsValid(pond::ui::kDefaultUiHardLimits));
 
 void ExpectUiErrorCode(const pond::core::Error& error, pond::ui::UiErrorCode code)
@@ -60,20 +62,27 @@ TEST(UiFoundationValueTests, ReservesStableUiErrorRange)
     };
 
     constexpr std::array kMappings{
-        ErrorMapping{pond::ui::UiErrorCode::InvalidPaintValue,
-                     pond::core::ErrorCategory::InvalidArgument, 0x0004'0001},
-        ErrorMapping{pond::ui::UiErrorCode::UnbalancedPaintState,
-                     pond::core::ErrorCategory::InvalidArgument, 0x0004'0002},
-        ErrorMapping{pond::ui::UiErrorCode::InvalidMetrics,
-                     pond::core::ErrorCategory::InvalidArgument, 0x0004'0003},
-        ErrorMapping{pond::ui::UiErrorCode::MetricsMismatch,
-                     pond::core::ErrorCategory::InvalidArgument, 0x0004'0004},
-        ErrorMapping{pond::ui::UiErrorCode::CompilationFailure, pond::core::ErrorCategory::General,
-                     0x0004'0005},
-        ErrorMapping{pond::ui::UiErrorCode::LimitExceeded,
-                     pond::core::ErrorCategory::InvalidArgument, 0x0004'0006},
-        ErrorMapping{pond::ui::UiErrorCode::InvalidPaintState,
-                     pond::core::ErrorCategory::InvalidArgument, 0x0004'0007}};
+        ErrorMapping{.uiCode = pond::ui::UiErrorCode::InvalidPaintValue,
+                     .category = pond::core::ErrorCategory::InvalidArgument,
+                     .value = 0x0004'0001},
+        ErrorMapping{.uiCode = pond::ui::UiErrorCode::UnbalancedPaintState,
+                     .category = pond::core::ErrorCategory::InvalidArgument,
+                     .value = 0x0004'0002},
+        ErrorMapping{.uiCode = pond::ui::UiErrorCode::InvalidMetrics,
+                     .category = pond::core::ErrorCategory::InvalidArgument,
+                     .value = 0x0004'0003},
+        ErrorMapping{.uiCode = pond::ui::UiErrorCode::MetricsMismatch,
+                     .category = pond::core::ErrorCategory::InvalidArgument,
+                     .value = 0x0004'0004},
+        ErrorMapping{.uiCode = pond::ui::UiErrorCode::CompilationFailure,
+                     .category = pond::core::ErrorCategory::General,
+                     .value = 0x0004'0005},
+        ErrorMapping{.uiCode = pond::ui::UiErrorCode::LimitExceeded,
+                     .category = pond::core::ErrorCategory::InvalidArgument,
+                     .value = 0x0004'0006},
+        ErrorMapping{.uiCode = pond::ui::UiErrorCode::InvalidPaintState,
+                     .category = pond::core::ErrorCategory::InvalidArgument,
+                     .value = 0x0004'0007}};
 
     for (const ErrorMapping& mapping : kMappings)
     {
@@ -123,7 +132,8 @@ TEST(UiFoundationValueTests, ValidatesLogicalGeometryWithoutPixelConflation)
     ExpectUiErrorCode(overflowingExtent.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
     constexpr pond::ui::LogicalRect kCollapsedPositiveExtent{
-        pond::ui::LogicalPoint{16'777'216.0F, 0.0F}, pond::ui::LogicalSize{1.0F, 1.0F}};
+        .origin = pond::ui::LogicalPoint{.x = 16'777'216.0F, .y = 0.0F},
+        .size = pond::ui::LogicalSize{.width = 1.0F, .height = 1.0F}};
     static_assert(pond::ui::GetRight(kCollapsedPositiveExtent) ==
                   kCollapsedPositiveExtent.origin.x);
     EXPECT_FALSE(pond::ui::IsValid(kCollapsedPositiveExtent));
@@ -134,7 +144,8 @@ TEST(UiFoundationValueTests, DerivesCopiedTargetMetricsFromExactExtents)
 {
     const auto metrics = pond::ui::MakeUiTargetMetrics(
         pond::ui::UiTargetId{7U}, pond::ui::UiTargetRevision{11U}, pond::ui::UiMetricsRevision{13U},
-        pond::ui::LogicalSize{800.0F, 400.0F}, pond::ui::FramebufferPixelSize{1200U, 1000U});
+        pond::ui::LogicalSize{.width = 800.0F, .height = 400.0F},
+        pond::ui::FramebufferPixelSize{.width = 1200U, .height = 1000U});
 
     ASSERT_TRUE(metrics.HasValue());
     EXPECT_EQ(metrics->GetTargetId().GetValue(), 7U);
@@ -146,7 +157,8 @@ TEST(UiFoundationValueTests, DerivesCopiedTargetMetricsFromExactExtents)
 
     const auto suspendedMetrics = pond::ui::MakeUiTargetMetrics(
         pond::ui::UiTargetId{7U}, pond::ui::UiTargetRevision{12U}, pond::ui::UiMetricsRevision{14U},
-        pond::ui::LogicalSize{0.0F, 400.0F}, pond::ui::FramebufferPixelSize{0U, 1000U});
+        pond::ui::LogicalSize{.width = 0.0F, .height = 400.0F},
+        pond::ui::FramebufferPixelSize{.width = 0U, .height = 1000U});
     ASSERT_TRUE(suspendedMetrics.HasValue());
     EXPECT_FLOAT_EQ(suspendedMetrics->GetLogicalToFramebufferScale().x, 0.0F);
     EXPECT_FLOAT_EQ(suspendedMetrics->GetLogicalToFramebufferScale().y, 2.5F);
@@ -154,7 +166,8 @@ TEST(UiFoundationValueTests, DerivesCopiedTargetMetricsFromExactExtents)
 
     const auto invalidIdentity = pond::ui::MakeUiTargetMetrics(
         pond::ui::UiTargetId{}, pond::ui::UiTargetRevision{12U}, pond::ui::UiMetricsRevision{14U},
-        pond::ui::LogicalSize{800.0F, 400.0F}, pond::ui::FramebufferPixelSize{1200U, 1000U});
+        pond::ui::LogicalSize{.width = 800.0F, .height = 400.0F},
+        pond::ui::FramebufferPixelSize{.width = 1200U, .height = 1000U});
     ASSERT_FALSE(invalidIdentity.HasValue());
     ExpectUiErrorCode(invalidIdentity.GetError(), pond::ui::UiErrorCode::InvalidMetrics);
 }
@@ -206,9 +219,11 @@ TEST(UiFoundationValueTests, MatchesIndependentColorReferenceVectors)
     EXPECT_EQ(packed->GetAlpha(), 64U);
     EXPECT_EQ(packed->GetValue(), 0x4000'400EU);
 
-    const pond::ui::LinearPremultipliedColor blended =
-        pond::ui::BlendSourceOver(pond::ui::LinearPremultipliedColor{0.25F, 0.0F, 0.0F, 0.5F},
-                                  pond::ui::LinearPremultipliedColor{0.0F, 0.0F, 1.0F, 1.0F});
+    const pond::ui::LinearPremultipliedColor blended = pond::ui::BlendSourceOver(
+        pond::ui::LinearPremultipliedColor{
+            .red = 0.25F, .green = 0.0F, .blue = 0.0F, .alpha = 0.5F},
+        pond::ui::LinearPremultipliedColor{
+            .red = 0.0F, .green = 0.0F, .blue = 1.0F, .alpha = 1.0F});
     EXPECT_NEAR(blended.red, 0.25F, 0.000001F);
     EXPECT_NEAR(blended.green, 0.0F, 0.000001F);
     EXPECT_NEAR(blended.blue, 0.5F, 0.000001F);
@@ -222,14 +237,27 @@ TEST(UiFoundationValueTests, MatchesIndependentColorReferenceVectors)
         std::uint32_t packed;
     };
     constexpr std::array colorCases{
-        ColorCase{{1.0F, 0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 0.0F}, 0x0000'0000U},
-        ColorCase{{1.0F, 0.0F, 0.0F, 1.0F}, {1.0F, 0.0F, 0.0F, 1.0F}, 0xFF00'00FFU},
-        ColorCase{{0.0F, 1.0F, 0.0F, 1.0F}, {0.0F, 1.0F, 0.0F, 1.0F}, 0xFF00'FF00U},
-        ColorCase{{0.0F, 0.0F, 1.0F, 1.0F}, {0.0F, 0.0F, 1.0F, 1.0F}, 0xFFFF'0000U},
-        ColorCase{{0.5F, 0.5F, 0.5F, 1.0F},
-                  {0.21404114F, 0.21404114F, 0.21404114F, 1.0F},
-                  0xFF37'3737U},
-        ColorCase{{1.0F, 1.0F, 1.0F, 0.5F}, {0.5F, 0.5F, 0.5F, 0.5F}, 0x8080'8080U}};
+        ColorCase{.authored = {.red = 1.0F, .green = 0.0F, .blue = 0.0F, .alpha = 0.0F},
+                  .semantic = {.red = 0.0F, .green = 0.0F, .blue = 0.0F, .alpha = 0.0F},
+                  .packed = 0x0000'0000U},
+        ColorCase{.authored = {.red = 1.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F},
+                  .semantic = {.red = 1.0F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F},
+                  .packed = 0xFF00'00FFU},
+        ColorCase{.authored = {.red = 0.0F, .green = 1.0F, .blue = 0.0F, .alpha = 1.0F},
+                  .semantic = {.red = 0.0F, .green = 1.0F, .blue = 0.0F, .alpha = 1.0F},
+                  .packed = 0xFF00'FF00U},
+        ColorCase{.authored = {.red = 0.0F, .green = 0.0F, .blue = 1.0F, .alpha = 1.0F},
+                  .semantic = {.red = 0.0F, .green = 0.0F, .blue = 1.0F, .alpha = 1.0F},
+                  .packed = 0xFFFF'0000U},
+        ColorCase{.authored = {.red = 0.5F, .green = 0.5F, .blue = 0.5F, .alpha = 1.0F},
+                  .semantic = {.red = 0.21404114F,
+                               .green = 0.21404114F,
+                               .blue = 0.21404114F,
+                               .alpha = 1.0F},
+                  .packed = 0xFF37'3737U},
+        ColorCase{.authored = {.red = 1.0F, .green = 1.0F, .blue = 1.0F, .alpha = 0.5F},
+                  .semantic = {.red = 0.5F, .green = 0.5F, .blue = 0.5F, .alpha = 0.5F},
+                  .packed = 0x8080'8080U}};
 
     for (const ColorCase& testCase : colorCases)
     {

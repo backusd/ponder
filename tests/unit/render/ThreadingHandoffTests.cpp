@@ -13,8 +13,9 @@ namespace
     std::uint64_t revision = 1, pond::platform::WindowId windowId = pond::platform::WindowId{42},
     pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision =
         pond::render::PresentationEnvironmentRevision{1U},
-    pond::platform::PixelSize pixelSize = pond::platform::PixelSize{800, 600},
-    pond::platform::LogicalSize logicalSize = pond::platform::LogicalSize{800, 600},
+    pond::platform::PixelSize pixelSize = pond::platform::PixelSize{.width = 800, .height = 600},
+    pond::platform::LogicalSize logicalSize = pond::platform::LogicalSize{.width = 800,
+                                                                          .height = 600},
     bool visible = true,
     pond::platform::WindowState windowState = pond::platform::WindowState::Normal)
 {
@@ -91,13 +92,13 @@ TEST(RenderThreadingHandoffTests, ValidatesTargetSnapshotUpdateOrdering)
                       pond::render::RenderErrorCode::InvalidArgument);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(2)),
                       pond::render::RenderErrorCode::InvalidState);
-    ExpectRenderError(
-        pond::render::ValidateTargetSnapshotUpdate(
-            MakeSnapshot(2), MakeSnapshot(2, pond::platform::WindowId{42},
-                                          pond::render::PresentationEnvironmentRevision{2U},
-                                          pond::platform::PixelSize{800, 600},
-                                          pond::platform::LogicalSize{640, 480})),
-        pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(
+                          MakeSnapshot(2),
+                          MakeSnapshot(2, pond::platform::WindowId{42},
+                                       pond::render::PresentationEnvironmentRevision{2U},
+                                       pond::platform::PixelSize{.width = 800, .height = 600},
+                                       pond::platform::LogicalSize{.width = 640, .height = 480})),
+                      pond::render::RenderErrorCode::InvalidState);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(1)),
                       pond::render::RenderErrorCode::InvalidState);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(
@@ -257,7 +258,7 @@ TEST(RenderThreadingHandoffTests,
     ExpectRenderError(conflictingSurface.TransferToCurrentThread(
                           MakeSnapshot(3, pond::platform::WindowId{42},
                                        pond::render::PresentationEnvironmentRevision{1U},
-                                       pond::platform::PixelSize{1024, 768})),
+                                       pond::platform::PixelSize{.width = 1024, .height = 768})),
                       pond::render::RenderErrorCode::InvalidState);
 
     auto regressingSurfaceResult = CreatePreparedSurfaceForTest(

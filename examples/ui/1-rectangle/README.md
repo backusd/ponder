@@ -76,12 +76,13 @@ and presentation resources, allocates transient GPU upload storage, and writes
 concise diagnostics to standard output or standard error. It creates no files,
 opens no network connection, and installs no artifacts.
 
-The Vulkan backend is supported on Windows and Linux. Windows is the currently
-live-tested host; Linux presentation behavior has not yet been validated by the
-project. A run requires a Vulkan 1.2-or-newer loader, a present-capable
-GPU/driver, and an active desktop session. Developer builds may also require
-the configured Khronos validation layer. The Vulkan SDK is not required merely
-to run an already-built executable.
+This experimental rectangle path is currently supported and live-validated
+only on Windows with Vulkan. Linux presentation behavior is outside this
+example's support claim and has not been validated by the project. A run
+requires a Vulkan 1.2-or-newer loader, a present-capable GPU/driver, and an
+active desktop session. Developer builds may also require the configured
+Khronos validation layer. The Vulkan SDK is not required merely to run an
+already-built executable.
 
 ## Build And Run
 
@@ -107,7 +108,7 @@ Run interactively or in bounded mode:
 The compile-only CTest entry ponder_ui_1_rectangle_build_smoke builds this
 target but does not launch it. The bounded launch is supporting evidence only;
 the validation-disabled --smoke path does not replace deterministic
-packet/backend tests or the later required live Windows/Vulkan validation gate.
+packet/backend tests or the required `ui_live_vulkan` Windows/Vulkan gate.
 
 ## Intentional Scope
 

@@ -23,9 +23,9 @@ int main()
     }
 
     const auto metrics = pond::ui::MakeUiTargetMetrics(
-        pond::ui::UiTargetId{1U}, pond::ui::UiTargetRevision{1U},
-        pond::ui::UiMetricsRevision{1U}, pond::ui::LogicalSize{100.0F, 50.0F},
-        pond::ui::FramebufferPixelSize{200U, 100U});
+        pond::ui::UiTargetId{1U}, pond::ui::UiTargetRevision{1U}, pond::ui::UiMetricsRevision{1U},
+        pond::ui::LogicalSize{.width = 100.0F, .height = 50.0F},
+        pond::ui::FramebufferPixelSize{.width = 200U, .height = 100U});
     if (!metrics.HasValue() || !pond::ui::IsDrawable(*metrics))
     {
         return 3;

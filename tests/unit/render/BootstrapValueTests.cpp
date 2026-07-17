@@ -162,15 +162,15 @@ static_assert(!pond::render::IsValid(pond::render::RenderFrameResult{
     .status = pond::render::FrameStatus::Recreated}));
 static_assert(pond::render::IsValid(pond::render::RenderFrameMetrics{
     .windowId = pond::platform::WindowId{42},
-    .logicalSize = pond::platform::LogicalSize{800, 600},
-    .pixelSize = pond::platform::PixelSize{1600, 1200},
+    .logicalSize = pond::platform::LogicalSize{.width = 800, .height = 600},
+    .pixelSize = pond::platform::PixelSize{.width = 1600, .height = 1200},
     .metricsRevision = pond::render::PresentationEnvironmentRevision{2U},
     .targetRevision = 3U}));
 static_assert(!pond::render::IsValid(pond::render::RenderFrameMetrics{}));
 static_assert(!pond::render::IsValid(pond::render::RenderFrameMetrics{
     .windowId = pond::platform::WindowId{42},
     .logicalSize = pond::platform::LogicalSize{},
-    .pixelSize = pond::platform::PixelSize{1600, 1200},
+    .pixelSize = pond::platform::PixelSize{.width = 1600, .height = 1200},
     .metricsRevision = pond::render::PresentationEnvironmentRevision{2U},
     .targetRevision = 3U}));
 
@@ -179,13 +179,14 @@ static_assert(!pond::render::IsValid(pond::render::RenderFrameMetrics{
     pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision =
         pond::render::PresentationEnvironmentRevision{1U})
 {
-    return pond::render::RenderTargetSnapshot{pond::platform::WindowId{42},
-                                              pond::platform::PixelSize{800, 600},
-                                              pond::platform::LogicalSize{800U, 600U},
-                                              true,
-                                              pond::platform::WindowState::Normal,
-                                              presentationEnvironmentRevision,
-                                              revision};
+    return pond::render::RenderTargetSnapshot{
+        pond::platform::WindowId{42},
+        pond::platform::PixelSize{.width = 800, .height = 600},
+        pond::platform::LogicalSize{.width = 800U, .height = 600U},
+        true,
+        pond::platform::WindowState::Normal,
+        presentationEnvironmentRevision,
+        revision};
 }
 
 static_assert(pond::render::IsValid(pond::render::PresentationEnvironmentRevision{1U}));
@@ -193,15 +194,16 @@ static_assert(!pond::render::IsValid(pond::render::PresentationEnvironmentRevisi
 static_assert(pond::render::IsValid(MakeValidSnapshot()));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{}));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{800, 600},
-    pond::platform::LogicalSize{800U, 600U}, true, static_cast<pond::platform::WindowState>(255),
+    pond::platform::WindowId{42}, pond::platform::PixelSize{.width = 800, .height = 600},
+    pond::platform::LogicalSize{.width = 800U, .height = 600U}, true,
+    static_cast<pond::platform::WindowState>(255),
     pond::render::PresentationEnvironmentRevision{1U}, 1}));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{800, 600},
-    pond::platform::LogicalSize{800U, 600U}, true, pond::platform::WindowState::Normal,
-    pond::render::PresentationEnvironmentRevision{}, 1}));
+    pond::platform::WindowId{42}, pond::platform::PixelSize{.width = 800, .height = 600},
+    pond::platform::LogicalSize{.width = 800U, .height = 600U}, true,
+    pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{}, 1}));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{800, 600},
+    pond::platform::WindowId{42}, pond::platform::PixelSize{.width = 800, .height = 600},
     pond::platform::LogicalSize{}, true, pond::platform::WindowState::Normal,
     pond::render::PresentationEnvironmentRevision{1U}, 1}));
 static_assert(pond::render::IsValid(pond::render::RenderTargetSnapshot{
@@ -343,16 +345,16 @@ TEST(RenderBootstrapValueTests, SnapshotStoresCopiedWindowStateWithoutNativePayl
         5};
     const pond::render::RenderTargetSnapshot restoredSnapshot{
         windowId,
-        pond::platform::PixelSize{640, 480},
-        pond::platform::LogicalSize{640U, 480U},
+        pond::platform::PixelSize{.width = 640, .height = 480},
+        pond::platform::LogicalSize{.width = 640U, .height = 480U},
         true,
         pond::platform::WindowState::Normal,
         pond::render::PresentationEnvironmentRevision{2U},
         6};
     const pond::render::RenderTargetSnapshot maximizedSnapshot{
         windowId,
-        pond::platform::PixelSize{640, 480},
-        pond::platform::LogicalSize{640U, 480U},
+        pond::platform::PixelSize{.width = 640, .height = 480},
+        pond::platform::LogicalSize{.width = 640U, .height = 480U},
         true,
         pond::platform::WindowState::Maximized,
         pond::render::PresentationEnvironmentRevision{2U},
@@ -380,8 +382,8 @@ TEST(RenderBootstrapValueTests, SnapshotStoresCopiedWindowStateWithoutNativePayl
     EXPECT_TRUE(pond::render::IsValid(maximizedSnapshot));
     EXPECT_TRUE(pond::render::IsValid(hiddenZeroSizedSnapshot));
     EXPECT_TRUE(pond::render::IsValid(visibleZeroSizedSnapshot));
-    const pond::platform::PixelSize expectedPixelSize{640, 480};
-    const pond::platform::LogicalSize expectedLogicalSize{640, 480};
+    const pond::platform::PixelSize expectedPixelSize{.width = 640, .height = 480};
+    const pond::platform::LogicalSize expectedLogicalSize{.width = 640, .height = 480};
     EXPECT_EQ(restoredSnapshot.GetWindowId(), windowId);
     EXPECT_EQ(restoredSnapshot.GetPixelSize(), expectedPixelSize);
     EXPECT_EQ(restoredSnapshot.GetLogicalSize(), expectedLogicalSize);
@@ -406,7 +408,7 @@ TEST(RenderBootstrapValueTests, RepresentsPresentationPreferencesAsSelectionStat
         .queuedLatencyFallback =
             pond::render::QueuedFrameLatencyFallbackReason::TargetMaximumExceeded,
         .output = pond::render::PresentationOutput::OpaqueSdrSrgb,
-        .pixelExtent = pond::platform::PixelSize{800, 600}};
+        .pixelExtent = pond::platform::PixelSize{.width = 800, .height = 600}};
 
     EXPECT_TRUE(pond::render::IsValid(selection));
     EXPECT_EQ(selection.actualPolicy, pond::render::PresentationPolicy::VSync);

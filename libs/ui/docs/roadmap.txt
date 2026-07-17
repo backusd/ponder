@@ -1424,6 +1424,54 @@ TASK UI-020: Run Formatting And Static-Analysis Gates
 Run the milestone-wide code-quality work explicitly after the implementation and example exist,
 rather than repeatedly applying expensive analysis to every intermediate task.
 
+Status: completed on 2026-07-16.
+
+Implementation evidence:
+
+- Enumerated 64 milestone-owned handwritten C/C++ files across the UI core, paint/compiler,
+  experimental facade and workbench, private Draw2D seam, Vulkan 2D backend, shader contract,
+  focused tests, header consumers, and installed-package consumers. Kept 36 contemporaneous
+  core/platform convention changes outside the milestone scope untouched.
+- Applied clang-format 22.1.3 to that exact file set. The final dry run reported 64 checked files
+  and zero drift.
+- Ran clang-tidy 22.1.3 with `--warnings-as-errors=*` against real compile commands for all 48
+  scoped translation units. New files received full-file diagnostic coverage; modified files used
+  the milestone's `HEAD^..working-tree` changed-line filters while still parsing their complete
+  translation units. The production/example group passed 12/12, UI unit/install consumers passed
+  23/23, and render unit/integration/install consumers passed 13/13 with zero in-range primary
+  diagnostics. Inherited out-of-range core/render findings were reported rather than refactored.
+- Repaired only milestone-owned findings: removed post-move example accesses, made Vulkan shader
+  entry points compile-time NUL-terminated without allocating after Vulkan resource acquisition,
+  made upload-size arithmetic width-safe, clarified thread and lifecycle predicates, completed
+  Vulkan aggregate initialization/comparison, and applied safe modernize/readability fixes to
+  focused sources and tests. Focused MSVC builds and the affected 30 Draw2D, 146 backend, and
+  example checks passed after the repairs.
+
+Validation and command evidence:
+
+- `ctest --test-dir build/windows-msvc-debug --output-on-failure --no-tests=error -R
+  "^ponder_ui_clean_windows_build_matrix$"`, run through the x64 Visual Studio Developer Command
+  Prompt, passed its post-repair single 1,055-second driver. It created and passed clean MSVC
+  render-off/render-generic/full-integration configurations in both Debug and Release with
+  warnings-as-errors, tests, headers, dependency scans, shader checks, packages, and installed
+  consumers enabled as appropriate.
+- `ponder_render_clear_window` and `ponder_ui_1_rectangle` built in the fresh MSVC Debug analysis
+  tree and from the configured MSVC Release preset. The Release build regenerated both rectangle
+  shader artifacts, then verified them current and verified the reflected interface.
+- A final DevCmd CTest selection passed 17/17 shader artifact/staleness/interface, Draw2D shader
+  contract, public/private header, UI topology, removed-dependency, and installed render/UI
+  consumer checks. The same selection was first invoked outside DevCmd; its 15 compiler-independent
+  checks passed and only the two consumer configure steps failed because no compiler was available.
+  The corrected DevCmd rerun is the recorded result.
+- The supported `windows-clangcl-debug` preset configured with clang-cl 22.1.3. The `ponder_ui`
+  and `ponder_ui_paint` targets passed, and the renderer build passed generated shader/interface
+  work before stopping in unrelated `libs/platform/src/EventPolling.cpp:73` on
+  `-Wmissing-field-initializers` promoted to an error. That parallel platform change was reported
+  rather than modified. The repository provides no Windows clang-cl Release or sanitizer preset;
+  live Windows/Vulkan validation remains explicitly deferred to UI-021.
+- The final milestone scope passed `git diff --check`, and the final clang-format dry run remained
+  clean after all repairs.
+
 Work:
 
 - Apply the repository clang-format policy to every handwritten C/C++ file added or changed for
@@ -1453,6 +1501,69 @@ TASK UI-021: Run The Live Windows/Vulkan Validation Gate
 
 Prove the exact production path on the supported host after deterministic and package gates have
 removed ordinary logic and ownership defects.
+
+Status: completed on 2026-07-16.
+
+Implementation evidence:
+
+- Added the Windows-only `ponder_ui_live_integration_tests` target behind the existing render-live
+  and UI-integration gates. Its CTest entry uses the shared `ponder_platform_sdl` resource lock, a
+  300-second timeout, the unique `ui_live_vulkan` label, required-lane compile semantics, and a
+  private-only renderer instrumentation include. No Vulkan or live-test type entered the UI public
+  API.
+- The test creates two real SDL windows and, through public project APIs, one Vulkan bootstrap and
+  device, two surfaces and targets, and one experimental rectangle renderer. It presents a
+  contrasting clear plus opaque and overlapping translucent rectangles, interleaves eight warm and
+  six steady frames per target, coalesces a four-size resize storm, performs bounded
+  minimize/restore waits using copied current snapshots, renders the unaffected target while its
+  peer is suspended, and verifies continued rendering after asymmetric teardown.
+- Added private production-path pipeline/upload statistics and bounded first-validation-failure
+  name, operation, and message context. The live gate proves one pipeline creation with no
+  replacement, at least 12 additional steady-state reuse hits, stable post-warm upload capacity,
+  allocation, growth, and generation counts on both targets, zero ordinary device-wide idle calls
+  or practical wait fallbacks, target isolation, and final zero active layer, target, device, and
+  prepared-surface baselines. Validation is checked after child destruction and before instance
+  shutdown.
+- The shared live harness disables every skip in required builds. Optional builds use an exact
+  error-code, lifecycle-operation, and allowlisted capability-message classification; missing
+  dispatch and generic backend failures remain failures. Compile-time checks cover the missing-layer
+  case and reject both dispatch and backend failures as skip reasons.
+- Hardened validation-mode discovery to include extensions exposed by
+  `VK_LAYER_KHRONOS_validation`, and chained `VkSwapchainPresentModesCreateInfoKHR` whenever
+  swapchain-maintenance present-mode switching is enabled. Fake-backend regressions cover both
+  fixes, bounded validation context, and two-target Draw2D steady-state behavior. Existing exact
+  shader, packet, and blend tests supplied sufficient translucent-blend evidence, so no pixel probe
+  or screenshot oracle was added.
+
+Validation and command evidence:
+
+- Used Vulkan SDK/loader 1.4.350, `VK_LAYER_KHRONOS_validation` 1.4.350, the NVIDIA GeForce RTX
+  3070 Laptop GPU with Vulkan 1.4.341 and driver 610.74, MSVC 19.51.36248, Ninja, and Debug builds
+  from the x64 Visual Studio Developer Command Prompt.
+- Configured fresh `build/ui-021-live-<mode>-vs18` trees with `cmake -S . -B <tree> -G Ninja
+  -DCMAKE_BUILD_TYPE=Debug`, tests/render/UI integration/Vulkan/validation enabled,
+  `PONDER_RENDER_REQUIRE_LIVE_TESTS=ON`, and `PONDER_RENDER_LIVE_VALIDATION_MODE` set in turn to
+  `Standard`, `BestPractices`, `Synchronization`, and `GpuAssisted`. Every candidate built the
+  production live target and ran `ctest --test-dir <tree> --output-on-failure --no-tests=error
+  --timeout 300 -L ui_live_vulkan`; configure success alone was not accepted.
+- Standard, Best Practices, and Synchronization each passed the complete lifecycle 1/1 with zero
+  unexpected validation warnings or errors. These advanced modes are orthogonal rather than a
+  simple strength ordering; Synchronization was designated the strongest accepted correctness lane
+  for this milestone because it directly validates resource and queue hazards, while Best Practices
+  supplies a second clean policy lane. GPU Assisted also built and ran the complete path, but was
+  rejected as a clean acceptance lane because this layer/device combination emits one
+  `VALIDATION-SETTINGS` core-check warning and two
+  `WARNING-Setting-Limit-Adjusted` capability-adjustment warnings. They were reported rather than
+  filtered, skipped, or misrepresented as a pass.
+- The final Standard, Best Practices, and Synchronization reruns passed 1/1 in 1.02, 1.04, and 1.07
+  seconds respectively. All three existing live render/WSI tests
+  passed after the shared support-header refactor, and the complete fake renderer backend suite
+  passed 147/147. Both live targets also compiled in the existing optional/default-validation tree.
+  The final clang-format 22.1.3 dry run over the UI-021 C++ files and `git diff --check` were clean.
+- The host had a stale enabled Epic overlay manifest and the AMD switchable-graphics implicit
+  layer. Each live invocation isolated those host-only loader diagnostics with a reversible wrapper;
+  the Epic registry DWORD was restored to its original value of `0` in a `finally` block after every
+  run. No missing required capability or generic backend failure was converted into a skip.
 
 Work:
 

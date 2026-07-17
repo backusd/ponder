@@ -830,9 +830,8 @@ public:
                 RenderErrorCode::InvalidArgument, detail::MakeValidationMessage(validation)));
         }
 
-        Draw2DPacket packet = m_reusablePacket.has_value()
-                                  ? std::move(*m_reusablePacket)
-                                  : Draw2DPacket{};
+        Draw2DPacket packet =
+            m_reusablePacket.has_value() ? std::move(*m_reusablePacket) : Draw2DPacket{};
         m_reusablePacket.reset();
         try
         {

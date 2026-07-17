@@ -110,20 +110,24 @@ TEST(UiPaintRecorderTests, RejectsInvalidFillsBeforeStateChange)
     PaintRecorder recorder{MakeRecorderTestLimits()};
 
     const auto negativeExtent = recorder.FillRectangle(
-        pond::ui::LogicalRect{pond::ui::LogicalPoint{}, pond::ui::LogicalSize{-1.0F, 2.0F}},
+        pond::ui::LogicalRect{.origin = pond::ui::LogicalPoint{},
+                              .size = pond::ui::LogicalSize{.width = -1.0F, .height = 2.0F}},
         MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
     ASSERT_FALSE(negativeExtent.HasValue());
     ExpectUiErrorCode(negativeExtent.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
     const auto nonFinite = recorder.FillRectangle(
-        pond::ui::LogicalRect{pond::ui::LogicalPoint{0.0F, 0.0F},
-                              pond::ui::LogicalSize{std::numeric_limits<float>::infinity(), 2.0F}},
+        pond::ui::LogicalRect{
+            .origin = pond::ui::LogicalPoint{.x = 0.0F, .y = 0.0F},
+            .size = pond::ui::LogicalSize{.width = std::numeric_limits<float>::infinity(),
+                                          .height = 2.0F}},
         MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
     ASSERT_FALSE(nonFinite.HasValue());
     ExpectUiErrorCode(nonFinite.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
     const auto invalidColor = recorder.FillRectangle(
-        MakeRect(0.0F, 0.0F, 1.0F, 1.0F), pond::ui::SrgbStraightAlphaColor{1.1F, 0.0F, 0.0F, 1.0F});
+        MakeRect(0.0F, 0.0F, 1.0F, 1.0F),
+        pond::ui::SrgbStraightAlphaColor{.red = 1.1F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F});
     ASSERT_FALSE(invalidColor.HasValue());
     ExpectUiErrorCode(invalidColor.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
