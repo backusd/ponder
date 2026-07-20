@@ -14,6 +14,11 @@ static_assert(!std::is_copy_assignable_v<pond::platform::PlatformRuntime>);
 static_assert(std::is_nothrow_move_constructible_v<pond::platform::PlatformRuntime>);
 static_assert(std::is_nothrow_move_assignable_v<pond::platform::PlatformRuntime>);
 static_assert(std::is_nothrow_destructible_v<pond::platform::PlatformRuntime>);
+static_assert(std::is_same_v<pond::platform::ConfigureHintsBeforeInitialization,
+                             void (*)(pond::platform::HintManager&)>);
+static_assert(std::is_same_v<decltype(std::declval<pond::platform::PlatformRuntime&>()
+                                          .GetHintManager()),
+                             pond::platform::HintManager&>);
 static_assert(std::is_same_v<decltype(std::declval<pond::platform::PlatformRuntime&>().PollEvent()),
                              std::optional<pond::platform::PlatformEvent>>);
 static_assert(
@@ -64,6 +69,7 @@ TEST(PlatformRuntimeDescTests, ProvidesStableApplicationMetadataDefaults)
     EXPECT_EQ(desc.applicationName, "ponder");
     EXPECT_FALSE(desc.applicationVersion.has_value());
     EXPECT_FALSE(desc.applicationIdentifier.has_value());
+    EXPECT_EQ(desc.configureHintsBeforeInitialization, nullptr);
 }
 
 TEST(PlatformRuntimeDescTests, OwnsConfiguredApplicationMetadata)

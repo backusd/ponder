@@ -31,6 +31,7 @@ add_library(ponder_platform_header_tests OBJECT
     HeaderSelfContainment/DialogHeader.cpp
     HeaderSelfContainment/DisplayHeader.cpp
     HeaderSelfContainment/GeometryHeader.cpp
+    HeaderSelfContainment/HintManagerHeader.cpp
     HeaderSelfContainment/IdentifiersHeader.cpp
     HeaderSelfContainment/KeyboardHeader.cpp
     HeaderSelfContainment/MouseHeader.cpp
@@ -67,6 +68,7 @@ set_target_properties(ponder_platform_process_helper PROPERTIES
 
 ponder_add_project_test(ponder_platform_backend_tests
     SOURCES
+        HintManagerTests.cpp
         PlatformRuntimeTests.cpp
         ProcessBackendTests.cpp
         RuntimeChildRegistryTests.cpp

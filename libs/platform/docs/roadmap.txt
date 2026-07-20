@@ -216,7 +216,7 @@ Approved contract:
   mouse warping, gamepad navigation, and touch/pen source discrimination are
   deferred to deliberately designed milestones.
 - Missing or underspecified project primitives are assigned to later tasks:
-  private mouse hints in PLAT-004, pointer enter/leave in PLAT-008, exact wheel
+  typed hint management in PLAT-004, pointer enter/leave in PLAT-008, exact wheel
   and cursor contracts in PLAT-011, and external-URI opening in PLAT-015.
   No SDL public type is missing from the approved adapter contract.
 
@@ -301,14 +301,16 @@ Work:
   uses process-global `SDL_Quit()` for deterministic cleanup. Before shutdown,
   verify that no subsystem outside the runtime-owned video/event set appeared.
 - Initialize only SDL video; use the events initialization implied by video.
-- Do not add typed SDL hints until a concrete platform behavior needs one, and
-  never expose an arbitrary string-hint map.
-- Apply the two typed mouse policies required by the UI adapter:
+- Model a curated cross-platform SDL hint catalog through the public, strongly
+  typed `HintManager`; never expose SDL names or an arbitrary string-hint map.
+  Keep an independent value stack for each hint, validate typed values, reject
+  invalid lifecycle mutations, and provide a descriptor callback for hints that
+  must be set before initialization. Apply the UI adapter defaults first:
   `SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH=1` and `SDL_HINT_MOUSE_AUTO_CAPTURE=0`.
-  Preserve and restore prior process values across runtime lifetime; do not
-  expose either setting as a generic public hint. SDL exposes neither hint
-  priority nor provenance, so restoration guarantees the prior effective
-  nullable string value, after `SDL_Quit()`, rather than its original priority.
+- Preserve and restore every managed prior effective process value across runtime
+  lifetime. SDL exposes neither hint priority nor provenance, so restoration
+  guarantees the prior effective nullable string value, after `SDL_Quit()`,
+  rather than its original priority.
 - Capture the startup thread during module initialization as a defense-in-depth
   guard and require `Create` to run there before consulting SDL. Also verify
   `SDL_IsMainThread()` and capture the creating thread as the runtime owner.
@@ -1189,8 +1191,10 @@ the portability matrix—not known implementation defects.
   visibility, accepted duplicates remain idempotent, immediate reversals reach
   SDL while flags lag, and delayed SHOWN events cannot erase newer hidden or
   visible intent.
-- Production and fake backend tables use designated initializers, keeping every
-  function pointer visibly associated with its field.
+- The runtime owns a class-based backend through `IPlatformRuntimeBackend`;
+  production and fake implementations carry their own state and lifetime.
+  Window and display backend tables retain designated initializers, keeping
+  every remaining function pointer visibly associated with its field.
 - Process termination rejects forged enum values before backend dispatch. The
   process-lifetime abandoned-child reaper is created before child launch, blocks
   while idle, polls all active handles fairly, and never makes public destruction

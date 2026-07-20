@@ -15,6 +15,8 @@ static_assert(
     std::is_same_v<std::underlying_type_t<pond::platform::SystemCursorShape>, std::uint8_t>);
 static_assert(pond::platform::MouseButton{} == pond::platform::MouseButton::Unknown);
 static_assert(pond::platform::SystemCursorShape{} == pond::platform::SystemCursorShape::Default);
+static_assert(std::is_aggregate_v<pond::platform::MousePosition>);
+static_assert(pond::platform::MousePosition{} == pond::platform::MousePosition{0.0F, 0.0F});
 
 template <typename Value, std::size_t Size>
 void ExpectUnique(const std::array<Value, Size>& values)
@@ -53,5 +55,11 @@ TEST(MouseTests, DefinesDistinctSupportedSystemCursorShapes)
                                 pond::platform::SystemCursorShape::NotAllowed};
 
     ExpectUnique(shapes);
+}
+TEST(MouseTests, StoresBackendMouseCoordinatesAsAValue)
+{
+    constexpr pond::platform::MousePosition position{-12.5F, 300.25F};
+    EXPECT_FLOAT_EQ(position.x, -12.5F);
+    EXPECT_FLOAT_EQ(position.y, 300.25F);
 }
 } // namespace

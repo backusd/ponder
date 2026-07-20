@@ -4,6 +4,14 @@
 
 namespace pond::platform
 {
+struct MousePosition final
+{
+    float x{};
+    float y{};
+
+    friend constexpr bool operator==(const MousePosition&, const MousePosition&) noexcept = default;
+};
+
 enum class MouseButton : std::uint8_t
 {
     Unknown,

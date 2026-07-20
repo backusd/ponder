@@ -2,14 +2,63 @@
 
 #include <ponder/core/Result.hpp>
 
+#include <charconv>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
 
 namespace pond::core
 {
+template <typename Value>
+    requires((std::integral<Value> && !std::same_as<std::remove_cv_t<Value>, bool>) ||
+             std::floating_point<Value>)
+[[nodiscard]] std::optional<Value> ParseNumber(std::string_view text) noexcept
+{
+    if (text.empty())
+    {
+        return std::nullopt;
+    }
+
+    Value value{};
+    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (error != std::errc{} || end != text.data() + text.size())
+    {
+        return std::nullopt;
+    }
+    return value;
+}
+
+[[nodiscard]] constexpr bool EqualsCaseInsensitive(std::string_view left,
+                                                   std::string_view right) noexcept
+{
+    if (left.size() != right.size())
+    {
+        return false;
+    }
+
+    constexpr char kCaseOffset = 'a' - 'A';
+    const auto toLower = [](char character) constexpr noexcept
+    {
+        return character >= 'A' && character <= 'Z' ? static_cast<char>(character + kCaseOffset)
+                                                    : character;
+    };
+
+    for (std::size_t index = 0; index < left.size(); ++index)
+    {
+        if (toLower(left[index]) != toLower(right[index]))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 namespace detail
 {
 static_assert(sizeof(wchar_t) == 2 || sizeof(wchar_t) == 4,

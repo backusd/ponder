@@ -96,7 +96,7 @@ namespace detail
 core::VoidResult PlatformRuntimeState::SetMouseCapture(bool enabled)
 {
     VerifyOwnerThread("mouse capture update");
-    if (!m_backend.supportsGlobalMouse(m_backend.context))
+    if (!m_backend->SupportsGlobalMouse())
     {
         if (!enabled)
         {
@@ -107,7 +107,7 @@ core::VoidResult PlatformRuntimeState::SetMouseCapture(bool enabled)
             kUnsupportedCode, "Global mouse capture is unsupported by the active video driver."});
     }
 
-    if (!m_backend.setMouseCapture(m_backend.context, enabled))
+    if (!m_backend->SetMouseCapture(enabled))
     {
         return core::VoidResult::FromError(CaptureSdlFailure(
             kBackendFailureCode, "SDL_CaptureMouse", enabled ? "enable" : "disable"));
@@ -119,14 +119,14 @@ core::VoidResult PlatformRuntimeState::SetMouseCapture(bool enabled)
 core::Result<LogicalPoint> PlatformRuntimeState::GetGlobalMousePosition() const
 {
     VerifyOwnerThread("global mouse-position query");
-    if (!m_backend.supportsGlobalMouse(m_backend.context))
+    if (!m_backend->SupportsGlobalMouse())
     {
         return core::Result<LogicalPoint>::FromError(core::Error{
             kUnsupportedCode, "Global mouse position is unsupported by the active video driver."});
     }
 
-    LogicalPoint position;
-    m_backend.getGlobalMousePosition(m_backend.context, &position.x, &position.y);
+    const MousePosition backendPosition = m_backend->GetGlobalMousePosition();
+    const LogicalPoint position{backendPosition.x, backendPosition.y};
     if (!IsValid(position))
     {
         return core::Result<LogicalPoint>::FromError(core::Error{
@@ -146,18 +146,18 @@ core::VoidResult PlatformRuntimeState::SetSystemCursor(SystemCursorShape shape)
             core::Error{kInvalidArgumentCode, "System cursor shape is invalid."});
     }
 
-    void*& cursor = m_systemCursors[*cursorIndex];
-    if (cursor == nullptr)
+    CursorHandle& cursor = m_systemCursors[*cursorIndex];
+    if (!cursor.IsValid())
     {
-        cursor = m_backend.createSystemCursor(m_backend.context, shape);
-        if (cursor == nullptr)
+        cursor = m_backend->CreateSystemCursor(shape);
+        if (!cursor.IsValid())
         {
             return core::VoidResult::FromError(CaptureSdlFailure(
                 kBackendFailureCode, "SDL_CreateSystemCursor", GetCursorName(shape)));
         }
     }
 
-    if (!m_backend.setCursor(m_backend.context, cursor))
+    if (!m_backend->SetCursor(cursor))
     {
         return core::VoidResult::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_SetCursor", GetCursorName(shape)));
@@ -169,12 +169,12 @@ core::VoidResult PlatformRuntimeState::SetSystemCursor(SystemCursorShape shape)
 core::VoidResult PlatformRuntimeState::ShowCursor()
 {
     VerifyOwnerThread("cursor visibility update");
-    if (m_backend.isCursorVisible(m_backend.context))
+    if (m_backend->IsCursorVisible())
     {
         return core::VoidResult::Success();
     }
 
-    if (!m_backend.showCursor(m_backend.context))
+    if (!m_backend->ShowCursor())
     {
         return core::VoidResult::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_ShowCursor"));
@@ -186,12 +186,12 @@ core::VoidResult PlatformRuntimeState::ShowCursor()
 core::VoidResult PlatformRuntimeState::HideCursor()
 {
     VerifyOwnerThread("cursor visibility update");
-    if (!m_backend.isCursorVisible(m_backend.context))
+    if (!m_backend->IsCursorVisible())
     {
         return core::VoidResult::Success();
     }
 
-    if (!m_backend.hideCursor(m_backend.context))
+    if (!m_backend->HideCursor())
     {
         return core::VoidResult::FromError(
             CaptureSdlFailure(kBackendFailureCode, "SDL_HideCursor"));
@@ -203,17 +203,17 @@ core::VoidResult PlatformRuntimeState::HideCursor()
 bool PlatformRuntimeState::IsCursorVisible() const
 {
     VerifyOwnerThread("cursor visibility query");
-    return m_backend.isCursorVisible(m_backend.context);
+    return m_backend->IsCursorVisible();
 }
 
 void PlatformRuntimeState::DestroySystemCursors() noexcept
 {
-    for (void*& cursor : m_systemCursors)
+    for (CursorHandle& cursor : m_systemCursors)
     {
-        if (cursor != nullptr)
+        if (cursor.IsValid())
         {
-            m_backend.destroyCursor(m_backend.context, cursor);
-            cursor = nullptr;
+            m_backend->DestroyCursor(cursor);
+            cursor = CursorHandle{};
         }
     }
 }

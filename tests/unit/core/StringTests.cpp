@@ -1,13 +1,18 @@
 #include <ponder/core/String.hpp>
 
 #include <gtest/gtest.h>
+#include <cstdint>
 #include <initializer_list>
+#include <limits>
 #include <string>
 #include <string_view>
 
 namespace
 {
 constexpr std::string_view kRocketUtf8{"\xF0\x9F\x9A\x80", 4};
+
+static_assert(pond::core::EqualsCaseInsensitive("Ponder", "PONDER"));
+static_assert(!pond::core::EqualsCaseInsensitive("Ponder", "Pond"));
 
 constexpr bool Utf8ToWideStringAsciiIsConstexpr()
 {
@@ -121,6 +126,14 @@ void ExpectParseFailure(const pond::core::Result<std::string>& result)
     EXPECT_EQ(result.GetError().GetCode().GetCategory(), pond::core::ErrorCategory::Parse);
 }
 
+TEST(StringComparisonTests, ComparesAsciiCaseInsensitively)
+{
+    EXPECT_TRUE(pond::core::EqualsCaseInsensitive("", ""));
+    EXPECT_TRUE(pond::core::EqualsCaseInsensitive("SDL_FALSE", "sdl_false"));
+    EXPECT_FALSE(pond::core::EqualsCaseInsensitive("SDL_TRUE", "SDL_FALSE"));
+    EXPECT_FALSE(pond::core::EqualsCaseInsensitive("Ponder", "Ponder "));
+}
+
 TEST(Utf8ValidationTests, ValidatesUtf8WithoutAllocatingAResult)
 {
     EXPECT_TRUE(pond::core::IsValidUtf8(""));
@@ -219,5 +232,28 @@ TEST(StringConversionTests, RejectsInvalidWideStrings)
         std::wstring tooLarge{static_cast<wchar_t>(0x00110000)};
         ExpectParseFailure(pond::core::WideStringToUtf8(tooLarge));
     }
+}
+TEST(NumberParsingTests, ParsesCompleteIntegralAndFloatingPointValues)
+{
+    const auto signedValue = pond::core::ParseNumber<int>("-42");
+    ASSERT_TRUE(signedValue.has_value());
+    EXPECT_EQ(*signedValue, -42);
+
+    const auto unsignedValue = pond::core::ParseNumber<std::uint32_t>("4294967295");
+    ASSERT_TRUE(unsignedValue.has_value());
+    EXPECT_EQ(*unsignedValue, std::numeric_limits<std::uint32_t>::max());
+
+    const auto floatingValue = pond::core::ParseNumber<float>("1.25");
+    ASSERT_TRUE(floatingValue.has_value());
+    EXPECT_FLOAT_EQ(*floatingValue, 1.25F);
+}
+
+TEST(NumberParsingTests, RejectsEmptyPartialWhitespaceAndOutOfRangeValues)
+{
+    EXPECT_FALSE(pond::core::ParseNumber<int>("").has_value());
+    EXPECT_FALSE(pond::core::ParseNumber<int>("12ms").has_value());
+    EXPECT_FALSE(pond::core::ParseNumber<int>(" 12").has_value());
+    EXPECT_FALSE(pond::core::ParseNumber<unsigned int>("-1").has_value());
+    EXPECT_FALSE(pond::core::ParseNumber<int>("999999999999999999999999").has_value());
 }
 } // namespace

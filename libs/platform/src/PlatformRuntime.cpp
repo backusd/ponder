@@ -8,17 +8,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
-#include <string>
 #include <string_view>
 #include <thread>
 #include <utility>
 
 #include "PlatformRuntimeState.hpp"
-#include "SdlError.hpp"
 
 namespace pond::platform
 {
@@ -41,9 +38,6 @@ enum class RuntimeSlotState : std::uint8_t
 std::atomic<RuntimeSlotState> runtimeSlot{RuntimeSlotState::Available};
 const std::thread::id processEntryThread = std::this_thread::get_id();
 
-using HintSnapshot = detail::RuntimeHintSnapshot;
-using MetadataSnapshot = detail::RuntimeMetadataSnapshot;
-using MetadataSnapshots = detail::RuntimeMetadataSnapshots;
 
 [[nodiscard]] core::VoidResult Validate(const PlatformRuntimeDesc& desc)
 {
@@ -82,56 +76,6 @@ using MetadataSnapshots = detail::RuntimeMetadataSnapshots;
     }
 
     return ResultType::Success();
-}
-
-void VerifyBackend(const detail::PlatformRuntimeBackend& backend)
-{
-    PONDER_VERIFY(backend.isMainThread != nullptr,
-                  "Platform runtime backend is missing isMainThread");
-    PONDER_VERIFY(backend.hasInitializedSubsystems != nullptr,
-                  "Platform runtime backend is missing hasInitializedSubsystems");
-    PONDER_VERIFY(backend.hasExpectedRuntimeSubsystems != nullptr,
-                  "Platform runtime backend is missing hasExpectedRuntimeSubsystems");
-    PONDER_VERIFY(backend.getAppMetadataProperty != nullptr,
-                  "Platform runtime backend is missing getAppMetadataProperty");
-    PONDER_VERIFY(backend.setAppMetadataProperty != nullptr,
-                  "Platform runtime backend is missing setAppMetadataProperty");
-    PONDER_VERIFY(backend.getHint != nullptr, "Platform runtime backend is missing getHint");
-    PONDER_VERIFY(backend.setHintOverride != nullptr,
-                  "Platform runtime backend is missing setHintOverride");
-    PONDER_VERIFY(backend.resetHint != nullptr, "Platform runtime backend is missing resetHint");
-    PONDER_VERIFY(backend.initializeVideo != nullptr,
-                  "Platform runtime backend is missing initializeVideo");
-    PONDER_VERIFY(backend.quit != nullptr, "Platform runtime backend is missing quit");
-    PONDER_VERIFY(backend.getTicksNanoseconds != nullptr,
-                  "Platform runtime backend is missing getTicksNanoseconds");
-    PONDER_VERIFY(backend.pollEvent != nullptr, "Platform runtime backend is missing pollEvent");
-    PONDER_VERIFY(backend.supportsGlobalMouse != nullptr,
-                  "Platform runtime backend is missing supportsGlobalMouse");
-    PONDER_VERIFY(backend.getGlobalMousePosition != nullptr,
-                  "Platform runtime backend is missing getGlobalMousePosition");
-    PONDER_VERIFY(backend.setMouseCapture != nullptr,
-                  "Platform runtime backend is missing setMouseCapture");
-    PONDER_VERIFY(backend.createSystemCursor != nullptr,
-                  "Platform runtime backend is missing createSystemCursor");
-    PONDER_VERIFY(backend.setCursor != nullptr, "Platform runtime backend is missing setCursor");
-    PONDER_VERIFY(backend.destroyCursor != nullptr,
-                  "Platform runtime backend is missing destroyCursor");
-    PONDER_VERIFY(backend.showCursor != nullptr, "Platform runtime backend is missing showCursor");
-    PONDER_VERIFY(backend.hideCursor != nullptr, "Platform runtime backend is missing hideCursor");
-    PONDER_VERIFY(backend.isCursorVisible != nullptr,
-                  "Platform runtime backend is missing isCursorVisible");
-    PONDER_VERIFY(backend.supportsClipboardText != nullptr,
-                  "Platform runtime backend is missing supportsClipboardText");
-    PONDER_VERIFY(backend.getClipboardText != nullptr,
-                  "Platform runtime backend is missing getClipboardText");
-    PONDER_VERIFY(backend.freeClipboardText != nullptr,
-                  "Platform runtime backend is missing freeClipboardText");
-    PONDER_VERIFY(backend.setClipboardText != nullptr,
-                  "Platform runtime backend is missing setClipboardText");
-    PONDER_VERIFY(backend.openExternalUri != nullptr,
-                  "Platform runtime backend is missing openExternalUri");
-    PONDER_VERIFY(backend.showDialog != nullptr, "Platform runtime backend is missing showDialog");
 }
 
 void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
@@ -208,139 +152,6 @@ void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)
                   "Platform display backend is missing getWindowDisplayScale");
 }
 
-[[nodiscard]] HintSnapshot CaptureHint(const detail::PlatformRuntimeBackend& backend,
-                                       const char* name)
-{
-    const char* const currentValue = backend.getHint(backend.context, name);
-    return HintSnapshot{name, currentValue != nullptr ? std::optional<std::string>{currentValue}
-                                                      : std::nullopt};
-}
-
-[[nodiscard]] bool HintMatchesSnapshot(const detail::PlatformRuntimeBackend& backend,
-                                       const HintSnapshot& snapshot)
-{
-    const char* const currentValue = backend.getHint(backend.context, snapshot.name);
-    if (!snapshot.value.has_value())
-    {
-        return currentValue == nullptr;
-    }
-
-    return currentValue != nullptr && std::string_view{currentValue} == *snapshot.value;
-}
-
-void RestoreHint(const detail::PlatformRuntimeBackend& backend,
-                 const HintSnapshot& snapshot) noexcept
-{
-    try
-    {
-        const bool restored =
-            snapshot.value.has_value()
-                ? backend.setHintOverride(backend.context, snapshot.name, snapshot.value->c_str())
-                : backend.resetHint(backend.context, snapshot.name);
-        if (!restored)
-        {
-            const core::Error error = detail::CaptureSdlFailure(
-                kBackendFailureCode, "SDL hint restoration", snapshot.name);
-            if (!HintMatchesSnapshot(backend, snapshot))
-            {
-                LOG_ERROR_CATEGORY(kLogCategory, "{}", error.GetMessage());
-            }
-        }
-    }
-    catch (const std::exception& exception)
-    {
-        LOG_ERROR_CATEGORY(kLogCategory, "SDL hint restoration failed for {}: {}", snapshot.name,
-                           exception.what());
-    }
-    catch (...)
-    {
-        LOG_ERROR_CATEGORY(kLogCategory, "SDL hint restoration failed for {}", snapshot.name);
-    }
-}
-
-void RestoreRuntimeHints(const detail::PlatformRuntimeBackend& backend,
-                         const HintSnapshot& focusClickThrough,
-                         const HintSnapshot& autoCapture) noexcept
-{
-    RestoreHint(backend, autoCapture);
-    RestoreHint(backend, focusClickThrough);
-}
-
-[[nodiscard]] std::optional<std::string> CaptureMetadataValue(
-    const detail::PlatformRuntimeBackend& backend, detail::ApplicationMetadataProperty property)
-{
-    const char* const value = backend.getAppMetadataProperty(backend.context, property);
-    return value != nullptr ? std::optional<std::string>{value} : std::nullopt;
-}
-
-[[nodiscard]] MetadataSnapshots CaptureApplicationMetadata(
-    const detail::PlatformRuntimeBackend& backend)
-{
-    return MetadataSnapshots{{
-        MetadataSnapshot{
-            detail::ApplicationMetadataProperty::Name,
-            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Name)
-        },
-        MetadataSnapshot{
-            detail::ApplicationMetadataProperty::Version,
-            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Version)
-        },
-        MetadataSnapshot{
-            detail::ApplicationMetadataProperty::Identifier,
-            CaptureMetadataValue(backend, detail::ApplicationMetadataProperty::Identifier)
-        },
-    }};
-}
-
-[[nodiscard]] bool MetadataMatchesSnapshot(const detail::PlatformRuntimeBackend& backend,
-                                           const MetadataSnapshot& snapshot)
-{
-    const char* const currentValue =
-        backend.getAppMetadataProperty(backend.context, snapshot.property);
-    if (!snapshot.value.has_value())
-    {
-        return currentValue == nullptr;
-    }
-
-    return currentValue != nullptr && std::string_view{currentValue} == *snapshot.value;
-}
-
-void RestoreMetadataProperty(const detail::PlatformRuntimeBackend& backend,
-                             const MetadataSnapshot& snapshot) noexcept
-{
-    try
-    {
-        const bool restored = backend.setAppMetadataProperty(
-            backend.context, snapshot.property,
-            snapshot.value.has_value() ? snapshot.value->c_str() : nullptr);
-        if (!restored)
-        {
-            const core::Error error = detail::CaptureSdlFailure(
-                kBackendFailureCode, "SDL metadata restoration", "application metadata");
-            if (!MetadataMatchesSnapshot(backend, snapshot))
-            {
-                LOG_ERROR_CATEGORY(kLogCategory, "{}", error.GetMessage());
-            }
-        }
-    }
-    catch (const std::exception& exception)
-    {
-        LOG_ERROR_CATEGORY(kLogCategory, "SDL metadata restoration failed: {}", exception.what());
-    }
-    catch (...)
-    {
-        LOG_ERROR_CATEGORY(kLogCategory, "SDL metadata restoration failed");
-    }
-}
-
-void RestoreApplicationMetadata(const detail::PlatformRuntimeBackend& backend,
-                                const MetadataSnapshots& snapshots) noexcept
-{
-    for (auto iterator = snapshots.rbegin(); iterator != snapshots.rend(); ++iterator)
-    {
-        RestoreMetadataProperty(backend, *iterator);
-    }
-}
 
 void ReleaseRuntimeReservation() noexcept
 {
@@ -366,15 +177,11 @@ void BeginRuntimeDestruction()
 
 namespace detail
 {
-PlatformRuntimeState::PlatformRuntimeState(PlatformRuntimeBackend backend,
+PlatformRuntimeState::PlatformRuntimeState(std::unique_ptr<IPlatformRuntimeBackend> backend,
                                            PlatformWindowBackend windowBackend,
-                                           PlatformDisplayBackend displayBackend,
-                                           RuntimeHintSnapshot focusClickThrough,
-                                           RuntimeHintSnapshot autoCapture,
-                                           RuntimeMetadataSnapshots metadata) noexcept
-    : m_backend(backend), m_windowBackend(windowBackend), m_displayBackend(displayBackend),
-      m_focusClickThrough(std::move(focusClickThrough)), m_autoCapture(std::move(autoCapture)),
-      m_metadata(std::move(metadata)), m_ownerThread(std::this_thread::get_id())
+                                           PlatformDisplayBackend displayBackend) noexcept
+    : m_backend(std::move(backend)), m_windowBackend(windowBackend),
+      m_displayBackend(displayBackend), m_ownerThread(std::this_thread::get_id())
 {
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime initialized");
 }
@@ -388,15 +195,15 @@ PlatformRuntimeState::~PlatformRuntimeState() noexcept
     PONDER_VERIFY(m_windowsByBackendId.empty(),
                   "Cannot destroy PlatformRuntime with {} backend window mappings",
                   m_windowsByBackendId.size());
-    PONDER_VERIFY(m_backend.hasExpectedRuntimeSubsystems(m_backend.context),
+    PONDER_VERIFY(m_backend != nullptr, "Platform runtime backend is unavailable");
+    PONDER_VERIFY(m_backend->HasExpectedRuntimeSubsystems(),
                   "SDL subsystem ownership changed while PlatformRuntime was active");
     BeginRuntimeDestruction();
 
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime shutting down");
     DestroySystemCursors();
-    m_backend.quit(m_backend.context);
-    RestoreApplicationMetadata(m_backend, m_metadata);
-    RestoreRuntimeHints(m_backend, m_focusClickThrough, m_autoCapture);
+    m_backend->Quit();
+    m_backend.reset();
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime shut down");
     ReleaseRuntimeReservation();
 }
@@ -495,9 +302,15 @@ Timestamp PlatformRuntimeState::Now() const
     return CaptureBackendTimestamp();
 }
 
+HintManager& PlatformRuntimeState::GetHintManager()
+{
+    VerifyOwnerThread("hint manager access");
+    return m_backend->GetHintManager();
+}
+
 Timestamp PlatformRuntimeState::CaptureBackendTimestamp() const
 {
-    const std::uint64_t ticks = m_backend.getTicksNanoseconds(m_backend.context);
+    const std::uint64_t ticks = m_backend->GetTicksNanoseconds();
     constexpr auto kMaximumTicks =
         static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
     PONDER_VERIFY(ticks <= kMaximumTicks,
@@ -525,14 +338,13 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
             ReleaseRuntimeReservation();
         });
 
-    core::VoidResult validation = Validate(desc);
-    RETURN_ERROR_IF_FAILED(validation);
+    RETURN_ERROR_IF_FAILED(Validate(desc));
 
     PONDER_VERIFY(std::this_thread::get_id() == processEntryThread,
                   "PlatformRuntime must be created on the process entry thread");
 
-    const detail::PlatformRuntimeBackend backend = detail::GetPlatformRuntimeBackend();
-    VerifyBackend(backend);
+    std::unique_ptr<detail::IPlatformRuntimeBackend> backend =
+        detail::GetPlatformRuntimeBackend();
 
     const detail::PlatformWindowBackend windowBackend = detail::GetPlatformWindowBackend();
     VerifyWindowBackend(windowBackend);
@@ -540,95 +352,46 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     const detail::PlatformDisplayBackend displayBackend = detail::GetPlatformDisplayBackend();
     VerifyDisplayBackend(displayBackend);
 
-    PONDER_VERIFY(backend.isMainThread(backend.context),
+    PONDER_VERIFY(backend->IsMainThread(),
                   "PlatformRuntime must be created on SDL's main thread");
 
-    if (backend.hasInitializedSubsystems(backend.context))
+    if (backend->HasInitializedSubsystems())
     {
         return ResultType::FromError(core::Error{kBackendFailureCode,
             "Cannot create PlatformRuntime while SDL subsystems are already initialized."});
     }
 
-    HintSnapshot focusClickThrough = CaptureHint(backend, detail::kMouseFocusClickThroughHint);
-    HintSnapshot autoCapture = CaptureHint(backend, detail::kMouseAutoCaptureHint);
-    auto restoreHints = core::MakeScopeExit(
-        [&backend, &focusClickThrough, &autoCapture]() noexcept
-        {
-            RestoreRuntimeHints(backend, focusClickThrough, autoCapture);
-        });
+    HintManager& hintManager = backend->GetHintManager();
+    RETURN_ERROR_IF_FAILED(hintManager.PushHint(hints::MouseFocusClickThrough{true}));
+    RETURN_ERROR_IF_FAILED(hintManager.PushHint(hints::MouseAutoCapture{false}));
 
-    if (!backend.setHintOverride(backend.context, detail::kMouseFocusClickThroughHint, "1"))
+    if (desc.configureHintsBeforeInitialization != nullptr)
     {
-        return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
-            "SDL_SetHintWithPriority", detail::kMouseFocusClickThroughHint));
+        desc.configureHintsBeforeInitialization(hintManager);
     }
 
-    if (!backend.setHintOverride(backend.context, detail::kMouseAutoCaptureHint, "0"))
-    {
-        return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
-            "SDL_SetHintWithPriority", detail::kMouseAutoCaptureHint));
-    }
-
-    MetadataSnapshots metadataSnapshots = CaptureApplicationMetadata(backend);
-    auto restoreMetadata = core::MakeScopeExit(
-        [&backend, &metadataSnapshots]() noexcept
-        {
-            RestoreApplicationMetadata(backend, metadataSnapshots);
-        });
-
-    struct MetadataValue final
-    {
-        detail::ApplicationMetadataProperty property;
-        const char* value;
-        std::string_view context;
-    };
-
-    const MetadataValue metadata[]{
-        {
-            detail::ApplicationMetadataProperty::Name,
-            desc.applicationName.c_str(),
-            "name"
-        },
-        {
-            detail::ApplicationMetadataProperty::Version,
-            desc.applicationVersion.has_value() ? desc.applicationVersion->c_str() : nullptr,
-            "version"
-        },
-        {
-            detail::ApplicationMetadataProperty::Identifier,
-            desc.applicationIdentifier.has_value() ? desc.applicationIdentifier->c_str() : nullptr,
-            "identifier"
-        }};
-
-    for (const MetadataValue& value : metadata)
-    {
-        if (!backend.setAppMetadataProperty(backend.context, value.property, value.value))
-        {
-            return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
-                "SDL_SetAppMetadataProperty", value.context));
-        }
-    }
+    RETURN_ERROR_IF_FAILED(backend->SetAppMetadataProperty(
+        detail::ApplicationMetadataProperty::Name, desc.applicationName.c_str()));
+    RETURN_ERROR_IF_FAILED(backend->SetAppMetadataProperty(
+        detail::ApplicationMetadataProperty::Version,
+        desc.applicationVersion.has_value() ? desc.applicationVersion->c_str() : nullptr));
+    RETURN_ERROR_IF_FAILED(backend->SetAppMetadataProperty(
+        detail::ApplicationMetadataProperty::Identifier,
+        desc.applicationIdentifier.has_value() ? desc.applicationIdentifier->c_str() : nullptr));
 
     auto quitOnFailure = core::MakeScopeExit(
         [&backend]() noexcept
         {
-            backend.quit(backend.context);
+            backend->Quit();
         });
 
-    if (!backend.initializeVideo(backend.context))
-    {
-        return ResultType::FromError(detail::CaptureSdlFailure(kBackendFailureCode,
-            "SDL_Init", "SDL_INIT_VIDEO"));
-    }
+    RETURN_ERROR_IF_FAILED(backend->InitializeVideo());
 
     auto state = std::make_unique<detail::PlatformRuntimeState>(
-        backend, windowBackend, displayBackend, std::move(focusClickThrough),
-        std::move(autoCapture), std::move(metadataSnapshots));
+        std::move(backend), windowBackend, displayBackend);
 
     MarkRuntimeActive();
     quitOnFailure.Dismiss();
-    restoreMetadata.Dismiss();
-    restoreHints.Dismiss();
     releaseReservation.Dismiss();
     return PlatformRuntime{std::move(state)};
 }
@@ -641,6 +404,12 @@ PlatformRuntime::PlatformRuntime(std::unique_ptr<detail::PlatformRuntimeState> s
 PlatformRuntime::~PlatformRuntime() noexcept = default;
 PlatformRuntime::PlatformRuntime(PlatformRuntime&&) noexcept = default;
 PlatformRuntime& PlatformRuntime::operator=(PlatformRuntime&&) noexcept = default;
+
+HintManager& PlatformRuntime::GetHintManager()
+{
+    PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from PlatformRuntime");
+    return m_state->GetHintManager();
+}
 
 Timestamp PlatformRuntime::Now() const
 {

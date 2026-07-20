@@ -65,7 +65,7 @@ std::optional<PlatformEvent> PlatformRuntimeState::PollEvent()
     while (true)
     {
         SDL_Event event{};
-        if (!m_backend.pollEvent(m_backend.context, &event))
+        if (!m_backend->PollEvent(&event))
         {
             return std::nullopt;
         }

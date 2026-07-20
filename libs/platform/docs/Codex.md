@@ -29,11 +29,16 @@ privately by SDL3.
   invalidate another owner. Before teardown, verify that no subsystem outside
   runtime-owned video/events appeared while the runtime was live.
 - Use checked `SDL_SetAppMetadataProperty` calls rather than the convenience
-  metadata function, apply metadata before video initialization, and restore
-  prior effective nullable metadata values on rollback and after shutdown.
-- Apply the two UI mouse hints at override priority and restore their prior
-  effective values after `SDL_Quit()`. Do not claim to preserve priority or
-  provenance because SDL cannot report either one.
+  metadata function and apply descriptor metadata before video initialization.
+  Clear absent optional descriptor properties and do not snapshot or restore
+  prior metadata. After `SDL_Quit()`, leave the resulting process state to SDL.
+- Manage the curated SDL hint catalog exclusively through the public, strongly
+  typed `HintManager`; never expose SDL names or an arbitrary string-hint map.
+  Keep an independent value stack per hint, enforce value and initialization
+  constraints, and invoke descriptor hint configuration before SDL initialization.
+  The runtime still applies its two required mouse policies first. Restore every
+  managed prior effective value after `SDL_Quit()`. SDL cannot report priority or
+  provenance, so do not claim to preserve either one.
 - Keep runtime and resource owners non-copyable and movable. Define moved-from
   behavior and keep child lifetime safe in release builds.
 - Treat SDL-backed APIs as runtime-owner-thread APIs unless explicitly documented

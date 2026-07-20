@@ -3,6 +3,7 @@ ponder_add_project_library(platform
         include/ponder/platform/Dialog.hpp
         include/ponder/platform/Display.hpp
         include/ponder/platform/Geometry.hpp
+        include/ponder/platform/HintManager.hpp
         include/ponder/platform/Identifiers.hpp
         include/ponder/platform/Keyboard.hpp
         include/ponder/platform/Mouse.hpp
@@ -20,6 +21,7 @@ ponder_add_project_library(platform
         src/Dialog.cpp
         src/Display.cpp
         src/EventPolling.cpp
+        src/HintManager.cpp
         src/Mouse.cpp
         src/NativeWindow.cpp
         src/PlatformRuntime.cpp
@@ -29,16 +31,20 @@ ponder_add_project_library(platform
         src/RuntimeChildRegistry.cpp
         src/SdlEventTranslator.cpp
         src/SdlError.cpp
+        src/SdlRuntimeBackend.cpp
         src/Window.cpp
         src/WindowProperties.cpp
         src/WindowTextInput.cpp
     PRIVATE_HEADERS
+        src/HintManagerBackend.hpp
+        src/IPlatformRuntimeBackend.hpp
         src/PlatformRuntimeBackend.hpp
         src/PlatformRuntimeState.hpp
         src/ProcessBackend.hpp
         src/RuntimeChildRegistry.hpp
         src/SdlEventTranslator.hpp
         src/SdlError.hpp
+        src/SdlRuntimeBackend.hpp
         src/WindowImpl.hpp
     PUBLIC_DEPS
         ponder::core

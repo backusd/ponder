@@ -119,19 +119,23 @@ private:
     }
 };
 
-TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresEffectiveGlobalState)
+TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
 {
-    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
     ASSERT_TRUE(SDL_SetHintWithPriority(kFocusClickThroughHint, "prior-focus", SDL_HINT_OVERRIDE));
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, "Prior App"));
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING, "1.0"));
     ASSERT_TRUE(
         SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, "org.ponder.prior"));
 
-    const pond::platform::PlatformRuntimeDesc desc{.applicationName = "Ponder Integration Test",
-                                                   .applicationVersion = std::string{"2.0"},
-                                                   .applicationIdentifier =
-                                                       std::string{"org.ponder.integration"}};
+    const pond::platform::PlatformRuntimeDesc desc{
+        .applicationName = "Ponder Integration Test",
+        .applicationVersion = std::string{"2.0"},
+        .applicationIdentifier = std::string{"org.ponder.integration"},
+        .configureHintsBeforeInitialization = [](pond::platform::HintManager& hints)
+        {
+            const auto result = hints.PushHint(pond::platform::hints::VideoDriver{"dummy"});
+            EXPECT_TRUE(result.HasValue());
+        }};
 
     const std::uint64_t ticksBefore = SDL_GetTicksNS();
     {
@@ -159,10 +163,8 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresEffectiveGlobalSta
     EXPECT_EQ(SDL_WasInit(0), 0U);
     EXPECT_STREQ(SDL_GetHint(kFocusClickThroughHint), "prior-focus");
     EXPECT_EQ(SDL_GetHint(kAutoCaptureHint), nullptr);
-    EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING), "Prior App");
-    EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING), "1.0");
-    EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING),
-                 "org.ponder.prior");
+    EXPECT_EQ(SDL_GetHint(SDL_HINT_VIDEO_DRIVER), nullptr);
+
 }
 
 TEST_F(PlatformRuntimeIntegrationTests, ReportsLiveSdlVideoInitializationFailure)

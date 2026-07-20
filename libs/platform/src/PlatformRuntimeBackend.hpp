@@ -4,24 +4,16 @@
 #include <ponder/platform/NativeWindow.hpp>
 #include <ponder/platform/WindowGraphics.hpp>
 
-#include <SDL3/SDL_dialog.h>
 #include <cstddef>
 #include <cstdint>
-#include <string>
+#include <memory>
 #include <string_view>
 #include <vector>
 
-union SDL_Event;
+#include "IPlatformRuntimeBackend.hpp"
 
 namespace pond::platform::detail
 {
-enum class ApplicationMetadataProperty : std::uint8_t
-{
-    Name,
-    Version,
-    Identifier
-};
-
 struct BackendWindowCreateDesc final
 {
     const char* title{};
@@ -81,31 +73,6 @@ struct BackendNativeWindowHandleResult final
     const char* operation{};
     const char* message{};
     bool captureSdlError{};
-};
-
-struct BackendClipboardTextResult final
-{
-    char* text{};
-    std::string errorText;
-};
-
-enum class BackendDialogKind : std::uint8_t
-{
-    OpenFile,
-    SaveFile,
-    OpenFolder
-};
-
-struct BackendDialogRequestDesc final
-{
-    BackendDialogKind kind{BackendDialogKind::OpenFile};
-    SDL_DialogFileCallback callback{};
-    void* userdata{};
-    void* parentWindow{};
-    const SDL_DialogFileFilter* filters{};
-    int filterCount{};
-    const char* defaultLocation{};
-    bool allowMultipleSelection{};
 };
 
 struct PlatformWindowBackend final
@@ -180,43 +147,23 @@ struct PlatformDisplayBackend final
     float (*getWindowDisplayScale)(void* context, void* window){};
 };
 
-struct PlatformRuntimeBackend final
+class IPlatformRuntimeBackendFactory
 {
-    void* context{};
-    bool (*isMainThread)(void* context){};
-    bool (*hasInitializedSubsystems)(void* context){};
-    bool (*hasExpectedRuntimeSubsystems)(void* context){};
-    const char* (*getAppMetadataProperty)(void* context, ApplicationMetadataProperty property){};
-    bool (*setAppMetadataProperty)(void* context, ApplicationMetadataProperty property,
-                                   const char* value){};
-    const char* (*getHint)(void* context, const char* name){};
-    bool (*setHintOverride)(void* context, const char* name, const char* value){};
-    bool (*resetHint)(void* context, const char* name){};
-    bool (*initializeVideo)(void* context){};
-    void (*quit)(void* context){};
-    std::uint64_t (*getTicksNanoseconds)(void* context){};
-    bool (*pollEvent)(void* context, SDL_Event* event){};
-    bool (*supportsGlobalMouse)(void* context){};
-    void (*getGlobalMousePosition)(void* context, float* x, float* y){};
-    bool (*setMouseCapture)(void* context, bool enabled){};
-    void* (*createSystemCursor)(void* context, SystemCursorShape shape){};
-    bool (*setCursor)(void* context, void* cursor){};
-    void (*destroyCursor)(void* context, void* cursor){};
-    bool (*showCursor)(void* context){};
-    bool (*hideCursor)(void* context){};
-    bool (*isCursorVisible)(void* context){};
-    bool (*supportsClipboardText)(void* context){};
-    BackendClipboardTextResult (*getClipboardText)(void* context){};
-    void (*freeClipboardText)(void* context, char* text){};
-    bool (*setClipboardText)(void* context, const char* text){};
-    bool (*openExternalUri)(void* context, const char* uri){};
-    void (*showDialog)(void* context, const BackendDialogRequestDesc& desc){};
+public:
+    virtual ~IPlatformRuntimeBackendFactory() noexcept = default;
+
+    IPlatformRuntimeBackendFactory(const IPlatformRuntimeBackendFactory&) = delete;
+    IPlatformRuntimeBackendFactory& operator=(const IPlatformRuntimeBackendFactory&) = delete;
+    IPlatformRuntimeBackendFactory(IPlatformRuntimeBackendFactory&&) = delete;
+    IPlatformRuntimeBackendFactory& operator=(IPlatformRuntimeBackendFactory&&) = delete;
+
+    [[nodiscard]] virtual std::unique_ptr<IPlatformRuntimeBackend> Create() const = 0;
+
+protected:
+    IPlatformRuntimeBackendFactory() noexcept = default;
 };
 
 inline constexpr std::size_t kSystemCursorShapeCount{11};
-
-inline constexpr char kMouseFocusClickThroughHint[]{"SDL_MOUSE_FOCUS_CLICKTHROUGH"};
-inline constexpr char kMouseAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
 
 [[nodiscard]] bool IsWindowGraphicsCompatibilitySupported(
     WindowGraphicsCompatibility compatibility) noexcept;
@@ -224,12 +171,12 @@ inline constexpr char kMouseAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
 [[nodiscard]] std::uint64_t BuildSdlWindowFlags(const BackendWindowCreateDesc& desc) noexcept;
 [[nodiscard]] bool IsReservedSdlWindowPosition(std::int32_t value) noexcept;
 
-[[nodiscard]] PlatformRuntimeBackend GetPlatformRuntimeBackend() noexcept;
+[[nodiscard]] std::unique_ptr<IPlatformRuntimeBackend> GetPlatformRuntimeBackend();
 [[nodiscard]] PlatformWindowBackend GetPlatformWindowBackend() noexcept;
 [[nodiscard]] PlatformDisplayBackend GetPlatformDisplayBackend() noexcept;
 
-// The override must outlive every runtime created while it is installed.
-void SetPlatformRuntimeBackendForTesting(const PlatformRuntimeBackend* backend) noexcept;
+// The factory and any state borrowed by its backends must outlive each created runtime.
+void SetPlatformRuntimeBackendForTesting(const IPlatformRuntimeBackendFactory* factory) noexcept;
 void SetPlatformWindowBackendForTesting(const PlatformWindowBackend* backend) noexcept;
 void SetPlatformDisplayBackendForTesting(const PlatformDisplayBackend* backend) noexcept;
 } // namespace pond::platform::detail

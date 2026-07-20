@@ -4,7 +4,6 @@
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
 
-#include <SDL3/SDL_error.h>
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "PlatformRuntimeState.hpp"
@@ -112,8 +112,7 @@ struct PreparedDialogRequest final
     detail::BackendDialogKind kind{detail::BackendDialogKind::OpenFile};
     std::optional<WindowId> parentWindowId;
     std::optional<std::string> defaultLocation;
-    std::vector<std::string> filterNames;
-    std::vector<std::string> filterPatterns;
+    std::vector<detail::BackendDialogFileFilter> filters;
     bool allowMultipleSelection{};
 };
 
@@ -140,21 +139,18 @@ struct PreparedDialogRequest final
     PreparedDialogRequest prepared{.kind = kind,
                                    .parentWindowId = parentWindowId,
                                    .defaultLocation = std::move(locationResult).GetValue(),
-                                   .filterNames = {},
-                                   .filterPatterns = {},
+                                   .filters = {},
                                    .allowMultipleSelection = allowMultipleSelection};
-    prepared.filterNames.reserve(filters.size());
-    prepared.filterPatterns.reserve(filters.size());
+    prepared.filters.reserve(filters.size());
 
     for (std::size_t index = 0; index < filters.size(); ++index)
     {
         core::VoidResult validation = ValidateFilter(filters[index], index);
         RETURN_ERROR_IF_FAILED(validation);
 
-        prepared.filterNames.push_back(filters[index].name);
-        prepared.filterPatterns.push_back(filters[index].pattern);
+        prepared.filters.push_back(detail::BackendDialogFileFilter{
+            .name = filters[index].name, .pattern = filters[index].pattern});
     }
-
     return prepared;
 }
 
@@ -191,23 +187,24 @@ struct PreparedDialogRequest final
     return DialogFailure{core::Error{kBackendFailureCode, std::move(text)}};
 }
 
-[[nodiscard]] DialogOutcome CopyDialogOutcome(const detail::DialogRequestState& request,
-                                              const char* const* fileList, int selectedFilter,
-                                              std::string_view capturedError);
+[[nodiscard]] DialogOutcome CopyDialogOutcome(
+    const detail::DialogRequestState& request,
+    const detail::BackendDialogOutcome& backendOutcome);
 } // namespace
 
 namespace detail
 {
-struct DialogRequestState final
+struct DialogRequestState final : IBackendDialogCallback
 {
+    void OnDialogCompleted(BackendDialogOutcome outcome) noexcept override;
+    void OnDialogCallbackFailure() noexcept override;
+
     PlatformRuntimeState* runtime{};
     DialogRequestId id;
     BackendDialogKind kind{BackendDialogKind::OpenFile};
     WindowImpl* parentWindow{};
     std::optional<std::string> defaultLocation;
-    std::vector<std::string> filterNames;
-    std::vector<std::string> filterPatterns;
-    std::vector<SDL_DialogFileFilter> filters;
+    std::vector<BackendDialogFileFilter> filters;
     bool allowMultipleSelection{};
     std::optional<DialogCompletionRecord> completion;
     std::optional<DialogFailure> callbackFailure;
@@ -220,24 +217,31 @@ struct DialogRequestState final
 
 namespace
 {
-[[nodiscard]] DialogOutcome CopyDialogOutcome(const detail::DialogRequestState& request,
-                                              const char* const* fileList, int selectedFilter,
-                                              std::string_view capturedError)
+[[nodiscard]] DialogOutcome CopyDialogOutcome(
+    const detail::DialogRequestState& request,
+    const detail::BackendDialogOutcome& backendOutcome)
 {
-    if (fileList == nullptr)
+    if (const auto* failure = std::get_if<detail::BackendDialogFailure>(&backendOutcome))
     {
-        return MakeDialogFailure(request.kind, capturedError);
+        return MakeDialogFailure(request.kind, failure->message);
     }
 
-    if (fileList[0] == nullptr)
+    if (std::holds_alternative<detail::BackendDialogCancellation>(backendOutcome))
+    {
+        return DialogCancellation{};
+    }
+
+    const auto* selection = std::get_if<detail::BackendDialogSelection>(&backendOutcome);
+    PONDER_VERIFY(selection != nullptr, "Backend dialog outcome has no recognized alternative");
+    if (selection->paths.empty())
     {
         return DialogCancellation{};
     }
 
     std::vector<std::filesystem::path> paths;
-    for (std::size_t index = 0; fileList[index] != nullptr; ++index)
+    paths.reserve(selection->paths.size());
+    for (const std::string& pathText : selection->paths)
     {
-        const std::string pathText{fileList[index]};
         if (!core::IsValidUtf8WithoutEmbeddedNull(pathText))
         {
             return MakeDialogFailure(
@@ -246,24 +250,15 @@ namespace
         paths.push_back(io::PathFromUtf8(pathText));
     }
 
-    if (paths.empty())
+    if (selection->selectedFilterIndex.has_value() &&
+        *selection->selectedFilterIndex >= request.filters.size())
     {
-        return DialogCancellation{};
+        return MakeDialogFailure(
+            request.kind, "The backend returned an out-of-range selected dialog filter index.");
     }
 
-    std::optional<std::size_t> selectedFilterIndex;
-    if (selectedFilter >= 0)
-    {
-        const auto index = static_cast<std::size_t>(selectedFilter);
-        if (index >= request.filters.size())
-        {
-            return MakeDialogFailure(
-                request.kind, "The backend returned an out-of-range selected dialog filter index.");
-        }
-        selectedFilterIndex = index;
-    }
-
-    return DialogSelection{.paths = std::move(paths), .selectedFilterIndex = selectedFilterIndex};
+    return DialogSelection{.paths = std::move(paths),
+                           .selectedFilterIndex = selection->selectedFilterIndex};
 }
 
 [[nodiscard]] detail::DialogCompletionRecord TakeDialogCompletion(
@@ -284,32 +279,21 @@ namespace
     return std::move(*request.completion);
 }
 
-void SDLCALL OnDialogCompleted(void* userdata, const char* const* fileList,
-                               int selectedFilter) noexcept
-{
-    detail::DialogRequestState* rawRequest{};
-    Timestamp timestamp{};
+} // namespace
 
+namespace detail
+{
+void DialogRequestState::OnDialogCompleted(BackendDialogOutcome backendOutcome) noexcept
+{
+    Timestamp timestamp{};
     try
     {
-        rawRequest = static_cast<detail::DialogRequestState*>(userdata);
-        if (rawRequest == nullptr || rawRequest->runtime == nullptr)
+        if (runtime == nullptr)
         {
             return;
         }
 
-        std::string capturedError;
-        if (fileList == nullptr)
-        {
-            const char* const rawError = SDL_GetError();
-            if (rawError != nullptr)
-            {
-                capturedError = rawError;
-            }
-        }
-
-        std::shared_ptr<detail::DialogRequestState> request =
-            rawRequest->runtime->AcquireDialogRequest(rawRequest->id);
+        std::shared_ptr<DialogRequestState> request = runtime->AcquireDialogRequest(id);
         if (request == nullptr)
         {
             return;
@@ -320,7 +304,7 @@ void SDLCALL OnDialogCompleted(void* userdata, const char* const* fileList,
         DialogOutcome outcome = DialogCancellation{};
         try
         {
-            outcome = CopyDialogOutcome(*request, fileList, selectedFilter, capturedError);
+            outcome = CopyDialogOutcome(*request, backendOutcome);
         }
         catch (const std::exception& exception)
         {
@@ -335,16 +319,21 @@ void SDLCALL OnDialogCompleted(void* userdata, const char* const* fileList,
     }
     catch (...)
     {
-        if (rawRequest != nullptr && rawRequest->runtime != nullptr)
+        if (runtime != nullptr)
         {
-            rawRequest->runtime->MarkDialogCallbackFailure(rawRequest->id, timestamp);
+            runtime->MarkDialogCallbackFailure(id, timestamp);
         }
     }
 }
-} // namespace
 
-namespace detail
+void DialogRequestState::OnDialogCallbackFailure() noexcept
 {
+    if (runtime != nullptr)
+    {
+        runtime->MarkDialogCallbackFailure(id, Timestamp{});
+    }
+}
+
 core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
     BackendDialogKind kind, std::optional<WindowId> parentWindowId,
     const std::optional<std::filesystem::path>& defaultLocation,
@@ -358,7 +347,7 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
 
     PreparedDialogRequest prepared = std::move(preparedResult).GetValue();
     WindowImpl* parentWindow{};
-    void* parentNativeWindow{};
+    std::optional<BackendWindowHandle> parentBackendWindow;
     if (prepared.parentWindowId.has_value())
     {
         const auto parent = std::ranges::find_if(m_windowsByBackendId,
@@ -375,7 +364,8 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
         parentWindow = parent->second.window;
         PONDER_VERIFY(parentWindow != nullptr, "Dialog parent window record has no owning window");
         parentWindow->VerifyUsable("dialog parent lookup");
-        parentNativeWindow = parentWindow->m_nativeWindow;
+        parentBackendWindow.emplace(
+            reinterpret_cast<BackendWindowHandle::ValueType>(parentWindow->m_nativeWindow));
     }
 
     PONDER_VERIFY(m_nextDialogRequestId != 0, "Platform dialog request ID space is exhausted");
@@ -387,15 +377,7 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
     request->kind = prepared.kind;
     request->parentWindow = parentWindow;
     request->defaultLocation = std::move(prepared.defaultLocation);
-    request->filterNames = std::move(prepared.filterNames);
-    request->filterPatterns = std::move(prepared.filterPatterns);
-    request->filters.reserve(request->filterNames.size());
-    for (std::size_t index = 0; index < request->filterNames.size(); ++index)
-    {
-        request->filters.push_back(
-            SDL_DialogFileFilter{.name = request->filterNames[index].c_str(),
-                                 .pattern = request->filterPatterns[index].c_str()});
-    }
+    request->filters = std::move(prepared.filters);
     request->allowMultipleSelection = prepared.allowMultipleSelection;
     request->callbackFailure = MakeDialogFailure(
         request->kind, "Dialog callback failed before a completion could be safely enqueued.");
@@ -430,15 +412,14 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
 
     const BackendDialogRequestDesc backendDesc{
         .kind = request->kind,
-        .callback = OnDialogCompleted,
-        .userdata = request.get(),
-        .parentWindow = parentNativeWindow,
-        .filters = request->filters.empty() ? nullptr : request->filters.data(),
-        .filterCount = static_cast<int>(request->filters.size()),
-        .defaultLocation =
-            request->defaultLocation.has_value() ? request->defaultLocation->c_str() : nullptr,
+        .callback = *request,
+        .parentWindow = parentBackendWindow,
+        .filters = std::span<const BackendDialogFileFilter>{request->filters},
+        .defaultLocation = request->defaultLocation.has_value()
+                               ? std::optional<std::string_view>{*request->defaultLocation}
+                               : std::nullopt,
         .allowMultipleSelection = request->allowMultipleSelection};
-    m_backend.showDialog(m_backend.context, backendDesc);
+    m_backend->ShowDialog(backendDesc);
 
     ++m_nextDialogRequestId;
     return id;

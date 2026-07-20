@@ -4,6 +4,7 @@
 
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_platform_defines.h>
 #include <algorithm>
@@ -14,9 +15,11 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <format>
 #include <gtest/gtest.h>
 #include <limits>
 #include <list>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -27,14 +30,21 @@
 #include <variant>
 #include <vector>
 
+#include "HintManagerBackend.hpp"
 #include "PlatformRuntimeBackend.hpp"
 
 namespace
 {
 using pond::platform::detail::ApplicationMetadataProperty;
 using pond::platform::detail::BackendClipboardTextResult;
+using pond::platform::detail::BackendDialogCancellation;
+using pond::platform::detail::BackendDialogFailure;
 using pond::platform::detail::BackendDialogKind;
 using pond::platform::detail::BackendDialogRequestDesc;
+using pond::platform::detail::BackendDialogSelection;
+using pond::platform::detail::BackendWindowHandle;
+using pond::platform::detail::CursorHandle;
+using pond::platform::detail::IBackendDialogCallback;
 using pond::platform::detail::BackendDisplayOrientation;
 using pond::platform::detail::BackendNativeWindowDriver;
 using pond::platform::detail::BackendNativeWindowHandleResult;
@@ -44,8 +54,11 @@ using pond::platform::detail::BackendTextInputArea;
 using pond::platform::detail::BackendWindowCreateDesc;
 using pond::platform::detail::BackendWindowOperationResult;
 using pond::platform::detail::BackendWindowProperties;
+using pond::platform::detail::HintManagerAccess;
+using pond::platform::detail::IHintBackend;
+using pond::platform::detail::IPlatformRuntimeBackend;
+using pond::platform::detail::IPlatformRuntimeBackendFactory;
 using pond::platform::detail::PlatformDisplayBackend;
-using pond::platform::detail::PlatformRuntimeBackend;
 using pond::platform::detail::PlatformWindowBackend;
 
 [[nodiscard]] constexpr std::size_t MetadataIndex(ApplicationMetadataProperty property) noexcept
@@ -127,15 +140,14 @@ struct QueuedBackendEvent final
 struct FakeDialogLaunch final
 {
     BackendDialogKind kind{BackendDialogKind::OpenFile};
-    void* parentWindow{};
+    std::optional<BackendWindowHandle> parentWindow;
     std::vector<pond::platform::DialogFileFilter> filters;
     std::optional<std::string> defaultLocation;
     bool allowMultipleSelection{};
-    SDL_DialogFileCallback callback{};
-    void* userdata{};
+    IBackendDialogCallback* callback{};
 };
 
-struct FakeRuntimeBackend final
+struct FakeRuntimeBackendState final
 {
     bool mainThread{true};
     bool initializedSubsystems{false};
@@ -177,10 +189,8 @@ struct FakeRuntimeBackend final
     int mouseFailuresRemaining{};
     bool clipboardTextSupported{true};
     std::string clipboardText;
-    std::string clipboardReadBuffer;
     std::string clipboardGetError;
     bool clipboardGetReturnsNull{};
-    int clipboardFreeCalls{};
     std::string failingServiceOperation;
     int serviceFailuresRemaining{};
 
@@ -206,7 +216,7 @@ struct FakeRuntimeBackend final
     std::unordered_map<std::string, std::string> hints;
     std::list<FakeWindow> windows;
     std::list<FakeCursor> cursors;
-    void* activeCursor{};
+    CursorHandle activeCursor;
     std::vector<pond::platform::SystemCursorShape> createdCursorShapes;
     std::vector<pond::platform::SystemCursorShape> selectedCursorShapes;
     std::vector<pond::platform::SystemCursorShape> destroyedCursorShapes;
@@ -218,9 +228,9 @@ struct FakeRuntimeBackend final
     std::vector<std::string> calls;
 };
 
-[[nodiscard]] FakeRuntimeBackend& GetFake(void* context)
+[[nodiscard]] FakeRuntimeBackendState& GetFake(void* context)
 {
-    return *static_cast<FakeRuntimeBackend*>(context);
+    return *static_cast<FakeRuntimeBackendState*>(context);
 }
 
 [[nodiscard]] FakeWindow& GetFakeWindow(void* window)
@@ -228,12 +238,13 @@ struct FakeRuntimeBackend final
     return *static_cast<FakeWindow*>(window);
 }
 
-[[nodiscard]] FakeCursor& GetFakeCursor(void* cursor)
+[[nodiscard]] FakeCursor& GetFakeCursor(CursorHandle cursor)
 {
-    return *static_cast<FakeCursor*>(cursor);
+    return *reinterpret_cast<FakeCursor*>(cursor.GetValue());
 }
 
-[[nodiscard]] FakeDisplay& GetFakeDisplay(FakeRuntimeBackend& fake, std::uint32_t backendDisplayId)
+[[nodiscard]] FakeDisplay& GetFakeDisplay(FakeRuntimeBackendState& fake,
+                                          std::uint32_t backendDisplayId)
 {
     return fake.displays.at(backendDisplayId);
 }
@@ -388,7 +399,7 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     EXPECT_EQ(std::get<Event>(*event), expected);
 }
 
-[[nodiscard]] bool FailWindowOperation(FakeRuntimeBackend& fake, std::string_view operation)
+[[nodiscard]] bool FailWindowOperation(FakeRuntimeBackendState& fake, std::string_view operation)
 {
     if (fake.failingWindowOperation != operation || fake.windowFailuresRemaining == 0)
     {
@@ -401,7 +412,7 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     return true;
 }
 
-[[nodiscard]] BackendWindowOperationResult GetWindowOperationResult(FakeRuntimeBackend& fake,
+[[nodiscard]] BackendWindowOperationResult GetWindowOperationResult(FakeRuntimeBackendState& fake,
                                                                     std::string_view operation)
 {
     if (fake.unsupportedWindowOperation == operation &&
@@ -419,7 +430,7 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     return BackendWindowOperationResult::Succeeded;
 }
 
-[[nodiscard]] bool FailDisplayOperation(FakeRuntimeBackend& fake, std::string_view operation)
+[[nodiscard]] bool FailDisplayOperation(FakeRuntimeBackendState& fake, std::string_view operation)
 {
     if (fake.failingDisplayOperation != operation || fake.displayFailuresRemaining == 0)
     {
@@ -439,7 +450,7 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     return true;
 }
 
-[[nodiscard]] bool FailMouseOperation(FakeRuntimeBackend& fake, std::string_view operation)
+[[nodiscard]] bool FailMouseOperation(FakeRuntimeBackendState& fake, std::string_view operation)
 {
     if (fake.failingMouseOperation != operation || fake.mouseFailuresRemaining == 0)
     {
@@ -452,7 +463,7 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     return true;
 }
 
-[[nodiscard]] bool FailServiceOperation(FakeRuntimeBackend& fake, std::string_view operation)
+[[nodiscard]] bool FailServiceOperation(FakeRuntimeBackendState& fake, std::string_view operation)
 {
     if (fake.failingServiceOperation != operation || fake.serviceFailuresRemaining == 0)
     {
@@ -465,7 +476,7 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     return true;
 }
 
-[[nodiscard]] const char* GetHintValue(FakeRuntimeBackend& fake, const char* name)
+[[nodiscard]] const char* GetHintValue(FakeRuntimeBackendState& fake, const char* name)
 {
     const auto iterator = fake.hints.find(name);
     return iterator != fake.hints.end() ? iterator->second.c_str() : nullptr;
@@ -742,7 +753,7 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     return rejectedCalls;
 }
 
-void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackend& fake)
+void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackendState& fake)
 {
     if (!fake.attemptCreateDuringRestoration || fake.quitCalls == 0 ||
         fake.attemptedCreateDuringRestoration)
@@ -761,7 +772,7 @@ void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackend& fake)
 
 [[nodiscard]] bool FakeIsMainThread(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.mainThreadChecks;
     fake.calls.emplace_back("is-main-thread");
     return fake.mainThread;
@@ -769,7 +780,7 @@ void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackend& fake)
 
 [[nodiscard]] bool FakeHasInitializedSubsystems(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.initializedSubsystemChecks;
     fake.calls.emplace_back("was-init");
     return fake.initializedSubsystems;
@@ -777,50 +788,45 @@ void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackend& fake)
 
 [[nodiscard]] bool FakeHasExpectedRuntimeSubsystems(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.runtimeSubsystemChecks;
     fake.calls.emplace_back("has-runtime-subsystems");
     return fake.initializedSubsystems && fake.onlyRuntimeSubsystems;
 }
 
-[[nodiscard]] const char* FakeGetAppMetadataProperty(void* context,
-                                                     ApplicationMetadataProperty property)
+[[nodiscard]] pond::core::VoidResult FakeSetAppMetadataProperty(
+    void* context, ApplicationMetadataProperty property, const char* value)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
-    fake.calls.emplace_back("get-metadata");
-    const std::optional<std::string>& value = fake.metadata[MetadataIndex(property)];
-    return value.has_value() ? value->c_str() : nullptr;
-}
+    using ResultType = pond::core::VoidResult;
 
-[[nodiscard]] bool FakeSetAppMetadataProperty(void* context, ApplicationMetadataProperty property,
-                                              const char* value)
-{
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.metadataCalls;
     fake.calls.emplace_back("set-metadata");
 
     if (fake.failingMetadataProperty == property && fake.metadataFailuresRemaining > 0)
     {
         --fake.metadataFailuresRemaining;
-        static_cast<void>(SDL_SetError("synthetic metadata failure"));
-        return false;
+        return ResultType::FromError(pond::core::Error{
+            pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure),
+            std::format("SDL_SetAppMetadataProperty ({}) failed: synthetic metadata failure",
+                        property)});
     }
 
     fake.metadata[MetadataIndex(property)] =
         value != nullptr ? std::optional<std::string>{value} : std::nullopt;
-    return true;
+    return ResultType::Success();
 }
 
 [[nodiscard]] const char* FakeGetHint(void* context, const char* name)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back(std::string{"get-hint:"} + name);
     return GetHintValue(fake, name);
 }
 
 [[nodiscard]] bool FakeSetHintOverride(void* context, const char* name, const char* value)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back(std::string{"set-hint:"} + name + "=" + value);
     MaybeAttemptCreateDuringRestoration(fake);
 
@@ -837,37 +843,40 @@ void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackend& fake)
 
 [[nodiscard]] bool FakeResetHint(void* context, const char* name)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back(std::string{"reset-hint:"} + name);
     MaybeAttemptCreateDuringRestoration(fake);
     return fake.hints.erase(name) == 1;
 }
 
-[[nodiscard]] bool FakeInitializeVideo(void* context)
+[[nodiscard]] pond::core::VoidResult FakeInitializeVideo(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    using ResultType = pond::core::VoidResult;
+
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.initializeVideoCalls;
     fake.calls.emplace_back("initialize-video");
     fake.policiesObservedDuringInitialization =
-        GetHintValue(fake, pond::platform::detail::kMouseFocusClickThroughHint) ==
+        GetHintValue(fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH) ==
             std::string_view{"1"} &&
-        GetHintValue(fake, pond::platform::detail::kMouseAutoCaptureHint) == std::string_view{"0"};
+        GetHintValue(fake, SDL_HINT_MOUSE_AUTO_CAPTURE) == std::string_view{"0"};
     fake.metadataObservedDuringInitialization =
         fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)].has_value();
 
     if (!fake.initializeVideoSucceeds)
     {
-        static_cast<void>(SDL_SetError("synthetic video initialization failure"));
-        return false;
+        return ResultType::FromError(pond::core::Error{
+            pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure),
+            "SDL_Init (SDL_INIT_VIDEO) failed: synthetic video initialization failure"});
     }
 
     fake.initializedSubsystems = true;
-    return true;
+    return ResultType::Success();
 }
 
 void FakeQuit(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.quitCalls;
     fake.calls.emplace_back("quit");
     fake.cursorsPresentAtQuit = !fake.cursors.empty();
@@ -878,7 +887,7 @@ void FakeQuit(void* context)
 
 [[nodiscard]] std::uint64_t FakeGetTicksNanoseconds(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.tickCalls;
     fake.calls.emplace_back("ticks");
     if (fake.timestampCaptureOverwritesSdlError)
@@ -890,7 +899,7 @@ void FakeQuit(void* context)
 
 [[nodiscard]] bool FakePollEvent(void* context, SDL_Event* event)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.pollEventCalls;
     fake.calls.emplace_back("poll-event");
     if (fake.eventQueue.empty())
@@ -910,22 +919,20 @@ void FakeQuit(void* context)
 
 [[nodiscard]] bool FakeSupportsGlobalMouse(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("supports-global-mouse");
     return fake.globalMouseSupported;
 }
 
-void FakeGetGlobalMousePosition(void* context, float* x, float* y)
+[[nodiscard]] pond::platform::MousePosition FakeGetGlobalMousePosition(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-global-mouse-position");
-    *x = fake.globalMousePosition.x;
-    *y = fake.globalMousePosition.y;
+    return pond::platform::MousePosition{fake.globalMousePosition.x, fake.globalMousePosition.y};
 }
-
 [[nodiscard]] bool FakeSetMouseCapture(void* context, bool enabled)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-mouse-capture");
     if (FailMouseOperation(fake, "set-mouse-capture"))
     {
@@ -936,23 +943,25 @@ void FakeGetGlobalMousePosition(void* context, float* x, float* y)
     return true;
 }
 
-[[nodiscard]] void* FakeCreateSystemCursor(void* context, pond::platform::SystemCursorShape shape)
+[[nodiscard]] CursorHandle FakeCreateSystemCursor(
+    void* context, pond::platform::SystemCursorShape shape)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("create-system-cursor");
     fake.createdCursorShapes.push_back(shape);
     if (FailMouseOperation(fake, "create-system-cursor"))
     {
-        return nullptr;
+        return CursorHandle{};
     }
 
     fake.cursors.emplace_back(FakeCursor{shape});
-    return &fake.cursors.back();
+    return CursorHandle{
+        reinterpret_cast<CursorHandle::ValueType>(std::addressof(fake.cursors.back()))};
 }
 
-[[nodiscard]] bool FakeSetCursor(void* context, void* cursor)
+[[nodiscard]] bool FakeSetCursor(void* context, CursorHandle cursor)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-cursor");
     fake.selectedCursorShapes.push_back(GetFakeCursor(cursor).shape);
     if (FailMouseOperation(fake, "set-cursor"))
@@ -964,14 +973,16 @@ void FakeGetGlobalMousePosition(void* context, float* x, float* y)
     return true;
 }
 
-void FakeDestroyCursor(void* context, void* cursor)
+void FakeDestroyCursor(void* context, CursorHandle cursor)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("destroy-cursor");
+    const auto* const cursorAddress = reinterpret_cast<const FakeCursor*>(cursor.GetValue());
     const auto iterator = std::ranges::find_if(fake.cursors,
-                                               [cursor](const FakeCursor& candidate)
+                                               [cursorAddress](const FakeCursor& candidate)
                                                {
-                                                   return &candidate == cursor;
+                                                   return std::addressof(candidate) ==
+                                                          cursorAddress;
                                                });
     if (iterator == fake.cursors.end())
     {
@@ -981,14 +992,13 @@ void FakeDestroyCursor(void* context, void* cursor)
     fake.destroyedCursorShapes.push_back(iterator->shape);
     if (fake.activeCursor == cursor)
     {
-        fake.activeCursor = nullptr;
+        fake.activeCursor = CursorHandle{};
     }
     fake.cursors.erase(iterator);
 }
-
 [[nodiscard]] bool FakeShowCursor(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("show-cursor");
     if (FailMouseOperation(fake, "show-cursor"))
     {
@@ -1001,7 +1011,7 @@ void FakeDestroyCursor(void* context, void* cursor)
 
 [[nodiscard]] bool FakeHideCursor(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("hide-cursor");
     if (FailMouseOperation(fake, "hide-cursor"))
     {
@@ -1014,63 +1024,52 @@ void FakeDestroyCursor(void* context, void* cursor)
 
 [[nodiscard]] bool FakeIsCursorVisible(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("is-cursor-visible");
     return fake.cursorVisible;
 }
 
 [[nodiscard]] bool FakeSupportsClipboardText(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("supports-clipboard-text");
     return fake.clipboardTextSupported;
 }
 
 [[nodiscard]] BackendClipboardTextResult FakeGetClipboardText(void* context)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-clipboard-text");
     if (fake.clipboardGetReturnsNull)
     {
         const std::string error = fake.clipboardGetError.empty()
                                       ? "synthetic get-clipboard-text failure"
                                       : fake.clipboardGetError;
-        static_cast<void>(SDL_SetError("%s", error.c_str()));
-        return BackendClipboardTextResult{.text = nullptr, .errorText = error};
+        return BackendClipboardTextResult{
+            .text = {}, .errorText = error, .succeeded = false};
     }
 
-    fake.clipboardReadBuffer = fake.clipboardText;
-    return BackendClipboardTextResult{.text = fake.clipboardReadBuffer.data(),
-                                      .errorText = fake.clipboardGetError};
+    return BackendClipboardTextResult{.text = fake.clipboardText,
+                                      .errorText = fake.clipboardGetError,
+                                      .succeeded = true};
 }
 
-void FakeFreeClipboardText(void* context, char* text)
+[[nodiscard]] bool FakeSetClipboardText(void* context, std::string_view text)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
-    fake.calls.emplace_back("free-clipboard-text");
-    ++fake.clipboardFreeCalls;
-    if (text == fake.clipboardReadBuffer.data())
-    {
-        fake.clipboardReadBuffer = "freed clipboard text";
-    }
-}
-
-[[nodiscard]] bool FakeSetClipboardText(void* context, const char* text)
-{
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-clipboard-text");
     if (FailServiceOperation(fake, "set-clipboard-text"))
     {
         return false;
     }
 
-    fake.clipboardText = text;
+    fake.clipboardText.assign(text.data(), text.size());
     return true;
 }
 
-[[nodiscard]] bool FakeOpenExternalUri(void* context, const char* uri)
+[[nodiscard]] bool FakeOpenExternalUri(void* context, std::string_view uri)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("open-external-uri");
     if (FailServiceOperation(fake, "open-external-uri"))
     {
@@ -1083,25 +1082,22 @@ void FakeFreeClipboardText(void* context, char* text)
 
 void FakeShowDialog(void* context, const BackendDialogRequestDesc& desc)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("show-dialog");
 
-    FakeDialogLaunch launch{.kind = desc.kind,
-                            .parentWindow = desc.parentWindow,
-                            .defaultLocation =
-                                desc.defaultLocation != nullptr
-                                    ? std::optional<std::string>{desc.defaultLocation}
-                                    : std::nullopt,
-                            .allowMultipleSelection = desc.allowMultipleSelection,
-                            .callback = desc.callback,
-                            .userdata = desc.userdata};
-    if (desc.filters != nullptr)
+    FakeDialogLaunch launch{
+        .kind = desc.kind,
+        .parentWindow = desc.parentWindow,
+        .defaultLocation =
+            desc.defaultLocation.has_value()
+                ? std::optional<std::string>{std::string{*desc.defaultLocation}}
+                : std::nullopt,
+        .allowMultipleSelection = desc.allowMultipleSelection,
+        .callback = std::addressof(desc.callback)};
+    for (const auto& filter : desc.filters)
     {
-        for (int index = 0; index < desc.filterCount; ++index)
-        {
-            launch.filters.push_back(pond::platform::DialogFileFilter{
-                .name = desc.filters[index].name, .pattern = desc.filters[index].pattern});
-        }
+        launch.filters.push_back(
+            pond::platform::DialogFileFilter{.name = filter.name, .pattern = filter.pattern});
     }
     fake.dialogLaunches.push_back(std::move(launch));
 }
@@ -1109,33 +1105,27 @@ void FakeShowDialog(void* context, const BackendDialogRequestDesc& desc)
 void CompleteDialogSelection(FakeDialogLaunch& launch, std::span<const std::string> paths,
                              int selectedFilter)
 {
-    std::vector<const char*> fileList;
-    fileList.reserve(paths.size() + 1U);
-    for (const std::string& path : paths)
+    BackendDialogSelection selection;
+    selection.paths.assign(paths.begin(), paths.end());
+    if (selectedFilter >= 0)
     {
-        fileList.push_back(path.c_str());
+        selection.selectedFilterIndex = static_cast<std::size_t>(selectedFilter);
     }
-    fileList.push_back(nullptr);
-
-    launch.callback(launch.userdata, fileList.data(), selectedFilter);
+    launch.callback->OnDialogCompleted(std::move(selection));
 }
 
 void CompleteDialogCancellation(FakeDialogLaunch& launch)
 {
-    const char* const fileList[]{nullptr};
-    launch.callback(launch.userdata, fileList, -1);
+    launch.callback->OnDialogCompleted(BackendDialogCancellation{});
 }
 
 void CompleteDialogFailure(FakeDialogLaunch& launch, std::string_view message)
 {
-    static_cast<void>(SDL_SetError("%.*s", static_cast<int>(message.size()), message.data()));
-    launch.callback(launch.userdata, nullptr, -1);
-    static_cast<void>(SDL_ClearError());
+    launch.callback->OnDialogCompleted(BackendDialogFailure{.message = std::string{message}});
 }
-
 [[nodiscard]] void* FakeCreateWindow(void* context, const BackendWindowCreateDesc& desc)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.createWindowCalls;
     fake.calls.emplace_back("create-window");
     if (FailWindowOperation(fake, "create-window"))
@@ -1164,7 +1154,7 @@ void CompleteDialogFailure(FakeDialogLaunch& launch, std::string_view message)
 
 void FakeDestroyWindow(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.destroyWindowCalls;
     fake.calls.emplace_back("destroy-window");
     if (fake.destroyOverwritesError)
@@ -1185,7 +1175,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] std::uint32_t FakeGetWindowId(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-id");
     return FailWindowOperation(fake, "get-window-id") ? 0 : GetFakeWindow(window).backendId;
 }
@@ -1198,7 +1188,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeSetWindowTitle(void* context, void* window, const char* title)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-title");
     if (FailWindowOperation(fake, "set-window-title"))
     {
@@ -1210,7 +1200,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeGetWindowPosition(void* context, void* window, int* x, int* y)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-position");
     if (FailWindowOperation(fake, "get-window-position"))
     {
@@ -1224,7 +1214,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeSetWindowPosition(void* context, void* window, int x, int y)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-position");
     if (FailWindowOperation(fake, "set-window-position"))
     {
@@ -1238,7 +1228,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeGetWindowSize(void* context, void* window, int* width, int* height)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-size");
     if (FailWindowOperation(fake, "get-window-size"))
     {
@@ -1252,7 +1242,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeGetWindowSizeInPixels(void* context, void* window, int* width, int* height)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-size-in-pixels");
     if (FailWindowOperation(fake, "get-window-size-in-pixels"))
     {
@@ -1266,7 +1256,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeSetWindowSize(void* context, void* window, int width, int height)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-size");
     if (FailWindowOperation(fake, "set-window-size"))
     {
@@ -1280,7 +1270,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeSetWindowMinimumSize(void* context, void* window, int width, int height)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-minimum-size");
     if (FailWindowOperation(fake, "set-window-minimum-size"))
     {
@@ -1294,7 +1284,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeShowWindow(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("show-window");
     if (FailWindowOperation(fake, "show-window"))
     {
@@ -1328,7 +1318,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeHideWindow(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("hide-window");
     if (FailWindowOperation(fake, "hide-window"))
     {
@@ -1347,7 +1337,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] bool FakeGetWindowProperties(void* context, void* window,
                                            BackendWindowProperties* properties)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-properties");
     if (FailWindowOperation(fake, "get-window-properties"))
     {
@@ -1369,7 +1359,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] BackendWindowOperationResult FakeSetFullscreenModeToDesktop(void* context, void*)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-fullscreen-mode-to-desktop");
     return GetWindowOperationResult(fake, "set-window-fullscreen-mode-to-desktop");
 }
@@ -1377,7 +1367,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] BackendWindowOperationResult FakeSetWindowFullscreen(void* context, void* window,
                                                                    bool fullscreen)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-fullscreen");
     const BackendWindowOperationResult result =
         GetWindowOperationResult(fake, "set-window-fullscreen");
@@ -1391,7 +1381,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] BackendWindowOperationResult FakeSetWindowBordered(void* context, void* window,
                                                                  bool bordered)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-bordered");
     const BackendWindowOperationResult result =
         GetWindowOperationResult(fake, "set-window-bordered");
@@ -1405,7 +1395,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] BackendWindowOperationResult FakeSetWindowResizable(void* context, void* window,
                                                                   bool resizable)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-resizable");
     const BackendWindowOperationResult result =
         GetWindowOperationResult(fake, "set-window-resizable");
@@ -1419,7 +1409,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] BackendWindowOperationResult FakeSetWindowAlwaysOnTop(void* context, void* window,
                                                                     bool alwaysOnTop)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-always-on-top");
     const BackendWindowOperationResult result =
         GetWindowOperationResult(fake, "set-window-always-on-top");
@@ -1432,7 +1422,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] BackendWindowOperationResult FakeMinimizeWindow(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("minimize-window");
     const BackendWindowOperationResult result = GetWindowOperationResult(fake, "minimize-window");
     if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
@@ -1453,7 +1443,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] BackendWindowOperationResult FakeMaximizeWindow(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("maximize-window");
     const BackendWindowOperationResult result = GetWindowOperationResult(fake, "maximize-window");
     if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
@@ -1474,7 +1464,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] BackendWindowOperationResult FakeRestoreWindow(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("restore-window");
     const BackendWindowOperationResult result = GetWindowOperationResult(fake, "restore-window");
     if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
@@ -1496,7 +1486,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeStartWindowTextInput(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("start-text-input");
     if (FailWindowOperation(fake, "start-text-input"))
     {
@@ -1509,7 +1499,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeStopWindowTextInput(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("stop-text-input");
     if (FailWindowOperation(fake, "stop-text-input"))
     {
@@ -1528,7 +1518,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeClearWindowTextComposition(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("clear-text-composition");
     if (FailWindowOperation(fake, "clear-text-composition"))
     {
@@ -1542,7 +1532,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] bool FakeSetWindowTextInputArea(void* context, void* window,
                                               const BackendTextInputArea* area)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-text-input-area");
     if (FailWindowOperation(fake, "set-text-input-area"))
     {
@@ -1556,7 +1546,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeSetWindowMouseGrab(void* context, void* window, bool grabbed)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-mouse-grab");
     if (FailWindowOperation(fake, "set-window-mouse-grab"))
     {
@@ -1572,14 +1562,14 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeIsWindowMouseGrabbed(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("is-window-mouse-grabbed");
     return GetFakeWindow(window).mouseGrabbed;
 }
 
 [[nodiscard]] bool FakeSetWindowRelativeMouseMode(void* context, void* window, bool enabled)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-relative-mouse-mode");
     if (FailWindowOperation(fake, "set-window-relative-mouse-mode"))
     {
@@ -1595,7 +1585,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeIsWindowRelativeMouseModeEnabled(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("is-window-relative-mouse-mode-enabled");
     return GetFakeWindow(window).relativeMouseModeEnabled;
 }
@@ -1603,7 +1593,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] BackendNativeWindowHandleResult FakeGetNativeWindowHandle(
     void* context, void*, pond::platform::NativeWindowHandle* handle)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-native-handle");
     const BackendWindowOperationResult operationResult =
         GetWindowOperationResult(fake, "get-native-handle");
@@ -1665,7 +1655,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] bool FakeEnumerateDisplays(void* context, std::vector<std::uint32_t>& displayIds)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.enumerateDisplayCalls;
     fake.calls.emplace_back("enumerate-displays");
     if (FailDisplayOperation(fake, "enumerate-displays"))
@@ -1679,7 +1669,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] const char* FakeGetDisplayName(void* context, std::uint32_t backendDisplayId)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-display-name");
     if (FailDisplayOperation(fake, "get-display-name"))
     {
@@ -1691,7 +1681,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] bool FakeGetDisplayBounds(void* context, std::uint32_t backendDisplayId,
                                         BackendScreenRectangle* bounds)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-display-bounds");
     if (FailDisplayOperation(fake, "get-display-bounds"))
     {
@@ -1704,7 +1694,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] bool FakeGetDisplayUsableBounds(void* context, std::uint32_t backendDisplayId,
                                               BackendScreenRectangle* bounds)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-display-usable-bounds");
     if (FailDisplayOperation(fake, "get-display-usable-bounds"))
     {
@@ -1717,7 +1707,7 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] bool FakeGetCurrentDisplayRefreshRate(void* context, std::uint32_t backendDisplayId,
                                                     float* refreshRateHertz)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-current-display-refresh-rate");
     if (FailDisplayOperation(fake, "get-current-display-refresh-rate"))
     {
@@ -1730,14 +1720,14 @@ void FakeDestroyWindow(void* context, void* window)
 [[nodiscard]] BackendDisplayOrientation FakeGetCurrentDisplayOrientation(
     void* context, std::uint32_t backendDisplayId)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-current-display-orientation");
     return GetFakeDisplay(fake, backendDisplayId).orientation;
 }
 
 [[nodiscard]] float FakeGetDisplayContentScale(void* context, std::uint32_t backendDisplayId)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-display-content-scale");
     if (FailDisplayOperation(fake, "get-display-content-scale"))
     {
@@ -1748,7 +1738,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] std::uint32_t FakeGetDisplayForWindow(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-display-for-window");
     if (FailDisplayOperation(fake, "get-display-for-window"))
     {
@@ -1759,7 +1749,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] float FakeGetWindowPixelDensity(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-pixel-density");
     if (FailDisplayOperation(fake, "get-window-pixel-density"))
     {
@@ -1770,7 +1760,7 @@ void FakeDestroyWindow(void* context, void* window)
 
 [[nodiscard]] float FakeGetWindowDisplayScale(void* context, void* window)
 {
-    FakeRuntimeBackend& fake = GetFake(context);
+    FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-display-scale");
     if (FailDisplayOperation(fake, "get-window-display-scale"))
     {
@@ -1779,41 +1769,191 @@ void FakeDestroyWindow(void* context, void* window)
     return GetFakeWindow(window).displayScale;
 }
 
-[[nodiscard]] PlatformRuntimeBackend MakeBackend(FakeRuntimeBackend& fake)
+class FakeHintBackend final : public IHintBackend
 {
-    return PlatformRuntimeBackend{
-        .context = &fake,
-        .isMainThread = FakeIsMainThread,
-        .hasInitializedSubsystems = FakeHasInitializedSubsystems,
-        .hasExpectedRuntimeSubsystems = FakeHasExpectedRuntimeSubsystems,
-        .getAppMetadataProperty = FakeGetAppMetadataProperty,
-        .setAppMetadataProperty = FakeSetAppMetadataProperty,
-        .getHint = FakeGetHint,
-        .setHintOverride = FakeSetHintOverride,
-        .resetHint = FakeResetHint,
-        .initializeVideo = FakeInitializeVideo,
-        .quit = FakeQuit,
-        .getTicksNanoseconds = FakeGetTicksNanoseconds,
-        .pollEvent = FakePollEvent,
-        .supportsGlobalMouse = FakeSupportsGlobalMouse,
-        .getGlobalMousePosition = FakeGetGlobalMousePosition,
-        .setMouseCapture = FakeSetMouseCapture,
-        .createSystemCursor = FakeCreateSystemCursor,
-        .setCursor = FakeSetCursor,
-        .destroyCursor = FakeDestroyCursor,
-        .showCursor = FakeShowCursor,
-        .hideCursor = FakeHideCursor,
-        .isCursorVisible = FakeIsCursorVisible,
-        .supportsClipboardText = FakeSupportsClipboardText,
-        .getClipboardText = FakeGetClipboardText,
-        .freeClipboardText = FakeFreeClipboardText,
-        .setClipboardText = FakeSetClipboardText,
-        .openExternalUri = FakeOpenExternalUri,
-        .showDialog = FakeShowDialog,
-    };
-}
+public:
+    explicit FakeHintBackend(FakeRuntimeBackendState& state) noexcept : m_state(state)
+    {
+    }
 
-[[nodiscard]] PlatformWindowBackend MakeWindowBackend(FakeRuntimeBackend& fake)
+    [[nodiscard]] bool IsMainThread() const noexcept override
+    {
+        return FakeIsMainThread(&m_state);
+    }
+
+    [[nodiscard]] bool HasInitializedSubsystems() const noexcept override
+    {
+        return FakeHasInitializedSubsystems(&m_state);
+    }
+
+    [[nodiscard]] const char* GetHint(const char* name) const noexcept override
+    {
+        return FakeGetHint(&m_state, name);
+    }
+
+    [[nodiscard]] bool SetHintOverride(const char* name, const char* value) noexcept override
+    {
+        return FakeSetHintOverride(&m_state, name, value);
+    }
+
+    [[nodiscard]] bool ResetHint(const char* name) noexcept override
+    {
+        return FakeResetHint(&m_state, name);
+    }
+
+private:
+    FakeRuntimeBackendState& m_state;
+};
+
+class FakeRuntimeBackend final : public IPlatformRuntimeBackend
+{
+public:
+    explicit FakeRuntimeBackend(FakeRuntimeBackendState& state)
+        : m_state(state), m_hintBackend(state),
+          m_hintManager(HintManagerAccess::Create(m_hintBackend))
+    {
+    }
+
+    [[nodiscard]] pond::platform::HintManager& GetHintManager() noexcept override
+    {
+        return m_hintManager;
+    }
+
+    [[nodiscard]] bool IsMainThread() override
+    {
+        return FakeIsMainThread(&m_state);
+    }
+
+    [[nodiscard]] bool HasInitializedSubsystems() override
+    {
+        return FakeHasInitializedSubsystems(&m_state);
+    }
+
+    [[nodiscard]] bool HasExpectedRuntimeSubsystems() override
+    {
+        return FakeHasExpectedRuntimeSubsystems(&m_state);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetAppMetadataProperty(
+        ApplicationMetadataProperty property, const char* value) override
+    {
+        return FakeSetAppMetadataProperty(&m_state, property, value);
+    }
+
+    [[nodiscard]] pond::core::VoidResult InitializeVideo() override
+    {
+        return FakeInitializeVideo(&m_state);
+    }
+
+    void Quit() override
+    {
+        FakeQuit(&m_state);
+    }
+
+    [[nodiscard]] std::uint64_t GetTicksNanoseconds() override
+    {
+        return FakeGetTicksNanoseconds(&m_state);
+    }
+
+    [[nodiscard]] bool PollEvent(SDL_Event* event) override
+    {
+        return FakePollEvent(&m_state, event);
+    }
+
+    [[nodiscard]] bool SupportsGlobalMouse() override
+    {
+        return FakeSupportsGlobalMouse(&m_state);
+    }
+
+    [[nodiscard]] pond::platform::MousePosition GetGlobalMousePosition() override
+    {
+        return FakeGetGlobalMousePosition(&m_state);
+    }
+
+    [[nodiscard]] bool SetMouseCapture(bool enabled) override
+    {
+        return FakeSetMouseCapture(&m_state, enabled);
+    }
+
+    [[nodiscard]] CursorHandle CreateSystemCursor(
+        pond::platform::SystemCursorShape shape) override
+    {
+        return FakeCreateSystemCursor(&m_state, shape);
+    }
+
+    [[nodiscard]] bool SetCursor(CursorHandle cursor) override
+    {
+        return FakeSetCursor(&m_state, cursor);
+    }
+
+    void DestroyCursor(CursorHandle cursor) override
+    {
+        FakeDestroyCursor(&m_state, cursor);
+    }
+
+    [[nodiscard]] bool ShowCursor() override
+    {
+        return FakeShowCursor(&m_state);
+    }
+
+    [[nodiscard]] bool HideCursor() override
+    {
+        return FakeHideCursor(&m_state);
+    }
+
+    [[nodiscard]] bool IsCursorVisible() override
+    {
+        return FakeIsCursorVisible(&m_state);
+    }
+
+    [[nodiscard]] bool SupportsClipboardText() override
+    {
+        return FakeSupportsClipboardText(&m_state);
+    }
+
+    [[nodiscard]] BackendClipboardTextResult GetClipboardText() override
+    {
+        return FakeGetClipboardText(&m_state);
+    }
+
+    [[nodiscard]] bool SetClipboardText(std::string_view text) override
+    {
+        return FakeSetClipboardText(&m_state, text);
+    }
+
+    [[nodiscard]] bool OpenExternalUri(std::string_view uri) override
+    {
+        return FakeOpenExternalUri(&m_state, uri);
+    }
+
+    void ShowDialog(const BackendDialogRequestDesc& desc) override
+    {
+        FakeShowDialog(&m_state, desc);
+    }
+
+private:
+    FakeRuntimeBackendState& m_state;
+    FakeHintBackend m_hintBackend;
+    pond::platform::HintManager m_hintManager;
+};
+
+class FakeRuntimeBackendFactory final : public IPlatformRuntimeBackendFactory
+{
+public:
+    explicit FakeRuntimeBackendFactory(FakeRuntimeBackendState& state) noexcept : m_state(state)
+    {
+    }
+
+    [[nodiscard]] std::unique_ptr<IPlatformRuntimeBackend> Create() const override
+    {
+        return std::make_unique<FakeRuntimeBackend>(m_state);
+    }
+
+private:
+    FakeRuntimeBackendState& m_state;
+};
+
+[[nodiscard]] PlatformWindowBackend MakeWindowBackend(FakeRuntimeBackendState& fake)
 {
     return PlatformWindowBackend{
         .context = &fake,
@@ -1852,7 +1992,7 @@ void FakeDestroyWindow(void* context, void* window)
     };
 }
 
-[[nodiscard]] PlatformDisplayBackend MakeDisplayBackend(FakeRuntimeBackend& fake)
+[[nodiscard]] PlatformDisplayBackend MakeDisplayBackend(FakeRuntimeBackendState& fake)
 {
     return PlatformDisplayBackend{
         .context = &fake,
@@ -1875,10 +2015,9 @@ protected:
     void SetUp() override
     {
         static_cast<void>(SDL_ClearError());
-        m_backend = MakeBackend(m_fake);
         m_windowBackend = MakeWindowBackend(m_fake);
         m_displayBackend = MakeDisplayBackend(m_fake);
-        pond::platform::detail::SetPlatformRuntimeBackendForTesting(&m_backend);
+        pond::platform::detail::SetPlatformRuntimeBackendForTesting(&m_backendFactory);
         pond::platform::detail::SetPlatformWindowBackendForTesting(&m_windowBackend);
         pond::platform::detail::SetPlatformDisplayBackendForTesting(&m_displayBackend);
     }
@@ -1891,15 +2030,23 @@ protected:
         static_cast<void>(SDL_ClearError());
     }
 
-    FakeRuntimeBackend m_fake;
-    PlatformRuntimeBackend m_backend;
+    FakeRuntimeBackendState m_fake;
+    FakeRuntimeBackendFactory m_backendFactory{m_fake};
     PlatformWindowBackend m_windowBackend;
     PlatformDisplayBackend m_displayBackend;
 };
 
-TEST_F(PlatformRuntimeBackendTests, AppliesMetadataPoliciesAndProvidesTimestamps)
+TEST(ApplicationMetadataPropertyTests, FormatsAsErrorContext)
 {
-    m_fake.hints[pond::platform::detail::kMouseFocusClickThroughHint] = "previous";
+    EXPECT_EQ(std::format("{}", ApplicationMetadataProperty::Name), "name");
+    EXPECT_EQ(std::format("{}", ApplicationMetadataProperty::Version), "version");
+    EXPECT_EQ(std::format("{}", ApplicationMetadataProperty::Identifier), "identifier");
+}
+
+TEST_F(PlatformRuntimeBackendTests,
+       AppliesMetadataWithoutRestoringPriorValuesAndProvidesTimestamps)
+{
+    m_fake.hints[SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH] = "previous";
     m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)] = "Prior App";
     m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)] = "1.0";
     m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)] = "org.ponder.prior";
@@ -1920,29 +2067,80 @@ TEST_F(PlatformRuntimeBackendTests, AppliesMetadataPoliciesAndProvidesTimestamps
         EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)], "2.4.1");
         EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)],
                   "org.ponder.workbench");
-        EXPECT_EQ(GetHintValue(m_fake, pond::platform::detail::kMouseFocusClickThroughHint),
+        EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
                   std::string_view{"1"});
-        EXPECT_EQ(GetHintValue(m_fake, pond::platform::detail::kMouseAutoCaptureHint),
+        EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE),
                   std::string_view{"0"});
+        EXPECT_EQ(m_fake.hints.size(), 2U);
         EXPECT_TRUE(m_fake.policiesObservedDuringInitialization);
         EXPECT_TRUE(m_fake.metadataObservedDuringInitialization);
         EXPECT_EQ(runtime.Now().GetTimeSinceEpoch(), std::chrono::nanoseconds{987'654'321});
     }
 
     EXPECT_EQ(m_fake.quitCalls, 1);
-    EXPECT_EQ(GetHintValue(m_fake, pond::platform::detail::kMouseFocusClickThroughHint),
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
               std::string_view{"previous"});
-    EXPECT_EQ(GetHintValue(m_fake, pond::platform::detail::kMouseAutoCaptureHint), nullptr);
-    EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)], "Prior App");
-    EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)], "1.0");
-    EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)],
-              "org.ponder.prior");
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE), nullptr);
+    EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)].has_value());
+    EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)].has_value());
+    EXPECT_FALSE(
+        m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)].has_value());
     EXPECT_EQ(m_fake.runtimeSubsystemChecks, 1);
 }
 
+TEST_F(PlatformRuntimeBackendTests, ConfiguresHintsBeforeInitializationAndExposesManager)
+{
+    using pond::platform::PlatformErrorCode;
+
+    pond::platform::PlatformRuntimeDesc desc;
+    desc.configureHintsBeforeInitialization = [](pond::platform::HintManager& hintManager)
+    {
+        using namespace pond::platform::hints;
+
+        EXPECT_TRUE(hintManager.PushHint(VideoDriver{"dummy"}).HasValue());
+        EXPECT_TRUE(
+            hintManager.PushHint(ImeImplementedUi{ImeUiCapabilities::CompositionAndCandidates})
+                .HasValue());
+        EXPECT_TRUE(hintManager.PushHint(MouseFocusClickThrough{false}).HasValue());
+    };
+
+    {
+        auto result = pond::platform::PlatformRuntime::Create(desc);
+        ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
+        pond::platform::PlatformRuntime runtime = std::move(result).GetValue();
+        pond::platform::HintManager& hintManager = runtime.GetHintManager();
+
+        using namespace pond::platform::hints;
+
+        EXPECT_EQ(hintManager.GetHint(VideoDriver{}).GetValue().value, "dummy");
+        EXPECT_EQ(hintManager.GetHint(ImeImplementedUi{}).GetValue().value,
+                  ImeUiCapabilities::CompositionAndCandidates);
+        EXPECT_FALSE(hintManager.GetHint(MouseFocusClickThrough{}).GetValue().value);
+
+        const auto lateVideoDriver = hintManager.PushHint(VideoDriver{"offscreen"});
+        ASSERT_FALSE(lateVideoDriver.HasValue());
+        EXPECT_EQ(lateVideoDriver.GetError().GetCode(),
+                  pond::platform::ToErrorCode(PlatformErrorCode::InvalidArgument));
+
+        ASSERT_TRUE(hintManager.PushHint(WindowActivateWhenShown{false}).HasValue());
+        EXPECT_FALSE(hintManager.GetHint(WindowActivateWhenShown{}).GetValue().value);
+        EXPECT_TRUE(hintManager.ClearHints(WindowActivateWhenShown{}).HasValue());
+
+        const auto callbackCall = std::ranges::find(
+            m_fake.calls, std::string{"set-hint:"} + SDL_HINT_VIDEO_DRIVER + "=dummy");
+        const auto initializationCall = std::ranges::find(m_fake.calls, "initialize-video");
+        ASSERT_NE(callbackCall, m_fake.calls.end());
+        ASSERT_NE(initializationCall, m_fake.calls.end());
+        EXPECT_LT(callbackCall, initializationCall);
+    }
+
+    EXPECT_FALSE(m_fake.hints.contains(SDL_HINT_VIDEO_DRIVER));
+    EXPECT_FALSE(m_fake.hints.contains(SDL_HINT_IME_IMPLEMENTED_UI));
+    EXPECT_FALSE(m_fake.hints.contains(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH));
+}
 TEST_F(PlatformRuntimeBackendTests, RestoresAOriginallyPresentEmptyHint)
 {
-    m_fake.hints[pond::platform::detail::kMouseFocusClickThroughHint] = "";
+    m_fake.hints[SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH] = "";
 
     {
         auto result =
@@ -1951,18 +2149,30 @@ TEST_F(PlatformRuntimeBackendTests, RestoresAOriginallyPresentEmptyHint)
         pond::platform::PlatformRuntime runtime = std::move(result).GetValue();
     }
 
-    const auto iterator = m_fake.hints.find(pond::platform::detail::kMouseFocusClickThroughHint);
+    const auto iterator = m_fake.hints.find(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH);
     ASSERT_NE(iterator, m_fake.hints.end());
     EXPECT_TRUE(iterator->second.empty());
 }
 
-TEST_F(PlatformRuntimeBackendTests, PassesAbsentOptionalMetadataAsNull)
+TEST_F(PlatformRuntimeBackendTests, ClearsAbsentOptionalMetadata)
 {
-    auto result = pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(result.HasValue());
-    pond::platform::PlatformRuntime runtime = std::move(result).GetValue();
+    m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)] = "prior-version";
+    m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)] = "org.ponder.prior";
 
-    EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)], "ponder");
+    {
+        auto result =
+            pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+        ASSERT_TRUE(result.HasValue());
+        pond::platform::PlatformRuntime runtime = std::move(result).GetValue();
+
+        EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)], "ponder");
+        EXPECT_FALSE(
+            m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)].has_value());
+        EXPECT_FALSE(
+            m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)].has_value());
+    }
+
+    EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)].has_value());
     EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)].has_value());
     EXPECT_FALSE(
         m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)].has_value());
@@ -2090,9 +2300,9 @@ TEST_F(PlatformRuntimeBackendTests, RejectsExternallyInitializedSdl)
 
 TEST_F(PlatformRuntimeBackendTests, RestoresHintsAfterHintFailureAndPermitsRetry)
 {
-    m_fake.hints[pond::platform::detail::kMouseFocusClickThroughHint] = "old-focus";
-    m_fake.hints[pond::platform::detail::kMouseAutoCaptureHint] = "old-capture";
-    m_fake.failingHint = pond::platform::detail::kMouseAutoCaptureHint;
+    m_fake.hints[SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH] = "old-focus";
+    m_fake.hints[SDL_HINT_MOUSE_AUTO_CAPTURE] = "old-capture";
+    m_fake.failingHint = SDL_HINT_MOUSE_AUTO_CAPTURE;
     m_fake.hintFailuresRemaining = 1;
 
     auto result = pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -2102,9 +2312,9 @@ TEST_F(PlatformRuntimeBackendTests, RestoresHintsAfterHintFailureAndPermitsRetry
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
     EXPECT_NE(result.GetError().GetMessage().find("synthetic hint failure"),
               std::string_view::npos);
-    EXPECT_EQ(GetHintValue(m_fake, pond::platform::detail::kMouseFocusClickThroughHint),
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
               std::string_view{"old-focus"});
-    EXPECT_EQ(GetHintValue(m_fake, pond::platform::detail::kMouseAutoCaptureHint),
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE),
               std::string_view{"old-capture"});
     EXPECT_EQ(m_fake.initializeVideoCalls, 0);
 
@@ -2113,7 +2323,7 @@ TEST_F(PlatformRuntimeBackendTests, RestoresHintsAfterHintFailureAndPermitsRetry
     pond::platform::PlatformRuntime runtime = std::move(retry).GetValue();
 }
 
-TEST_F(PlatformRuntimeBackendTests, RollsBackMetadataFailureAndPermitsRetry)
+TEST_F(PlatformRuntimeBackendTests, KeepsAppliedMetadataAfterFailureAndPermitsRetry)
 {
     m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)] = "Prior App";
     m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)] = "1.0";
@@ -2128,8 +2338,9 @@ TEST_F(PlatformRuntimeBackendTests, RollsBackMetadataFailureAndPermitsRetry)
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
     EXPECT_NE(result.GetError().GetMessage().find("synthetic metadata failure"),
               std::string_view::npos);
+    EXPECT_NE(result.GetError().GetMessage().find("version"), std::string_view::npos);
     EXPECT_EQ(m_fake.initializeVideoCalls, 0);
-    EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)], "Prior App");
+    EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)], "ponder");
     EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)], "1.0");
     EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)],
               "org.ponder.prior");
@@ -2137,11 +2348,18 @@ TEST_F(PlatformRuntimeBackendTests, RollsBackMetadataFailureAndPermitsRetry)
     auto retry = pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
     ASSERT_TRUE(retry.HasValue());
     pond::platform::PlatformRuntime runtime = std::move(retry).GetValue();
+
+    EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)], "ponder");
+    EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)].has_value());
+    EXPECT_FALSE(
+        m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)].has_value());
 }
 
-TEST_F(PlatformRuntimeBackendTests, CapturesInitializationFailureBeforeRollback)
+TEST_F(PlatformRuntimeBackendTests, PropagatesInitializationFailureWithoutRestoringMetadata)
 {
-    m_fake.hints[pond::platform::detail::kMouseFocusClickThroughHint] = "old-focus";
+    m_fake.hints[SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH] = "old-focus";
+    m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)] = "Prior App";
+    m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)] = "1.0";
     m_fake.initializeVideoSucceeds = false;
 
     auto result = pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -2152,8 +2370,10 @@ TEST_F(PlatformRuntimeBackendTests, CapturesInitializationFailureBeforeRollback)
     EXPECT_NE(result.GetError().GetMessage().find("synthetic video initialization failure"),
               std::string_view::npos);
     EXPECT_EQ(m_fake.quitCalls, 1);
-    EXPECT_EQ(GetHintValue(m_fake, pond::platform::detail::kMouseFocusClickThroughHint),
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
               std::string_view{"old-focus"});
+    EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)].has_value());
+    EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)].has_value());
 
     m_fake.initializeVideoSucceeds = true;
     auto retry = pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
@@ -2215,7 +2435,7 @@ TEST_F(PlatformRuntimeBackendTests, RejectsWrongThreadAndOutOfRangeTimestamps)
 
 TEST_F(PlatformRuntimeBackendTests, HoldsSingletonUntilHintRestorationCompletes)
 {
-    m_fake.hints[pond::platform::detail::kMouseFocusClickThroughHint] = "old-focus";
+    m_fake.hints[SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH] = "old-focus";
     m_fake.attemptCreateDuringRestoration = true;
 
     {
@@ -5132,7 +5352,7 @@ TEST_F(PlatformRuntimeBackendTests, LazilyCachesEverySystemCursorAndDestroysThem
 
     EXPECT_FALSE(m_fake.cursorsPresentAtQuit);
     EXPECT_TRUE(m_fake.cursors.empty());
-    EXPECT_EQ(m_fake.activeCursor, nullptr);
+    EXPECT_FALSE(m_fake.activeCursor.IsValid());
     EXPECT_TRUE(std::ranges::equal(m_fake.destroyedCursorShapes, kSystemCursorShapes));
     EXPECT_EQ(std::ranges::count(m_fake.calls, "destroy-cursor"),
               static_cast<std::ptrdiff_t>(kSystemCursorShapes.size()));
@@ -5258,7 +5478,10 @@ TEST_F(PlatformRuntimeBackendTests, LaunchesAsynchronousDialogsWithOwnedDescript
 
     ASSERT_EQ(m_fake.dialogLaunches.size(), 3U);
     EXPECT_EQ(m_fake.dialogLaunches[0].kind, BackendDialogKind::OpenFile);
-    EXPECT_EQ(m_fake.dialogLaunches[0].parentWindow, &m_fake.windows.front());
+    ASSERT_TRUE(m_fake.dialogLaunches[0].parentWindow.has_value());
+    EXPECT_EQ(m_fake.dialogLaunches[0].parentWindow->GetValue(),
+              reinterpret_cast<BackendWindowHandle::ValueType>(
+                  std::addressof(m_fake.windows.front())));
     ASSERT_EQ(m_fake.dialogLaunches[0].filters.size(), 2U);
     EXPECT_EQ(m_fake.dialogLaunches[0].filters[0].name, "Molecules");
     EXPECT_EQ(m_fake.dialogLaunches[0].filters[0].pattern, "SDF-2_x.foo;mol");
@@ -5266,7 +5489,7 @@ TEST_F(PlatformRuntimeBackendTests, LaunchesAsynchronousDialogsWithOwnedDescript
     EXPECT_TRUE(m_fake.dialogLaunches[0].allowMultipleSelection);
 
     EXPECT_EQ(m_fake.dialogLaunches[1].kind, BackendDialogKind::SaveFile);
-    EXPECT_FALSE(m_fake.dialogLaunches[1].parentWindow != nullptr);
+    EXPECT_FALSE(m_fake.dialogLaunches[1].parentWindow.has_value());
     ASSERT_EQ(m_fake.dialogLaunches[1].filters.size(), 1U);
     EXPECT_FALSE(m_fake.dialogLaunches[1].allowMultipleSelection);
 
@@ -5585,15 +5808,12 @@ TEST_F(PlatformRuntimeBackendTests, GetsClipboardTextAndDistinguishesEmptyTextFr
     auto text = runtime.GetClipboardText();
     ASSERT_TRUE(text.HasValue());
     EXPECT_EQ(text.GetValue(), "C6H6");
-    EXPECT_EQ(m_fake.clipboardFreeCalls, 1);
-    EXPECT_EQ(m_fake.clipboardReadBuffer, "freed clipboard text");
 
     m_fake.clipboardText.clear();
     m_fake.clipboardGetError.clear();
     auto emptyText = runtime.GetClipboardText();
     ASSERT_TRUE(emptyText.HasValue());
     EXPECT_TRUE(emptyText.GetValue().empty());
-    EXPECT_EQ(m_fake.clipboardFreeCalls, 2);
 
     m_fake.clipboardGetError = "synthetic empty clipboard failure";
     auto emptyFailure = runtime.GetClipboardText();
@@ -5604,7 +5824,6 @@ TEST_F(PlatformRuntimeBackendTests, GetsClipboardTextAndDistinguishesEmptyTextFr
               std::string_view::npos);
     EXPECT_NE(emptyFailure.GetError().GetMessage().find("synthetic empty clipboard failure"),
               std::string_view::npos);
-    EXPECT_EQ(m_fake.clipboardFreeCalls, 3);
 
     m_fake.clipboardGetReturnsNull = true;
     m_fake.clipboardGetError = "synthetic null clipboard failure";
@@ -5614,7 +5833,6 @@ TEST_F(PlatformRuntimeBackendTests, GetsClipboardTextAndDistinguishesEmptyTextFr
               pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
     EXPECT_NE(nullFailure.GetError().GetMessage().find("synthetic null clipboard failure"),
               std::string_view::npos);
-    EXPECT_EQ(m_fake.clipboardFreeCalls, 3);
 }
 
 TEST_F(PlatformRuntimeBackendTests, HandlesClipboardCapabilityValidationAndSetFailures)

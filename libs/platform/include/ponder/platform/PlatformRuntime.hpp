@@ -4,6 +4,7 @@
 #include <ponder/platform/Dialog.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
+#include <ponder/platform/HintManager.hpp>
 #include <ponder/platform/Mouse.hpp>
 #include <ponder/platform/PlatformEvent.hpp>
 #include <ponder/platform/Timing.hpp>
@@ -17,11 +18,14 @@
 
 namespace pond::platform
 {
+using ConfigureHintsBeforeInitialization = void (*)(HintManager&);
+
 struct PlatformRuntimeDesc final
 {
     std::string applicationName{"ponder"};
     std::optional<std::string> applicationVersion;
     std::optional<std::string> applicationIdentifier;
+    ConfigureHintsBeforeInitialization configureHintsBeforeInitialization{};
 };
 
 namespace detail
@@ -41,6 +45,7 @@ public:
     PlatformRuntime(PlatformRuntime&&) noexcept;
     PlatformRuntime& operator=(PlatformRuntime&&) noexcept;
 
+    [[nodiscard]] HintManager& GetHintManager();
     [[nodiscard]] Timestamp Now() const;
     [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<Window> CreateWindow(const WindowDesc& desc);

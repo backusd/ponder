@@ -61,14 +61,17 @@ Status: platform contracts revised on 2026-07-13 for renderer interop.
 ### Runtime And Windows
 
 - SDL3 video/event initialization and shutdown behind explicit RAII ownership.
-- Apply the UI-required SDL mouse policy privately: focus-gaining clicks pass
-  through, and SDL automatic capture is disabled in favor of explicit project
-  capture. Restore each prior effective nullable hint value after `SDL_Quit()`;
-  SDL does not expose enough information to restore its former priority or
-  provenance.
-- Apply owned, validated application metadata through checked SDL property
-  operations before initializing video. Restore the prior effective nullable
-  metadata values after failed creation and after `SDL_Quit()` at shutdown.
+- Expose the curated SDL hint catalog through the strongly typed `HintManager`,
+  with independent value stacks, validated values, initialization-phase checks,
+  and pre-initialization descriptor configuration. Apply the UI-required mouse
+  defaults first: focus-gaining clicks pass through, and SDL automatic capture
+  is disabled in favor of explicit project capture. Restore every managed prior
+  effective nullable value after `SDL_Quit()`; SDL does not expose enough
+  information to restore its former priority or provenance.
+- Apply owned, validated descriptor metadata through checked SDL property
+  operations before initializing video. Clear absent optional properties and
+  do not snapshot or restore prior metadata on failed creation or shutdown.
+  Leave the post-`SDL_Quit()` process state to SDL.
 - Multiple windows from the first implementation.
 - Runtime-local 64-bit `WindowId` values. Zero is invalid; valid IDs increase
   monotonically and are never reused during a runtime lifetime.

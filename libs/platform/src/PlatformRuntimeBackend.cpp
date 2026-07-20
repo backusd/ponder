@@ -1,27 +1,19 @@
 #include "PlatformRuntimeBackend.hpp"
 
-#include <ponder/core/ScopeExit.hpp>
+#include <ponder/core/Assert.hpp>
 
-#include <SDL3/SDL_clipboard.h>
-#include <SDL3/SDL_error.h>
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_hints.h>
-#include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keyboard.h>
-#include <SDL3/SDL_misc.h>
 #include <SDL3/SDL_mouse.h>
 #include <SDL3/SDL_platform_defines.h>
 #include <SDL3/SDL_properties.h>
 #include <SDL3/SDL_rect.h>
-#include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 #include <atomic>
 #include <memory>
-#include <optional>
-#include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
+
+#include "SdlRuntimeBackend.hpp"
 
 namespace pond::platform::detail
 {
@@ -138,228 +130,6 @@ struct SdlDisplayListDeleter final
     return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Failed,
                                            .operation = operation,
                                            .captureSdlError = true};
-}
-
-[[nodiscard]] bool IsMainThread(void*) noexcept
-{
-    return SDL_IsMainThread();
-}
-
-[[nodiscard]] bool HasInitializedSubsystems(void*) noexcept
-{
-    return SDL_WasInit(0) != 0;
-}
-
-[[nodiscard]] bool HasExpectedRuntimeSubsystems(void*) noexcept
-{
-    constexpr SDL_InitFlags kRuntimeSubsystems = SDL_INIT_VIDEO | SDL_INIT_EVENTS;
-    const SDL_InitFlags initializedSubsystems = SDL_WasInit(0);
-    return (initializedSubsystems & kRuntimeSubsystems) == kRuntimeSubsystems &&
-           (initializedSubsystems & ~kRuntimeSubsystems) == 0;
-}
-
-[[nodiscard]] const char* GetMetadataPropertyName(ApplicationMetadataProperty property) noexcept
-{
-    switch (property)
-    {
-    case ApplicationMetadataProperty::Name:
-        return SDL_PROP_APP_METADATA_NAME_STRING;
-    case ApplicationMetadataProperty::Version:
-        return SDL_PROP_APP_METADATA_VERSION_STRING;
-    case ApplicationMetadataProperty::Identifier:
-        return SDL_PROP_APP_METADATA_IDENTIFIER_STRING;
-    }
-
-    return nullptr;
-}
-
-[[nodiscard]] const char* GetAppMetadataProperty(void*,
-                                                 ApplicationMetadataProperty property) noexcept
-{
-    const char* const propertyName = GetMetadataPropertyName(property);
-    return propertyName != nullptr ? SDL_GetAppMetadataProperty(propertyName) : nullptr;
-}
-
-[[nodiscard]] bool SetAppMetadataProperty(void*, ApplicationMetadataProperty property,
-                                          const char* value) noexcept
-{
-    const char* const propertyName = GetMetadataPropertyName(property);
-    return propertyName != nullptr && SDL_SetAppMetadataProperty(propertyName, value);
-}
-
-[[nodiscard]] const char* GetHint(void*, const char* name) noexcept
-{
-    return SDL_GetHint(name);
-}
-
-[[nodiscard]] bool SetHintOverride(void*, const char* name, const char* value) noexcept
-{
-    return SDL_SetHintWithPriority(name, value, SDL_HINT_OVERRIDE);
-}
-
-[[nodiscard]] bool ResetHint(void*, const char* name) noexcept
-{
-    return SDL_ResetHint(name);
-}
-
-[[nodiscard]] bool InitializeVideo(void*) noexcept
-{
-    return SDL_Init(SDL_INIT_VIDEO);
-}
-
-void Quit(void*) noexcept
-{
-    SDL_Quit();
-}
-
-[[nodiscard]] std::uint64_t GetTicksNanoseconds(void*) noexcept
-{
-    return SDL_GetTicksNS();
-}
-
-[[nodiscard]] bool PollEvent(void*, SDL_Event* event) noexcept
-{
-    return SDL_PollEvent(event);
-}
-
-[[nodiscard]] bool SupportsGlobalMouse(void*) noexcept
-{
-    const char* const driver = SDL_GetCurrentVideoDriver();
-    if (driver == nullptr)
-    {
-        return false;
-    }
-
-    const std::string_view name{driver};
-    return name == "windows" || name == "cocoa" || name == "x11";
-}
-
-void GetGlobalMousePosition(void*, float* x, float* y) noexcept
-{
-    static_cast<void>(SDL_GetGlobalMouseState(x, y));
-}
-
-[[nodiscard]] bool SetMouseCapture(void*, bool enabled) noexcept
-{
-    return SDL_CaptureMouse(enabled);
-}
-
-[[nodiscard]] std::optional<SDL_SystemCursor> ToSdlSystemCursor(SystemCursorShape shape) noexcept
-{
-    switch (shape)
-    {
-    case SystemCursorShape::Default:
-        return SDL_SYSTEM_CURSOR_DEFAULT;
-    case SystemCursorShape::TextInput:
-        return SDL_SYSTEM_CURSOR_TEXT;
-    case SystemCursorShape::Move:
-        return SDL_SYSTEM_CURSOR_MOVE;
-    case SystemCursorShape::ResizeNorthSouth:
-        return SDL_SYSTEM_CURSOR_NS_RESIZE;
-    case SystemCursorShape::ResizeEastWest:
-        return SDL_SYSTEM_CURSOR_EW_RESIZE;
-    case SystemCursorShape::ResizeNortheastSouthwest:
-        return SDL_SYSTEM_CURSOR_NESW_RESIZE;
-    case SystemCursorShape::ResizeNorthwestSoutheast:
-        return SDL_SYSTEM_CURSOR_NWSE_RESIZE;
-    case SystemCursorShape::Pointer:
-        return SDL_SYSTEM_CURSOR_POINTER;
-    case SystemCursorShape::Wait:
-        return SDL_SYSTEM_CURSOR_WAIT;
-    case SystemCursorShape::Progress:
-        return SDL_SYSTEM_CURSOR_PROGRESS;
-    case SystemCursorShape::NotAllowed:
-        return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
-    }
-
-    return std::nullopt;
-}
-
-[[nodiscard]] void* CreateSystemCursor(void*, SystemCursorShape shape) noexcept
-{
-    const std::optional<SDL_SystemCursor> cursor = ToSdlSystemCursor(shape);
-    return cursor.has_value() ? SDL_CreateSystemCursor(*cursor) : nullptr;
-}
-
-[[nodiscard]] bool SetCursor(void*, void* cursor) noexcept
-{
-    return SDL_SetCursor(static_cast<SDL_Cursor*>(cursor));
-}
-
-void DestroyCursor(void*, void* cursor) noexcept
-{
-    SDL_DestroyCursor(static_cast<SDL_Cursor*>(cursor));
-}
-
-[[nodiscard]] bool ShowCursor(void*) noexcept
-{
-    return SDL_ShowCursor();
-}
-
-[[nodiscard]] bool HideCursor(void*) noexcept
-{
-    return SDL_HideCursor();
-}
-
-[[nodiscard]] bool IsCursorVisible(void*) noexcept
-{
-    return SDL_CursorVisible();
-}
-
-[[nodiscard]] bool SupportsClipboardText(void*) noexcept
-{
-    return true;
-}
-
-[[nodiscard]] BackendClipboardTextResult GetClipboardText(void*)
-{
-    static_cast<void>(SDL_ClearError());
-    char* const text = SDL_GetClipboardText();
-    auto freeTextOnFailure = core::MakeScopeExit(
-        [text]() noexcept
-        {
-            SDL_free(text);
-        });
-    const char* const rawError = SDL_GetError();
-    BackendClipboardTextResult result{
-        .text = text, .errorText = rawError != nullptr ? std::string{rawError} : std::string{}};
-    freeTextOnFailure.Dismiss();
-    return result;
-}
-
-void FreeClipboardText(void*, char* text) noexcept
-{
-    SDL_free(text);
-}
-
-[[nodiscard]] bool SetClipboardText(void*, const char* text) noexcept
-{
-    return SDL_SetClipboardText(text);
-}
-
-[[nodiscard]] bool OpenExternalUri(void*, const char* uri) noexcept
-{
-    return SDL_OpenURL(uri);
-}
-
-void ShowDialog(void*, const BackendDialogRequestDesc& desc) noexcept
-{
-    auto* const parentWindow = static_cast<SDL_Window*>(desc.parentWindow);
-    switch (desc.kind)
-    {
-    case BackendDialogKind::OpenFile:
-        SDL_ShowOpenFileDialog(desc.callback, desc.userdata, parentWindow, desc.filters,
-                               desc.filterCount, desc.defaultLocation, desc.allowMultipleSelection);
-        break;
-    case BackendDialogKind::SaveFile:
-        SDL_ShowSaveFileDialog(desc.callback, desc.userdata, parentWindow, desc.filters,
-                               desc.filterCount, desc.defaultLocation);
-        break;
-    case BackendDialogKind::OpenFolder:
-        SDL_ShowOpenFolderDialog(desc.callback, desc.userdata, parentWindow, desc.defaultLocation,
-                                 desc.allowMultipleSelection);
-        break;
-    }
 }
 
 [[nodiscard]] void* CreateWindow(void*, const BackendWindowCreateDesc& desc) noexcept
@@ -832,47 +602,23 @@ constexpr PlatformDisplayBackend kSdlDisplayBackend{
     .getWindowDisplayScale = GetWindowDisplayScale,
 };
 
-constexpr PlatformRuntimeBackend kSdlBackend{
-    .context = nullptr,
-    .isMainThread = IsMainThread,
-    .hasInitializedSubsystems = HasInitializedSubsystems,
-    .hasExpectedRuntimeSubsystems = HasExpectedRuntimeSubsystems,
-    .getAppMetadataProperty = GetAppMetadataProperty,
-    .setAppMetadataProperty = SetAppMetadataProperty,
-    .getHint = GetHint,
-    .setHintOverride = SetHintOverride,
-    .resetHint = ResetHint,
-    .initializeVideo = InitializeVideo,
-    .quit = Quit,
-    .getTicksNanoseconds = GetTicksNanoseconds,
-    .pollEvent = PollEvent,
-    .supportsGlobalMouse = SupportsGlobalMouse,
-    .getGlobalMousePosition = GetGlobalMousePosition,
-    .setMouseCapture = SetMouseCapture,
-    .createSystemCursor = CreateSystemCursor,
-    .setCursor = SetCursor,
-    .destroyCursor = DestroyCursor,
-    .showCursor = ShowCursor,
-    .hideCursor = HideCursor,
-    .isCursorVisible = IsCursorVisible,
-    .supportsClipboardText = SupportsClipboardText,
-    .getClipboardText = GetClipboardText,
-    .freeClipboardText = FreeClipboardText,
-    .setClipboardText = SetClipboardText,
-    .openExternalUri = OpenExternalUri,
-    .showDialog = ShowDialog,
-};
-
-std::atomic<const PlatformRuntimeBackend*> backendOverride{nullptr};
+std::atomic<const IPlatformRuntimeBackendFactory*> backendFactoryOverride{nullptr};
 std::atomic<const PlatformWindowBackend*> windowBackendOverride{nullptr};
 std::atomic<const PlatformDisplayBackend*> displayBackendOverride{nullptr};
 } // namespace
 
-PlatformRuntimeBackend GetPlatformRuntimeBackend() noexcept
+std::unique_ptr<IPlatformRuntimeBackend> GetPlatformRuntimeBackend()
 {
-    const PlatformRuntimeBackend* const overrideBackend =
-        backendOverride.load(std::memory_order_acquire);
-    return overrideBackend != nullptr ? *overrideBackend : kSdlBackend;
+    const IPlatformRuntimeBackendFactory* const factory =
+        backendFactoryOverride.load(std::memory_order_acquire);
+    if (factory == nullptr)
+    {
+        return std::make_unique<SdlRuntimeBackend>();
+    }
+
+    std::unique_ptr<IPlatformRuntimeBackend> backend = factory->Create();
+    PONDER_VERIFY(backend != nullptr, "Platform runtime backend factory returned null");
+    return backend;
 }
 
 PlatformWindowBackend GetPlatformWindowBackend() noexcept
@@ -889,9 +635,10 @@ PlatformDisplayBackend GetPlatformDisplayBackend() noexcept
     return overrideBackend != nullptr ? *overrideBackend : kSdlDisplayBackend;
 }
 
-void SetPlatformRuntimeBackendForTesting(const PlatformRuntimeBackend* backend) noexcept
+void SetPlatformRuntimeBackendForTesting(
+    const IPlatformRuntimeBackendFactory* factory) noexcept
 {
-    backendOverride.store(backend, std::memory_order_release);
+    backendFactoryOverride.store(factory, std::memory_order_release);
 }
 
 void SetPlatformWindowBackendForTesting(const PlatformWindowBackend* backend) noexcept

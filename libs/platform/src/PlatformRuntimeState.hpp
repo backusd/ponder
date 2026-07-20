@@ -36,19 +36,6 @@ struct DialogCompletionRecord final
     DialogOutcome outcome;
 };
 
-struct RuntimeHintSnapshot final
-{
-    const char* name{};
-    std::optional<std::string> value;
-};
-
-struct RuntimeMetadataSnapshot final
-{
-    ApplicationMetadataProperty property{};
-    std::optional<std::string> value;
-};
-
-using RuntimeMetadataSnapshots = std::array<RuntimeMetadataSnapshot, 3>;
 
 struct RuntimeDisplayRecord final
 {
@@ -72,10 +59,9 @@ struct RuntimeWindowRecord final
 class PlatformRuntimeState final
 {
 public:
-    PlatformRuntimeState(PlatformRuntimeBackend backend, PlatformWindowBackend windowBackend,
-                         PlatformDisplayBackend displayBackend,
-                         RuntimeHintSnapshot focusClickThrough, RuntimeHintSnapshot autoCapture,
-                         RuntimeMetadataSnapshots metadata) noexcept;
+    PlatformRuntimeState(std::unique_ptr<IPlatformRuntimeBackend> backend,
+                         PlatformWindowBackend windowBackend,
+                         PlatformDisplayBackend displayBackend) noexcept;
     ~PlatformRuntimeState() noexcept;
 
     PlatformRuntimeState(const PlatformRuntimeState&) = delete;
@@ -100,6 +86,7 @@ public:
         std::uint32_t backendDisplayId) const;
 
     [[nodiscard]] Timestamp Now() const;
+    [[nodiscard]] HintManager& GetHintManager();
     [[nodiscard]] Timestamp CaptureBackendTimestamp() const;
     [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
@@ -146,12 +133,9 @@ private:
     [[nodiscard]] std::optional<PlatformEvent> PollDialogCompletion();
     void DestroySystemCursors() noexcept;
 
-    PlatformRuntimeBackend m_backend;
+    std::unique_ptr<IPlatformRuntimeBackend> m_backend;
     PlatformWindowBackend m_windowBackend;
     PlatformDisplayBackend m_displayBackend;
-    RuntimeHintSnapshot m_focusClickThrough;
-    RuntimeHintSnapshot m_autoCapture;
-    RuntimeMetadataSnapshots m_metadata;
     std::thread::id m_ownerThread;
     RuntimeChildRegistry m_registry;
     std::unordered_map<std::uint32_t, RuntimeWindowRecord> m_windowsByBackendId;
@@ -165,6 +149,6 @@ private:
     std::unordered_map<DialogRequestId, std::shared_ptr<DialogRequestState>> m_dialogRequests;
     DialogRequestState* m_firstCompletedDialogRequest{};
     DialogRequestState* m_lastCompletedDialogRequest{};
-    std::array<void*, kSystemCursorShapeCount> m_systemCursors{};
+    std::array<CursorHandle, kSystemCursorShapeCount> m_systemCursors{};
 };
 } // namespace pond::platform::detail

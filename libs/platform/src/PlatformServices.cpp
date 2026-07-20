@@ -1,5 +1,4 @@
 #include <ponder/core/Assert.hpp>
-#include <ponder/core/ScopeExit.hpp>
 #include <ponder/core/String.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
@@ -7,6 +6,7 @@
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "PlatformRuntimeState.hpp"
 #include "SdlError.hpp"
@@ -46,32 +46,20 @@ namespace detail
 core::Result<std::string> PlatformRuntimeState::GetClipboardText() const
 {
     VerifyOwnerThread("clipboard text query");
-    if (!m_backend.supportsClipboardText(m_backend.context))
+    if (!m_backend->SupportsClipboardText())
     {
         return core::Result<std::string>::FromError(MakeUnsupportedClipboardError());
     }
 
-    const BackendClipboardTextResult backendText = m_backend.getClipboardText(m_backend.context);
-    if (backendText.text == nullptr)
+    BackendClipboardTextResult backendText = m_backend->GetClipboardText();
+    if (!backendText.succeeded ||
+        (backendText.text.empty() && !backendText.errorText.empty()))
     {
         return core::Result<std::string>::FromError(detail::CaptureSdlFailure(
             kBackendFailureCode, "SDL_GetClipboardText", "clipboard text", backendText.errorText));
     }
 
-    auto freeText = core::MakeScopeExit(
-        [this, text = backendText.text]() noexcept
-        {
-            m_backend.freeClipboardText(m_backend.context, text);
-        });
-
-    const std::string text{backendText.text};
-    if (text.empty() && !backendText.errorText.empty())
-    {
-        return core::Result<std::string>::FromError(detail::CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetClipboardText", "clipboard text", backendText.errorText));
-    }
-
-    return text;
+    return std::move(backendText.text);
 }
 
 core::VoidResult PlatformRuntimeState::SetClipboardText(std::string_view text)
@@ -79,13 +67,12 @@ core::VoidResult PlatformRuntimeState::SetClipboardText(std::string_view text)
     VerifyOwnerThread("clipboard text update");
     core::VoidResult validation = ValidateNullTerminatedUtf8(text, "Clipboard text");
     RETURN_ERROR_IF_FAILED(validation);
-    if (!m_backend.supportsClipboardText(m_backend.context))
+    if (!m_backend->SupportsClipboardText())
     {
         return core::VoidResult::FromError(MakeUnsupportedClipboardError());
     }
 
-    const std::string ownedText{text};
-    if (!m_backend.setClipboardText(m_backend.context, ownedText.c_str()))
+    if (!m_backend->SetClipboardText(text))
     {
         return core::VoidResult::FromError(detail::CaptureSdlFailure(
             kBackendFailureCode, "SDL_SetClipboardText", "clipboard text"));
@@ -106,8 +93,7 @@ core::VoidResult PlatformRuntimeState::OpenExternalUri(std::string_view uri)
     core::VoidResult validation = ValidateNullTerminatedUtf8(uri, "External URI");
     RETURN_ERROR_IF_FAILED(validation);
 
-    const std::string ownedUri{uri};
-    if (!m_backend.openExternalUri(m_backend.context, ownedUri.c_str()))
+    if (!m_backend->OpenExternalUri(uri))
     {
         return core::VoidResult::FromError(
             detail::CaptureSdlFailure(kBackendFailureCode, "SDL_OpenURL", "external URI"));
