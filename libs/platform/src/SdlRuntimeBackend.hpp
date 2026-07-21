@@ -11,8 +11,9 @@ public:
     [[nodiscard]] bool IsMainThread() const noexcept override;
     [[nodiscard]] bool HasInitializedSubsystems() const noexcept override;
     [[nodiscard]] const char* GetHint(const char* name) const noexcept override;
-    [[nodiscard]] bool SetHintOverride(const char* name, const char* value) noexcept override;
-    [[nodiscard]] bool ResetHint(const char* name) noexcept override;
+    [[nodiscard]] core::VoidResult SetHintOverride(const char* name,
+                                                   const char* value) override;
+    [[nodiscard]] core::VoidResult ResetHint(const char* name) override;
 };
 
 class SdlRuntimeBackend final : public IPlatformRuntimeBackend
@@ -33,17 +34,17 @@ public:
     [[nodiscard]] bool PollEvent(SDL_Event* event) noexcept override;
     [[nodiscard]] bool SupportsGlobalMouse() noexcept override;
     [[nodiscard]] MousePosition GetGlobalMousePosition() noexcept override;
-    [[nodiscard]] bool SetMouseCapture(bool enabled) noexcept override;
-    [[nodiscard]] CursorHandle CreateSystemCursor(SystemCursorShape shape) noexcept override;
-    [[nodiscard]] bool SetCursor(CursorHandle cursor) noexcept override;
+    [[nodiscard]] core::VoidResult SetMouseCapture(bool enabled) override;
+    [[nodiscard]] core::Result<CursorHandle> CreateSystemCursor(SystemCursorShape shape) override;
+    [[nodiscard]] core::VoidResult SetCursor(CursorHandle cursor) override;
     void DestroyCursor(CursorHandle cursor) noexcept override;
-    [[nodiscard]] bool ShowCursor() noexcept override;
-    [[nodiscard]] bool HideCursor() noexcept override;
+    [[nodiscard]] core::VoidResult ShowCursor() override;
+    [[nodiscard]] core::VoidResult HideCursor() override;
     [[nodiscard]] bool IsCursorVisible() noexcept override;
     [[nodiscard]] bool SupportsClipboardText() noexcept override;
-    [[nodiscard]] BackendClipboardTextResult GetClipboardText() override;
-    [[nodiscard]] bool SetClipboardText(std::string_view text) override;
-    [[nodiscard]] bool OpenExternalUri(std::string_view uri) override;
+    [[nodiscard]] core::Result<std::string> GetClipboardText() override;
+    [[nodiscard]] core::VoidResult SetClipboardText(std::string_view text) override;
+    [[nodiscard]] core::VoidResult OpenExternalUri(std::string_view uri) override;
     void ShowDialog(const BackendDialogRequestDesc& desc) noexcept override;
 
 private:

@@ -7,7 +7,6 @@
 #include <string_view>
 #include <utility>
 
-#include "SdlError.hpp"
 #include "WindowImpl.hpp"
 
 namespace pond::platform
@@ -15,7 +14,6 @@ namespace pond::platform
 namespace
 {
 constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 
 [[nodiscard]] core::Result<detail::BackendTextInputArea> ToBackendTextInputArea(TextInputArea area)
 {
@@ -48,56 +46,35 @@ namespace detail
 core::VoidResult WindowImpl::StartTextInput()
 {
     VerifyUsable("text input start");
-    if (m_backend.isTextInputActive(m_backend.context, m_nativeWindow))
+    if (m_backend.IsTextInputActive(m_backendWindow))
     {
         return core::VoidResult::Success();
     }
 
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.startTextInput(m_backend.context, m_nativeWindow))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_StartTextInput", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.StartTextInput(m_backendWindow);
 }
 
 core::VoidResult WindowImpl::StopTextInput()
 {
     VerifyUsable("text input stop");
-    if (!m_backend.isTextInputActive(m_backend.context, m_nativeWindow))
+    if (!m_backend.IsTextInputActive(m_backendWindow))
     {
         return core::VoidResult::Success();
     }
 
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.stopTextInput(m_backend.context, m_nativeWindow))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_StopTextInput", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.StopTextInput(m_backendWindow);
 }
 
 bool WindowImpl::IsTextInputActive() const
 {
     VerifyUsable("text input active-state query");
-    return m_backend.isTextInputActive(m_backend.context, m_nativeWindow);
+    return m_backend.IsTextInputActive(m_backendWindow);
 }
 
 core::VoidResult WindowImpl::ClearTextComposition()
 {
     VerifyUsable("text composition clear");
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.clearTextComposition(m_backend.context, m_nativeWindow))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_ClearComposition", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.ClearTextComposition(m_backendWindow);
 }
 
 core::VoidResult WindowImpl::SetTextInputArea(TextInputArea area)
@@ -106,31 +83,16 @@ core::VoidResult WindowImpl::SetTextInputArea(TextInputArea area)
     auto backendAreaResult = ToBackendTextInputArea(area);
     RETURN_ERROR_IF_FAILED(backendAreaResult);
 
-    const BackendTextInputArea backendArea = std::move(backendAreaResult).GetValue();
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.setTextInputArea(m_backend.context, m_nativeWindow, &backendArea))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_SetTextInputArea", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.SetTextInputArea(m_backendWindow,
+                                      std::move(backendAreaResult).GetValue());
 }
 
 core::VoidResult WindowImpl::ClearTextInputArea()
 {
     VerifyUsable("text input area clear");
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.setTextInputArea(m_backend.context, m_nativeWindow, nullptr))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_SetTextInputArea", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.SetTextInputArea(m_backendWindow, std::nullopt);
 }
 } // namespace detail
-
 core::VoidResult Window::StartTextInput()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");

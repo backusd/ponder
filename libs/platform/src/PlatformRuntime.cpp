@@ -38,7 +38,6 @@ enum class RuntimeSlotState : std::uint8_t
 std::atomic<RuntimeSlotState> runtimeSlot{RuntimeSlotState::Available};
 const std::thread::id processEntryThread = std::this_thread::get_id();
 
-
 [[nodiscard]] core::VoidResult Validate(const PlatformRuntimeDesc& desc)
 {
     using ResultType = core::VoidResult;
@@ -78,81 +77,6 @@ const std::thread::id processEntryThread = std::this_thread::get_id();
     return ResultType::Success();
 }
 
-void VerifyWindowBackend(const detail::PlatformWindowBackend& backend)
-{
-    PONDER_VERIFY(backend.create != nullptr, "Platform window backend is missing create");
-    PONDER_VERIFY(backend.destroy != nullptr, "Platform window backend is missing destroy");
-    PONDER_VERIFY(backend.getId != nullptr, "Platform window backend is missing getId");
-    PONDER_VERIFY(backend.getTitle != nullptr, "Platform window backend is missing getTitle");
-    PONDER_VERIFY(backend.setTitle != nullptr, "Platform window backend is missing setTitle");
-    PONDER_VERIFY(backend.getPosition != nullptr, "Platform window backend is missing getPosition");
-    PONDER_VERIFY(backend.setPosition != nullptr, "Platform window backend is missing setPosition");
-    PONDER_VERIFY(backend.getSize != nullptr, "Platform window backend is missing getSize");
-    PONDER_VERIFY(backend.getSizeInPixels != nullptr,
-                  "Platform window backend is missing getSizeInPixels");
-    PONDER_VERIFY(backend.setSize != nullptr, "Platform window backend is missing setSize");
-    PONDER_VERIFY(backend.setMinimumSize != nullptr,
-                  "Platform window backend is missing setMinimumSize");
-    PONDER_VERIFY(backend.show != nullptr, "Platform window backend is missing show");
-    PONDER_VERIFY(backend.hide != nullptr, "Platform window backend is missing hide");
-    PONDER_VERIFY(backend.getProperties != nullptr,
-                  "Platform window backend is missing getProperties");
-    PONDER_VERIFY(backend.setFullscreenModeToDesktop != nullptr,
-                  "Platform window backend is missing setFullscreenModeToDesktop");
-    PONDER_VERIFY(backend.setFullscreen != nullptr,
-                  "Platform window backend is missing setFullscreen");
-    PONDER_VERIFY(backend.setBordered != nullptr, "Platform window backend is missing setBordered");
-    PONDER_VERIFY(backend.setResizable != nullptr,
-                  "Platform window backend is missing setResizable");
-    PONDER_VERIFY(backend.setAlwaysOnTop != nullptr,
-                  "Platform window backend is missing setAlwaysOnTop");
-    PONDER_VERIFY(backend.minimize != nullptr, "Platform window backend is missing minimize");
-    PONDER_VERIFY(backend.maximize != nullptr, "Platform window backend is missing maximize");
-    PONDER_VERIFY(backend.restore != nullptr, "Platform window backend is missing restore");
-    PONDER_VERIFY(backend.startTextInput != nullptr,
-                  "Platform window backend is missing startTextInput");
-    PONDER_VERIFY(backend.stopTextInput != nullptr,
-                  "Platform window backend is missing stopTextInput");
-    PONDER_VERIFY(backend.isTextInputActive != nullptr,
-                  "Platform window backend is missing isTextInputActive");
-    PONDER_VERIFY(backend.clearTextComposition != nullptr,
-                  "Platform window backend is missing clearTextComposition");
-    PONDER_VERIFY(backend.setTextInputArea != nullptr,
-                  "Platform window backend is missing setTextInputArea");
-    PONDER_VERIFY(backend.setMouseGrab != nullptr,
-                  "Platform window backend is missing setMouseGrab");
-    PONDER_VERIFY(backend.isMouseGrabbed != nullptr,
-                  "Platform window backend is missing isMouseGrabbed");
-    PONDER_VERIFY(backend.setRelativeMouseMode != nullptr,
-                  "Platform window backend is missing setRelativeMouseMode");
-    PONDER_VERIFY(backend.isRelativeMouseModeEnabled != nullptr,
-                  "Platform window backend is missing isRelativeMouseModeEnabled");
-    PONDER_VERIFY(backend.getNativeHandle != nullptr,
-                  "Platform window backend is missing getNativeHandle");
-}
-
-void VerifyDisplayBackend(const detail::PlatformDisplayBackend& backend)
-{
-    PONDER_VERIFY(backend.enumerate != nullptr, "Platform display backend is missing enumerate");
-    PONDER_VERIFY(backend.getName != nullptr, "Platform display backend is missing getName");
-    PONDER_VERIFY(backend.getBounds != nullptr, "Platform display backend is missing getBounds");
-    PONDER_VERIFY(backend.getUsableBounds != nullptr,
-                  "Platform display backend is missing getUsableBounds");
-    PONDER_VERIFY(backend.getCurrentRefreshRate != nullptr,
-                  "Platform display backend is missing getCurrentRefreshRate");
-    PONDER_VERIFY(backend.getCurrentOrientation != nullptr,
-                  "Platform display backend is missing getCurrentOrientation");
-    PONDER_VERIFY(backend.getContentScale != nullptr,
-                  "Platform display backend is missing getContentScale");
-    PONDER_VERIFY(backend.getForWindow != nullptr,
-                  "Platform display backend is missing getForWindow");
-    PONDER_VERIFY(backend.getWindowPixelDensity != nullptr,
-                  "Platform display backend is missing getWindowPixelDensity");
-    PONDER_VERIFY(backend.getWindowDisplayScale != nullptr,
-                  "Platform display backend is missing getWindowDisplayScale");
-}
-
-
 void ReleaseRuntimeReservation() noexcept
 {
     runtimeSlot.store(RuntimeSlotState::Available, std::memory_order_release);
@@ -177,11 +101,12 @@ void BeginRuntimeDestruction()
 
 namespace detail
 {
-PlatformRuntimeState::PlatformRuntimeState(std::unique_ptr<IPlatformRuntimeBackend> backend,
-                                           PlatformWindowBackend windowBackend,
-                                           PlatformDisplayBackend displayBackend) noexcept
-    : m_backend(std::move(backend)), m_windowBackend(windowBackend),
-      m_displayBackend(displayBackend), m_ownerThread(std::this_thread::get_id())
+PlatformRuntimeState::PlatformRuntimeState(
+    std::unique_ptr<IPlatformRuntimeBackend> backend,
+    std::unique_ptr<IPlatformWindowBackend> windowBackend,
+    std::unique_ptr<IPlatformDisplayBackend> displayBackend) noexcept
+    : m_backend(std::move(backend)), m_windowBackend(std::move(windowBackend)),
+      m_displayBackend(std::move(displayBackend)), m_ownerThread(std::this_thread::get_id())
 {
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime initialized");
 }
@@ -202,6 +127,10 @@ PlatformRuntimeState::~PlatformRuntimeState() noexcept
 
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime shutting down");
     DestroySystemCursors();
+    PONDER_VERIFY(m_displayBackend != nullptr, "Platform display backend is unavailable");
+    m_displayBackend.reset();
+    PONDER_VERIFY(m_windowBackend != nullptr, "Platform window backend is unavailable");
+    m_windowBackend.reset();
     m_backend->Quit();
     m_backend.reset();
     LOG_INFO_CATEGORY(kLogCategory, "Platform runtime shut down");
@@ -346,12 +275,6 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     std::unique_ptr<detail::IPlatformRuntimeBackend> backend =
         detail::GetPlatformRuntimeBackend();
 
-    const detail::PlatformWindowBackend windowBackend = detail::GetPlatformWindowBackend();
-    VerifyWindowBackend(windowBackend);
-
-    const detail::PlatformDisplayBackend displayBackend = detail::GetPlatformDisplayBackend();
-    VerifyDisplayBackend(displayBackend);
-
     PONDER_VERIFY(backend->IsMainThread(),
                   "PlatformRuntime must be created on SDL's main thread");
 
@@ -362,8 +285,6 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     }
 
     HintManager& hintManager = backend->GetHintManager();
-    RETURN_ERROR_IF_FAILED(hintManager.PushHint(hints::MouseFocusClickThrough{true}));
-    RETURN_ERROR_IF_FAILED(hintManager.PushHint(hints::MouseAutoCapture{false}));
 
     if (desc.configureHintsBeforeInitialization != nullptr)
     {
@@ -388,7 +309,10 @@ core::Result<PlatformRuntime> PlatformRuntime::Create(const PlatformRuntimeDesc&
     RETURN_ERROR_IF_FAILED(backend->InitializeVideo());
 
     auto state = std::make_unique<detail::PlatformRuntimeState>(
-        std::move(backend), windowBackend, displayBackend);
+        std::move(backend),
+        detail::GetPlatformWindowBackend(),
+        detail::GetPlatformDisplayBackend()
+    );
 
     MarkRuntimeActive();
     quitOnFailure.Dismiss();

@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "PlatformRuntimeBackend.hpp"
-#include "SdlError.hpp"
 #include "WindowImpl.hpp"
 
 namespace pond::platform
@@ -51,33 +50,6 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
     return WindowState::Normal;
 }
 
-[[nodiscard]] core::VoidResult ConvertOperationResult(detail::BackendWindowOperationResult result,
-                                                      std::string_view backendOperation,
-                                                      std::string_view context,
-                                                      bool unsupportedIsSdlFailure)
-{
-    switch (result)
-    {
-    case detail::BackendWindowOperationResult::Succeeded:
-        return core::VoidResult::Success();
-    case detail::BackendWindowOperationResult::Unsupported:
-        if (unsupportedIsSdlFailure)
-        {
-            return core::VoidResult::FromError(
-                detail::CaptureSdlFailure(kUnsupportedCode, backendOperation, context));
-        }
-        return core::VoidResult::FromError(MakeUnsupportedError(
-            std::string{backendOperation} + " is unsupported for " + std::string{context} + "."));
-    case detail::BackendWindowOperationResult::Failed:
-        return core::VoidResult::FromError(
-            detail::CaptureSdlFailure(kBackendFailureCode, backendOperation, context));
-    }
-
-    return core::VoidResult::FromError(
-        core::Error{kBackendFailureCode, "The backend returned an unknown result for " +
-                                             std::string{backendOperation} + " on " +
-                                             std::string{context} + "."});
-}
 } // namespace
 
 namespace detail
@@ -85,14 +57,7 @@ namespace detail
 core::Result<BackendWindowProperties> WindowImpl::GetProperties(std::string_view operation) const
 {
     VerifyUsable(operation);
-    BackendWindowProperties properties;
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.getProperties(m_backend.context, m_nativeWindow, &properties))
-    {
-        return core::Result<BackendWindowProperties>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowFlags", context));
-    }
-    return properties;
+    return m_backend.GetProperties(m_backendWindow);
 }
 
 core::Result<WindowPresentation> WindowImpl::GetPresentation() const
@@ -135,18 +100,13 @@ core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
         return core::VoidResult::Success();
     }
 
-    const std::string_view context = GetErrorContext();
     if (fullscreen)
     {
-        core::VoidResult modeResult = ConvertOperationResult(
-            m_backend.setFullscreenModeToDesktop(m_backend.context, m_nativeWindow),
-            "SDL_SetWindowFullscreenMode", context, false);
-        RETURN_ERROR_IF_FAILED(modeResult);
+        RETURN_ERROR_IF_FAILED(m_backend.SetFullscreenModeToDesktop(m_backendWindow));
     }
 
-    core::VoidResult presentationResult = ConvertOperationResult(
-        m_backend.setFullscreen(m_backend.context, m_nativeWindow, fullscreen),
-        "SDL_SetWindowFullscreen", context, false);
+    core::VoidResult presentationResult =
+        m_backend.SetFullscreen(m_backendWindow, fullscreen);
     if (presentationResult.HasValue())
     {
         m_pendingPresentationRequest = presentation;
@@ -192,10 +152,7 @@ core::VoidResult WindowImpl::SetDecoration(WindowDecoration decoration)
                                  std::to_string(m_id.GetValue()) + " is fullscreen."));
     }
 
-    const std::string_view context = GetErrorContext();
-    return ConvertOperationResult(
-        m_backend.setBordered(m_backend.context, m_nativeWindow, !borderless),
-        "SDL_SetWindowBordered", context, false);
+    return m_backend.SetBordered(m_backendWindow, !borderless);
 }
 
 core::Result<::pond::platform::WindowState> WindowImpl::GetState() const
@@ -224,18 +181,14 @@ core::VoidResult WindowImpl::Minimize()
         return core::VoidResult::Success();
     }
 
-    const std::string_view context = GetErrorContext();
     if (properties.GetValue().hidden &&
         state.GetValue() == ::pond::platform::WindowState::Maximized)
     {
-        core::VoidResult restoreResult =
-            ConvertOperationResult(m_backend.restore(m_backend.context, m_nativeWindow),
-                                   "SDL_RestoreWindow", context, true);
-        RETURN_ERROR_IF_FAILED(restoreResult);
+        RETURN_ERROR_IF_FAILED(m_backend.Restore(m_backendWindow));
         RecordStateRequest(::pond::platform::WindowState::Normal, true);
     }
-    core::VoidResult minimizeResult = ConvertOperationResult(
-        m_backend.minimize(m_backend.context, m_nativeWindow), "SDL_MinimizeWindow", context, true);
+
+    core::VoidResult minimizeResult = m_backend.Minimize(m_backendWindow);
     if (minimizeResult.HasValue())
     {
         RecordStateRequest(::pond::platform::WindowState::Minimized, properties.GetValue().hidden);
@@ -267,18 +220,14 @@ core::VoidResult WindowImpl::Maximize()
             MakeUnsupportedError("A non-resizable window cannot be maximized."));
     }
 
-    const std::string_view context = GetErrorContext();
     if (properties.GetValue().hidden &&
         state.GetValue() == ::pond::platform::WindowState::Minimized)
     {
-        core::VoidResult restoreResult =
-            ConvertOperationResult(m_backend.restore(m_backend.context, m_nativeWindow),
-                                   "SDL_RestoreWindow", context, true);
-        RETURN_ERROR_IF_FAILED(restoreResult);
+        RETURN_ERROR_IF_FAILED(m_backend.Restore(m_backendWindow));
         RecordStateRequest(::pond::platform::WindowState::Normal, true);
     }
-    core::VoidResult maximizeResult = ConvertOperationResult(
-        m_backend.maximize(m_backend.context, m_nativeWindow), "SDL_MaximizeWindow", context, true);
+
+    core::VoidResult maximizeResult = m_backend.Maximize(m_backendWindow);
     if (maximizeResult.HasValue())
     {
         RecordStateRequest(::pond::platform::WindowState::Maximized, properties.GetValue().hidden);
@@ -305,9 +254,7 @@ core::VoidResult WindowImpl::Restore()
         return core::VoidResult::Success();
     }
 
-    const std::string_view context = GetErrorContext();
-    core::VoidResult restoreResult = ConvertOperationResult(
-        m_backend.restore(m_backend.context, m_nativeWindow), "SDL_RestoreWindow", context, true);
+    core::VoidResult restoreResult = m_backend.Restore(m_backendWindow);
     if (restoreResult.HasValue())
     {
         RecordStateRequest(::pond::platform::WindowState::Normal, properties.GetValue().hidden);
@@ -344,10 +291,7 @@ core::VoidResult WindowImpl::SetResizable(bool resizable)
                                  std::to_string(m_id.GetValue()) + " is fullscreen."));
     }
 
-    const std::string_view context = GetErrorContext();
-    return ConvertOperationResult(
-        m_backend.setResizable(m_backend.context, m_nativeWindow, resizable),
-        "SDL_SetWindowResizable", context, false);
+    return m_backend.SetResizable(m_backendWindow, resizable);
 }
 
 core::Result<bool> WindowImpl::IsFocused() const
@@ -373,13 +317,9 @@ core::VoidResult WindowImpl::SetAlwaysOnTop(bool alwaysOnTop)
         return core::VoidResult::Success();
     }
 
-    const std::string_view context = GetErrorContext();
-    return ConvertOperationResult(
-        m_backend.setAlwaysOnTop(m_backend.context, m_nativeWindow, alwaysOnTop),
-        "SDL_SetWindowAlwaysOnTop", context, false);
+    return m_backend.SetAlwaysOnTop(m_backendWindow, alwaysOnTop);
 }
 } // namespace detail
-
 core::Result<WindowPresentation> Window::GetPresentation() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");

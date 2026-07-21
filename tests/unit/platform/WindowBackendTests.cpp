@@ -2,17 +2,79 @@
 
 #include <SDL3/SDL_platform_defines.h>
 #include <SDL3/SDL_video.h>
+#include <concepts>
 #include <cstdint>
+#include <format>
 #include <gtest/gtest.h>
+#include <ostream>
+#include <sstream>
+#include <string>
 
 #include "PlatformRuntimeBackend.hpp"
+#include "ProcessBackend.hpp"
 
 namespace
 {
+template <typename Type>
+concept FormattableAndStreamable =
+    std::formattable<Type, char> && requires(std::ostream& output, const Type& value) {
+        { output << value } -> std::same_as<std::ostream&>;
+    };
+
+template <typename... Types>
+consteval bool AreFormattableAndStreamable()
+{
+    return (FormattableAndStreamable<Types> && ...);
+}
+
+using namespace pond::platform::detail;
+
+static_assert(AreFormattableAndStreamable<
+              ApplicationMetadataProperty, CursorHandle,
+              BackendDialogKind, BackendDialogFileFilter, BackendDialogSelection,
+              BackendDialogCancellation, BackendDialogFailure, BackendDialogRequestDesc,
+              BackendWindowHandle, BackendWindowPosition, BackendWindowLogicalSize,
+              BackendWindowPixelSize, BackendWindowCreateDesc, BackendWindowProperties,
+              BackendTextInputArea, BackendNativeWindowDriver, BackendDisplayOrientation,
+              BackendScreenRectangle, BackendProcessExitKind, BackendProcessExitStatus,
+              BackendProcessKillResult>());
+
+TEST(WindowBackendFormattingTests, FormatsAndStreamsBackendWindowValues)
+{
+    const BackendWindowHandle window{42};
+    const BackendWindowPosition position{12, -4};
+    const BackendWindowLogicalSize size{1280, 800};
+
+    EXPECT_EQ(std::format("{}", window), "0x2A");
+    EXPECT_EQ(std::format("{}", position), "(12, -4)");
+    EXPECT_EQ(std::format("{}", size), "1280x800");
+    EXPECT_EQ(std::format("{}", BackendNativeWindowDriver::Wayland), "wayland");
+
+    std::ostringstream output;
+    output << BackendTextInputArea{1, 2, 300, 40, 12};
+    EXPECT_EQ(output.str(), "(1, 2) / 300x40, cursorOffset=12");
+}
+
+TEST(WindowBackendHandleTests, DistinguishesInvalidAndValidValues)
+{
+    using pond::platform::detail::BackendWindowHandle;
+
+    const BackendWindowHandle invalid;
+    const BackendWindowHandle valid{42};
+
+    EXPECT_FALSE(invalid.IsValid());
+    EXPECT_TRUE(valid.IsValid());
+    EXPECT_EQ(valid.GetValue(), 42U);
+    EXPECT_NE(valid, invalid);
+}
 TEST(WindowBackendFlagTests, StagesEveryWindowHiddenAndKeepsPropertiesOrthogonal)
 {
     const pond::platform::detail::BackendWindowCreateDesc defaultDesc{
-        "ponder", 1280, 800, true, true, pond::platform::WindowGraphicsCompatibility::Default};
+        .title = "ponder",
+        .logicalSize = {1280, 800},
+        .resizable = true,
+        .highPixelDensity = true,
+        .graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Default};
 
     const std::uint64_t defaultFlags = pond::platform::detail::BuildSdlWindowFlags(defaultDesc);
     EXPECT_NE(defaultFlags & SDL_WINDOW_HIDDEN, 0U);
@@ -57,9 +119,17 @@ TEST(WindowBackendFlagTests, MapsRendererCompatibilityOnlyOnSupportedHosts)
     using pond::platform::detail::BuildSdlWindowFlags;
 
     const BackendWindowCreateDesc vulkanDesc{
-        "ponder", 1280, 800, true, true, WindowGraphicsCompatibility::Vulkan};
+        .title = "ponder",
+        .logicalSize = {1280, 800},
+        .resizable = true,
+        .highPixelDensity = true,
+        .graphicsCompatibility = WindowGraphicsCompatibility::Vulkan};
     const BackendWindowCreateDesc metalDesc{
-        "ponder", 1280, 800, true, true, WindowGraphicsCompatibility::Metal};
+        .title = "ponder",
+        .logicalSize = {1280, 800},
+        .resizable = true,
+        .highPixelDensity = true,
+        .graphicsCompatibility = WindowGraphicsCompatibility::Metal};
 
     const std::uint64_t vulkanFlags = BuildSdlWindowFlags(vulkanDesc);
 #if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)

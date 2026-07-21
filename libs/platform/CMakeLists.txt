@@ -29,22 +29,30 @@ ponder_add_project_library(platform
         src/PlatformServices.cpp
         src/Process.cpp
         src/RuntimeChildRegistry.cpp
+        src/SdlCommon.cpp
+        src/SdlDisplayBackend.cpp
         src/SdlEventTranslator.cpp
         src/SdlError.cpp
         src/SdlRuntimeBackend.cpp
+        src/SdlWindowBackend.cpp
         src/Window.cpp
         src/WindowProperties.cpp
         src/WindowTextInput.cpp
     PRIVATE_HEADERS
         src/HintManagerBackend.hpp
+        src/IPlatformDisplayBackend.hpp
         src/IPlatformRuntimeBackend.hpp
+        src/IPlatformWindowBackend.hpp
         src/PlatformRuntimeBackend.hpp
         src/PlatformRuntimeState.hpp
         src/ProcessBackend.hpp
         src/RuntimeChildRegistry.hpp
+        src/SdlCommon.hpp
+        src/SdlDisplayBackend.hpp
         src/SdlEventTranslator.hpp
         src/SdlError.hpp
         src/SdlRuntimeBackend.hpp
+        src/SdlWindowBackend.hpp
         src/WindowImpl.hpp
     PUBLIC_DEPS
         ponder::core

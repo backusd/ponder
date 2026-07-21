@@ -22,7 +22,6 @@
 #include <vector>
 
 #include "HintManagerBackend.hpp"
-#include "SdlError.hpp"
 
 namespace pond::platform
 {
@@ -202,10 +201,11 @@ public:
             }
         }
 
-        if (!m_backend.SetHintOverride(definition.name, state.values.back().c_str()))
+        core::VoidResult setResult =
+            m_backend.SetHintOverride(definition.name, state.values.back().c_str());
+        if (!setResult)
         {
-            const core::Error error = detail::CaptureSdlFailure(
-                kBackendFailureCode, "SDL_SetHintWithPriority", definition.name);
+            core::Error error = std::move(setResult).GetError();
             state.values.pop_back();
             if (firstValue)
             {
@@ -213,7 +213,7 @@ public:
                 state.originalCaptured = false;
                 m_activeHints.pop_back();
             }
-            return core::VoidResult::FromError(error);
+            return core::VoidResult::FromError(std::move(error));
         }
 
         state.everPushed = true;
@@ -341,12 +341,7 @@ private:
 
     [[nodiscard]] core::VoidResult SetValue(const char* name, const std::string& value)
     {
-        if (!m_backend.SetHintOverride(name, value.c_str()))
-        {
-            return core::VoidResult::FromError(
-                detail::CaptureSdlFailure(kBackendFailureCode, "SDL_SetHintWithPriority", name));
-        }
-        return core::VoidResult::Success();
+        return m_backend.SetHintOverride(name, value.c_str());
     }
 
     [[nodiscard]] bool MatchesOriginalValue(const char* name, const HintState& state) const noexcept
@@ -363,18 +358,18 @@ private:
         PONDER_VERIFY(state.originalCaptured,
                       "Cannot restore a platform hint without its original value");
 
-        const bool restored = state.originalValue.has_value()
-                                  ? m_backend.SetHintOverride(name, state.originalValue->c_str())
-                                  : m_backend.ResetHint(name);
-        if (restored)
+        core::VoidResult restoration =
+            state.originalValue.has_value()
+                ? m_backend.SetHintOverride(name, state.originalValue->c_str())
+                : m_backend.ResetHint(name);
+        if (restoration)
         {
             return core::VoidResult::Success();
         }
 
-        const core::Error error =
-            detail::CaptureSdlFailure(kBackendFailureCode, "SDL hint restoration", name);
+        core::Error error = std::move(restoration).GetError();
         return MatchesOriginalValue(name, state) ? core::VoidResult::Success()
-                                                 : core::VoidResult::FromError(error);
+                                                 : core::VoidResult::FromError(std::move(error));
     }
 
     void FinishActivation(std::string_view name, HintState& state)

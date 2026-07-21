@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "PlatformRuntimeState.hpp"
-#include "SdlError.hpp"
 #include "WindowImpl.hpp"
 
 namespace pond::platform
@@ -296,12 +295,10 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
 {
     VerifyOwnerThread("display refresh");
 
-    std::vector<std::uint32_t> backendDisplayIds;
-    if (!m_displayBackend.enumerate(m_displayBackend.context, backendDisplayIds))
-    {
-        return core::Result<std::vector<std::uint32_t>>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplays", "displays"));
-    }
+    auto backendDisplayIdsResult = m_displayBackend->Enumerate();
+    RETURN_ERROR_IF_FAILED(backendDisplayIdsResult);
+    std::vector<std::uint32_t> backendDisplayIds =
+        std::move(backendDisplayIdsResult).GetValue();
 
     std::unordered_set<std::uint32_t> uniqueIds;
     uniqueIds.reserve(backendDisplayIds.size());
@@ -426,47 +423,30 @@ core::Result<std::vector<std::uint32_t>> PlatformRuntimeState::RefreshDisplays()
     m_nextDisplayId = nextDisplayId;
     return core::Result<std::vector<std::uint32_t>>::FromValue(std::move(backendDisplayIds));
 }
+
 core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
     DisplayId id, std::uint32_t backendDisplayId) const
 {
     const std::string context = MakeDisplayContext(id);
 
-    const char* const backendName =
-        m_displayBackend.getName(m_displayBackend.context, backendDisplayId);
-    if (backendName == nullptr)
-    {
-        return core::Result<DisplayInfo>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayName", context));
-    }
-    const std::string name{backendName};
+    auto backendName = m_displayBackend->GetName(backendDisplayId);
+    RETURN_ERROR_IF_FAILED(backendName);
+    std::string name = std::move(backendName).GetValue();
 
-    BackendScreenRectangle backendBounds;
-    if (!m_displayBackend.getBounds(m_displayBackend.context, backendDisplayId, &backendBounds))
-    {
-        return core::Result<DisplayInfo>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayBounds", context));
-    }
-    auto bounds = ConvertRectangle(backendBounds, "SDL_GetDisplayBounds", context);
+    auto backendBounds = m_displayBackend->GetBounds(backendDisplayId);
+    RETURN_ERROR_IF_FAILED(backendBounds);
+    auto bounds = ConvertRectangle(backendBounds.GetValue(), "SDL_GetDisplayBounds", context);
     RETURN_ERROR_IF_FAILED(bounds);
 
-    BackendScreenRectangle backendUsableBounds;
-    if (!m_displayBackend.getUsableBounds(m_displayBackend.context, backendDisplayId,
-                                          &backendUsableBounds))
-    {
-        return core::Result<DisplayInfo>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayUsableBounds", context));
-    }
-    auto usableBounds =
-        ConvertRectangle(backendUsableBounds, "SDL_GetDisplayUsableBounds", context);
+    auto backendUsableBounds = m_displayBackend->GetUsableBounds(backendDisplayId);
+    RETURN_ERROR_IF_FAILED(backendUsableBounds);
+    auto usableBounds = ConvertRectangle(backendUsableBounds.GetValue(),
+                                         "SDL_GetDisplayUsableBounds", context);
     RETURN_ERROR_IF_FAILED(usableBounds);
 
-    float refreshRateHertz{};
-    if (!m_displayBackend.getCurrentRefreshRate(m_displayBackend.context, backendDisplayId,
-                                                &refreshRateHertz))
-    {
-        return core::Result<DisplayInfo>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetCurrentDisplayMode", context));
-    }
+    auto backendRefreshRate = m_displayBackend->GetCurrentRefreshRate(backendDisplayId);
+    RETURN_ERROR_IF_FAILED(backendRefreshRate);
+    const float refreshRateHertz = backendRefreshRate.GetValue();
     if (!std::isfinite(refreshRateHertz) || refreshRateHertz < 0.0F)
     {
         return core::Result<DisplayInfo>::FromError(MakeBackendDataError(
@@ -475,22 +455,22 @@ core::Result<DisplayInfo> PlatformRuntimeState::QueryDisplayInfo(
     const std::optional<float> refreshRate =
         refreshRateHertz > 0.0F ? std::optional<float>{refreshRateHertz} : std::nullopt;
 
-    const DisplayOrientation orientation = ConvertOrientation(
-        m_displayBackend.getCurrentOrientation(m_displayBackend.context, backendDisplayId));
+    const DisplayOrientation orientation =
+        ConvertOrientation(m_displayBackend->GetCurrentOrientation(backendDisplayId));
 
-    const float contentScale =
-        m_displayBackend.getContentScale(m_displayBackend.context, backendDisplayId);
-    if (contentScale == 0.0F)
-    {
-        return core::Result<DisplayInfo>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayContentScale", context));
-    }
-    auto validContentScale = ValidateScale(contentScale, "SDL_GetDisplayContentScale", context);
+    auto contentScale = m_displayBackend->GetContentScale(backendDisplayId);
+    RETURN_ERROR_IF_FAILED(contentScale);
+    auto validContentScale =
+        ValidateScale(contentScale.GetValue(), "SDL_GetDisplayContentScale", context);
     RETURN_ERROR_IF_FAILED(validContentScale);
 
-    return DisplayInfo{
-        id,          name,        std::move(bounds).GetValue(), std::move(usableBounds).GetValue(),
-        refreshRate, orientation, validContentScale.GetValue()};
+    return DisplayInfo{id,
+                       std::move(name),
+                       std::move(bounds).GetValue(),
+                       std::move(usableBounds).GetValue(),
+                       refreshRate,
+                       orientation,
+                       validContentScale.GetValue()};
 }
 
 core::Result<std::vector<DisplayInfo>> PlatformRuntimeState::EnumerateDisplays()
@@ -550,17 +530,12 @@ core::Result<DisplayInfo> PlatformRuntimeState::GetDisplayInfo(DisplayId id)
     return core::Result<DisplayInfo>::FromError(std::move(primaryError));
 }
 
-core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(void* nativeWindow,
-                                                                    std::string_view windowContext)
+core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(BackendWindowHandle window)
 {
     VerifyOwnerThread("window display query");
-    const std::uint32_t backendDisplayId =
-        m_displayBackend.getForWindow(m_displayBackend.context, nativeWindow);
-    if (backendDisplayId == 0)
-    {
-        return core::Result<DisplayId>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetDisplayForWindow", windowContext));
-    }
+    auto backendDisplayIdResult = m_displayBackend->GetForWindow(window);
+    RETURN_ERROR_IF_FAILED(backendDisplayIdResult);
+    const std::uint32_t backendDisplayId = backendDisplayIdResult.GetValue();
 
     auto refresh = RefreshDisplays();
     RETURN_ERROR_IF_FAILED(refresh);
@@ -575,31 +550,21 @@ core::Result<DisplayId> PlatformRuntimeState::GetDisplayIdForWindow(void* native
 }
 
 core::Result<float> PlatformRuntimeState::GetPixelDensityForWindow(
-    void* nativeWindow, std::string_view windowContext) const
+    BackendWindowHandle window, std::string_view windowContext) const
 {
     VerifyOwnerThread("window pixel density query");
-    const float density =
-        m_displayBackend.getWindowPixelDensity(m_displayBackend.context, nativeWindow);
-    if (density == 0.0F)
-    {
-        return core::Result<float>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowPixelDensity", windowContext));
-    }
-    return ValidateScale(density, "SDL_GetWindowPixelDensity", windowContext);
+    auto density = m_displayBackend->GetWindowPixelDensity(window);
+    RETURN_ERROR_IF_FAILED(density);
+    return ValidateScale(density.GetValue(), "SDL_GetWindowPixelDensity", windowContext);
 }
 
 core::Result<float> PlatformRuntimeState::GetDisplayScaleForWindow(
-    void* nativeWindow, std::string_view windowContext) const
+    BackendWindowHandle window, std::string_view windowContext) const
 {
     VerifyOwnerThread("window display scale query");
-    const float scale =
-        m_displayBackend.getWindowDisplayScale(m_displayBackend.context, nativeWindow);
-    if (scale == 0.0F)
-    {
-        return core::Result<float>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowDisplayScale", windowContext));
-    }
-    return ValidateScale(scale, "SDL_GetWindowDisplayScale", windowContext);
+    auto scale = m_displayBackend->GetWindowDisplayScale(window);
+    RETURN_ERROR_IF_FAILED(scale);
+    return ValidateScale(scale.GetValue(), "SDL_GetWindowDisplayScale", windowContext);
 }
 } // namespace detail
 
@@ -638,19 +603,19 @@ namespace detail
 core::Result<DisplayId> WindowImpl::GetDisplayId() const
 {
     VerifyUsable("display query");
-    return m_runtime->GetDisplayIdForWindow(m_nativeWindow, GetErrorContext());
+    return m_runtime->GetDisplayIdForWindow(m_backendWindow);
 }
 
 core::Result<float> WindowImpl::GetPixelDensity() const
 {
     VerifyUsable("pixel density query");
-    return m_runtime->GetPixelDensityForWindow(m_nativeWindow, GetErrorContext());
+    return m_runtime->GetPixelDensityForWindow(m_backendWindow, GetErrorContext());
 }
 
 core::Result<float> WindowImpl::GetDisplayScale() const
 {
     VerifyUsable("display scale query");
-    return m_runtime->GetDisplayScaleForWindow(m_nativeWindow, GetErrorContext());
+    return m_runtime->GetDisplayScaleForWindow(m_backendWindow, GetErrorContext());
 }
 } // namespace detail
 } // namespace pond::platform

@@ -1,7 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <format>
 #include <optional>
+#include <ostream>
+#include <string>
+#include <string_view>
 
 namespace pond::platform
 {
@@ -336,5 +340,120 @@ constexpr KeyModifiers& operator&=(KeyModifiers& lhs, KeyModifiers rhs) noexcept
 [[nodiscard]] constexpr bool HasAllKeyModifiers(KeyModifiers modifiers, KeyModifiers mask) noexcept
 {
     return (modifiers & mask) == mask;
+}
+} // namespace pond::platform
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::PhysicalKey> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::PhysicalKey key, FormatContext& context) const
+    {
+        return formatter<string>::format(
+            std::format("physical_key({})", static_cast<std::uint16_t>(key)), context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::NamedKey> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::NamedKey key, FormatContext& context) const
+    {
+        return formatter<string>::format(
+            std::format("named_key({})", static_cast<std::uint16_t>(key)), context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::LogicalKey::Kind> : formatter<string_view>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::LogicalKey::Kind kind, FormatContext& context) const
+    {
+        using Kind = pond::platform::LogicalKey::Kind;
+
+        string_view name{"unknown"};
+        switch (kind)
+        {
+        case Kind::Unknown:
+            break;
+        case Kind::Character:
+            name = "character";
+            break;
+        case Kind::Named:
+            name = "named";
+            break;
+        }
+
+        return formatter<string_view>::format(name, context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::LogicalKey> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const pond::platform::LogicalKey& key, FormatContext& context) const
+    {
+        using Kind = pond::platform::LogicalKey::Kind;
+
+        string text{"unknown"};
+        switch (key.GetKind())
+        {
+        case Kind::Unknown:
+            break;
+        case Kind::Character:
+            text = std::format("U+{:04X}",
+                               static_cast<std::uint32_t>(*key.GetCharacter()));
+            break;
+        case Kind::Named:
+            text = std::format("{}", *key.GetNamedKey());
+            break;
+        }
+
+        return formatter<string>::format(text, context);
+    }
+};
+
+template <>
+struct formatter<pond::platform::KeyModifiers> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::KeyModifiers modifiers, FormatContext& context) const
+    {
+        return formatter<string>::format(
+            std::format("0x{:04X}", static_cast<std::uint16_t>(modifiers)), context);
+    }
+};
+} // namespace std
+
+namespace pond::platform
+{
+inline std::ostream& operator<<(std::ostream& output, PhysicalKey key)
+{
+    return output << std::format("{}", key);
+}
+
+inline std::ostream& operator<<(std::ostream& output, NamedKey key)
+{
+    return output << std::format("{}", key);
+}
+
+inline std::ostream& operator<<(std::ostream& output, LogicalKey::Kind kind)
+{
+    return output << std::format("{}", kind);
+}
+
+inline std::ostream& operator<<(std::ostream& output, const LogicalKey& key)
+{
+    return output << std::format("{}", key);
+}
+
+inline std::ostream& operator<<(std::ostream& output, KeyModifiers modifiers)
+{
+    return output << std::format("{}", modifiers);
 }
 } // namespace pond::platform

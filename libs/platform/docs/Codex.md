@@ -22,6 +22,31 @@ privately by SDL3.
   deliberately revised.
 - Keep SDL and OS-specific helpers under `src/`. Use PIMPL or another
   heap-stable private representation for native resource owners.
+- Runtime state owns its `IPlatformRuntimeBackend`, `IPlatformWindowBackend`, and
+  `IPlatformDisplayBackend` instances through `std::unique_ptr`s produced by private
+  factories. A `WindowImpl` may borrow the runtime-owned window backend only while it is
+  registered as a runtime child, and stores native identity as the strong,
+  zero-invalid `BackendWindowHandle`.
+- Keep `IPlatformWindowBackend` backend-agnostic and value-oriented: use typed
+  `Result<T>` queries, `VoidResult` commands, `std::string_view` inputs, and
+  owned string outputs instead of raw window pointers, C-style out parameters,
+  or backend-specific status enums. Preserve plain `bool` only for infallible
+  state queries where false is data. Convert between `BackendWindowHandle` and
+  `SDL_Window*` only inside the SDL backend, and capture documented SDL failures
+  there before returning an error.
+- Keep `IPlatformDisplayBackend` backend-agnostic and value-oriented too. Return
+  owned names and display lists, use `Result<T>` for every SDL query with a
+  documented failure sentinel, and capture SDL diagnostics in `SdlDisplayBackend`.
+  Preserve `BackendDisplayOrientation::Unknown` as valid unavailable data rather
+  than treating it as a failure.
+- Apply the same result boundary to `IPlatformRuntimeBackend`: reserve plain
+  `bool` for infallible state, capability, and event-availability queries; use
+  `VoidResult` for fallible commands and `Result<T>` for fallible value-producing
+  operations. `SdlRuntimeBackend` must capture a documented SDL error immediately
+  after observing failure so callers never need SDL-specific diagnostics.
+- Keep `SdlRuntimeBackend`, `SdlWindowBackend`, and `SdlDisplayBackend` declarations
+  and implementations in their dedicated private files. Put only genuinely shared SDL
+  conversion and context helpers in `SdlCommon`.
 - Permit only one logical `PlatformRuntime` per process. Create runtime and
   windows through fallible factories returning `pond::core::Result<T>`.
 - Treat SDL lifecycle ownership as exclusive. Reject creation when an SDL
@@ -36,8 +61,9 @@ privately by SDL3.
   typed `HintManager`; never expose SDL names or an arbitrary string-hint map.
   Keep an independent value stack per hint, enforce value and initialization
   constraints, and invoke descriptor hint configuration before SDL initialization.
-  The runtime still applies its two required mouse policies first. Restore every
-  managed prior effective value after `SDL_Quit()`. SDL cannot report priority or
+  The runtime must not apply implicit hint policies; applications opt into every
+  managed hint explicitly. Restore every managed prior effective value after
+  `SDL_Quit()`. SDL cannot report priority or
   provenance, so do not claim to preserve either one.
 - Keep runtime and resource owners non-copyable and movable. Define moved-from
   behavior and keep child lifetime safe in release builds.

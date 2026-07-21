@@ -16,7 +16,7 @@
 
 #include "PlatformRuntimeBackend.hpp"
 #include "PlatformRuntimeState.hpp"
-#include "SdlError.hpp"
+
 #include "WindowImpl.hpp"
 
 namespace pond::platform
@@ -119,64 +119,56 @@ core::Result<std::unique_ptr<WindowImpl>> WindowImpl::Create(PlatformRuntimeStat
     core::VoidResult validation = Validate(desc);
     RETURN_ERROR_IF_FAILED(validation);
 
-    const PlatformWindowBackend backend = runtime.m_windowBackend;
-    const BackendWindowCreateDesc backendDesc{desc.title.c_str(),
-                                              static_cast<int>(desc.logicalSize.width),
-                                              static_cast<int>(desc.logicalSize.height),
-                                              desc.resizable,
-                                              desc.highPixelDensity,
-                                              desc.graphicsCompatibility};
+    PONDER_VERIFY(runtime.m_windowBackend != nullptr, "Platform window backend is unavailable");
+    IPlatformWindowBackend& backend = *runtime.m_windowBackend;
+    const BackendWindowCreateDesc backendDesc{
+        .title = desc.title,
+        .logicalSize = BackendWindowLogicalSize{static_cast<int>(desc.logicalSize.width),
+                                                static_cast<int>(desc.logicalSize.height)},
+        .resizable = desc.resizable,
+        .highPixelDensity = desc.highPixelDensity,
+        .graphicsCompatibility = desc.graphicsCompatibility};
 
-    void* const nativeWindow = backend.create(backend.context, backendDesc);
-    if (nativeWindow == nullptr)
-    {
-        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_CreateWindow", "window"));
-    }
+    auto backendWindowResult = backend.Create(backendDesc);
+    RETURN_ERROR_IF_FAILED(backendWindowResult);
 
-    auto destroyNativeWindow = core::MakeScopeExit(
-        [backend, nativeWindow]() noexcept
+    const BackendWindowHandle backendWindow = std::move(backendWindowResult).GetValue();
+    auto destroyBackendWindow = core::MakeScopeExit(
+        [&backend, backendWindow]() noexcept
         {
-            backend.destroy(backend.context, nativeWindow);
+            backend.Destroy(backendWindow);
         });
 
-    if (desc.minimumLogicalSize.has_value() &&
-        !backend.setMinimumSize(backend.context, nativeWindow,
-                                static_cast<int>(desc.minimumLogicalSize->width),
-                                static_cast<int>(desc.minimumLogicalSize->height)))
+    if (desc.minimumLogicalSize.has_value())
     {
-        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_SetWindowMinimumSize", "window creation"));
+        RETURN_ERROR_IF_FAILED(backend.SetMinimumSize(
+            backendWindow,
+            BackendWindowLogicalSize{static_cast<int>(desc.minimumLogicalSize->width),
+                                     static_cast<int>(desc.minimumLogicalSize->height)}));
     }
 
-    const std::uint32_t backendWindowId = backend.getId(backend.context, nativeWindow);
-    if (backendWindowId == 0)
-    {
-        return core::Result<std::unique_ptr<WindowImpl>>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowID", "window creation"));
-    }
+    auto backendWindowIdResult = backend.GetId(backendWindow);
+    RETURN_ERROR_IF_FAILED(backendWindowIdResult);
+    const std::uint32_t backendWindowId = std::move(backendWindowIdResult).GetValue();
 
-    auto state = std::make_unique<WindowImpl>(runtime, backend, nativeWindow, backendWindowId,
+    auto state = std::make_unique<WindowImpl>(runtime, backend, backendWindow, backendWindowId,
                                               desc.graphicsCompatibility);
-    destroyNativeWindow.Dismiss();
+    destroyBackendWindow.Dismiss();
 
     const WindowId id = runtime.RegisterWindow(state.get(), backendWindowId);
     state->CommitRegistration(id);
 
-    if (desc.visible && !backend.show(backend.context, nativeWindow))
+    if (desc.visible)
     {
-        core::Error error =
-            CaptureSdlFailure(kBackendFailureCode, "SDL_ShowWindow", "window creation");
-        return core::Result<std::unique_ptr<WindowImpl>>::FromError(std::move(error));
+        RETURN_ERROR_IF_FAILED(backend.Show(backendWindow));
     }
 
     return core::Result<std::unique_ptr<WindowImpl>>::FromValue(std::move(state));
 }
-
-WindowImpl::WindowImpl(PlatformRuntimeState& runtime, PlatformWindowBackend backend,
-                       void* nativeWindow, std::uint32_t backendWindowId,
+WindowImpl::WindowImpl(PlatformRuntimeState& runtime, IPlatformWindowBackend& backend,
+                       BackendWindowHandle backendWindow, std::uint32_t backendWindowId,
                        WindowGraphicsCompatibility graphicsCompatibility) noexcept
-    : m_runtime(&runtime), m_backend(backend), m_nativeWindow(nativeWindow),
+    : m_runtime(&runtime), m_backend(backend), m_backendWindow(backendWindow),
       m_backendWindowId(backendWindowId), m_graphicsCompatibility(graphicsCompatibility)
 {
 }
@@ -188,15 +180,15 @@ WindowImpl::~WindowImpl() noexcept
     PONDER_VERIFY(m_pendingDialogRequestCount == 0,
                   "Cannot destroy a platform window with {} pending dialog requests",
                   m_pendingDialogRequestCount);
-    PONDER_VERIFY(m_nativeWindow != nullptr, "Window native state is missing");
+    PONDER_VERIFY(m_backendWindow.IsValid(), "Window backend state is missing");
 
     if (m_registered)
     {
         m_runtime->BeginWindowDestruction(this, m_backendWindowId, m_id);
     }
 
-    m_backend.destroy(m_backend.context, m_nativeWindow);
-    m_nativeWindow = nullptr;
+    m_backend.Destroy(m_backendWindow);
+    m_backendWindow = BackendWindowHandle{};
 
     if (m_registered)
     {
@@ -223,9 +215,9 @@ void WindowImpl::CommitRegistration(WindowId id) noexcept
 
 void WindowImpl::ObserveShownEvent() noexcept
 {
-    BackendWindowProperties properties;
-    if (!m_backend.getProperties(m_backend.context, m_nativeWindow, &properties) ||
-        properties.hidden)
+    const core::Result<BackendWindowProperties> properties =
+        m_backend.GetProperties(m_backendWindow);
+    if (!properties || properties.GetValue().hidden)
     {
         return;
     }
@@ -281,7 +273,7 @@ void WindowImpl::VerifyUsable(std::string_view operation) const
 {
     PONDER_VERIFY(m_runtime != nullptr, "Cannot use a window without runtime state");
     PONDER_VERIFY(m_registered, "Cannot use an unregistered window");
-    PONDER_VERIFY(m_nativeWindow != nullptr, "Cannot use a destroyed window");
+    PONDER_VERIFY(m_backendWindow.IsValid(), "Cannot use a destroyed window");
     m_runtime->VerifyOwnerThread(operation);
 }
 
@@ -306,9 +298,7 @@ WindowGraphicsCompatibility WindowImpl::GetGraphicsCompatibility() const
 std::string WindowImpl::GetTitle() const
 {
     VerifyUsable("title query");
-    const char* const title = m_backend.getTitle(m_backend.context, m_nativeWindow);
-    PONDER_VERIFY(title != nullptr, "Backend returned a null window title");
-    return std::string{title};
+    return m_backend.GetTitle(m_backendWindow);
 }
 
 core::VoidResult WindowImpl::SetTitle(std::string_view title)
@@ -320,37 +310,27 @@ core::VoidResult WindowImpl::SetTitle(std::string_view title)
             kInvalidArgumentCode, "Window title must be UTF-8 without embedded nulls."});
     }
 
-    const std::string ownedTitle{title};
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.setTitle(m_backend.context, m_nativeWindow, ownedTitle.c_str()))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_SetWindowTitle", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.SetTitle(m_backendWindow, title);
 }
 
 core::Result<ScreenPosition> WindowImpl::GetPosition() const
 {
     VerifyUsable("position query");
-    int x{};
-    int y{};
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.getPosition(m_backend.context, m_nativeWindow, &x, &y))
-    {
-        return core::Result<ScreenPosition>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowPosition", context));
-    }
+    auto positionResult = m_backend.GetPosition(m_backendWindow);
+    RETURN_ERROR_IF_FAILED(positionResult);
 
-    if (!std::in_range<std::int32_t>(x) || !std::in_range<std::int32_t>(y))
+    const BackendWindowPosition position = std::move(positionResult).GetValue();
+    const std::string_view context = GetErrorContext();
+    if (!std::in_range<std::int32_t>(position.x) ||
+        !std::in_range<std::int32_t>(position.y))
     {
         return core::Result<ScreenPosition>::FromError(core::Error{
             kBackendFailureCode, "SDL_GetWindowPosition returned an out-of-range value for " +
                                      std::string{context} + "."});
     }
 
-    return ScreenPosition{static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)};
+    return ScreenPosition{static_cast<std::int32_t>(position.x),
+                          static_cast<std::int32_t>(position.y)};
 }
 
 core::VoidResult WindowImpl::SetPosition(ScreenPosition position)
@@ -359,55 +339,43 @@ core::VoidResult WindowImpl::SetPosition(ScreenPosition position)
     core::VoidResult validation = ValidatePosition(position);
     RETURN_ERROR_IF_FAILED(validation);
 
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.setPosition(m_backend.context, m_nativeWindow, static_cast<int>(position.x),
-                               static_cast<int>(position.y)))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_SetWindowPosition", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.SetPosition(
+        m_backendWindow,
+        BackendWindowPosition{static_cast<int>(position.x), static_cast<int>(position.y)});
 }
 
 core::Result<LogicalSize> WindowImpl::GetLogicalSize() const
 {
     VerifyUsable("logical size query");
-    int width{};
-    int height{};
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.getSize(m_backend.context, m_nativeWindow, &width, &height))
+    auto sizeResult = m_backend.GetSize(m_backendWindow);
+    RETURN_ERROR_IF_FAILED(sizeResult);
+
+    const BackendWindowLogicalSize size = std::move(sizeResult).GetValue();
+    if (size.width < 0 || size.height < 0)
     {
         return core::Result<LogicalSize>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowSize", context));
-    }
-    if (width < 0 || height < 0)
-    {
-        return core::Result<LogicalSize>::FromError(
-            MakeInvalidBackendSizeError("SDL_GetWindowSize", context));
+            MakeInvalidBackendSizeError("SDL_GetWindowSize", GetErrorContext()));
     }
 
-    return LogicalSize{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
+    return LogicalSize{static_cast<std::uint32_t>(size.width),
+                       static_cast<std::uint32_t>(size.height)};
 }
 
 core::Result<PixelSize> WindowImpl::GetPixelSize() const
 {
     VerifyUsable("pixel size query");
-    int width{};
-    int height{};
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.getSizeInPixels(m_backend.context, m_nativeWindow, &width, &height))
+    auto sizeResult = m_backend.GetSizeInPixels(m_backendWindow);
+    RETURN_ERROR_IF_FAILED(sizeResult);
+
+    const BackendWindowPixelSize size = std::move(sizeResult).GetValue();
+    if (size.width < 0 || size.height < 0)
     {
         return core::Result<PixelSize>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_GetWindowSizeInPixels", context));
-    }
-    if (width < 0 || height < 0)
-    {
-        return core::Result<PixelSize>::FromError(
-            MakeInvalidBackendSizeError("SDL_GetWindowSizeInPixels", context));
+            MakeInvalidBackendSizeError("SDL_GetWindowSizeInPixels", GetErrorContext()));
     }
 
-    return PixelSize{static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)};
+    return PixelSize{static_cast<std::uint32_t>(size.width),
+                     static_cast<std::uint32_t>(size.height)};
 }
 
 core::VoidResult WindowImpl::SetLogicalSize(LogicalSize size)
@@ -416,26 +384,15 @@ core::VoidResult WindowImpl::SetLogicalSize(LogicalSize size)
     core::VoidResult validation = ValidatePositiveSize(size, "Window logical size");
     RETURN_ERROR_IF_FAILED(validation);
 
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.setSize(m_backend.context, m_nativeWindow, static_cast<int>(size.width),
-                           static_cast<int>(size.height)))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_SetWindowSize", context));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend.SetSize(
+        m_backendWindow,
+        BackendWindowLogicalSize{static_cast<int>(size.width), static_cast<int>(size.height)});
 }
 
 core::VoidResult WindowImpl::Show()
 {
     VerifyUsable("show");
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.show(m_backend.context, m_nativeWindow))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_ShowWindow", context));
-    }
+    RETURN_ERROR_IF_FAILED(m_backend.Show(m_backendWindow));
 
     SynchronizeStateRequestVisibility(false);
     return core::VoidResult::Success();
@@ -444,18 +401,12 @@ core::VoidResult WindowImpl::Show()
 core::VoidResult WindowImpl::Hide()
 {
     VerifyUsable("hide");
-    const std::string_view context = GetErrorContext();
-    if (!m_backend.hide(m_backend.context, m_nativeWindow))
-    {
-        return core::VoidResult::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_HideWindow", context));
-    }
+    RETURN_ERROR_IF_FAILED(m_backend.Hide(m_backendWindow));
 
     SynchronizeStateRequestVisibility(true);
     return core::VoidResult::Success();
 }
 } // namespace detail
-
 core::Result<Window> PlatformRuntime::CreateWindow(const WindowDesc& desc)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from PlatformRuntime");

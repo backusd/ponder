@@ -4,6 +4,7 @@
 #include <ponder/core/ScopeExit.hpp>
 #include <ponder/platform/PlatformError.hpp>
 
+#include "SdlCommon.hpp"
 #include "SdlError.hpp"
 
 #include <SDL3/SDL_clipboard.h>
@@ -179,14 +180,29 @@ const char* SdlHintBackend::GetHint(const char* name) const noexcept
     return SDL_GetHint(name);
 }
 
-bool SdlHintBackend::SetHintOverride(const char* name, const char* value) noexcept
+core::VoidResult SdlHintBackend::SetHintOverride(const char* name, const char* value)
 {
-    return SDL_SetHintWithPriority(name, value, SDL_HINT_OVERRIDE);
+    if (!SDL_SetHintWithPriority(name, value, SDL_HINT_OVERRIDE))
+    {
+        return core::VoidResult::FromError(CaptureSdlFailure(
+            kBackendFailureCode, "SDL_SetHintWithPriority",
+            name != nullptr ? std::string_view{name} : std::string_view{"null hint name"}));
+    }
+
+    return core::VoidResult::Success();
 }
 
-bool SdlHintBackend::ResetHint(const char* name) noexcept
+core::VoidResult SdlHintBackend::ResetHint(const char* name)
 {
-    return SDL_ResetHint(name);
+    if (!SDL_ResetHint(name))
+    {
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_ResetHint",
+                              name != nullptr ? std::string_view{name}
+                                              : std::string_view{"null hint name"}));
+    }
+
+    return core::VoidResult::Success();
 }
 
 SdlRuntimeBackend::SdlRuntimeBackend()
@@ -286,19 +302,38 @@ MousePosition SdlRuntimeBackend::GetGlobalMousePosition() noexcept
     return position;
 }
 
-bool SdlRuntimeBackend::SetMouseCapture(bool enabled) noexcept
+core::VoidResult SdlRuntimeBackend::SetMouseCapture(bool enabled)
 {
-    return SDL_CaptureMouse(enabled);
+    if (!SDL_CaptureMouse(enabled))
+    {
+        return core::VoidResult::FromError(CaptureSdlFailure(
+            kBackendFailureCode, "SDL_CaptureMouse", enabled ? "enable" : "disable"));
+    }
+
+    return core::VoidResult::Success();
 }
 
-CursorHandle SdlRuntimeBackend::CreateSystemCursor(SystemCursorShape shape) noexcept
+core::Result<CursorHandle> SdlRuntimeBackend::CreateSystemCursor(SystemCursorShape shape)
 {
-    return ToCursorHandle(SDL_CreateSystemCursor(ToSdlSystemCursor(shape)));
+    SDL_Cursor* const cursor = SDL_CreateSystemCursor(ToSdlSystemCursor(shape));
+    if (cursor == nullptr)
+    {
+        return core::Result<CursorHandle>::FromError(CaptureSdlFailure(
+            kBackendFailureCode, "SDL_CreateSystemCursor", std::format("{}", shape)));
+    }
+
+    return ToCursorHandle(cursor);
 }
 
-bool SdlRuntimeBackend::SetCursor(CursorHandle cursor) noexcept
+core::VoidResult SdlRuntimeBackend::SetCursor(CursorHandle cursor)
 {
-    return SDL_SetCursor(ToSdlCursor(cursor));
+    if (!SDL_SetCursor(ToSdlCursor(cursor)))
+    {
+        return core::VoidResult::FromError(CaptureSdlFailure(
+            kBackendFailureCode, "SDL_SetCursor", std::format("cursor {}", cursor)));
+    }
+
+    return core::VoidResult::Success();
 }
 
 void SdlRuntimeBackend::DestroyCursor(CursorHandle cursor) noexcept
@@ -306,14 +341,26 @@ void SdlRuntimeBackend::DestroyCursor(CursorHandle cursor) noexcept
     SDL_DestroyCursor(ToSdlCursor(cursor));
 }
 
-bool SdlRuntimeBackend::ShowCursor() noexcept
+core::VoidResult SdlRuntimeBackend::ShowCursor()
 {
-    return SDL_ShowCursor();
+    if (!SDL_ShowCursor())
+    {
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_ShowCursor"));
+    }
+
+    return core::VoidResult::Success();
 }
 
-bool SdlRuntimeBackend::HideCursor() noexcept
+core::VoidResult SdlRuntimeBackend::HideCursor()
 {
-    return SDL_HideCursor();
+    if (!SDL_HideCursor())
+    {
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_HideCursor"));
+    }
+
+    return core::VoidResult::Success();
 }
 
 bool SdlRuntimeBackend::IsCursorVisible() noexcept
@@ -326,7 +373,7 @@ bool SdlRuntimeBackend::SupportsClipboardText() noexcept
     return true;
 }
 
-BackendClipboardTextResult SdlRuntimeBackend::GetClipboardText()
+core::Result<std::string> SdlRuntimeBackend::GetClipboardText()
 {
     static_cast<void>(SDL_ClearError());
     char* const rawText = SDL_GetClipboardText();
@@ -337,23 +384,38 @@ BackendClipboardTextResult SdlRuntimeBackend::GetClipboardText()
         });
 
     const char* const rawError = SDL_GetError();
-    std::string errorText = rawError != nullptr ? std::string{rawError} : std::string{};
-    std::string text = rawText != nullptr ? std::string{rawText} : std::string{};
-    return BackendClipboardTextResult{.text = std::move(text),
-                                      .errorText = std::move(errorText),
-                                      .succeeded = rawText != nullptr};
+    const std::string errorText = rawError != nullptr ? std::string{rawError} : std::string{};
+    if (rawText == nullptr || (rawText[0] == '\0' && !errorText.empty()))
+    {
+        return core::Result<std::string>::FromError(CaptureSdlFailure(
+            kBackendFailureCode, "SDL_GetClipboardText", "clipboard text", errorText));
+    }
+
+    return std::string{rawText};
 }
 
-bool SdlRuntimeBackend::SetClipboardText(std::string_view text)
+core::VoidResult SdlRuntimeBackend::SetClipboardText(std::string_view text)
 {
     const std::string ownedText{text};
-    return SDL_SetClipboardText(ownedText.c_str());
+    if (!SDL_SetClipboardText(ownedText.c_str()))
+    {
+        return core::VoidResult::FromError(CaptureSdlFailure(
+            kBackendFailureCode, "SDL_SetClipboardText", "clipboard text"));
+    }
+
+    return core::VoidResult::Success();
 }
 
-bool SdlRuntimeBackend::OpenExternalUri(std::string_view uri)
+core::VoidResult SdlRuntimeBackend::OpenExternalUri(std::string_view uri)
 {
     const std::string ownedUri{uri};
-    return SDL_OpenURL(ownedUri.c_str());
+    if (!SDL_OpenURL(ownedUri.c_str()))
+    {
+        return core::VoidResult::FromError(
+            CaptureSdlFailure(kBackendFailureCode, "SDL_OpenURL", "external URI"));
+    }
+
+    return core::VoidResult::Success();
 }
 
 void SdlRuntimeBackend::ShowDialog(const BackendDialogRequestDesc& desc) noexcept
@@ -372,10 +434,8 @@ void SdlRuntimeBackend::ShowDialog(const BackendDialogRequestDesc& desc) noexcep
         }
 
         auto context = std::make_unique<SdlDialogContext>(desc);
-        auto* const parentWindow =
-            desc.parentWindow.has_value()
-                ? reinterpret_cast<SDL_Window*>(desc.parentWindow->GetValue())
-                : nullptr;
+        SDL_Window* const parentWindow =
+            desc.parentWindow.has_value() ? ToSdlWindow(*desc.parentWindow) : nullptr;
         const SDL_DialogFileFilter* const filters =
             context->nativeFilters.empty() ? nullptr : context->nativeFilters.data();
         const int filterCount = static_cast<int>(context->nativeFilters.size());

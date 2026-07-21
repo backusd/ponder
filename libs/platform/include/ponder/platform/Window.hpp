@@ -8,8 +8,10 @@
 #include <ponder/platform/WindowGraphics.hpp>
 #include <ponder/platform/WindowState.hpp>
 
+#include <format>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
 
@@ -98,4 +100,33 @@ private:
 
     std::unique_ptr<detail::WindowImpl> m_state;
 };
+} // namespace pond::platform
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::WindowDesc> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const pond::platform::WindowDesc& desc, FormatContext& context) const
+    {
+        const string minimumSize = desc.minimumLogicalSize.has_value()
+                                       ? std::format("{}", *desc.minimumLogicalSize)
+                                       : "none";
+        return formatter<string>::format(
+            std::format("title='{}', logicalSize={}, visible={}, resizable={}, "
+                        "highPixelDensity={}, minimumLogicalSize={}, graphics={}",
+                        desc.title, desc.logicalSize, desc.visible, desc.resizable,
+                        desc.highPixelDensity, minimumSize, desc.graphicsCompatibility),
+            context);
+    }
+};
+} // namespace std
+
+namespace pond::platform
+{
+inline std::ostream& operator<<(std::ostream& output, const WindowDesc& desc)
+{
+    return output << std::format("{}", desc);
+}
 } // namespace pond::platform

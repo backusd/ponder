@@ -32,34 +32,39 @@
 
 #include "HintManagerBackend.hpp"
 #include "PlatformRuntimeBackend.hpp"
+#include "SdlError.hpp"
 
 namespace
 {
 using pond::platform::detail::ApplicationMetadataProperty;
-using pond::platform::detail::BackendClipboardTextResult;
 using pond::platform::detail::BackendDialogCancellation;
 using pond::platform::detail::BackendDialogFailure;
 using pond::platform::detail::BackendDialogKind;
 using pond::platform::detail::BackendDialogRequestDesc;
 using pond::platform::detail::BackendDialogSelection;
 using pond::platform::detail::BackendWindowHandle;
+using pond::platform::detail::BackendWindowLogicalSize;
+using pond::platform::detail::BackendWindowPixelSize;
+using pond::platform::detail::BackendWindowPosition;
 using pond::platform::detail::CursorHandle;
 using pond::platform::detail::IBackendDialogCallback;
 using pond::platform::detail::BackendDisplayOrientation;
 using pond::platform::detail::BackendNativeWindowDriver;
-using pond::platform::detail::BackendNativeWindowHandleResult;
-using pond::platform::detail::BackendNativeWindowHandleStatus;
+
+
 using pond::platform::detail::BackendScreenRectangle;
 using pond::platform::detail::BackendTextInputArea;
 using pond::platform::detail::BackendWindowCreateDesc;
-using pond::platform::detail::BackendWindowOperationResult;
+
 using pond::platform::detail::BackendWindowProperties;
 using pond::platform::detail::HintManagerAccess;
 using pond::platform::detail::IHintBackend;
+using pond::platform::detail::IPlatformDisplayBackend;
+using pond::platform::detail::IPlatformDisplayBackendFactory;
 using pond::platform::detail::IPlatformRuntimeBackend;
 using pond::platform::detail::IPlatformRuntimeBackendFactory;
-using pond::platform::detail::PlatformDisplayBackend;
-using pond::platform::detail::PlatformWindowBackend;
+using pond::platform::detail::IPlatformWindowBackend;
+using pond::platform::detail::IPlatformWindowBackendFactory;
 
 [[nodiscard]] constexpr std::size_t MetadataIndex(ApplicationMetadataProperty property) noexcept
 {
@@ -205,7 +210,7 @@ struct FakeRuntimeBackendState final
     int destroyWindowCalls{};
     int enumerateDisplayCalls{};
     int pollEventCalls{};
-    bool policiesObservedDuringInitialization{};
+
     bool metadataObservedDuringInitialization{};
     bool attemptCreateDuringRestoration{};
     bool attemptedCreateDuringRestoration{};
@@ -233,9 +238,10 @@ struct FakeRuntimeBackendState final
     return *static_cast<FakeRuntimeBackendState*>(context);
 }
 
-[[nodiscard]] FakeWindow& GetFakeWindow(void* window)
+
+[[nodiscard]] FakeWindow& GetFakeWindow(BackendWindowHandle window)
 {
-    return *static_cast<FakeWindow*>(window);
+    return *reinterpret_cast<FakeWindow*>(window.GetValue());
 }
 
 [[nodiscard]] FakeCursor& GetFakeCursor(CursorHandle cursor)
@@ -412,24 +418,67 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     return true;
 }
 
-[[nodiscard]] BackendWindowOperationResult GetWindowOperationResult(FakeRuntimeBackendState& fake,
-                                                                    std::string_view operation)
+[[nodiscard]] std::string GetFakeBackendWindowContext(BackendWindowHandle window)
+{
+    return window.IsValid() ? std::format("backend window {}", window) : "window";
+}
+
+[[nodiscard]] pond::core::Error CaptureFakeWindowFailure(
+    pond::platform::PlatformErrorCode code, std::string_view operation,
+    BackendWindowHandle window = {})
+{
+    return pond::platform::detail::CaptureSdlFailure(
+        pond::platform::ToErrorCode(code), operation, GetFakeBackendWindowContext(window));
+}
+
+[[nodiscard]] pond::core::VoidResult ToFakeWindowResult(
+    bool succeeded, std::string_view operation, BackendWindowHandle window)
+{
+    if (!succeeded)
+    {
+        return pond::core::VoidResult::FromError(
+            CaptureFakeWindowFailure(pond::platform::PlatformErrorCode::BackendFailure,
+                                     operation, window));
+    }
+
+    return pond::core::VoidResult::Success();
+}
+
+template <typename Value>
+[[nodiscard]] pond::core::Result<Value> ToFakeWindowResult(
+    std::optional<Value> value, std::string_view operation, BackendWindowHandle window)
+{
+    if (!value.has_value())
+    {
+        return pond::core::Result<Value>::FromError(
+            CaptureFakeWindowFailure(pond::platform::PlatformErrorCode::BackendFailure,
+                                     operation, window));
+    }
+
+    return std::move(*value);
+}
+
+[[nodiscard]] pond::core::VoidResult GetWindowOperationResult(
+    FakeRuntimeBackendState& fake, std::string_view operation,
+    std::string_view backendOperation, BackendWindowHandle window)
 {
     if (fake.unsupportedWindowOperation == operation &&
         fake.unsupportedWindowOperationsRemaining != 0)
     {
         --fake.unsupportedWindowOperationsRemaining;
-        const std::string message = "synthetic " + std::string{operation} + " unsupported";
-        static_cast<void>(SDL_SetError("%s", message.c_str()));
-        return BackendWindowOperationResult::Unsupported;
+        return pond::core::VoidResult::FromError(pond::core::Error{
+            pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported),
+            std::format("{} did not apply the requested state for {}.", backendOperation,
+                        GetFakeBackendWindowContext(window))});
     }
     if (FailWindowOperation(fake, operation))
     {
-        return BackendWindowOperationResult::Failed;
+        return pond::core::VoidResult::FromError(
+            CaptureFakeWindowFailure(pond::platform::PlatformErrorCode::BackendFailure,
+                                     backendOperation, window));
     }
-    return BackendWindowOperationResult::Succeeded;
+    return pond::core::VoidResult::Success();
 }
-
 [[nodiscard]] bool FailDisplayOperation(FakeRuntimeBackendState& fake, std::string_view operation)
 {
     if (fake.failingDisplayOperation != operation || fake.displayFailuresRemaining == 0)
@@ -474,6 +523,13 @@ void ExpectPolledEvent(const std::optional<pond::platform::PlatformEvent>& event
     const std::string message = "synthetic " + std::string{operation} + " failure";
     static_cast<void>(SDL_SetError("%s", message.c_str()));
     return true;
+}
+[[nodiscard]] pond::core::Error CaptureFakeRuntimeFailure(
+    std::string_view operation, std::string_view objectContext = {})
+{
+    return pond::platform::detail::CaptureSdlFailure(
+        pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure),
+        operation, objectContext);
 }
 
 [[nodiscard]] const char* GetHintValue(FakeRuntimeBackendState& fake, const char* name)
@@ -824,8 +880,11 @@ void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackendState& fake)
     return GetHintValue(fake, name);
 }
 
-[[nodiscard]] bool FakeSetHintOverride(void* context, const char* name, const char* value)
+[[nodiscard]] pond::core::VoidResult FakeSetHintOverride(void* context, const char* name,
+                                                         const char* value)
 {
+    using ResultType = pond::core::VoidResult;
+
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back(std::string{"set-hint:"} + name + "=" + value);
     MaybeAttemptCreateDuringRestoration(fake);
@@ -834,19 +893,22 @@ void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackendState& fake)
     {
         --fake.hintFailuresRemaining;
         static_cast<void>(SDL_SetError("synthetic hint failure"));
-        return false;
+        return ResultType::FromError(pond::platform::detail::CaptureSdlFailure(
+            pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure),
+            "SDL_SetHintWithPriority", name));
     }
 
     fake.hints[name] = value;
-    return true;
+    return ResultType::Success();
 }
 
-[[nodiscard]] bool FakeResetHint(void* context, const char* name)
+[[nodiscard]] pond::core::VoidResult FakeResetHint(void* context, const char* name)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back(std::string{"reset-hint:"} + name);
     MaybeAttemptCreateDuringRestoration(fake);
-    return fake.hints.erase(name) == 1;
+    fake.hints.erase(name);
+    return pond::core::VoidResult::Success();
 }
 
 [[nodiscard]] pond::core::VoidResult FakeInitializeVideo(void* context)
@@ -856,10 +918,7 @@ void MaybeAttemptCreateDuringRestoration(FakeRuntimeBackendState& fake)
     FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.initializeVideoCalls;
     fake.calls.emplace_back("initialize-video");
-    fake.policiesObservedDuringInitialization =
-        GetHintValue(fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH) ==
-            std::string_view{"1"} &&
-        GetHintValue(fake, SDL_HINT_MOUSE_AUTO_CAPTURE) == std::string_view{"0"};
+
     fake.metadataObservedDuringInitialization =
         fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)].has_value();
 
@@ -930,20 +989,21 @@ void FakeQuit(void* context)
     fake.calls.emplace_back("get-global-mouse-position");
     return pond::platform::MousePosition{fake.globalMousePosition.x, fake.globalMousePosition.y};
 }
-[[nodiscard]] bool FakeSetMouseCapture(void* context, bool enabled)
+[[nodiscard]] pond::core::VoidResult FakeSetMouseCapture(void* context, bool enabled)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-mouse-capture");
     if (FailMouseOperation(fake, "set-mouse-capture"))
     {
-        return false;
+        return pond::core::VoidResult::FromError(CaptureFakeRuntimeFailure(
+            "SDL_CaptureMouse", enabled ? "enable" : "disable"));
     }
 
     fake.mouseCaptureEnabled = enabled;
-    return true;
+    return pond::core::VoidResult::Success();
 }
 
-[[nodiscard]] CursorHandle FakeCreateSystemCursor(
+[[nodiscard]] pond::core::Result<CursorHandle> FakeCreateSystemCursor(
     void* context, pond::platform::SystemCursorShape shape)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
@@ -951,7 +1011,8 @@ void FakeQuit(void* context)
     fake.createdCursorShapes.push_back(shape);
     if (FailMouseOperation(fake, "create-system-cursor"))
     {
-        return CursorHandle{};
+        return pond::core::Result<CursorHandle>::FromError(CaptureFakeRuntimeFailure(
+            "SDL_CreateSystemCursor", std::format("{}", shape)));
     }
 
     fake.cursors.emplace_back(FakeCursor{shape});
@@ -959,18 +1020,19 @@ void FakeQuit(void* context)
         reinterpret_cast<CursorHandle::ValueType>(std::addressof(fake.cursors.back()))};
 }
 
-[[nodiscard]] bool FakeSetCursor(void* context, CursorHandle cursor)
+[[nodiscard]] pond::core::VoidResult FakeSetCursor(void* context, CursorHandle cursor)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-cursor");
     fake.selectedCursorShapes.push_back(GetFakeCursor(cursor).shape);
     if (FailMouseOperation(fake, "set-cursor"))
     {
-        return false;
+        return pond::core::VoidResult::FromError(CaptureFakeRuntimeFailure(
+            "SDL_SetCursor", std::format("cursor {}", cursor)));
     }
 
     fake.activeCursor = cursor;
-    return true;
+    return pond::core::VoidResult::Success();
 }
 
 void FakeDestroyCursor(void* context, CursorHandle cursor)
@@ -996,30 +1058,32 @@ void FakeDestroyCursor(void* context, CursorHandle cursor)
     }
     fake.cursors.erase(iterator);
 }
-[[nodiscard]] bool FakeShowCursor(void* context)
+[[nodiscard]] pond::core::VoidResult FakeShowCursor(void* context)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("show-cursor");
     if (FailMouseOperation(fake, "show-cursor"))
     {
-        return false;
+        return pond::core::VoidResult::FromError(
+            CaptureFakeRuntimeFailure("SDL_ShowCursor"));
     }
 
     fake.cursorVisible = true;
-    return true;
+    return pond::core::VoidResult::Success();
 }
 
-[[nodiscard]] bool FakeHideCursor(void* context)
+[[nodiscard]] pond::core::VoidResult FakeHideCursor(void* context)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("hide-cursor");
     if (FailMouseOperation(fake, "hide-cursor"))
     {
-        return false;
+        return pond::core::VoidResult::FromError(
+            CaptureFakeRuntimeFailure("SDL_HideCursor"));
     }
 
     fake.cursorVisible = false;
-    return true;
+    return pond::core::VoidResult::Success();
 }
 
 [[nodiscard]] bool FakeIsCursorVisible(void* context)
@@ -1036,48 +1100,52 @@ void FakeDestroyCursor(void* context, CursorHandle cursor)
     return fake.clipboardTextSupported;
 }
 
-[[nodiscard]] BackendClipboardTextResult FakeGetClipboardText(void* context)
+[[nodiscard]] pond::core::Result<std::string> FakeGetClipboardText(void* context)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-clipboard-text");
-    if (fake.clipboardGetReturnsNull)
+    if (fake.clipboardGetReturnsNull ||
+        (fake.clipboardText.empty() && !fake.clipboardGetError.empty()))
     {
         const std::string error = fake.clipboardGetError.empty()
                                       ? "synthetic get-clipboard-text failure"
                                       : fake.clipboardGetError;
-        return BackendClipboardTextResult{
-            .text = {}, .errorText = error, .succeeded = false};
+        return pond::core::Result<std::string>::FromError(
+            pond::platform::detail::CaptureSdlFailure(
+                pond::platform::ToErrorCode(
+                    pond::platform::PlatformErrorCode::BackendFailure),
+                "SDL_GetClipboardText", "clipboard text", error));
     }
 
-    return BackendClipboardTextResult{.text = fake.clipboardText,
-                                      .errorText = fake.clipboardGetError,
-                                      .succeeded = true};
+    return fake.clipboardText;
 }
 
-[[nodiscard]] bool FakeSetClipboardText(void* context, std::string_view text)
+[[nodiscard]] pond::core::VoidResult FakeSetClipboardText(void* context, std::string_view text)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-clipboard-text");
     if (FailServiceOperation(fake, "set-clipboard-text"))
     {
-        return false;
+        return pond::core::VoidResult::FromError(
+            CaptureFakeRuntimeFailure("SDL_SetClipboardText", "clipboard text"));
     }
 
     fake.clipboardText.assign(text.data(), text.size());
-    return true;
+    return pond::core::VoidResult::Success();
 }
 
-[[nodiscard]] bool FakeOpenExternalUri(void* context, std::string_view uri)
+[[nodiscard]] pond::core::VoidResult FakeOpenExternalUri(void* context, std::string_view uri)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("open-external-uri");
     if (FailServiceOperation(fake, "open-external-uri"))
     {
-        return false;
+        return pond::core::VoidResult::FromError(
+            CaptureFakeRuntimeFailure("SDL_OpenURL", "external URI"));
     }
 
     fake.openedExternalUris.emplace_back(uri);
-    return true;
+    return pond::core::VoidResult::Success();
 }
 
 void FakeShowDialog(void* context, const BackendDialogRequestDesc& desc)
@@ -1123,14 +1191,15 @@ void CompleteDialogFailure(FakeDialogLaunch& launch, std::string_view message)
 {
     launch.callback->OnDialogCompleted(BackendDialogFailure{.message = std::string{message}});
 }
-[[nodiscard]] void* FakeCreateWindow(void* context, const BackendWindowCreateDesc& desc)
+[[nodiscard]] BackendWindowHandle FakeCreateWindow(
+    void* context, const BackendWindowCreateDesc& desc)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.createWindowCalls;
     fake.calls.emplace_back("create-window");
     if (FailWindowOperation(fake, "create-window"))
     {
-        return nullptr;
+        return BackendWindowHandle{};
     }
 
     const std::uint32_t backendId =
@@ -1138,21 +1207,22 @@ void CompleteDialogFailure(FakeDialogLaunch& launch, std::string_view message)
             ? fake.scriptedBackendWindowIds[fake.scriptedBackendWindowIdIndex++]
             : fake.nextBackendWindowId++;
     fake.windows.emplace_back(FakeWindow{.backendId = backendId,
-                                         .title = desc.title,
-                                         .width = desc.width,
-                                         .height = desc.height,
-                                         .pixelWidth = desc.width,
-                                         .pixelHeight = desc.height,
+                                         .title = std::string{desc.title},
+                                         .width = desc.logicalSize.width,
+                                         .height = desc.logicalSize.height,
+                                         .pixelWidth = desc.logicalSize.width,
+                                         .pixelHeight = desc.logicalSize.height,
                                          .backendDisplayId = fake.defaultWindowDisplayId,
                                          .pixelDensity = fake.defaultWindowPixelDensity,
                                          .displayScale = fake.defaultWindowDisplayScale,
                                          .resizable = desc.resizable,
                                          .highPixelDensity = desc.highPixelDensity,
                                          .graphicsCompatibility = desc.graphicsCompatibility});
-    return &fake.windows.back();
+    return BackendWindowHandle{reinterpret_cast<BackendWindowHandle::ValueType>(
+        &fake.windows.back())};
 }
 
-void FakeDestroyWindow(void* context, void* window)
+void FakeDestroyWindow(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     ++fake.destroyWindowCalls;
@@ -1165,7 +1235,9 @@ void FakeDestroyWindow(void* context, void* window)
     const auto iterator = std::ranges::find_if(fake.windows,
                                                [window](const FakeWindow& candidate)
                                                {
-                                                   return &candidate == window;
+                                                   return BackendWindowHandle{reinterpret_cast<
+                                                              BackendWindowHandle::ValueType>(
+                                                              &candidate)} == window;
                                                });
     if (iterator != fake.windows.end())
     {
@@ -1173,20 +1245,20 @@ void FakeDestroyWindow(void* context, void* window)
     }
 }
 
-[[nodiscard]] std::uint32_t FakeGetWindowId(void* context, void* window)
+[[nodiscard]] std::uint32_t FakeGetWindowId(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-id");
     return FailWindowOperation(fake, "get-window-id") ? 0 : GetFakeWindow(window).backendId;
 }
 
-[[nodiscard]] const char* FakeGetWindowTitle(void* context, void* window)
+[[nodiscard]] std::string FakeGetWindowTitle(void* context, BackendWindowHandle window)
 {
     GetFake(context).calls.emplace_back("get-window-title");
-    return GetFakeWindow(window).title.c_str();
+    return GetFakeWindow(window).title;
 }
-
-[[nodiscard]] bool FakeSetWindowTitle(void* context, void* window, const char* title)
+[[nodiscard]] bool FakeSetWindowTitle(void* context, BackendWindowHandle window,
+                                      std::string_view title)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-title");
@@ -1197,22 +1269,20 @@ void FakeDestroyWindow(void* context, void* window)
     GetFakeWindow(window).title = title;
     return true;
 }
-
-[[nodiscard]] bool FakeGetWindowPosition(void* context, void* window, int* x, int* y)
+[[nodiscard]] std::optional<BackendWindowPosition> FakeGetWindowPosition(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-position");
     if (FailWindowOperation(fake, "get-window-position"))
     {
-        return false;
+        return std::nullopt;
     }
     const FakeWindow& fakeWindow = GetFakeWindow(window);
-    *x = fakeWindow.x;
-    *y = fakeWindow.y;
-    return true;
+    return BackendWindowPosition{fakeWindow.x, fakeWindow.y};
 }
-
-[[nodiscard]] bool FakeSetWindowPosition(void* context, void* window, int x, int y)
+[[nodiscard]] bool FakeSetWindowPosition(void* context, BackendWindowHandle window,
+                                         BackendWindowPosition position)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-position");
@@ -1221,40 +1291,36 @@ void FakeDestroyWindow(void* context, void* window)
         return false;
     }
     FakeWindow& fakeWindow = GetFakeWindow(window);
-    fakeWindow.x = x;
-    fakeWindow.y = y;
+    fakeWindow.x = position.x;
+    fakeWindow.y = position.y;
     return true;
 }
-
-[[nodiscard]] bool FakeGetWindowSize(void* context, void* window, int* width, int* height)
+[[nodiscard]] std::optional<BackendWindowLogicalSize> FakeGetWindowSize(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-size");
     if (FailWindowOperation(fake, "get-window-size"))
     {
-        return false;
+        return std::nullopt;
     }
     const FakeWindow& fakeWindow = GetFakeWindow(window);
-    *width = fakeWindow.width;
-    *height = fakeWindow.height;
-    return true;
+    return BackendWindowLogicalSize{fakeWindow.width, fakeWindow.height};
 }
-
-[[nodiscard]] bool FakeGetWindowSizeInPixels(void* context, void* window, int* width, int* height)
+[[nodiscard]] std::optional<BackendWindowPixelSize> FakeGetWindowSizeInPixels(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-size-in-pixels");
     if (FailWindowOperation(fake, "get-window-size-in-pixels"))
     {
-        return false;
+        return std::nullopt;
     }
     const FakeWindow& fakeWindow = GetFakeWindow(window);
-    *width = fakeWindow.pixelWidth;
-    *height = fakeWindow.pixelHeight;
-    return true;
+    return BackendWindowPixelSize{fakeWindow.pixelWidth, fakeWindow.pixelHeight};
 }
-
-[[nodiscard]] bool FakeSetWindowSize(void* context, void* window, int width, int height)
+[[nodiscard]] bool FakeSetWindowSize(void* context, BackendWindowHandle window,
+                                     BackendWindowLogicalSize size)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-size");
@@ -1263,12 +1329,12 @@ void FakeDestroyWindow(void* context, void* window)
         return false;
     }
     FakeWindow& fakeWindow = GetFakeWindow(window);
-    fakeWindow.width = width;
-    fakeWindow.height = height;
+    fakeWindow.width = size.width;
+    fakeWindow.height = size.height;
     return true;
 }
-
-[[nodiscard]] bool FakeSetWindowMinimumSize(void* context, void* window, int width, int height)
+[[nodiscard]] bool FakeSetWindowMinimumSize(void* context, BackendWindowHandle window,
+                                            BackendWindowLogicalSize size)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-minimum-size");
@@ -1277,12 +1343,11 @@ void FakeDestroyWindow(void* context, void* window)
         return false;
     }
     FakeWindow& fakeWindow = GetFakeWindow(window);
-    fakeWindow.minimumWidth = width;
-    fakeWindow.minimumHeight = height;
+    fakeWindow.minimumWidth = size.width;
+    fakeWindow.minimumHeight = size.height;
     return true;
 }
-
-[[nodiscard]] bool FakeShowWindow(void* context, void* window)
+[[nodiscard]] bool FakeShowWindow(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("show-window");
@@ -1316,7 +1381,7 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
-[[nodiscard]] bool FakeHideWindow(void* context, void* window)
+[[nodiscard]] bool FakeHideWindow(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("hide-window");
@@ -1334,98 +1399,101 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
-[[nodiscard]] bool FakeGetWindowProperties(void* context, void* window,
-                                           BackendWindowProperties* properties)
+[[nodiscard]] std::optional<BackendWindowProperties> FakeGetWindowProperties(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-window-properties");
     if (FailWindowOperation(fake, "get-window-properties"))
     {
-        return false;
+        return std::nullopt;
     }
 
     const FakeWindow& fakeWindow = GetFakeWindow(window);
-    *properties =
-        BackendWindowProperties{.desktopFullscreen = fakeWindow.desktopFullscreen,
-                                .hidden = !fakeWindow.visible,
-                                .borderless = fakeWindow.borderless,
-                                .resizable = fakeWindow.resizable,
-                                .minimized = fakeWindow.minimized || fakeWindow.pendingMinimized,
-                                .maximized = fakeWindow.maximized || fakeWindow.pendingMaximized,
-                                .inputFocus = fakeWindow.inputFocus,
-                                .alwaysOnTop = fakeWindow.alwaysOnTop};
-    return true;
+    return BackendWindowProperties{
+        .desktopFullscreen = fakeWindow.desktopFullscreen,
+        .hidden = !fakeWindow.visible,
+        .borderless = fakeWindow.borderless,
+        .resizable = fakeWindow.resizable,
+        .minimized = fakeWindow.minimized || fakeWindow.pendingMinimized,
+        .maximized = fakeWindow.maximized || fakeWindow.pendingMaximized,
+        .inputFocus = fakeWindow.inputFocus,
+        .alwaysOnTop = fakeWindow.alwaysOnTop};
 }
-
-[[nodiscard]] BackendWindowOperationResult FakeSetFullscreenModeToDesktop(void* context, void*)
+[[nodiscard]] pond::core::VoidResult FakeSetFullscreenModeToDesktop(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-fullscreen-mode-to-desktop");
-    return GetWindowOperationResult(fake, "set-window-fullscreen-mode-to-desktop");
+    return GetWindowOperationResult(fake, "set-window-fullscreen-mode-to-desktop",
+                                    "SDL_SetWindowFullscreenMode", window);
 }
 
-[[nodiscard]] BackendWindowOperationResult FakeSetWindowFullscreen(void* context, void* window,
-                                                                   bool fullscreen)
+[[nodiscard]] pond::core::VoidResult FakeSetWindowFullscreen(
+    void* context, BackendWindowHandle window, bool fullscreen)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-fullscreen");
-    const BackendWindowOperationResult result =
-        GetWindowOperationResult(fake, "set-window-fullscreen");
-    if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
+    pond::core::VoidResult result =
+        GetWindowOperationResult(fake, "set-window-fullscreen",
+                                 "SDL_SetWindowFullscreen", window);
+    if (result.HasValue() && fake.applyWindowOperationEffects)
     {
         GetFakeWindow(window).desktopFullscreen = fullscreen;
     }
     return result;
 }
 
-[[nodiscard]] BackendWindowOperationResult FakeSetWindowBordered(void* context, void* window,
-                                                                 bool bordered)
+[[nodiscard]] pond::core::VoidResult FakeSetWindowBordered(
+    void* context, BackendWindowHandle window, bool bordered)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-bordered");
-    const BackendWindowOperationResult result =
-        GetWindowOperationResult(fake, "set-window-bordered");
-    if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
+    pond::core::VoidResult result =
+        GetWindowOperationResult(fake, "set-window-bordered", "SDL_SetWindowBordered", window);
+    if (result.HasValue() && fake.applyWindowOperationEffects)
     {
         GetFakeWindow(window).borderless = !bordered;
     }
     return result;
 }
 
-[[nodiscard]] BackendWindowOperationResult FakeSetWindowResizable(void* context, void* window,
-                                                                  bool resizable)
+[[nodiscard]] pond::core::VoidResult FakeSetWindowResizable(
+    void* context, BackendWindowHandle window, bool resizable)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-resizable");
-    const BackendWindowOperationResult result =
-        GetWindowOperationResult(fake, "set-window-resizable");
-    if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
+    pond::core::VoidResult result =
+        GetWindowOperationResult(fake, "set-window-resizable", "SDL_SetWindowResizable", window);
+    if (result.HasValue() && fake.applyWindowOperationEffects)
     {
         GetFakeWindow(window).resizable = resizable;
     }
     return result;
 }
 
-[[nodiscard]] BackendWindowOperationResult FakeSetWindowAlwaysOnTop(void* context, void* window,
-                                                                    bool alwaysOnTop)
+[[nodiscard]] pond::core::VoidResult FakeSetWindowAlwaysOnTop(
+    void* context, BackendWindowHandle window, bool alwaysOnTop)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-always-on-top");
-    const BackendWindowOperationResult result =
-        GetWindowOperationResult(fake, "set-window-always-on-top");
-    if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
+    pond::core::VoidResult result = GetWindowOperationResult(
+        fake, "set-window-always-on-top", "SDL_SetWindowAlwaysOnTop", window);
+    if (result.HasValue() && fake.applyWindowOperationEffects)
     {
         GetFakeWindow(window).alwaysOnTop = alwaysOnTop;
     }
     return result;
 }
 
-[[nodiscard]] BackendWindowOperationResult FakeMinimizeWindow(void* context, void* window)
+[[nodiscard]] pond::core::VoidResult FakeMinimizeWindow(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("minimize-window");
-    const BackendWindowOperationResult result = GetWindowOperationResult(fake, "minimize-window");
-    if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
+    pond::core::VoidResult result =
+        GetWindowOperationResult(fake, "minimize-window", "SDL_MinimizeWindow", window);
+    if (result.HasValue() && fake.applyWindowOperationEffects)
     {
         FakeWindow& fakeWindow = GetFakeWindow(window);
         if (fakeWindow.visible)
@@ -1441,12 +1509,14 @@ void FakeDestroyWindow(void* context, void* window)
     return result;
 }
 
-[[nodiscard]] BackendWindowOperationResult FakeMaximizeWindow(void* context, void* window)
+[[nodiscard]] pond::core::VoidResult FakeMaximizeWindow(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("maximize-window");
-    const BackendWindowOperationResult result = GetWindowOperationResult(fake, "maximize-window");
-    if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
+    pond::core::VoidResult result =
+        GetWindowOperationResult(fake, "maximize-window", "SDL_MaximizeWindow", window);
+    if (result.HasValue() && fake.applyWindowOperationEffects)
     {
         FakeWindow& fakeWindow = GetFakeWindow(window);
         if (fakeWindow.visible)
@@ -1462,12 +1532,14 @@ void FakeDestroyWindow(void* context, void* window)
     return result;
 }
 
-[[nodiscard]] BackendWindowOperationResult FakeRestoreWindow(void* context, void* window)
+[[nodiscard]] pond::core::VoidResult FakeRestoreWindow(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("restore-window");
-    const BackendWindowOperationResult result = GetWindowOperationResult(fake, "restore-window");
-    if (result == BackendWindowOperationResult::Succeeded && fake.applyWindowOperationEffects)
+    pond::core::VoidResult result =
+        GetWindowOperationResult(fake, "restore-window", "SDL_RestoreWindow", window);
+    if (result.HasValue() && fake.applyWindowOperationEffects)
     {
         FakeWindow& fakeWindow = GetFakeWindow(window);
         if (fakeWindow.visible)
@@ -1483,8 +1555,7 @@ void FakeDestroyWindow(void* context, void* window)
     }
     return result;
 }
-
-[[nodiscard]] bool FakeStartWindowTextInput(void* context, void* window)
+[[nodiscard]] bool FakeStartWindowTextInput(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("start-text-input");
@@ -1497,7 +1568,7 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
-[[nodiscard]] bool FakeStopWindowTextInput(void* context, void* window)
+[[nodiscard]] bool FakeStopWindowTextInput(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("stop-text-input");
@@ -1510,13 +1581,13 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
-[[nodiscard]] bool FakeIsWindowTextInputActive(void* context, void* window)
+[[nodiscard]] bool FakeIsWindowTextInputActive(void* context, BackendWindowHandle window)
 {
     GetFake(context).calls.emplace_back("is-text-input-active");
     return GetFakeWindow(window).textInputActive;
 }
 
-[[nodiscard]] bool FakeClearWindowTextComposition(void* context, void* window)
+[[nodiscard]] bool FakeClearWindowTextComposition(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("clear-text-composition");
@@ -1529,8 +1600,8 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
-[[nodiscard]] bool FakeSetWindowTextInputArea(void* context, void* window,
-                                              const BackendTextInputArea* area)
+[[nodiscard]] bool FakeSetWindowTextInputArea(
+    void* context, BackendWindowHandle window, std::optional<BackendTextInputArea> area)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-text-input-area");
@@ -1539,12 +1610,10 @@ void FakeDestroyWindow(void* context, void* window)
         return false;
     }
 
-    GetFakeWindow(window).textInputArea =
-        area != nullptr ? std::optional<BackendTextInputArea>{*area} : std::nullopt;
+    GetFakeWindow(window).textInputArea = area;
     return true;
 }
-
-[[nodiscard]] bool FakeSetWindowMouseGrab(void* context, void* window, bool grabbed)
+[[nodiscard]] bool FakeSetWindowMouseGrab(void* context, BackendWindowHandle window, bool grabbed)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-mouse-grab");
@@ -1560,14 +1629,15 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
-[[nodiscard]] bool FakeIsWindowMouseGrabbed(void* context, void* window)
+[[nodiscard]] bool FakeIsWindowMouseGrabbed(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("is-window-mouse-grabbed");
     return GetFakeWindow(window).mouseGrabbed;
 }
 
-[[nodiscard]] bool FakeSetWindowRelativeMouseMode(void* context, void* window, bool enabled)
+[[nodiscard]] bool FakeSetWindowRelativeMouseMode(
+    void* context, BackendWindowHandle window, bool enabled)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("set-window-relative-mouse-mode");
@@ -1583,192 +1653,224 @@ void FakeDestroyWindow(void* context, void* window)
     return true;
 }
 
-[[nodiscard]] bool FakeIsWindowRelativeMouseModeEnabled(void* context, void* window)
+[[nodiscard]] bool FakeIsWindowRelativeMouseModeEnabled(void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("is-window-relative-mouse-mode-enabled");
     return GetFakeWindow(window).relativeMouseModeEnabled;
 }
 
-[[nodiscard]] BackendNativeWindowHandleResult FakeGetNativeWindowHandle(
-    void* context, void*, pond::platform::NativeWindowHandle* handle)
+[[nodiscard]] pond::core::Result<pond::platform::NativeWindowHandle> FakeGetNativeWindowHandle(
+    void* context, BackendWindowHandle window)
 {
     FakeRuntimeBackendState& fake = GetFake(context);
     fake.calls.emplace_back("get-native-handle");
-    const BackendWindowOperationResult operationResult =
-        GetWindowOperationResult(fake, "get-native-handle");
-    if (operationResult == BackendWindowOperationResult::Unsupported)
+
+    pond::core::VoidResult operationResult =
+        GetWindowOperationResult(fake, "get-native-handle", "get-native-handle", window);
+    RETURN_ERROR_IF_FAILED(operationResult);
+
+    const auto makeError =
+        [window](pond::platform::PlatformErrorCode code, std::string_view message)
     {
-        return BackendNativeWindowHandleResult{.status =
-                                                   BackendNativeWindowHandleStatus::Unsupported,
-                                               .message = "synthetic native window unsupported"};
-    }
-    if (operationResult == BackendWindowOperationResult::Failed)
-    {
-        return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Failed,
-                                               .operation = "get-native-handle",
-                                               .captureSdlError = true};
-    }
+        return pond::core::Result<pond::platform::NativeWindowHandle>::FromError(
+            pond::core::Error{pond::platform::ToErrorCode(code),
+                              std::format("{} Context: {}.", message,
+                                          GetFakeBackendWindowContext(window))});
+    };
 
     switch (pond::platform::detail::GetNativeWindowDriver(fake.nativeVideoDriver))
     {
     case BackendNativeWindowDriver::Win32:
         if (fake.nativeWin32Instance == nullptr || fake.nativeWin32Window == nullptr)
         {
-            return BackendNativeWindowHandleResult{.status =
-                                                       BackendNativeWindowHandleStatus::Failed,
-                                                   .message = "missing fake Win32 data"};
+            return makeError(pond::platform::PlatformErrorCode::BackendFailure,
+                             "missing fake Win32 data");
         }
-        *handle = pond::platform::NativeWin32Window{.instance = fake.nativeWin32Instance,
-                                                    .window = fake.nativeWin32Window};
-        break;
+        return pond::platform::NativeWindowHandle{pond::platform::NativeWin32Window{
+            .instance = fake.nativeWin32Instance, .window = fake.nativeWin32Window}};
     case BackendNativeWindowDriver::X11:
         if (fake.nativeX11Display == nullptr || fake.nativeX11Window == 0)
         {
-            return BackendNativeWindowHandleResult{.status =
-                                                       BackendNativeWindowHandleStatus::Failed,
-                                                   .message = "missing fake X11 data"};
+            return makeError(pond::platform::PlatformErrorCode::BackendFailure,
+                             "missing fake X11 data");
         }
-        *handle = pond::platform::NativeX11Window{.display = fake.nativeX11Display,
-                                                  .window = fake.nativeX11Window};
-        break;
+        return pond::platform::NativeWindowHandle{pond::platform::NativeX11Window{
+            .display = fake.nativeX11Display, .window = fake.nativeX11Window}};
     case BackendNativeWindowDriver::Wayland:
         if (fake.nativeWaylandDisplay == nullptr || fake.nativeWaylandSurface == nullptr)
         {
-            return BackendNativeWindowHandleResult{.status =
-                                                       BackendNativeWindowHandleStatus::Failed,
-                                                   .message = "missing fake Wayland data"};
+            return makeError(pond::platform::PlatformErrorCode::BackendFailure,
+                             "missing fake Wayland data");
         }
-        *handle = pond::platform::NativeWaylandWindow{.display = fake.nativeWaylandDisplay,
-                                                      .surface = fake.nativeWaylandSurface};
-        break;
-
+        return pond::platform::NativeWindowHandle{pond::platform::NativeWaylandWindow{
+            .display = fake.nativeWaylandDisplay, .surface = fake.nativeWaylandSurface}};
     case BackendNativeWindowDriver::Unsupported:
-        return BackendNativeWindowHandleResult{.status =
-                                                   BackendNativeWindowHandleStatus::Unsupported,
-                                               .message = "synthetic unsupported video driver"};
+        return makeError(pond::platform::PlatformErrorCode::Unsupported,
+                         "synthetic unsupported video driver");
     }
 
-    return BackendNativeWindowHandleResult{.status = BackendNativeWindowHandleStatus::Succeeded};
+    return makeError(pond::platform::PlatformErrorCode::Unsupported,
+                     "synthetic unsupported video driver");
 }
 
-
-[[nodiscard]] bool FakeEnumerateDisplays(void* context, std::vector<std::uint32_t>& displayIds)
+class FakeDisplayBackend final : public IPlatformDisplayBackend
 {
-    FakeRuntimeBackendState& fake = GetFake(context);
-    ++fake.enumerateDisplayCalls;
-    fake.calls.emplace_back("enumerate-displays");
-    if (FailDisplayOperation(fake, "enumerate-displays"))
+public:
+    explicit FakeDisplayBackend(FakeRuntimeBackendState& state) noexcept : m_state(state) {}
+
+    [[nodiscard]] pond::core::Result<std::vector<std::uint32_t>> Enumerate() override
     {
-        return false;
+        ++m_state.enumerateDisplayCalls;
+        m_state.calls.emplace_back("enumerate-displays");
+        if (FailDisplayOperation(m_state, "enumerate-displays"))
+        {
+            return pond::core::Result<std::vector<std::uint32_t>>::FromError(
+                CaptureFailure("SDL_GetDisplays", "displays"));
+        }
+
+        return m_state.connectedDisplayIds;
     }
 
-    displayIds = fake.connectedDisplayIds;
-    return true;
-}
-
-[[nodiscard]] const char* FakeGetDisplayName(void* context, std::uint32_t backendDisplayId)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-display-name");
-    if (FailDisplayOperation(fake, "get-display-name"))
+    [[nodiscard]] pond::core::Result<std::string> GetName(
+        std::uint32_t backendDisplayId) override
     {
-        return nullptr;
+        m_state.calls.emplace_back("get-display-name");
+        if (FailDisplayOperation(m_state, "get-display-name"))
+        {
+            return pond::core::Result<std::string>::FromError(
+                CaptureFailure("SDL_GetDisplayName", GetDisplayContext(backendDisplayId)));
+        }
+        return GetFakeDisplay(m_state, backendDisplayId).name;
     }
-    return GetFakeDisplay(fake, backendDisplayId).name.c_str();
-}
 
-[[nodiscard]] bool FakeGetDisplayBounds(void* context, std::uint32_t backendDisplayId,
-                                        BackendScreenRectangle* bounds)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-display-bounds");
-    if (FailDisplayOperation(fake, "get-display-bounds"))
+    [[nodiscard]] pond::core::Result<BackendScreenRectangle> GetBounds(
+        std::uint32_t backendDisplayId) override
     {
-        return false;
+        m_state.calls.emplace_back("get-display-bounds");
+        if (FailDisplayOperation(m_state, "get-display-bounds"))
+        {
+            return pond::core::Result<BackendScreenRectangle>::FromError(
+                CaptureFailure("SDL_GetDisplayBounds", GetDisplayContext(backendDisplayId)));
+        }
+        return GetFakeDisplay(m_state, backendDisplayId).bounds;
     }
-    *bounds = GetFakeDisplay(fake, backendDisplayId).bounds;
-    return true;
-}
 
-[[nodiscard]] bool FakeGetDisplayUsableBounds(void* context, std::uint32_t backendDisplayId,
-                                              BackendScreenRectangle* bounds)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-display-usable-bounds");
-    if (FailDisplayOperation(fake, "get-display-usable-bounds"))
+    [[nodiscard]] pond::core::Result<BackendScreenRectangle> GetUsableBounds(
+        std::uint32_t backendDisplayId) override
     {
-        return false;
+        m_state.calls.emplace_back("get-display-usable-bounds");
+        if (FailDisplayOperation(m_state, "get-display-usable-bounds"))
+        {
+            return pond::core::Result<BackendScreenRectangle>::FromError(
+                CaptureFailure("SDL_GetDisplayUsableBounds",
+                               GetDisplayContext(backendDisplayId)));
+        }
+        return GetFakeDisplay(m_state, backendDisplayId).usableBounds;
     }
-    *bounds = GetFakeDisplay(fake, backendDisplayId).usableBounds;
-    return true;
-}
 
-[[nodiscard]] bool FakeGetCurrentDisplayRefreshRate(void* context, std::uint32_t backendDisplayId,
-                                                    float* refreshRateHertz)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-current-display-refresh-rate");
-    if (FailDisplayOperation(fake, "get-current-display-refresh-rate"))
+    [[nodiscard]] pond::core::Result<float> GetCurrentRefreshRate(
+        std::uint32_t backendDisplayId) override
     {
-        return false;
+        m_state.calls.emplace_back("get-current-display-refresh-rate");
+        if (FailDisplayOperation(m_state, "get-current-display-refresh-rate"))
+        {
+            return pond::core::Result<float>::FromError(
+                CaptureFailure("SDL_GetCurrentDisplayMode",
+                               GetDisplayContext(backendDisplayId)));
+        }
+        return GetFakeDisplay(m_state, backendDisplayId).refreshRateHertz;
     }
-    *refreshRateHertz = GetFakeDisplay(fake, backendDisplayId).refreshRateHertz;
-    return true;
-}
 
-[[nodiscard]] BackendDisplayOrientation FakeGetCurrentDisplayOrientation(
-    void* context, std::uint32_t backendDisplayId)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-current-display-orientation");
-    return GetFakeDisplay(fake, backendDisplayId).orientation;
-}
-
-[[nodiscard]] float FakeGetDisplayContentScale(void* context, std::uint32_t backendDisplayId)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-display-content-scale");
-    if (FailDisplayOperation(fake, "get-display-content-scale"))
+    [[nodiscard]] BackendDisplayOrientation GetCurrentOrientation(
+        std::uint32_t backendDisplayId) override
     {
-        return 0.0F;
+        m_state.calls.emplace_back("get-current-display-orientation");
+        return GetFakeDisplay(m_state, backendDisplayId).orientation;
     }
-    return GetFakeDisplay(fake, backendDisplayId).contentScale;
-}
 
-[[nodiscard]] std::uint32_t FakeGetDisplayForWindow(void* context, void* window)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-display-for-window");
-    if (FailDisplayOperation(fake, "get-display-for-window"))
+    [[nodiscard]] pond::core::Result<float> GetContentScale(
+        std::uint32_t backendDisplayId) override
     {
-        return 0;
+        m_state.calls.emplace_back("get-display-content-scale");
+        if (FailDisplayOperation(m_state, "get-display-content-scale"))
+        {
+            return pond::core::Result<float>::FromError(
+                CaptureFailure("SDL_GetDisplayContentScale",
+                               GetDisplayContext(backendDisplayId)));
+        }
+        return GetFakeDisplay(m_state, backendDisplayId).contentScale;
     }
-    return GetFakeWindow(window).backendDisplayId;
-}
 
-[[nodiscard]] float FakeGetWindowPixelDensity(void* context, void* window)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-window-pixel-density");
-    if (FailDisplayOperation(fake, "get-window-pixel-density"))
+    [[nodiscard]] pond::core::Result<std::uint32_t> GetForWindow(
+        BackendWindowHandle window) override
     {
-        return 0.0F;
+        m_state.calls.emplace_back("get-display-for-window");
+        if (FailDisplayOperation(m_state, "get-display-for-window"))
+        {
+            return pond::core::Result<std::uint32_t>::FromError(
+                CaptureFailure("SDL_GetDisplayForWindow",
+                               GetFakeBackendWindowContext(window)));
+        }
+        return GetFakeWindow(window).backendDisplayId;
     }
-    return GetFakeWindow(window).pixelDensity;
-}
 
-[[nodiscard]] float FakeGetWindowDisplayScale(void* context, void* window)
-{
-    FakeRuntimeBackendState& fake = GetFake(context);
-    fake.calls.emplace_back("get-window-display-scale");
-    if (FailDisplayOperation(fake, "get-window-display-scale"))
+    [[nodiscard]] pond::core::Result<float> GetWindowPixelDensity(
+        BackendWindowHandle window) override
     {
-        return 0.0F;
+        m_state.calls.emplace_back("get-window-pixel-density");
+        if (FailDisplayOperation(m_state, "get-window-pixel-density"))
+        {
+            return pond::core::Result<float>::FromError(
+                CaptureFailure("SDL_GetWindowPixelDensity",
+                               GetFakeBackendWindowContext(window)));
+        }
+        return GetFakeWindow(window).pixelDensity;
     }
-    return GetFakeWindow(window).displayScale;
-}
 
+    [[nodiscard]] pond::core::Result<float> GetWindowDisplayScale(
+        BackendWindowHandle window) override
+    {
+        m_state.calls.emplace_back("get-window-display-scale");
+        if (FailDisplayOperation(m_state, "get-window-display-scale"))
+        {
+            return pond::core::Result<float>::FromError(
+                CaptureFailure("SDL_GetWindowDisplayScale",
+                               GetFakeBackendWindowContext(window)));
+        }
+        return GetFakeWindow(window).displayScale;
+    }
+
+private:
+    [[nodiscard]] static pond::core::Error CaptureFailure(
+        std::string_view operation, std::string_view context)
+    {
+        return pond::platform::detail::CaptureSdlFailure(
+            pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure),
+            operation, context);
+    }
+
+    [[nodiscard]] static std::string GetDisplayContext(std::uint32_t backendDisplayId)
+    {
+        return std::format("backend display {}", backendDisplayId);
+    }
+
+    FakeRuntimeBackendState& m_state;
+};
+
+class FakeDisplayBackendFactory final : public IPlatformDisplayBackendFactory
+{
+public:
+    explicit FakeDisplayBackendFactory(FakeRuntimeBackendState& state) noexcept : m_state(state) {}
+
+    [[nodiscard]] std::unique_ptr<IPlatformDisplayBackend> Create() const override
+    {
+        return std::make_unique<FakeDisplayBackend>(m_state);
+    }
+
+private:
+    FakeRuntimeBackendState& m_state;
+};
 class FakeHintBackend final : public IHintBackend
 {
 public:
@@ -1791,12 +1893,13 @@ public:
         return FakeGetHint(&m_state, name);
     }
 
-    [[nodiscard]] bool SetHintOverride(const char* name, const char* value) noexcept override
+    [[nodiscard]] pond::core::VoidResult SetHintOverride(const char* name,
+                                                         const char* value) override
     {
         return FakeSetHintOverride(&m_state, name, value);
     }
 
-    [[nodiscard]] bool ResetHint(const char* name) noexcept override
+    [[nodiscard]] pond::core::VoidResult ResetHint(const char* name) override
     {
         return FakeResetHint(&m_state, name);
     }
@@ -1870,18 +1973,18 @@ public:
         return FakeGetGlobalMousePosition(&m_state);
     }
 
-    [[nodiscard]] bool SetMouseCapture(bool enabled) override
+    [[nodiscard]] pond::core::VoidResult SetMouseCapture(bool enabled) override
     {
         return FakeSetMouseCapture(&m_state, enabled);
     }
 
-    [[nodiscard]] CursorHandle CreateSystemCursor(
+    [[nodiscard]] pond::core::Result<CursorHandle> CreateSystemCursor(
         pond::platform::SystemCursorShape shape) override
     {
         return FakeCreateSystemCursor(&m_state, shape);
     }
 
-    [[nodiscard]] bool SetCursor(CursorHandle cursor) override
+    [[nodiscard]] pond::core::VoidResult SetCursor(CursorHandle cursor) override
     {
         return FakeSetCursor(&m_state, cursor);
     }
@@ -1891,12 +1994,12 @@ public:
         FakeDestroyCursor(&m_state, cursor);
     }
 
-    [[nodiscard]] bool ShowCursor() override
+    [[nodiscard]] pond::core::VoidResult ShowCursor() override
     {
         return FakeShowCursor(&m_state);
     }
 
-    [[nodiscard]] bool HideCursor() override
+    [[nodiscard]] pond::core::VoidResult HideCursor() override
     {
         return FakeHideCursor(&m_state);
     }
@@ -1911,17 +2014,17 @@ public:
         return FakeSupportsClipboardText(&m_state);
     }
 
-    [[nodiscard]] BackendClipboardTextResult GetClipboardText() override
+    [[nodiscard]] pond::core::Result<std::string> GetClipboardText() override
     {
         return FakeGetClipboardText(&m_state);
     }
 
-    [[nodiscard]] bool SetClipboardText(std::string_view text) override
+    [[nodiscard]] pond::core::VoidResult SetClipboardText(std::string_view text) override
     {
         return FakeSetClipboardText(&m_state, text);
     }
 
-    [[nodiscard]] bool OpenExternalUri(std::string_view uri) override
+    [[nodiscard]] pond::core::VoidResult OpenExternalUri(std::string_view uri) override
     {
         return FakeOpenExternalUri(&m_state, uri);
     }
@@ -1953,61 +2056,256 @@ private:
     FakeRuntimeBackendState& m_state;
 };
 
-[[nodiscard]] PlatformWindowBackend MakeWindowBackend(FakeRuntimeBackendState& fake)
+class FakeWindowBackend final : public IPlatformWindowBackend
 {
-    return PlatformWindowBackend{
-        .context = &fake,
-        .create = FakeCreateWindow,
-        .destroy = FakeDestroyWindow,
-        .getId = FakeGetWindowId,
-        .getTitle = FakeGetWindowTitle,
-        .setTitle = FakeSetWindowTitle,
-        .getPosition = FakeGetWindowPosition,
-        .setPosition = FakeSetWindowPosition,
-        .getSize = FakeGetWindowSize,
-        .getSizeInPixels = FakeGetWindowSizeInPixels,
-        .setSize = FakeSetWindowSize,
-        .setMinimumSize = FakeSetWindowMinimumSize,
-        .show = FakeShowWindow,
-        .hide = FakeHideWindow,
-        .getProperties = FakeGetWindowProperties,
-        .setFullscreenModeToDesktop = FakeSetFullscreenModeToDesktop,
-        .setFullscreen = FakeSetWindowFullscreen,
-        .setBordered = FakeSetWindowBordered,
-        .setResizable = FakeSetWindowResizable,
-        .setAlwaysOnTop = FakeSetWindowAlwaysOnTop,
-        .minimize = FakeMinimizeWindow,
-        .maximize = FakeMaximizeWindow,
-        .restore = FakeRestoreWindow,
-        .startTextInput = FakeStartWindowTextInput,
-        .stopTextInput = FakeStopWindowTextInput,
-        .isTextInputActive = FakeIsWindowTextInputActive,
-        .clearTextComposition = FakeClearWindowTextComposition,
-        .setTextInputArea = FakeSetWindowTextInputArea,
-        .setMouseGrab = FakeSetWindowMouseGrab,
-        .isMouseGrabbed = FakeIsWindowMouseGrabbed,
-        .setRelativeMouseMode = FakeSetWindowRelativeMouseMode,
-        .isRelativeMouseModeEnabled = FakeIsWindowRelativeMouseModeEnabled,
-        .getNativeHandle = FakeGetNativeWindowHandle,
-    };
-}
+public:
+    explicit FakeWindowBackend(FakeRuntimeBackendState& state) noexcept : m_state(state) {}
 
-[[nodiscard]] PlatformDisplayBackend MakeDisplayBackend(FakeRuntimeBackendState& fake)
+    [[nodiscard]] pond::core::Result<BackendWindowHandle> Create(
+        const BackendWindowCreateDesc& desc) override
+    {
+        const BackendWindowHandle window = FakeCreateWindow(&m_state, desc);
+        if (!window.IsValid())
+        {
+            return pond::core::Result<BackendWindowHandle>::FromError(
+                CaptureFakeWindowFailure(pond::platform::PlatformErrorCode::BackendFailure,
+                                         "SDL_CreateWindow"));
+        }
+        return window;
+    }
+
+    void Destroy(BackendWindowHandle window) noexcept override
+    {
+        FakeDestroyWindow(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::Result<std::uint32_t> GetId(
+        BackendWindowHandle window) override
+    {
+        const std::uint32_t id = FakeGetWindowId(&m_state, window);
+        if (id == 0)
+        {
+            return pond::core::Result<std::uint32_t>::FromError(
+                CaptureFakeWindowFailure(pond::platform::PlatformErrorCode::BackendFailure,
+                                         "SDL_GetWindowID", window));
+        }
+        return id;
+    }
+
+    [[nodiscard]] std::string GetTitle(BackendWindowHandle window) override
+    {
+        return FakeGetWindowTitle(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetTitle(
+        BackendWindowHandle window, std::string_view title) override
+    {
+        return ToFakeWindowResult(FakeSetWindowTitle(&m_state, window, title),
+                                  "SDL_SetWindowTitle", window);
+    }
+
+    [[nodiscard]] pond::core::Result<BackendWindowPosition> GetPosition(
+        BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeGetWindowPosition(&m_state, window),
+                                  "SDL_GetWindowPosition", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetPosition(
+        BackendWindowHandle window, BackendWindowPosition position) override
+    {
+        return ToFakeWindowResult(FakeSetWindowPosition(&m_state, window, position),
+                                  "SDL_SetWindowPosition", window);
+    }
+
+    [[nodiscard]] pond::core::Result<BackendWindowLogicalSize> GetSize(
+        BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeGetWindowSize(&m_state, window),
+                                  "SDL_GetWindowSize", window);
+    }
+
+    [[nodiscard]] pond::core::Result<BackendWindowPixelSize> GetSizeInPixels(
+        BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeGetWindowSizeInPixels(&m_state, window),
+                                  "SDL_GetWindowSizeInPixels", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetSize(
+        BackendWindowHandle window, BackendWindowLogicalSize size) override
+    {
+        return ToFakeWindowResult(FakeSetWindowSize(&m_state, window, size),
+                                  "SDL_SetWindowSize", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetMinimumSize(
+        BackendWindowHandle window, BackendWindowLogicalSize size) override
+    {
+        return ToFakeWindowResult(FakeSetWindowMinimumSize(&m_state, window, size),
+                                  "SDL_SetWindowMinimumSize", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult Show(BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeShowWindow(&m_state, window), "SDL_ShowWindow", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult Hide(BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeHideWindow(&m_state, window), "SDL_HideWindow", window);
+    }
+
+    [[nodiscard]] pond::core::Result<BackendWindowProperties> GetProperties(
+        BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeGetWindowProperties(&m_state, window),
+                                  "SDL_GetWindowFlags", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetFullscreenModeToDesktop(
+        BackendWindowHandle window) override
+    {
+        return FakeSetFullscreenModeToDesktop(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetFullscreen(
+        BackendWindowHandle window, bool fullscreen) override
+    {
+        return FakeSetWindowFullscreen(&m_state, window, fullscreen);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetBordered(
+        BackendWindowHandle window, bool bordered) override
+    {
+        return FakeSetWindowBordered(&m_state, window, bordered);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetResizable(
+        BackendWindowHandle window, bool resizable) override
+    {
+        return FakeSetWindowResizable(&m_state, window, resizable);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetAlwaysOnTop(
+        BackendWindowHandle window, bool alwaysOnTop) override
+    {
+        return FakeSetWindowAlwaysOnTop(&m_state, window, alwaysOnTop);
+    }
+
+    [[nodiscard]] pond::core::VoidResult Minimize(BackendWindowHandle window) override
+    {
+        return FakeMinimizeWindow(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult Maximize(BackendWindowHandle window) override
+    {
+        return FakeMaximizeWindow(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult Restore(BackendWindowHandle window) override
+    {
+        return FakeRestoreWindow(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult StartTextInput(
+        BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeStartWindowTextInput(&m_state, window),
+                                  "SDL_StartTextInput", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult StopTextInput(
+        BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeStopWindowTextInput(&m_state, window),
+                                  "SDL_StopTextInput", window);
+    }
+
+    [[nodiscard]] bool IsTextInputActive(BackendWindowHandle window) override
+    {
+        return FakeIsWindowTextInputActive(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult ClearTextComposition(
+        BackendWindowHandle window) override
+    {
+        return ToFakeWindowResult(FakeClearWindowTextComposition(&m_state, window),
+                                  "SDL_ClearComposition", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetTextInputArea(
+        BackendWindowHandle window, std::optional<BackendTextInputArea> area) override
+    {
+        return ToFakeWindowResult(
+            FakeSetWindowTextInputArea(&m_state, window, std::move(area)),
+            "SDL_SetTextInputArea", window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetMouseGrab(
+        BackendWindowHandle window, bool grabbed) override
+    {
+        return ToFakeWindowResult(FakeSetWindowMouseGrab(&m_state, window, grabbed),
+                                  "SDL_SetWindowMouseGrab", window);
+    }
+
+    [[nodiscard]] bool IsMouseGrabbed(BackendWindowHandle window) override
+    {
+        return FakeIsWindowMouseGrabbed(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::VoidResult SetRelativeMouseMode(
+        BackendWindowHandle window, bool enabled) override
+    {
+        if (FakeIsWindowRelativeMouseModeEnabled(&m_state, window) == enabled)
+        {
+            return pond::core::VoidResult::Success();
+        }
+
+        RETURN_ERROR_IF_FAILED(ToFakeWindowResult(
+            FakeSetWindowRelativeMouseMode(&m_state, window, enabled),
+            "SDL_SetWindowRelativeMouseMode", window));
+
+        if (FakeIsWindowRelativeMouseModeEnabled(&m_state, window) != enabled)
+        {
+            return pond::core::VoidResult::FromError(pond::core::Error{
+                pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported),
+                std::format("SDL_SetWindowRelativeMouseMode did not apply the requested state "
+                            "for {}; the backend does not support this operation.",
+                            GetFakeBackendWindowContext(window))});
+        }
+
+        return pond::core::VoidResult::Success();
+    }
+
+    [[nodiscard]] bool IsRelativeMouseModeEnabled(
+        BackendWindowHandle window) override
+    {
+        return FakeIsWindowRelativeMouseModeEnabled(&m_state, window);
+    }
+
+    [[nodiscard]] pond::core::Result<pond::platform::NativeWindowHandle> GetNativeHandle(
+        BackendWindowHandle window) override
+    {
+        return FakeGetNativeWindowHandle(&m_state, window);
+    }
+
+private:
+    FakeRuntimeBackendState& m_state;
+};
+class FakeWindowBackendFactory final : public IPlatformWindowBackendFactory
 {
-    return PlatformDisplayBackend{
-        .context = &fake,
-        .enumerate = FakeEnumerateDisplays,
-        .getName = FakeGetDisplayName,
-        .getBounds = FakeGetDisplayBounds,
-        .getUsableBounds = FakeGetDisplayUsableBounds,
-        .getCurrentRefreshRate = FakeGetCurrentDisplayRefreshRate,
-        .getCurrentOrientation = FakeGetCurrentDisplayOrientation,
-        .getContentScale = FakeGetDisplayContentScale,
-        .getForWindow = FakeGetDisplayForWindow,
-        .getWindowPixelDensity = FakeGetWindowPixelDensity,
-        .getWindowDisplayScale = FakeGetWindowDisplayScale,
-    };
-}
+public:
+    explicit FakeWindowBackendFactory(FakeRuntimeBackendState& state) noexcept : m_state(state) {}
+
+    [[nodiscard]] std::unique_ptr<IPlatformWindowBackend> Create() const override
+    {
+        return std::make_unique<FakeWindowBackend>(m_state);
+    }
+
+private:
+    FakeRuntimeBackendState& m_state;
+};
 
 class PlatformRuntimeBackendTests : public testing::Test
 {
@@ -2015,11 +2313,10 @@ protected:
     void SetUp() override
     {
         static_cast<void>(SDL_ClearError());
-        m_windowBackend = MakeWindowBackend(m_fake);
-        m_displayBackend = MakeDisplayBackend(m_fake);
         pond::platform::detail::SetPlatformRuntimeBackendForTesting(&m_backendFactory);
-        pond::platform::detail::SetPlatformWindowBackendForTesting(&m_windowBackend);
-        pond::platform::detail::SetPlatformDisplayBackendForTesting(&m_displayBackend);
+        pond::platform::detail::SetPlatformWindowBackendForTesting(&m_windowBackendFactory);
+        pond::platform::detail::SetPlatformDisplayBackendForTesting(
+            &m_displayBackendFactory);
     }
 
     void TearDown() override
@@ -2032,8 +2329,8 @@ protected:
 
     FakeRuntimeBackendState m_fake;
     FakeRuntimeBackendFactory m_backendFactory{m_fake};
-    PlatformWindowBackend m_windowBackend;
-    PlatformDisplayBackend m_displayBackend;
+    FakeWindowBackendFactory m_windowBackendFactory{m_fake};
+    FakeDisplayBackendFactory m_displayBackendFactory{m_fake};
 };
 
 TEST(ApplicationMetadataPropertyTests, FormatsAsErrorContext)
@@ -2043,8 +2340,7 @@ TEST(ApplicationMetadataPropertyTests, FormatsAsErrorContext)
     EXPECT_EQ(std::format("{}", ApplicationMetadataProperty::Identifier), "identifier");
 }
 
-TEST_F(PlatformRuntimeBackendTests,
-       AppliesMetadataWithoutRestoringPriorValuesAndProvidesTimestamps)
+TEST_F(PlatformRuntimeBackendTests, AppliesMetadataWithoutChangingMouseHintsAndProvidesTimestamps)
 {
     m_fake.hints[SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH] = "previous";
     m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)] = "Prior App";
@@ -2068,18 +2364,15 @@ TEST_F(PlatformRuntimeBackendTests,
         EXPECT_EQ(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Identifier)],
                   "org.ponder.workbench");
         EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
-                  std::string_view{"1"});
-        EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE),
-                  std::string_view{"0"});
-        EXPECT_EQ(m_fake.hints.size(), 2U);
-        EXPECT_TRUE(m_fake.policiesObservedDuringInitialization);
+                  std::string_view{"previous"});
+        EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE), nullptr);
+        EXPECT_EQ(m_fake.hints.size(), 1U);
         EXPECT_TRUE(m_fake.metadataObservedDuringInitialization);
         EXPECT_EQ(runtime.Now().GetTimeSinceEpoch(), std::chrono::nanoseconds{987'654'321});
     }
 
     EXPECT_EQ(m_fake.quitCalls, 1);
-    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
-              std::string_view{"previous"});
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH), nullptr);
     EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE), nullptr);
     EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)].has_value());
     EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)].has_value());
@@ -2147,6 +2440,9 @@ TEST_F(PlatformRuntimeBackendTests, RestoresAOriginallyPresentEmptyHint)
             pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
         ASSERT_TRUE(result.HasValue());
         pond::platform::PlatformRuntime runtime = std::move(result).GetValue();
+        ASSERT_TRUE(runtime.GetHintManager()
+                        .PushHint(pond::platform::hints::MouseFocusClickThrough{true})
+                        .HasValue());
     }
 
     const auto iterator = m_fake.hints.find(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH);
@@ -2298,25 +2594,44 @@ TEST_F(PlatformRuntimeBackendTests, RejectsExternallyInitializedSdl)
     pond::platform::PlatformRuntime runtime = std::move(retry).GetValue();
 }
 
-TEST_F(PlatformRuntimeBackendTests, RestoresHintsAfterHintFailureAndPermitsRetry)
+TEST_F(PlatformRuntimeBackendTests, RestoresExplicitHintsAfterMutationFailureAndPermitsRetry)
 {
     m_fake.hints[SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH] = "old-focus";
     m_fake.hints[SDL_HINT_MOUSE_AUTO_CAPTURE] = "old-capture";
-    m_fake.failingHint = SDL_HINT_MOUSE_AUTO_CAPTURE;
-    m_fake.hintFailuresRemaining = 1;
 
-    auto result = pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    {
+        auto runtimeResult =
+            pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+        ASSERT_TRUE(runtimeResult.HasValue());
+        pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
 
-    ASSERT_FALSE(result.HasValue());
-    EXPECT_EQ(result.GetError().GetCode(),
-              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
-    EXPECT_NE(result.GetError().GetMessage().find("synthetic hint failure"),
-              std::string_view::npos);
+        ASSERT_TRUE(runtime.GetHintManager()
+                        .PushHint(pond::platform::hints::MouseFocusClickThrough{true})
+                        .HasValue());
+
+        m_fake.failingHint = SDL_HINT_MOUSE_AUTO_CAPTURE;
+        m_fake.hintFailuresRemaining = 1;
+        auto hintResult = runtime.GetHintManager().PushHint(
+            pond::platform::hints::MouseAutoCapture{false});
+
+        ASSERT_FALSE(hintResult.HasValue());
+        EXPECT_EQ(
+            hintResult.GetError().GetCode(),
+            pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
+        EXPECT_NE(hintResult.GetError().GetMessage().find("SDL_SetHintWithPriority"),
+                  std::string_view::npos);
+        EXPECT_NE(hintResult.GetError().GetMessage().find("synthetic hint failure"),
+                  std::string_view::npos);
+        EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
+                  std::string_view{"1"});
+        EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE),
+                  std::string_view{"old-capture"});
+        EXPECT_EQ(m_fake.initializeVideoCalls, 1);
+    }
+
     EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
               std::string_view{"old-focus"});
-    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE),
-              std::string_view{"old-capture"});
-    EXPECT_EQ(m_fake.initializeVideoCalls, 0);
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_AUTO_CAPTURE), nullptr);
 
     auto retry = pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
     ASSERT_TRUE(retry.HasValue());
@@ -2370,8 +2685,7 @@ TEST_F(PlatformRuntimeBackendTests, PropagatesInitializationFailureWithoutRestor
     EXPECT_NE(result.GetError().GetMessage().find("synthetic video initialization failure"),
               std::string_view::npos);
     EXPECT_EQ(m_fake.quitCalls, 1);
-    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH),
-              std::string_view{"old-focus"});
+    EXPECT_EQ(GetHintValue(m_fake, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH), nullptr);
     EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Name)].has_value());
     EXPECT_FALSE(m_fake.metadata[MetadataIndex(ApplicationMetadataProperty::Version)].has_value());
 
@@ -2443,6 +2757,9 @@ TEST_F(PlatformRuntimeBackendTests, HoldsSingletonUntilHintRestorationCompletes)
             pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
         ASSERT_TRUE(result.HasValue());
         pond::platform::PlatformRuntime runtime = std::move(result).GetValue();
+        ASSERT_TRUE(runtime.GetHintManager()
+                        .PushHint(pond::platform::hints::MouseFocusClickThrough{true})
+                        .HasValue());
     }
 
     ASSERT_TRUE(m_fake.attemptedCreateDuringRestoration);
@@ -2781,13 +3098,14 @@ TEST_F(PlatformRuntimeBackendTests, ReturnsContextualWindowOperationFailures)
         m_fake.failingWindowOperation = std::move(operation);
         m_fake.windowFailuresRemaining = 1;
     };
-    const auto expectBackendFailure = [](const auto& result, std::string_view operation)
+    const auto expectBackendFailure = [](const auto& result, std::string_view operation,
+                                         std::string_view context = "backend window")
     {
         ASSERT_FALSE(result.HasValue());
         EXPECT_EQ(result.GetError().GetCode(),
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
         EXPECT_NE(result.GetError().GetMessage().find(operation), std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("window 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find(context), std::string_view::npos);
     };
 
     configureFailure("set-window-title");
@@ -2809,10 +3127,10 @@ TEST_F(PlatformRuntimeBackendTests, ReturnsContextualWindowOperationFailures)
 
     m_fake.failingWindowOperation.clear();
     m_fake.windows.front().width = -1;
-    expectBackendFailure(window.GetLogicalSize(), "SDL_GetWindowSize");
+    expectBackendFailure(window.GetLogicalSize(), "SDL_GetWindowSize", "window 1");
     m_fake.windows.front().width = 100;
     m_fake.windows.front().pixelHeight = -1;
-    expectBackendFailure(window.GetPixelSize(), "SDL_GetWindowSizeInPixels");
+    expectBackendFailure(window.GetPixelSize(), "SDL_GetWindowSizeInPixels", "window 1");
 }
 
 TEST_F(PlatformRuntimeBackendTests, MovesWindowsWithoutChangingTheirStableIdentity)
@@ -3294,21 +3612,18 @@ TEST_F(PlatformRuntimeBackendTests, ReportsNonResizableAndBackendUnsupportedWind
     configureUnsupported("minimize-window");
     auto result = window.Minimize();
     expectUnsupported(result, "SDL_MinimizeWindow");
-    EXPECT_NE(result.GetError().GetMessage().find("synthetic minimize-window unsupported"),
-              std::string_view::npos);
+    EXPECT_NE(result.GetError().GetMessage().find("backend window"), std::string_view::npos);
 
     configureUnsupported("maximize-window");
     result = window.Maximize();
     expectUnsupported(result, "SDL_MaximizeWindow");
-    EXPECT_NE(result.GetError().GetMessage().find("synthetic maximize-window unsupported"),
-              std::string_view::npos);
+    EXPECT_NE(result.GetError().GetMessage().find("backend window"), std::string_view::npos);
 
     backendWindow.minimized = true;
     configureUnsupported("restore-window");
     result = window.Restore();
     expectUnsupported(result, "SDL_RestoreWindow");
-    EXPECT_NE(result.GetError().GetMessage().find("synthetic restore-window unsupported"),
-              std::string_view::npos);
+    EXPECT_NE(result.GetError().GetMessage().find("backend window"), std::string_view::npos);
 }
 
 TEST_F(PlatformRuntimeBackendTests, ReportsTypedUnsupportedPropertyRequests)
@@ -3330,13 +3645,14 @@ TEST_F(PlatformRuntimeBackendTests, ReportsTypedUnsupportedPropertyRequests)
         m_fake.unsupportedWindowOperationsRemaining = 1;
     };
     const auto expectUnsupported =
-        [](const pond::core::VoidResult& result, std::string_view operation)
+        [](const pond::core::VoidResult& result, std::string_view operation,
+           std::string_view context = "backend window")
     {
         ASSERT_FALSE(result.HasValue());
         EXPECT_EQ(result.GetError().GetCode(),
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
         EXPECT_NE(result.GetError().GetMessage().find(operation), std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("window 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find(context), std::string_view::npos);
     };
 
     configureUnsupported("set-window-fullscreen-mode-to-desktop");
@@ -3359,9 +3675,9 @@ TEST_F(PlatformRuntimeBackendTests, ReportsTypedUnsupportedPropertyRequests)
     backendWindow.desktopFullscreen = true;
     const std::size_t callCount = m_fake.calls.size();
     expectUnsupported(window.SetDecoration(pond::platform::WindowDecoration::Borderless),
-                      "decoration");
+                      "decoration", "window 1");
     EXPECT_EQ(m_fake.calls.size(), callCount + 1);
-    expectUnsupported(window.SetResizable(false), "resizability");
+    expectUnsupported(window.SetResizable(false), "resizability", "window 1");
     EXPECT_EQ(m_fake.calls.size(), callCount + 2);
 }
 
@@ -3383,13 +3699,14 @@ TEST_F(PlatformRuntimeBackendTests, ReportsContextualWindowPropertyFailures)
         m_fake.failingWindowOperation = std::move(operation);
         m_fake.windowFailuresRemaining = 1;
     };
-    const auto expectBackendFailure = [](const auto& result, std::string_view operation)
+    const auto expectBackendFailure = [](const auto& result, std::string_view operation,
+                                         std::string_view context = "backend window")
     {
         ASSERT_FALSE(result.HasValue());
         EXPECT_EQ(result.GetError().GetCode(),
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
         EXPECT_NE(result.GetError().GetMessage().find(operation), std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("window 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find(context), std::string_view::npos);
     };
 
     configureFailure("set-window-fullscreen-mode-to-desktop");
@@ -3442,7 +3759,7 @@ TEST_F(PlatformRuntimeBackendTests, ReportsPropertyQueryFailuresAndContradictory
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
         EXPECT_NE(result.GetError().GetMessage().find("SDL_GetWindowFlags"),
                   std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("window 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find("backend window"), std::string_view::npos);
     };
 
     configurePropertiesFailure();
@@ -3763,7 +4080,8 @@ TEST_F(PlatformRuntimeBackendTests, ReportsContextualDisplayBackendFailures)
         EXPECT_EQ(result.GetError().GetCode(),
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
         EXPECT_NE(result.GetError().GetMessage().find(backendOperation), std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("display 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find("backend display 55"),
+                  std::string_view::npos);
     };
 
     expectQueryFailure("get-display-name", "SDL_GetDisplayName");
@@ -3981,7 +4299,7 @@ TEST_F(PlatformRuntimeBackendTests, ReportsWindowDisplayAndScaleFailures)
         EXPECT_EQ(result.GetError().GetCode(),
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
         EXPECT_NE(result.GetError().GetMessage().find(operation), std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("window 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find("window"), std::string_view::npos);
     };
 
     configureFailure("get-display-for-window");
@@ -4974,7 +5292,7 @@ TEST_F(PlatformRuntimeBackendTests, ReportsContextualTextInputBackendFailures)
         EXPECT_EQ(result.GetError().GetCode(),
                   pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
         EXPECT_NE(result.GetError().GetMessage().find(operation), std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("window 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find("backend window"), std::string_view::npos);
     };
 
     m_fake.failingWindowOperation = "start-text-input";
@@ -5218,7 +5536,7 @@ TEST_F(PlatformRuntimeBackendTests, ReportsWindowMouseFailuresWithoutCachingRequ
         ASSERT_FALSE(result.HasValue());
         EXPECT_EQ(result.GetError().GetCode(), pond::platform::ToErrorCode(code));
         EXPECT_NE(result.GetError().GetMessage().find(operation), std::string_view::npos);
-        EXPECT_NE(result.GetError().GetMessage().find("window 1"), std::string_view::npos);
+        EXPECT_NE(result.GetError().GetMessage().find("backend window"), std::string_view::npos);
     };
 
     m_fake.failingWindowOperation = "set-window-mouse-grab";

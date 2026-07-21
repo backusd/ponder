@@ -2,6 +2,11 @@
 
 #include <ponder/core/Result.hpp>
 
+#include <format>
+#include <ostream>
+#include <string>
+#include <string_view>
+
 namespace pond::platform
 {
 // Values from 0x0001'0000 through 0x0001'FFFF are reserved for platform errors.
@@ -32,5 +37,51 @@ enum class PlatformErrorCode : core::ErrorCodeValue
     }
 
     return core::ErrorCode{core::ErrorCategory::Internal, value};
+}
+} // namespace pond::platform
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::PlatformErrorCode> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(pond::platform::PlatformErrorCode code, FormatContext& context) const
+    {
+        using pond::platform::PlatformErrorCode;
+
+        string text;
+        switch (code)
+        {
+        case PlatformErrorCode::InvalidArgument:
+            text = "invalid_argument";
+            break;
+        case PlatformErrorCode::RuntimeAlreadyActive:
+            text = "runtime_already_active";
+            break;
+        case PlatformErrorCode::BackendFailure:
+            text = "backend_failure";
+            break;
+        case PlatformErrorCode::NotFound:
+            text = "not_found";
+            break;
+        case PlatformErrorCode::Unsupported:
+            text = "unsupported";
+            break;
+        default:
+            text = std::format("unknown({})", static_cast<pond::core::ErrorCodeValue>(code));
+            break;
+        }
+
+        return formatter<string>::format(text, context);
+    }
+};
+} // namespace std
+
+namespace pond::platform
+{
+inline std::ostream& operator<<(std::ostream& output, PlatformErrorCode code)
+{
+    return output << std::format("{}", code);
 }
 } // namespace pond::platform

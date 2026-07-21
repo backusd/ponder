@@ -36,7 +36,6 @@ struct DialogCompletionRecord final
     DialogOutcome outcome;
 };
 
-
 struct RuntimeDisplayRecord final
 {
     DisplayId id;
@@ -60,8 +59,8 @@ class PlatformRuntimeState final
 {
 public:
     PlatformRuntimeState(std::unique_ptr<IPlatformRuntimeBackend> backend,
-                         PlatformWindowBackend windowBackend,
-                         PlatformDisplayBackend displayBackend) noexcept;
+                         std::unique_ptr<IPlatformWindowBackend> windowBackend,
+                         std::unique_ptr<IPlatformDisplayBackend> displayBackend) noexcept;
     ~PlatformRuntimeState() noexcept;
 
     PlatformRuntimeState(const PlatformRuntimeState&) = delete;
@@ -91,12 +90,11 @@ public:
     [[nodiscard]] std::optional<PlatformEvent> PollEvent();
     [[nodiscard]] core::Result<std::vector<DisplayInfo>> EnumerateDisplays();
     [[nodiscard]] core::Result<DisplayInfo> GetDisplayInfo(DisplayId id);
-    [[nodiscard]] core::Result<DisplayId> GetDisplayIdForWindow(void* nativeWindow,
-                                                                std::string_view windowContext);
+    [[nodiscard]] core::Result<DisplayId> GetDisplayIdForWindow(BackendWindowHandle window);
     [[nodiscard]] core::Result<float> GetPixelDensityForWindow(
-        void* nativeWindow, std::string_view windowContext) const;
+        BackendWindowHandle window, std::string_view windowContext) const;
     [[nodiscard]] core::Result<float> GetDisplayScaleForWindow(
-        void* nativeWindow, std::string_view windowContext) const;
+        BackendWindowHandle window, std::string_view windowContext) const;
     [[nodiscard]] core::VoidResult SetMouseCapture(bool enabled);
     [[nodiscard]] core::Result<LogicalPoint> GetGlobalMousePosition() const;
     [[nodiscard]] core::VoidResult SetSystemCursor(SystemCursorShape shape);
@@ -134,8 +132,8 @@ private:
     void DestroySystemCursors() noexcept;
 
     std::unique_ptr<IPlatformRuntimeBackend> m_backend;
-    PlatformWindowBackend m_windowBackend;
-    PlatformDisplayBackend m_displayBackend;
+    std::unique_ptr<IPlatformWindowBackend> m_windowBackend;
+    std::unique_ptr<IPlatformDisplayBackend> m_displayBackend;
     std::thread::id m_ownerThread;
     RuntimeChildRegistry m_registry;
     std::unordered_map<std::uint32_t, RuntimeWindowRecord> m_windowsByBackendId;

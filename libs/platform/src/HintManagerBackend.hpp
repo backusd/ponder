@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/core/Result.hpp>
 #include <ponder/platform/HintManager.hpp>
 
 namespace pond::platform::detail
@@ -17,8 +18,9 @@ public:
     [[nodiscard]] virtual bool IsMainThread() const noexcept = 0;
     [[nodiscard]] virtual bool HasInitializedSubsystems() const noexcept = 0;
     [[nodiscard]] virtual const char* GetHint(const char* name) const noexcept = 0;
-    [[nodiscard]] virtual bool SetHintOverride(const char* name, const char* value) noexcept = 0;
-    [[nodiscard]] virtual bool ResetHint(const char* name) noexcept = 0;
+    [[nodiscard]] virtual core::VoidResult SetHintOverride(const char* name,
+                                                           const char* value) = 0;
+    [[nodiscard]] virtual core::VoidResult ResetHint(const char* name) = 0;
 
 protected:
     IHintBackend() noexcept = default;

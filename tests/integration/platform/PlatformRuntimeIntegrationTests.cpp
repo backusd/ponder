@@ -133,8 +133,15 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
         .applicationIdentifier = std::string{"org.ponder.integration"},
         .configureHintsBeforeInitialization = [](pond::platform::HintManager& hints)
         {
-            const auto result = hints.PushHint(pond::platform::hints::VideoDriver{"dummy"});
-            EXPECT_TRUE(result.HasValue());
+            const auto videoResult =
+                hints.PushHint(pond::platform::hints::VideoDriver{"dummy"});
+            EXPECT_TRUE(videoResult.HasValue());
+            const auto focusResult =
+                hints.PushHint(pond::platform::hints::MouseFocusClickThrough{true});
+            EXPECT_TRUE(focusResult.HasValue());
+            const auto captureResult =
+                hints.PushHint(pond::platform::hints::MouseAutoCapture{false});
+            EXPECT_TRUE(captureResult.HasValue());
         }};
 
     const std::uint64_t ticksBefore = SDL_GetTicksNS();

@@ -2,6 +2,7 @@ ponder_add_project_test(ponder_platform_tests
     SOURCES
         DialogTests.cpp
         DisplayTests.cpp
+        FormattingTests.cpp
         GeometryTests.cpp
         IdentifierTests.cpp
         KeyboardTests.cpp

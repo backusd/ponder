@@ -36,21 +36,6 @@ struct ExitStatus final
 namespace std
 {
 template <>
-struct formatter<pond::platform::WindowId> : formatter<string>
-{
-    template <typename FormatContext>
-    auto format(pond::platform::WindowId id, FormatContext& context) const
-    {
-        if (!id.IsValid())
-        {
-            return formatter<string>::format("invalid", context);
-        }
-
-        return formatter<string>::format(std::to_string(id.GetValue()), context);
-    }
-};
-
-template <>
 struct formatter<ExitStatus> : formatter<string>
 {
     template <typename FormatContext>
@@ -814,6 +799,10 @@ void UpdateWindowTitle(AppState& state)
     RETURN_ERROR_IF_FAILED(runtimeResult);
 
     platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    RETURN_ERROR_IF_FAILED(
+        runtime.GetHintManager().PushHint(platform::hints::MouseFocusClickThrough{true}));
+    RETURN_ERROR_IF_FAILED(
+        runtime.GetHintManager().PushHint(platform::hints::MouseAutoCapture{false}));
     const platform::Timestamp startTimestamp = runtime.Now();
     std::vector<WindowSlot> windows;
     windows.reserve(1);

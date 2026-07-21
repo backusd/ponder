@@ -72,4 +72,28 @@ struct formatter<pond::platform::DisplayOrientation> : formatter<string_view>
             pond::platform::GetDisplayOrientationName(orientation), context);
     }
 };
+template <>
+struct formatter<pond::platform::DisplayInfo> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const pond::platform::DisplayInfo& info, FormatContext& context) const
+    {
+        const string refreshRate = info.refreshRateHertz.has_value()
+                                       ? std::format("{} Hz", *info.refreshRateHertz)
+                                       : "unknown";
+        return formatter<string>::format(
+            std::format("display {} '{}': bounds={}, usableBounds={}, refreshRate={}, "
+                        "orientation={}, contentScale={}",
+                        info.id, info.name, info.bounds, info.usableBounds, refreshRate,
+                        info.orientation, info.contentScale),
+            context);
+    }
+};
 } // namespace std
+namespace pond::platform
+{
+inline std::ostream& operator<<(std::ostream& output, const DisplayInfo& info)
+{
+    return output << std::format("{}", info);
+}
+} // namespace pond::platform

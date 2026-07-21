@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "HintManagerBackend.hpp"
+#include "SdlError.hpp"
 
 namespace
 {
@@ -39,30 +40,39 @@ public:
         return iterator != hints.end() ? iterator->second.c_str() : nullptr;
     }
 
-    [[nodiscard]] bool SetHintOverride(const char* name, const char* value) noexcept override
+    [[nodiscard]] pond::core::VoidResult SetHintOverride(const char* name,
+                                                         const char* value) override
     {
         calls.emplace_back(std::string{"set:"} + name + "=" + value);
         if (setFailuresRemaining > 0)
         {
             --setFailuresRemaining;
             static_cast<void>(SDL_SetError("synthetic hint set failure"));
-            return false;
+            return pond::core::VoidResult::FromError(
+                pond::platform::detail::CaptureSdlFailure(
+                    pond::platform::ToErrorCode(
+                        pond::platform::PlatformErrorCode::BackendFailure),
+                    "SDL_SetHintWithPriority", name));
         }
         hints[name] = value;
-        return true;
+        return pond::core::VoidResult::Success();
     }
 
-    [[nodiscard]] bool ResetHint(const char* name) noexcept override
+    [[nodiscard]] pond::core::VoidResult ResetHint(const char* name) override
     {
         calls.emplace_back(std::string{"reset:"} + name);
         if (resetFailuresRemaining > 0)
         {
             --resetFailuresRemaining;
             static_cast<void>(SDL_SetError("synthetic hint reset failure"));
-            return false;
+            return pond::core::VoidResult::FromError(
+                pond::platform::detail::CaptureSdlFailure(
+                    pond::platform::ToErrorCode(
+                        pond::platform::PlatformErrorCode::BackendFailure),
+                    "SDL_ResetHint", name));
         }
         hints.erase(name);
-        return true;
+        return pond::core::VoidResult::Success();
     }
 
     bool mainThread{true};
@@ -418,6 +428,10 @@ TEST_F(HintManagerTests, PreservesStacksWhenBackendMutationsFail)
     ASSERT_FALSE(result.HasValue());
     EXPECT_EQ(result.GetError().GetCode(),
               pond::platform::ToErrorCode(PlatformErrorCode::BackendFailure));
+    EXPECT_NE(result.GetError().GetMessage().find("SDL_SetHintWithPriority"),
+              std::string_view::npos);
+    EXPECT_NE(result.GetError().GetMessage().find("synthetic hint set failure"),
+              std::string_view::npos);
     EXPECT_EQ(backend.hints["SDL_MOUSE_FOCUS_CLICKTHROUGH"], "original");
 
     ASSERT_TRUE(manager.PushHint(MouseFocusClickThrough{false}).HasValue());
@@ -432,6 +446,9 @@ TEST_F(HintManagerTests, PreservesStacksWhenBackendMutationsFail)
     backend.resetFailuresRemaining = 1;
     result = manager.ClearHints(MouseAutoCapture{});
     ASSERT_FALSE(result.HasValue());
+    EXPECT_NE(result.GetError().GetMessage().find("SDL_ResetHint"), std::string_view::npos);
+    EXPECT_NE(result.GetError().GetMessage().find("synthetic hint reset failure"),
+              std::string_view::npos);
     EXPECT_EQ(backend.hints["SDL_MOUSE_AUTO_CAPTURE"], "0");
     ASSERT_TRUE(manager.ClearHints(MouseAutoCapture{}).HasValue());
     EXPECT_FALSE(backend.hints.contains("SDL_MOUSE_AUTO_CAPTURE"));

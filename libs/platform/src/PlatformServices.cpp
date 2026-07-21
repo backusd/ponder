@@ -6,17 +6,14 @@
 #include <source_location>
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include "PlatformRuntimeState.hpp"
-#include "SdlError.hpp"
 
 namespace pond::platform
 {
 namespace
 {
 constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
 
 [[nodiscard]] core::Error MakeUnsupportedClipboardError(
@@ -51,15 +48,7 @@ core::Result<std::string> PlatformRuntimeState::GetClipboardText() const
         return core::Result<std::string>::FromError(MakeUnsupportedClipboardError());
     }
 
-    BackendClipboardTextResult backendText = m_backend->GetClipboardText();
-    if (!backendText.succeeded ||
-        (backendText.text.empty() && !backendText.errorText.empty()))
-    {
-        return core::Result<std::string>::FromError(detail::CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetClipboardText", "clipboard text", backendText.errorText));
-    }
-
-    return std::move(backendText.text);
+    return m_backend->GetClipboardText();
 }
 
 core::VoidResult PlatformRuntimeState::SetClipboardText(std::string_view text)
@@ -72,13 +61,7 @@ core::VoidResult PlatformRuntimeState::SetClipboardText(std::string_view text)
         return core::VoidResult::FromError(MakeUnsupportedClipboardError());
     }
 
-    if (!m_backend->SetClipboardText(text))
-    {
-        return core::VoidResult::FromError(detail::CaptureSdlFailure(
-            kBackendFailureCode, "SDL_SetClipboardText", "clipboard text"));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend->SetClipboardText(text);
 }
 
 core::VoidResult PlatformRuntimeState::OpenExternalUri(std::string_view uri)
@@ -93,13 +76,7 @@ core::VoidResult PlatformRuntimeState::OpenExternalUri(std::string_view uri)
     core::VoidResult validation = ValidateNullTerminatedUtf8(uri, "External URI");
     RETURN_ERROR_IF_FAILED(validation);
 
-    if (!m_backend->OpenExternalUri(uri))
-    {
-        return core::VoidResult::FromError(
-            detail::CaptureSdlFailure(kBackendFailureCode, "SDL_OpenURL", "external URI"));
-    }
-
-    return core::VoidResult::Success();
+    return m_backend->OpenExternalUri(uri);
 }
 } // namespace detail
 

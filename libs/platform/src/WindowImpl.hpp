@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-#include "PlatformRuntimeBackend.hpp"
+#include "IPlatformWindowBackend.hpp"
 
 namespace pond::platform::detail
 {
@@ -30,8 +30,8 @@ public:
     WindowImpl(WindowImpl&&) = delete;
     WindowImpl& operator=(WindowImpl&&) = delete;
 
-    WindowImpl(PlatformRuntimeState& runtime, PlatformWindowBackend backend, void* nativeWindow,
-               std::uint32_t backendWindowId,
+    WindowImpl(PlatformRuntimeState& runtime, IPlatformWindowBackend& backend,
+               BackendWindowHandle backendWindow, std::uint32_t backendWindowId,
                WindowGraphicsCompatibility graphicsCompatibility) noexcept;
 
     [[nodiscard]] WindowId GetId() const;
@@ -91,8 +91,8 @@ private:
     static constexpr std::size_t kErrorContextCapacity = 32;
 
     PlatformRuntimeState* m_runtime{};
-    PlatformWindowBackend m_backend;
-    void* m_nativeWindow{};
+    IPlatformWindowBackend& m_backend;
+    BackendWindowHandle m_backendWindow;
     std::uint32_t m_backendWindowId{};
     WindowId m_id;
     WindowGraphicsCompatibility m_graphicsCompatibility{WindowGraphicsCompatibility::Default};

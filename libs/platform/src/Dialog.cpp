@@ -364,8 +364,8 @@ core::Result<DialogRequestId> PlatformRuntimeState::ShowDialog(
         parentWindow = parent->second.window;
         PONDER_VERIFY(parentWindow != nullptr, "Dialog parent window record has no owning window");
         parentWindow->VerifyUsable("dialog parent lookup");
-        parentBackendWindow.emplace(
-            reinterpret_cast<BackendWindowHandle::ValueType>(parentWindow->m_nativeWindow));
+        parentBackendWindow = parentWindow->m_backendWindow;
+
     }
 
     PONDER_VERIFY(m_nextDialogRequestId != 0, "Platform dialog request ID space is exhausted");

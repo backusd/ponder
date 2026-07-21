@@ -10,8 +10,10 @@
 #include <ponder/platform/Timing.hpp>
 #include <ponder/platform/Window.hpp>
 
+#include <format>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -73,4 +75,34 @@ private:
 
     std::unique_ptr<detail::PlatformRuntimeState> m_state;
 };
+} // namespace pond::platform
+
+namespace std
+{
+template <>
+struct formatter<pond::platform::PlatformRuntimeDesc> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const pond::platform::PlatformRuntimeDesc& desc, FormatContext& context) const
+    {
+        const string version =
+            desc.applicationVersion.has_value() ? *desc.applicationVersion : "none";
+        const string identifier =
+            desc.applicationIdentifier.has_value() ? *desc.applicationIdentifier : "none";
+        return formatter<string>::format(
+            std::format("applicationName='{}', applicationVersion='{}', "
+                        "applicationIdentifier='{}', configuresHints={}",
+                        desc.applicationName, version, identifier,
+                        desc.configureHintsBeforeInitialization != nullptr),
+            context);
+    }
+};
+} // namespace std
+
+namespace pond::platform
+{
+inline std::ostream& operator<<(std::ostream& output, const PlatformRuntimeDesc& desc)
+{
+    return output << std::format("{}", desc);
+}
 } // namespace pond::platform
