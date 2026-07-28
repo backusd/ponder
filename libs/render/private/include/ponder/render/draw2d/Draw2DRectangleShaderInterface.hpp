@@ -36,23 +36,20 @@ struct Draw2DRectangleVertexAttribute final
     std::uint32_t offset{};
     Draw2DRectangleVertexAttributeFormat format{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DRectangleVertexAttribute& lhs,
-        const Draw2DRectangleVertexAttribute& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DRectangleVertexAttribute& lhs,
+                                                   const Draw2DRectangleVertexAttribute& rhs) noexcept = default;
 };
 
 inline constexpr std::uint32_t kDraw2DRectangleVertexBinding{0U};
 inline constexpr std::uint32_t kDraw2DRectangleVertexStride{sizeof(Draw2DVertex)};
-inline constexpr Draw2DRectangleVertexAttribute kDraw2DRectanglePositionAttribute{
-    .binding = kDraw2DRectangleVertexBinding,
-    .location = 0U,
-    .offset = offsetof(Draw2DVertex, x),
-    .format = Draw2DRectangleVertexAttributeFormat::Float32x2};
-inline constexpr Draw2DRectangleVertexAttribute kDraw2DRectangleColorAttribute{
-    .binding = kDraw2DRectangleVertexBinding,
-    .location = 1U,
-    .offset = offsetof(Draw2DVertex, color),
-    .format = Draw2DRectangleVertexAttributeFormat::Unorm8x4};
+inline constexpr Draw2DRectangleVertexAttribute kDraw2DRectanglePositionAttribute{.binding = kDraw2DRectangleVertexBinding,
+                                                                                  .location = 0U,
+                                                                                  .offset = offsetof(Draw2DVertex, x),
+                                                                                  .format = Draw2DRectangleVertexAttributeFormat::Float32x2};
+inline constexpr Draw2DRectangleVertexAttribute kDraw2DRectangleColorAttribute{.binding = kDraw2DRectangleVertexBinding,
+                                                                               .location = 1U,
+                                                                               .offset = offsetof(Draw2DVertex, color),
+                                                                               .format = Draw2DRectangleVertexAttributeFormat::Unorm8x4};
 inline constexpr std::array<Draw2DRectangleVertexAttribute, 2U> kDraw2DRectangleVertexAttributes{
     kDraw2DRectanglePositionAttribute,
     kDraw2DRectangleColorAttribute,
@@ -63,9 +60,7 @@ struct Draw2DRectangleConstants final
     std::uint32_t pixelExtentWidth{};
     std::uint32_t pixelExtentHeight{};
 
-    [[nodiscard]] friend constexpr bool operator==(const Draw2DRectangleConstants& lhs,
-                                                   const Draw2DRectangleConstants& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DRectangleConstants& lhs, const Draw2DRectangleConstants& rhs) noexcept = default;
 };
 
 enum class Draw2DRectangleShaderStage : std::uint8_t
@@ -74,8 +69,7 @@ enum class Draw2DRectangleShaderStage : std::uint8_t
     Fragment
 };
 
-inline constexpr Draw2DRectangleShaderStage kDraw2DRectangleConstantsStage{
-    Draw2DRectangleShaderStage::Vertex};
+inline constexpr Draw2DRectangleShaderStage kDraw2DRectangleConstantsStage{Draw2DRectangleShaderStage::Vertex};
 inline constexpr std::uint32_t kDraw2DRectangleConstantsOffset{0U};
 inline constexpr std::uint32_t kDraw2DRectangleConstantsSize{sizeof(Draw2DRectangleConstants)};
 inline constexpr std::uint32_t kDraw2DRectangleColorOutputLocation{0U};
@@ -94,12 +88,10 @@ static_assert(offsetof(Draw2DRectangleConstants, pixelExtentHeight) == 4U);
 static_assert(kDraw2DRectangleVertexStride == 12U);
 static_assert(kDraw2DRectanglePositionAttribute.location == 0U);
 static_assert(kDraw2DRectanglePositionAttribute.offset == 0U);
-static_assert(kDraw2DRectanglePositionAttribute.format ==
-              Draw2DRectangleVertexAttributeFormat::Float32x2);
+static_assert(kDraw2DRectanglePositionAttribute.format == Draw2DRectangleVertexAttributeFormat::Float32x2);
 static_assert(kDraw2DRectangleColorAttribute.location == 1U);
 static_assert(kDraw2DRectangleColorAttribute.offset == 8U);
-static_assert(kDraw2DRectangleColorAttribute.format ==
-              Draw2DRectangleVertexAttributeFormat::Unorm8x4);
+static_assert(kDraw2DRectangleColorAttribute.format == Draw2DRectangleVertexAttributeFormat::Unorm8x4);
 static_assert(kDraw2DRectangleConstantsOffset == 0U);
 static_assert(kDraw2DRectangleConstantsSize == 8U);
 static_assert(kDraw2DRectangleConstantsStage == Draw2DRectangleShaderStage::Vertex);

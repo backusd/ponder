@@ -10,7 +10,7 @@
 #include <string>
 #include <string_view>
 
-namespace pond::platform
+namespace ponder::platform
 {
 enum class DisplayOrientation : std::uint8_t
 {
@@ -21,8 +21,7 @@ enum class DisplayOrientation : std::uint8_t
     PortraitFlipped
 };
 
-[[nodiscard]] constexpr std::string_view GetDisplayOrientationName(
-    DisplayOrientation orientation) noexcept
+[[nodiscard]] constexpr std::string_view GetDisplayOrientationName(DisplayOrientation orientation) noexcept
 {
     switch (orientation)
     {
@@ -41,11 +40,6 @@ enum class DisplayOrientation : std::uint8_t
     return "unrecognized";
 }
 
-inline std::ostream& operator<<(std::ostream& output, DisplayOrientation orientation)
-{
-    return output << GetDisplayOrientationName(orientation);
-}
-
 struct DisplayInfo final
 {
     DisplayId id;
@@ -58,42 +52,43 @@ struct DisplayInfo final
 
     [[nodiscard]] friend bool operator==(const DisplayInfo& lhs, const DisplayInfo& rhs) = default;
 };
-} // namespace pond::platform
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::DisplayOrientation> : formatter<string_view>
+struct formatter<ponder::platform::DisplayOrientation> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::DisplayOrientation orientation, FormatContext& context) const
+    auto format(ponder::platform::DisplayOrientation orientation, FormatContext& context) const
     {
-        return formatter<string_view>::format(
-            pond::platform::GetDisplayOrientationName(orientation), context);
+        return formatter<string_view>::format(ponder::platform::GetDisplayOrientationName(orientation), context);
     }
 };
 template <>
-struct formatter<pond::platform::DisplayInfo> : formatter<string>
+struct formatter<ponder::platform::DisplayInfo> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::platform::DisplayInfo& info, FormatContext& context) const
+    auto format(const ponder::platform::DisplayInfo& info, FormatContext& context) const
     {
-        const string refreshRate = info.refreshRateHertz.has_value()
-                                       ? std::format("{} Hz", *info.refreshRateHertz)
-                                       : "unknown";
-        return formatter<string>::format(
-            std::format("display {} '{}': bounds={}, usableBounds={}, refreshRate={}, "
-                        "orientation={}, contentScale={}",
-                        info.id, info.name, info.bounds, info.usableBounds, refreshRate,
-                        info.orientation, info.contentScale),
-            context);
+        const string refreshRate = info.refreshRateHertz.has_value() ? std::format("{} Hz", *info.refreshRateHertz) : "unknown";
+        return formatter<string>::format(std::format("display {} '{}': bounds={}, usableBounds={}, refreshRate={}, "
+                                                     "orientation={}, contentScale={}",
+                                                     info.id, info.name, info.bounds, info.usableBounds, refreshRate, info.orientation,
+                                                     info.contentScale),
+                                         context);
     }
 };
 } // namespace std
-namespace pond::platform
+namespace ponder::platform
 {
+inline std::ostream& operator<<(std::ostream& output, DisplayOrientation orientation)
+{
+    return output << std::format("{}", orientation);
+}
+
 inline std::ostream& operator<<(std::ostream& output, const DisplayInfo& info)
 {
     return output << std::format("{}", info);
 }
-} // namespace pond::platform
+} // namespace ponder::platform

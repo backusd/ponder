@@ -1,19 +1,21 @@
+#include <ponder/core/Exception.hpp>
 #include <ponder/core/Result.hpp>
+#include <ponder/core/Timing.hpp>
 #include <ponder/io/Path.hpp>
+#include <ponder/platform/Hints.hpp>
 #include <ponder/platform/PlatformError.hpp>
-#include <ponder/platform/PlatformRuntime.hpp>
+#include <ponder/platform/Runtime.hpp>
 
-#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <format>
 #include <filesystem>
-#include <print>
+#include <format>
 #include <limits>
 #include <optional>
+#include <print>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -27,7 +29,7 @@ namespace
 {
 struct OptionalWindowId final
 {
-    const std::optional<pond::platform::WindowId>& value;
+    const std::optional<ponder::platform::WindowId>& value;
 };
 } // namespace
 
@@ -47,55 +49,37 @@ struct formatter<OptionalWindowId> : formatter<string>
         return formatter<string>::format(std::format("{}", *id.value), context);
     }
 };
+
 } // namespace std
 
 namespace
 {
-namespace core = pond::core;
+namespace core = ponder::core;
 namespace io = pond::io;
-namespace platform = pond::platform;
+namespace platform = ponder::platform;
 
 struct Options final
 {
-    std::optional<platform::Duration> autoCloseAfter;
+    std::optional<core::Duration> autoCloseAfter;
     std::optional<std::string> externalUri;
     std::optional<std::filesystem::path> dialogLocation;
     std::string clipboardText{"Ponder UTF-8 sample: H2O -> \xCE\x94G"};
     bool showHelp{};
 };
 
-enum class DialogKind : std::uint8_t
-{
-    OpenFile,
-    SaveFile,
-    OpenFolder
-};
-
-struct PendingDialog final
-{
-    platform::DialogRequestId id;
-    DialogKind kind{DialogKind::OpenFile};
-    platform::Timestamp requestedAt{};
-    std::string label;
-    bool parented{};
-};
-
 struct WindowSlot final
 {
     platform::Window window;
-    bool titleUpdateFailureReported{};
 };
 
 struct AppState final
 {
-    platform::PlatformRuntime& runtime;
+    platform::Runtime& runtime;
     const Options& options;
     std::vector<WindowSlot>& windows;
-    platform::Timestamp startTimestamp;
-    std::vector<PendingDialog> pendingDialogs;
+    core::Timestamp startTimestamp;
     std::uint64_t eventCount{};
     bool shutdownRequested{};
-    bool clipboardCaptureAttempted{};
     bool clipboardModified{};
     std::optional<std::string> originalClipboardText;
     std::string lastAction{"ready"};
@@ -103,60 +87,57 @@ struct AppState final
 
 [[nodiscard]] core::Error MakeOptionError(std::string message)
 {
-    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0},
-                       std::move(message)};
+    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0}, std::move(message)};
 }
 
 void PrintUsage(std::string_view executableName)
 {
-    std::print(
-        "Usage: {} [options]\n\n"
-        "Options:\n"
-        "  --auto-close-ms <milliseconds>  Exit after a short idle run.\n"
-        "  --clipboard-text <text>         Text copied by the C command.\n"
-        "  --dialog-location <path>        Default dialog location.\n"
-        "  --uri <uri>                     URI opened only after pressing U.\n"
-        "  --help                          Print this help text.\n\n"
-        "Controls:\n"
-        "  F1            Print this help text.\n"
-        "  C / E / R     Copy sample text, copy empty text, or read clipboard.\n"
-        "  B             Restore the clipboard captured before the first write.\n"
-        "  U             Open the URI supplied with --uri.\n"
-        "  O / M         Open parented single-file or unparented multi-file dialog.\n"
-        "  S / F         Open parented save-file or unparented folder dialog.\n"
-        "  A             Launch a concurrent three-dialog batch.\n"
-        "  Q / Escape    Request shutdown; pending dialogs are still consumed.\n",
-        executableName);
+    std::print("Usage: {} [options]\n\n"
+               "Options:\n"
+               "  --auto-close-ms <milliseconds>  Exit after a short idle run.\n"
+               "  --clipboard-text <text>         Text copied by the C command.\n"
+               "  --dialog-location <path>        Default dialog location.\n"
+               "  --uri <uri>                     URI opened only after pressing U.\n"
+               "  --help                          Print this help text.\n\n"
+               "Controls:\n"
+               "  F1            Print this help text.\n"
+               "  C / E / R     Copy sample text, copy empty text, or read clipboard.\n"
+               "  B             Restore the clipboard captured before the first write.\n"
+               "  U             Open the URI supplied with --uri.\n"
+               "  O / M         Open parented single-file or unparented multi-file dialog.\n"
+               "  S / F         Open parented save-file or unparented folder dialog.\n"
+               "  A             Launch a concurrent three-dialog batch.\n"
+               "  Q / Escape    Request shutdown; pending dialogs are still consumed.\n",
+               executableName);
 }
 
-[[nodiscard]] core::Result<platform::Duration> ParseMilliseconds(
-    std::string_view text)
+[[nodiscard]] core::Result<core::Duration> ParseMilliseconds(std::string_view text)
 {
+    using ResultType = core::Result<core::Duration>;
+
     std::uint64_t value{};
     const char* const begin = text.data();
     const char* const end = text.data() + text.size();
     const auto [next, error] = std::from_chars(begin, end, value);
     if (error != std::errc{} || next != end)
     {
-        return core::Result<platform::Duration>::FromError(
-            MakeOptionError("Expected a non-negative integer millisecond value."));
+        return ResultType::FromError(MakeOptionError("Expected a non-negative integer millisecond value."));
     }
 
     using Milliseconds = std::chrono::milliseconds;
-    constexpr auto kMaxMilliseconds = static_cast<std::uint64_t>(
-        std::numeric_limits<Milliseconds::rep>::max());
+    constexpr auto kMaxMilliseconds = static_cast<std::uint64_t>(std::numeric_limits<Milliseconds::rep>::max());
     if (value > kMaxMilliseconds)
     {
-        return core::Result<platform::Duration>::FromError(
-            MakeOptionError("Auto-close duration is too large."));
+        return ResultType::FromError(MakeOptionError("Auto-close duration is too large."));
     }
 
-    return platform::Duration{
-        Milliseconds{static_cast<Milliseconds::rep>(value)}};
+    return core::Duration{Milliseconds{static_cast<Milliseconds::rep>(value)}};
 }
 
 [[nodiscard]] core::Result<Options> ParseOptions(int argc, char** argv)
 {
+    using ResultType = core::Result<Options>;
+
     Options options{};
     for (int index = 1; index < argc; ++index)
     {
@@ -169,21 +150,22 @@ void PrintUsage(std::string_view executableName)
         {
             if (index + 1 >= argc)
             {
-                return core::Result<Options>::FromError(
-                    MakeOptionError("--auto-close-ms requires a value."));
+                return ResultType::FromError(MakeOptionError("--auto-close-ms requires a value."));
             }
 
             ++index;
             auto duration = ParseMilliseconds(argv[index]);
-            RETURN_ERROR_IF_FAILED(duration);
+            if (!duration)
+            {
+                return ResultType::FromError(std::move(duration).GetError());
+            }
             options.autoCloseAfter = std::move(duration).GetValue();
         }
         else if (argument == "--clipboard-text")
         {
             if (index + 1 >= argc)
             {
-                return core::Result<Options>::FromError(
-                    MakeOptionError("--clipboard-text requires a value."));
+                return ResultType::FromError(MakeOptionError("--clipboard-text requires a value."));
             }
             options.clipboardText = argv[++index];
         }
@@ -191,8 +173,7 @@ void PrintUsage(std::string_view executableName)
         {
             if (index + 1 >= argc)
             {
-                return core::Result<Options>::FromError(
-                    MakeOptionError("--dialog-location requires a value."));
+                return ResultType::FromError(MakeOptionError("--dialog-location requires a value."));
             }
             options.dialogLocation = io::PathFromUtf8(argv[++index]);
         }
@@ -200,26 +181,23 @@ void PrintUsage(std::string_view executableName)
         {
             if (index + 1 >= argc)
             {
-                return core::Result<Options>::FromError(
-                    MakeOptionError("--uri requires a value."));
+                return ResultType::FromError(MakeOptionError("--uri requires a value."));
             }
 
             options.externalUri = argv[++index];
             if (options.externalUri->empty())
             {
-                return core::Result<Options>::FromError(MakeOptionError("--uri cannot be empty."));
+                return ResultType::FromError(MakeOptionError("--uri cannot be empty."));
             }
         }
         else
         {
-            return core::Result<Options>::FromError(
-                MakeOptionError("Unknown option: " + std::string{argument}));
+            return ResultType::FromError(MakeOptionError("Unknown option: " + std::string{argument}));
         }
     }
 
     return options;
 }
-
 
 [[nodiscard]] std::string QuoteText(std::string_view text)
 {
@@ -274,27 +252,12 @@ void PrintUsage(std::string_view executableName)
     return QuoteText(io::PathToUtf8(path));
 }
 
-[[nodiscard]] std::string_view ToString(DialogKind kind) noexcept
-{
-    switch (kind)
-    {
-    case DialogKind::OpenFile:
-        return "open-file";
-    case DialogKind::SaveFile:
-        return "save-file";
-    case DialogKind::OpenFolder:
-        return "open-folder";
-    }
-
-    return "unrecognized";
-}
-
 void PrintError(std::string_view operation, const core::Error& error)
 {
     std::println("{} failed: {}", operation, error);
 }
 
-void PrintOperationResult(std::string_view operation, const core::VoidResult& result)
+void PrintServiceResult(std::string_view operation, const core::VoidResult& result)
 {
     if (result)
     {
@@ -375,27 +338,6 @@ void UpdateLastAction(AppState& state, std::string text)
     state.lastAction = Shorten(text, 96);
 }
 
-void CaptureClipboardIfNeeded(AppState& state)
-{
-    if (state.clipboardCaptureAttempted)
-    {
-        return;
-    }
-
-    state.clipboardCaptureAttempted = true;
-    auto original = state.runtime.GetClipboardText();
-    if (!original)
-    {
-        PrintError("PlatformRuntime::GetClipboardText before first write", original.GetError());
-        std::println("Clipboard restoration will be unavailable for this run.");
-        return;
-    }
-
-    state.originalClipboardText = std::move(original).GetValue();
-    std::println("Captured original clipboard text for best-effort restoration ({} byte(s)).",
-                 state.originalClipboardText->size());
-}
-
 void SetClipboardText(AppState& state, std::string_view text, std::string_view label)
 {
     if (!CanStartDesktopWork(state, label))
@@ -403,14 +345,36 @@ void SetClipboardText(AppState& state, std::string_view text, std::string_view l
         return;
     }
 
-    CaptureClipboardIfNeeded(state);
-    auto result = state.runtime.SetClipboardText(text);
-    if (result)
+    std::optional<std::string> capturedOriginal;
+    if (!state.clipboardModified && !state.originalClipboardText.has_value())
     {
-        state.clipboardModified = true;
-        UpdateLastAction(state, "clipboard set to " + QuoteText(text));
+        auto captureResult = state.runtime.ClipboardGetText();
+        if (captureResult)
+        {
+            capturedOriginal = std::move(captureResult).GetValue();
+        }
+        else
+        {
+            PrintError("Runtime::ClipboardGetText(capture original)", captureResult.GetError());
+        }
     }
-    PrintOperationResult(label, result);
+
+    const core::VoidResult setResult = state.runtime.ClipboardSetText(text);
+    if (!setResult)
+    {
+        PrintServiceResult(label, setResult);
+        UpdateLastAction(state, std::string{label} + " failed");
+        return;
+    }
+
+    if (capturedOriginal.has_value())
+    {
+        state.originalClipboardText = std::move(capturedOriginal);
+        std::println("Captured original clipboard text for best-effort restoration ({} byte(s)).", state.originalClipboardText->size());
+    }
+    state.clipboardModified = true;
+    UpdateLastAction(state, "clipboard set to " + QuoteText(text));
+    std::println("{} succeeded.", label);
 }
 
 void ReadClipboardText(AppState& state)
@@ -420,14 +384,16 @@ void ReadClipboardText(AppState& state)
         return;
     }
 
-    auto text = state.runtime.GetClipboardText();
-    if (!text)
+    auto textResult = state.runtime.ClipboardGetText();
+    if (!textResult)
     {
-        PrintError("PlatformRuntime::GetClipboardText", text.GetError());
+        PrintError("Runtime::ClipboardGetText", textResult.GetError());
+        UpdateLastAction(state, "clipboard read failed");
         return;
     }
 
-    const std::string quoted = QuoteText(text.GetValue());
+    const std::string text = std::move(textResult).GetValue();
+    const std::string quoted = QuoteText(text);
     std::println("Clipboard text: {}", quoted);
     UpdateLastAction(state, "clipboard read " + quoted);
 }
@@ -440,18 +406,22 @@ void RestoreClipboardText(AppState& state)
         return;
     }
 
-    auto result = state.runtime.SetClipboardText(*state.originalClipboardText);
-    if (result)
+    const core::VoidResult restoreResult = state.runtime.ClipboardSetText(*state.originalClipboardText);
+    if (!restoreResult)
     {
-        state.clipboardModified = false;
-        UpdateLastAction(state, "clipboard restored");
+        PrintServiceResult("Runtime::ClipboardSetText(restore)", restoreResult);
+        UpdateLastAction(state, "clipboard restore failed");
+        return;
     }
-    PrintOperationResult("PlatformRuntime::SetClipboardText(restore)", result);
+
+    state.clipboardModified = false;
+    UpdateLastAction(state, "clipboard restored");
+    std::println("Runtime::ClipboardSetText(restore) succeeded.");
 }
 
 void OpenConfiguredUri(AppState& state)
 {
-    if (!CanStartDesktopWork(state, "OpenExternalUri"))
+    if (!CanStartDesktopWork(state, "UriOpenExternal"))
     {
         return;
     }
@@ -462,44 +432,30 @@ void OpenConfiguredUri(AppState& state)
         return;
     }
 
-    std::println("Opening external URI after explicit key command: {}",
-                 QuoteText(*state.options.externalUri));
-    auto result = state.runtime.OpenExternalUri(*state.options.externalUri);
+    std::println("Opening external URI after explicit key command: {}", QuoteText(*state.options.externalUri));
+    auto result = state.runtime.UriOpenExternal(*state.options.externalUri);
     if (result)
     {
         UpdateLastAction(state, "opened URI " + *state.options.externalUri);
     }
-    PrintOperationResult("PlatformRuntime::OpenExternalUri", result);
+    PrintServiceResult("Runtime::UriOpenExternal", result);
+    if (!result)
+    {
+        std::println("Fallback: copy {} and open it manually if host policy permits.", QuoteText(*state.options.externalUri));
+    }
 }
 
-void RegisterDialog(AppState& state, DialogKind kind, std::string label, bool parented,
-                    core::Result<platform::DialogRequestId> request)
+void ReportDialogRequest(AppState& state, std::string_view operation, platform::DialogRequestId id)
 {
-    if (!request)
-    {
-        PrintError(label, request.GetError());
-        return;
-    }
-
-    const platform::DialogRequestId id = request.GetValue();
-    state.pendingDialogs.push_back(PendingDialog{
-        .id = id,
-        .kind = kind,
-        .requestedAt = state.runtime.Now(),
-        .label = std::move(label),
-        .parented = parented,
-    });
-
-    std::println(
-        "{} accepted as request {}: descriptor validation, request registration, and backend "
-        "invocation have completed. Await a later DialogCompletedEvent.",
-        state.pendingDialogs.back().label, id);
+    std::println("{} accepted as request {}: descriptor validation, request registration, and backend "
+                 "invocation have completed. {} dialog(s) are pending.",
+                 operation, id, state.runtime.DialogGetPendingCount());
     UpdateLastAction(state, std::format("registered dialog {}", id));
 }
 
 void ShowParentedOpenFileDialog(AppState& state)
 {
-    if (!CanStartDesktopWork(state, "ShowOpenFileDialog(parented)"))
+    if (!CanStartDesktopWork(state, "Runtime::DialogShowOpenFile(parented)"))
     {
         return;
     }
@@ -510,13 +466,12 @@ void ShowParentedOpenFileDialog(AppState& state)
         .filters = MakeMoleculeFilters(),
         .allowMultipleSelection = false,
     };
-    RegisterDialog(state, DialogKind::OpenFile, "ShowOpenFileDialog(parented single)", true,
-                   state.runtime.ShowOpenFileDialog(desc));
+    ReportDialogRequest(state, "Runtime::DialogShowOpenFile(parented single)", state.runtime.DialogShowOpenFile(desc));
 }
 
 void ShowUnparentedMultiOpenFileDialog(AppState& state)
 {
-    if (!CanStartDesktopWork(state, "ShowOpenFileDialog(unparented multi)"))
+    if (!CanStartDesktopWork(state, "Runtime::DialogShowOpenFile(unparented multi)"))
     {
         return;
     }
@@ -527,13 +482,12 @@ void ShowUnparentedMultiOpenFileDialog(AppState& state)
         .filters = MakeMoleculeFilters(),
         .allowMultipleSelection = true,
     };
-    RegisterDialog(state, DialogKind::OpenFile, "ShowOpenFileDialog(unparented multi)", false,
-                   state.runtime.ShowOpenFileDialog(desc));
+    ReportDialogRequest(state, "Runtime::DialogShowOpenFile(unparented multi)", state.runtime.DialogShowOpenFile(desc));
 }
 
 void ShowParentedSaveFileDialog(AppState& state)
 {
-    if (!CanStartDesktopWork(state, "ShowSaveFileDialog(parented)"))
+    if (!CanStartDesktopWork(state, "Runtime::DialogShowSaveFile(parented)"))
     {
         return;
     }
@@ -543,13 +497,12 @@ void ShowParentedSaveFileDialog(AppState& state)
         .defaultLocation = GetDialogLocation(state.options),
         .filters = MakeSaveFilters(),
     };
-    RegisterDialog(state, DialogKind::SaveFile, "ShowSaveFileDialog(parented)", true,
-                   state.runtime.ShowSaveFileDialog(desc));
+    ReportDialogRequest(state, "Runtime::DialogShowSaveFile(parented)", state.runtime.DialogShowSaveFile(desc));
 }
 
 void ShowUnparentedFolderDialog(AppState& state)
 {
-    if (!CanStartDesktopWork(state, "ShowOpenFolderDialog(unparented)"))
+    if (!CanStartDesktopWork(state, "Runtime::DialogShowOpenFolder(unparented)"))
     {
         return;
     }
@@ -559,8 +512,7 @@ void ShowUnparentedFolderDialog(AppState& state)
         .defaultLocation = GetDialogLocation(state.options),
         .allowMultipleSelection = false,
     };
-    RegisterDialog(state, DialogKind::OpenFolder, "ShowOpenFolderDialog(unparented)", false,
-                   state.runtime.ShowOpenFolderDialog(desc));
+    ReportDialogRequest(state, "Runtime::DialogShowOpenFolder(unparented)", state.runtime.DialogShowOpenFolder(desc));
 }
 
 void LaunchConcurrentDialogBatch(AppState& state)
@@ -578,24 +530,21 @@ void LaunchConcurrentDialogBatch(AppState& state)
         .filters = MakeMoleculeFilters(),
         .allowMultipleSelection = true,
     };
-    RegisterDialog(state, DialogKind::OpenFile, "batch parented multi open-file", true,
-                   state.runtime.ShowOpenFileDialog(openDesc));
+    ReportDialogRequest(state, "batch parented multi open-file", state.runtime.DialogShowOpenFile(openDesc));
 
     const platform::SaveFileDialogDesc saveDesc{
         .parentWindowId = std::nullopt,
         .defaultLocation = GetDialogLocation(state.options),
         .filters = MakeSaveFilters(),
     };
-    RegisterDialog(state, DialogKind::SaveFile, "batch unparented save-file", false,
-                   state.runtime.ShowSaveFileDialog(saveDesc));
+    ReportDialogRequest(state, "batch unparented save-file", state.runtime.DialogShowSaveFile(saveDesc));
 
     const platform::OpenFolderDialogDesc folderDesc{
         .parentWindowId = GetParentWindowId(state),
         .defaultLocation = GetDialogLocation(state.options),
         .allowMultipleSelection = true,
     };
-    RegisterDialog(state, DialogKind::OpenFolder, "batch parented multi folder", true,
-                   state.runtime.ShowOpenFolderDialog(folderDesc));
+    ReportDialogRequest(state, "batch parented multi folder", state.runtime.DialogShowOpenFolder(folderDesc));
 }
 
 void ReleaseParentWindow(AppState& state)
@@ -605,8 +554,7 @@ void ReleaseParentWindow(AppState& state)
         return;
     }
 
-    std::println("Releasing parent window after {} pending dialog(s) remain.",
-                 state.pendingDialogs.size());
+    std::println("Releasing parent window with {} pending dialog(s).", state.runtime.DialogGetPendingCount());
     state.windows.clear();
 }
 
@@ -618,22 +566,13 @@ void RequestShutdown(AppState& state, std::string_view reason)
         std::println("Shutdown requested by {}. New desktop work is disabled.", reason);
     }
 
-    if (state.pendingDialogs.empty())
+    if (!state.runtime.DialogHasPending())
     {
         ReleaseParentWindow(state);
         return;
     }
 
-    std::println("Waiting for {} pending dialog completion(s) before releasing the parent.",
-                 state.pendingDialogs.size());
-}
-
-[[nodiscard]] std::vector<PendingDialog>::iterator FindPendingDialog(
-    AppState& state, platform::DialogRequestId id)
-{
-    return std::ranges::find_if(state.pendingDialogs, [id](const PendingDialog& request) {
-        return request.id == id;
-    });
+    std::println("Waiting for {} pending dialog completion(s) before releasing the parent.", state.runtime.DialogGetPendingCount());
 }
 
 void PrintDialogSelection(const platform::DialogSelection& selection)
@@ -660,53 +599,34 @@ void PrintDialogSelection(const platform::DialogSelection& selection)
     }
 }
 
-void PrintDialogOutcome(const platform::DialogOutcome& outcome)
-{
-    struct Visitor final
-    {
-        void operator()(const platform::DialogSelection& selection) const
-        {
-            PrintDialogSelection(selection);
-        }
-
-        void operator()(platform::DialogCancellation) const
-        {
-            std::println("  outcome: cancellation (normal user choice)");
-        }
-
-        void operator()(const platform::DialogFailure& failure) const
-        {
-            std::println("  outcome: failure");
-            PrintError("  dialog completion", failure.error);
-        }
-    };
-
-    std::visit(Visitor{}, outcome);
-}
-
 void HandleDialogCompleted(AppState& state, const platform::DialogCompletedEvent& event)
 {
-    auto request = FindPendingDialog(state, event.requestId);
-    if (request == state.pendingDialogs.end())
+    std::println("DialogCompleted request={} kind={} parent={} filters={} allowMultipleSelection={}\n"
+                 "  requested timestamp: {} (+{})\n"
+                 "  callback timestamp: {} (+{})\n"
+                 "  elapsed since request invocation: {}",
+                 event.request.id, event.request.kind, OptionalWindowId{event.request.parentWindowId}, event.request.filterCount,
+                 event.request.allowMultipleSelection, event.request.requestedAt, event.request.requestedAt - state.startTimestamp, event.timestamp,
+                 event.timestamp - state.startTimestamp, event.timestamp - event.request.requestedAt);
+    if (const auto* selection = std::get_if<platform::DialogSelection>(&event.outcome))
     {
-        std::println("DialogCompleted for unknown request {}; it may have been consumed already.",
-                     event.requestId);
-        return;
+        PrintDialogSelection(*selection);
     }
+    else if (std::holds_alternative<platform::DialogCancellation>(event.outcome))
+    {
+        std::println("  outcome: cancellation (normal user choice)");
+    }
+    else
+    {
+        const auto& failure = std::get<platform::DialogFailure>(event.outcome);
+        std::println("  outcome: asynchronous failure");
+        PrintError("  dialog completion", failure.error);
+    }
+    std::println("  remaining pending dialogs: {}", state.runtime.DialogGetPendingCount());
 
-    std::println(
-        "DialogCompleted request={} kind={} label={} parented={}\n"
-        "  callback timestamp: {} (+{})\n"
-        "  elapsed since request registration: {}",
-        event.requestId, ToString(request->kind), request->label, request->parented,
-        event.timestamp, event.timestamp - state.startTimestamp,
-        event.timestamp - request->requestedAt);
-    PrintDialogOutcome(event.outcome);
+    UpdateLastAction(state, std::format("completed dialog {}", event.request.id));
 
-    UpdateLastAction(state, std::format("completed dialog {}", event.requestId));
-    state.pendingDialogs.erase(request);
-
-    if (state.shutdownRequested && state.pendingDialogs.empty())
+    if (state.shutdownRequested && !state.runtime.DialogHasPending())
     {
         ReleaseParentWindow(state);
     }
@@ -720,11 +640,10 @@ void HandleCommand(AppState& state, platform::PhysicalKey key)
         PrintUsage("ponder-platform-3-desktop-services-workbench");
         return;
     case platform::PhysicalKey::C:
-        SetClipboardText(state, state.options.clipboardText,
-                         "PlatformRuntime::SetClipboardText(sample)");
+        SetClipboardText(state, state.options.clipboardText, "Runtime::ClipboardSetText(sample)");
         return;
     case platform::PhysicalKey::E:
-        SetClipboardText(state, "", "PlatformRuntime::SetClipboardText(empty)");
+        SetClipboardText(state, "", "Runtime::ClipboardSetText(empty)");
         return;
     case platform::PhysicalKey::R:
         ReadClipboardText(state);
@@ -759,11 +678,9 @@ void HandleCommand(AppState& state, platform::PhysicalKey key)
     }
 }
 
-void PrintEventHeader(std::string_view name, platform::Timestamp timestamp,
-                      const AppState& state)
+void PrintEventHeader(std::string_view name, core::Timestamp timestamp, const AppState& state)
 {
-    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp,
-               timestamp - state.startTimestamp);
+    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp, timestamp - state.startTimestamp);
 }
 
 struct EventVisitor final
@@ -787,9 +704,7 @@ struct EventVisitor final
     void operator()(const platform::KeyboardKeyEvent& event) const
     {
         PrintEventHeader("KeyboardKey", event.timestamp, state);
-        std::println(" window={} physical={} pressed={} repeat={}",
-                     OptionalWindowId{event.windowId}, static_cast<int>(event.physicalKey),
-                     event.pressed, event.repeat);
+        std::println(" window={} physical={} pressed={} repeat={}", OptionalWindowId{event.windowId}, event.physicalKey, event.pressed, event.repeat);
 
         if (event.pressed && !event.repeat)
         {
@@ -814,7 +729,7 @@ struct EventVisitor final
 
 void DrainEvents(AppState& state)
 {
-    while (std::optional<platform::PlatformEvent> event = state.runtime.PollEvent())
+    while (std::optional<platform::PlatformEvent> event = state.runtime.EventPoll())
     {
         ++state.eventCount;
         std::visit(EventVisitor{state}, *event);
@@ -828,15 +743,8 @@ void UpdateWindowTitle(AppState& state)
         return;
     }
 
-    const std::string title = "Desktop Services | pending " +
-                              std::to_string(state.pendingDialogs.size()) + " | " +
-                              state.lastAction;
-    auto result = state.windows.front().window.SetTitle(title);
-    if (!result && !state.windows.front().titleUpdateFailureReported)
-    {
-        PrintError("SetTitle during title update", result.GetError());
-        state.windows.front().titleUpdateFailureReported = true;
-    }
+    const std::string title = "Desktop Services | pending " + std::to_string(state.runtime.DialogGetPendingCount()) + " | " + state.lastAction;
+    state.windows.front().window.SetTitle(title);
 }
 
 void RestoreClipboardOnExit(AppState& state)
@@ -856,7 +764,7 @@ void RestoreClipboardOnExit(AppState& state)
     RestoreClipboardText(state);
 }
 
-[[nodiscard]] core::Result<WindowSlot> CreateParentWindow(platform::PlatformRuntime& runtime)
+[[nodiscard]] WindowSlot CreateParentWindow(platform::Runtime& runtime)
 {
     const platform::WindowDesc desc{
         .title = "Ponder Desktop Services Workbench",
@@ -868,57 +776,50 @@ void RestoreClipboardOnExit(AppState& state)
         .graphicsCompatibility = platform::WindowGraphicsCompatibility::Default,
     };
 
-    auto window = runtime.CreateWindow(desc);
-    RETURN_ERROR_IF_FAILED(window);
-
-    return WindowSlot{.window = std::move(window).GetValue()};
+    return WindowSlot{.window = runtime.WindowCreate(desc)};
 }
 
-[[nodiscard]] core::VoidResult RunDesktopServicesWorkbench(int argc, char** argv)
+[[nodiscard]] int RunDesktopServicesWorkbench(int argc, char** argv)
 {
     auto optionsResult = ParseOptions(argc, argv);
-    RETURN_ERROR_IF_FAILED(optionsResult);
+    if (!optionsResult)
+    {
+        std::println(stderr, "ponder-platform-3-desktop-services-workbench failed: {}", optionsResult.GetError());
+        return 1;
+    }
 
     const Options options = std::move(optionsResult).GetValue();
     if (options.showHelp)
     {
         PrintUsage(argc > 0 ? argv[0] : "ponder-platform-3-desktop-services-workbench");
-        return {};
+        return 0;
     }
 
-    const platform::PlatformRuntimeDesc runtimeDesc{
+    const platform::RuntimeDesc runtimeDesc{
         .applicationName = "Ponder Platform Desktop Services Workbench",
         .applicationVersion = std::string{"0.1.0"},
-        .applicationIdentifier = std::string{
-            "org.ponder.examples.platform.desktop-services-workbench"},
+        .applicationIdentifier = std::string{"org.ponder.examples.platform.desktop-services-workbench"},
+        .configureHintsBeforeInitialization =
+            [](platform::Runtime& runtime)
+        {
+            runtime.HintPush<platform::hints::MouseFocusClickThrough>(platform::hints::MouseFocusClickThrough{true});
+            runtime.HintPush<platform::hints::MouseAutoCapture>(platform::hints::MouseAutoCapture{false});
+        },
     };
 
-    auto runtimeResult = platform::PlatformRuntime::Create(runtimeDesc);
-    RETURN_ERROR_IF_FAILED(runtimeResult);
-
-    platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseFocusClickThrough{true}));
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseAutoCapture{false}));
-    const platform::Timestamp start = runtime.Now();
+    platform::Runtime runtime = platform::Runtime::Create(runtimeDesc);
+    const core::Timestamp start = runtime.TimeNow();
 
     std::vector<WindowSlot> windows;
     windows.reserve(1);
-    auto parent = CreateParentWindow(runtime);
-    RETURN_ERROR_IF_FAILED(parent);
-    windows.push_back(std::move(parent).GetValue());
+    windows.push_back(CreateParentWindow(runtime));
 
-    AppState state{.runtime = runtime,
-                   .options = options,
-                   .windows = windows,
-                   .startTimestamp = start};
+    AppState state{.runtime = runtime, .options = options, .windows = windows, .startTimestamp = start};
 
     PrintUsage(argc > 0 ? argv[0] : "ponder-platform-3-desktop-services-workbench");
     if (options.externalUri)
     {
-        std::println("Configured URI is {}; press U to open it.",
-                     QuoteText(*options.externalUri));
+        std::println("Configured URI is {}; press U to open it.", QuoteText(*options.externalUri));
     }
     else
     {
@@ -926,29 +827,59 @@ void RestoreClipboardOnExit(AppState& state)
     }
 
     auto nextTitleUpdate = start;
-    while (!state.windows.empty() || !state.pendingDialogs.empty())
+    std::exception_ptr deferredFailure;
+    while (!state.windows.empty() || state.runtime.DialogHasPending())
     {
-        DrainEvents(state);
-
-        const platform::Timestamp now = runtime.Now();
-        if (now - nextTitleUpdate >= std::chrono::milliseconds{250})
+        try
         {
-            UpdateWindowTitle(state);
-            nextTitleUpdate = now;
+            DrainEvents(state);
+
+            const core::Timestamp now = state.runtime.TimeNow();
+            if (deferredFailure == nullptr && now - nextTitleUpdate >= std::chrono::milliseconds{250})
+            {
+                UpdateWindowTitle(state);
+                nextTitleUpdate = now;
+            }
+
+            if (options.autoCloseAfter && !state.shutdownRequested && now - start >= *options.autoCloseAfter)
+            {
+                std::println("Auto-close duration reached after {}.", now - start);
+                RequestShutdown(state, "auto close");
+            }
         }
-
-        if (options.autoCloseAfter && !state.shutdownRequested &&
-            now - start >= *options.autoCloseAfter)
+        catch (...)
         {
-            std::println("Auto-close duration reached after {}.", now - start);
-            RequestShutdown(state, "auto close");
+            if (deferredFailure != nullptr)
+            {
+                throw;
+            }
+
+            deferredFailure = std::current_exception();
+            state.shutdownRequested = true;
+            if (state.runtime.DialogHasPending())
+            {
+                std::println(stderr,
+                             "A synchronous failure occurred with {} accepted dialog request(s); new "
+                             "desktop work is disabled while their completions are consumed.",
+                             state.runtime.DialogGetPendingCount());
+            }
+            else
+            {
+                ReleaseParentWindow(state);
+            }
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds{8});
     }
 
     RestoreClipboardOnExit(state);
-    return {};
+    state.runtime.DialogShutdown();
+
+    if (deferredFailure != nullptr)
+    {
+        std::rethrow_exception(deferredFailure);
+    }
+    return 0;
 }
 } // namespace
 
@@ -956,21 +887,16 @@ int main(int argc, char** argv)
 {
     try
     {
-        const auto result = RunDesktopServicesWorkbench(argc, argv);
-        if (!result)
-        {
-            std::println(stderr, "ponder-platform-3-desktop-services-workbench failed: {}",
-                         result.GetError());
-            return 1;
-        }
+        return RunDesktopServicesWorkbench(argc, argv);
+    }
+    catch (const core::Exception& exception)
+    {
+        std::println(stderr, "ponder-platform-3-desktop-services-workbench terminated with a ponder exception: {}", exception.GetMessage());
+        return 1;
     }
     catch (const std::exception& exception)
     {
-        std::println(stderr,
-                     "ponder-platform-3-desktop-services-workbench terminated with an exception: {}",
-                     exception.what());
+        std::println(stderr, "ponder-platform-3-desktop-services-workbench terminated with an exception: {}", exception.what());
         return 1;
     }
-
-    return 0;
 }

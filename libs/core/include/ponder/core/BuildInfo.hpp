@@ -3,22 +3,26 @@
 #include <cstdint>
 #include <string_view>
 
-namespace pond::core
+namespace ponder::core
 {
 class BuildInfo final
 {
 public:
-    constexpr BuildInfo(std::string_view projectName, std::string_view projectVersion,
-                        std::string_view gitCommit, std::string_view buildType,
-                        std::string_view compilerName, std::string_view compilerVersion,
-                        std::string_view targetSystemName, std::string_view targetSystemProcessor,
-                        std::uint32_t pointerWidthBits, std::string_view cmakeGenerator,
-                        std::string_view cmakeVersion) noexcept
-        : m_projectName(projectName), m_projectVersion(projectVersion), m_gitCommit(gitCommit),
-          m_buildType(buildType), m_compilerName(compilerName), m_compilerVersion(compilerVersion),
-          m_targetSystemName(targetSystemName), m_targetSystemProcessor(targetSystemProcessor),
-          m_pointerWidthBits(pointerWidthBits), m_cmakeGenerator(cmakeGenerator),
-          m_cmakeVersion(cmakeVersion)
+    constexpr BuildInfo(std::string_view projectName, std::string_view projectVersion, std::string_view gitCommit, std::string_view buildType,
+                        std::string_view compilerName, std::string_view compilerVersion, std::string_view targetSystemName,
+                        std::string_view targetSystemProcessor, std::uint32_t pointerWidthBits, std::string_view cmakeGenerator,
+                        std::string_view cmakeVersion) noexcept :
+        m_projectName(projectName),
+        m_projectVersion(projectVersion),
+        m_gitCommit(gitCommit),
+        m_buildType(buildType),
+        m_compilerName(compilerName),
+        m_compilerVersion(compilerVersion),
+        m_targetSystemName(targetSystemName),
+        m_targetSystemProcessor(targetSystemProcessor),
+        m_pointerWidthBits(pointerWidthBits),
+        m_cmakeGenerator(cmakeGenerator),
+        m_cmakeVersion(cmakeVersion)
     {
     }
 
@@ -97,4 +101,4 @@ private:
 };
 
 [[nodiscard]] BuildInfo GetBuildInfo() noexcept;
-} // namespace pond::core
+} // namespace ponder::core

@@ -15,7 +15,7 @@
 #include <string>
 #include <string_view>
 
-namespace pond::platform
+namespace ponder::platform
 {
 struct WindowDesc final
 {
@@ -30,10 +30,12 @@ struct WindowDesc final
 
 namespace detail
 {
+class MockRuntime;
+class SdlRuntime;
 class WindowImpl;
-}
+} // namespace detail
 
-class PlatformRuntime;
+class Runtime;
 
 class Window final
 {
@@ -47,86 +49,85 @@ public:
 
     [[nodiscard]] WindowId GetId() const;
     [[nodiscard]] WindowGraphicsCompatibility GetGraphicsCompatibility() const;
-    [[nodiscard]] core::Result<NativeWindowHandle> GetNativeHandle() const;
+    [[nodiscard]] ponder::core::Result<NativeWindowHandle> GetNativeHandle() const;
 
     [[nodiscard]] std::string GetTitle() const;
-    [[nodiscard]] core::VoidResult SetTitle(std::string_view title);
+    void SetTitle(std::string_view title);
 
-    [[nodiscard]] core::Result<ScreenPosition> GetPosition() const;
-    [[nodiscard]] core::VoidResult SetPosition(ScreenPosition position);
+    [[nodiscard]] ScreenPosition GetPosition() const;
+    void SetPosition(ScreenPosition position);
 
-    [[nodiscard]] core::Result<LogicalSize> GetLogicalSize() const;
-    [[nodiscard]] core::Result<PixelSize> GetPixelSize() const;
-    [[nodiscard]] core::VoidResult SetLogicalSize(LogicalSize size);
-    [[nodiscard]] core::Result<DisplayId> GetDisplayId() const;
-    [[nodiscard]] core::Result<float> GetPixelDensity() const;
-    [[nodiscard]] core::Result<float> GetDisplayScale() const;
+    [[nodiscard]] LogicalSize GetLogicalSize() const;
+    [[nodiscard]] PixelSize GetPixelSize() const;
+    void SetLogicalSize(LogicalSize size);
+    [[nodiscard]] ponder::core::Result<DisplayId> GetDisplayId() const;
+    [[nodiscard]] float GetPixelDensity() const;
+    [[nodiscard]] float GetDisplayScale() const;
 
-    [[nodiscard]] core::Result<WindowPresentation> GetPresentation() const;
-    [[nodiscard]] core::VoidResult SetPresentation(WindowPresentation presentation);
-    [[nodiscard]] core::Result<WindowDecoration> GetDecoration() const;
-    [[nodiscard]] core::VoidResult SetDecoration(WindowDecoration decoration);
-    [[nodiscard]] core::Result<WindowState> GetState() const;
-    [[nodiscard]] core::VoidResult Minimize();
-    [[nodiscard]] core::VoidResult Maximize();
-    [[nodiscard]] core::VoidResult Restore();
+    [[nodiscard]] WindowPresentation GetPresentation() const;
+    void SetPresentation(WindowPresentation presentation);
+    [[nodiscard]] WindowDecoration GetDecoration() const;
+    void SetDecoration(WindowDecoration decoration);
+    [[nodiscard]] WindowState GetState() const;
+    void Minimize();
+    void Maximize();
+    void Restore();
 
-    [[nodiscard]] core::Result<bool> IsVisible() const;
-    [[nodiscard]] core::Result<bool> IsResizable() const;
-    [[nodiscard]] core::VoidResult SetResizable(bool resizable);
-    [[nodiscard]] core::Result<bool> IsFocused() const;
-    [[nodiscard]] core::Result<bool> IsAlwaysOnTop() const;
-    [[nodiscard]] core::VoidResult SetAlwaysOnTop(bool alwaysOnTop);
+    [[nodiscard]] bool IsVisible() const;
+    [[nodiscard]] bool IsResizable() const;
+    void SetResizable(bool resizable);
+    [[nodiscard]] bool IsFocused() const;
+    [[nodiscard]] bool IsAlwaysOnTop() const;
+    void SetAlwaysOnTop(bool alwaysOnTop);
 
-    [[nodiscard]] core::VoidResult StartTextInput();
-    [[nodiscard]] core::VoidResult StopTextInput();
+    void StartTextInput();
+    void StopTextInput();
     [[nodiscard]] bool IsTextInputActive() const;
-    [[nodiscard]] core::VoidResult ClearTextComposition();
-    [[nodiscard]] core::VoidResult SetTextInputArea(TextInputArea area);
-    [[nodiscard]] core::VoidResult ClearTextInputArea();
+    void ClearTextComposition();
+    void SetTextInputArea(TextInputArea area);
+    void ClearTextInputArea();
 
-    [[nodiscard]] core::VoidResult SetMouseGrab(bool grabbed);
+    void SetMouseGrab(bool grabbed);
     [[nodiscard]] bool IsMouseGrabbed() const;
-    [[nodiscard]] core::VoidResult SetRelativeMouseMode(bool enabled);
+    void SetRelativeMouseMode(bool enabled);
     [[nodiscard]] bool IsRelativeMouseModeEnabled() const;
 
-    [[nodiscard]] core::VoidResult Show();
-    [[nodiscard]] core::VoidResult Hide();
+    void Show();
+    void Hide();
 
 private:
-    friend class PlatformRuntime;
+    friend class Runtime;
+    friend class detail::MockRuntime;
+    friend class detail::SdlRuntime;
 
     explicit Window(std::unique_ptr<detail::WindowImpl> state) noexcept;
 
     std::unique_ptr<detail::WindowImpl> m_state;
 };
-} // namespace pond::platform
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::WindowDesc> : formatter<string>
+struct formatter<ponder::platform::WindowDesc> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::platform::WindowDesc& desc, FormatContext& context) const
+    auto format(const ponder::platform::WindowDesc& desc, FormatContext& context) const
     {
-        const string minimumSize = desc.minimumLogicalSize.has_value()
-                                       ? std::format("{}", *desc.minimumLogicalSize)
-                                       : "none";
-        return formatter<string>::format(
-            std::format("title='{}', logicalSize={}, visible={}, resizable={}, "
-                        "highPixelDensity={}, minimumLogicalSize={}, graphics={}",
-                        desc.title, desc.logicalSize, desc.visible, desc.resizable,
-                        desc.highPixelDensity, minimumSize, desc.graphicsCompatibility),
-            context);
+        const string minimumSize = desc.minimumLogicalSize.has_value() ? std::format("{}", *desc.minimumLogicalSize) : "none";
+        return formatter<string>::format(std::format("title='{}', logicalSize={}, visible={}, resizable={}, "
+                                                     "highPixelDensity={}, minimumLogicalSize={}, graphics={}",
+                                                     desc.title, desc.logicalSize, desc.visible, desc.resizable, desc.highPixelDensity, minimumSize,
+                                                     desc.graphicsCompatibility),
+                                         context);
     }
 };
 } // namespace std
 
-namespace pond::platform
+namespace ponder::platform
 {
 inline std::ostream& operator<<(std::ostream& output, const WindowDesc& desc)
 {
     return output << std::format("{}", desc);
 }
-} // namespace pond::platform
+} // namespace ponder::platform

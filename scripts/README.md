@@ -58,8 +58,8 @@ scripts/format.sh --check
 .\scripts\format.ps1 -Check
 ```
 
-By default, the format scripts run `clang-format -i` on project source files.
-Use check mode for verification without edits.
+By default, the format scripts run `clang-format -i` on project source files,
+including the examples. Use check mode for verification without edits.
 
 The format scripts also support an optional clang-tidy pass:
 

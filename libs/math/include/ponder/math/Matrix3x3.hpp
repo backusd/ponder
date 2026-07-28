@@ -23,23 +23,31 @@ struct Matrix3x3 final
 
     constexpr Matrix3x3() noexcept = default;
 
-    explicit constexpr Matrix3x3(float row0Column0Value, float row0Column1Value,
-                                 float row0Column2Value, float row1Column0Value,
-                                 float row1Column1Value, float row1Column2Value,
-                                 float row2Column0Value, float row2Column1Value,
-                                 float row2Column2Value) noexcept
-        : row0Column0(row0Column0Value), row1Column0(row1Column0Value),
-          row2Column0(row2Column0Value), row0Column1(row0Column1Value),
-          row1Column1(row1Column1Value), row2Column1(row2Column1Value),
-          row0Column2(row0Column2Value), row1Column2(row1Column2Value),
-          row2Column2(row2Column2Value)
+    explicit constexpr Matrix3x3(float row0Column0Value, float row0Column1Value, float row0Column2Value, float row1Column0Value,
+                                 float row1Column1Value, float row1Column2Value, float row2Column0Value, float row2Column1Value,
+                                 float row2Column2Value) noexcept :
+        row0Column0(row0Column0Value),
+        row1Column0(row1Column0Value),
+        row2Column0(row2Column0Value),
+        row0Column1(row0Column1Value),
+        row1Column1(row1Column1Value),
+        row2Column1(row2Column1Value),
+        row0Column2(row0Column2Value),
+        row1Column2(row1Column2Value),
+        row2Column2(row2Column2Value)
     {
     }
 
-    explicit constexpr Matrix3x3(Vector3 column0, Vector3 column1, Vector3 column2) noexcept
-        : row0Column0(column0.x), row1Column0(column0.y), row2Column0(column0.z),
-          row0Column1(column1.x), row1Column1(column1.y), row2Column1(column1.z),
-          row0Column2(column2.x), row1Column2(column2.y), row2Column2(column2.z)
+    explicit constexpr Matrix3x3(Vector3 column0, Vector3 column1, Vector3 column2) noexcept :
+        row0Column0(column0.x),
+        row1Column0(column0.y),
+        row2Column0(column0.z),
+        row0Column1(column1.x),
+        row1Column1(column1.y),
+        row2Column1(column1.z),
+        row0Column2(column2.x),
+        row1Column2(column2.y),
+        row2Column2(column2.z)
     {
     }
 
@@ -83,8 +91,7 @@ struct Matrix3x3 final
         }
     }
 
-    [[nodiscard]] constexpr core::Result<std::reference_wrapper<float>> At(std::size_t row,
-                                                                           std::size_t column)
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<float>> At(std::size_t row, std::size_t column)
     {
         if (row >= kDimension || column >= kDimension) [[unlikely]]
         {
@@ -94,8 +101,7 @@ struct Matrix3x3 final
         return std::ref(AtUnchecked(row, column));
     }
 
-    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(
-        std::size_t row, std::size_t column) const
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(std::size_t row, std::size_t column) const
     {
         if (row >= kDimension || column >= kDimension) [[unlikely]]
         {
@@ -105,16 +111,14 @@ struct Matrix3x3 final
         return std::cref(AtUnchecked(row, column));
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Matrix3x3& lhs,
-                                                   const Matrix3x3& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Matrix3x3& lhs, const Matrix3x3& rhs) noexcept = default;
 
 private:
     inline static constexpr std::size_t kDimension{3};
 
     [[nodiscard]] static core::Error MakeIndexError()
     {
-        return core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
-                           "Matrix3x3 index is out of range."};
+        return core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Matrix3x3 index is out of range."};
     }
 
     [[nodiscard]] constexpr float& AtUnchecked(std::size_t row, std::size_t column) noexcept
@@ -154,8 +158,7 @@ private:
         }
     }
 
-    [[nodiscard]] constexpr const float& AtUnchecked(std::size_t row,
-                                                     std::size_t column) const noexcept
+    [[nodiscard]] constexpr const float& AtUnchecked(std::size_t row, std::size_t column) const noexcept
     {
         switch (column)
         {
@@ -193,53 +196,41 @@ private:
     }
 };
 
-[[nodiscard]] constexpr bool IsNear(Matrix3x3 lhs, Matrix3x3 rhs,
-                                    core::Tolerance tolerance) noexcept
+[[nodiscard]] constexpr bool IsNear(Matrix3x3 lhs, Matrix3x3 rhs, core::Tolerance tolerance) noexcept
 {
-    return core::IsNear(lhs.row0Column0, rhs.row0Column0, tolerance) &&
-           core::IsNear(lhs.row1Column0, rhs.row1Column0, tolerance) &&
-           core::IsNear(lhs.row2Column0, rhs.row2Column0, tolerance) &&
-           core::IsNear(lhs.row0Column1, rhs.row0Column1, tolerance) &&
-           core::IsNear(lhs.row1Column1, rhs.row1Column1, tolerance) &&
-           core::IsNear(lhs.row2Column1, rhs.row2Column1, tolerance) &&
-           core::IsNear(lhs.row0Column2, rhs.row0Column2, tolerance) &&
-           core::IsNear(lhs.row1Column2, rhs.row1Column2, tolerance) &&
+    return core::IsNear(lhs.row0Column0, rhs.row0Column0, tolerance) && core::IsNear(lhs.row1Column0, rhs.row1Column0, tolerance) &&
+           core::IsNear(lhs.row2Column0, rhs.row2Column0, tolerance) && core::IsNear(lhs.row0Column1, rhs.row0Column1, tolerance) &&
+           core::IsNear(lhs.row1Column1, rhs.row1Column1, tolerance) && core::IsNear(lhs.row2Column1, rhs.row2Column1, tolerance) &&
+           core::IsNear(lhs.row0Column2, rhs.row0Column2, tolerance) && core::IsNear(lhs.row1Column2, rhs.row1Column2, tolerance) &&
            core::IsNear(lhs.row2Column2, rhs.row2Column2, tolerance);
 }
 
 [[nodiscard]] constexpr bool IsFinite(Matrix3x3 matrix) noexcept
 {
-    return core::IsFinite(matrix.row0Column0) && core::IsFinite(matrix.row1Column0) &&
-           core::IsFinite(matrix.row2Column0) && core::IsFinite(matrix.row0Column1) &&
-           core::IsFinite(matrix.row1Column1) && core::IsFinite(matrix.row2Column1) &&
-           core::IsFinite(matrix.row0Column2) && core::IsFinite(matrix.row1Column2) &&
-           core::IsFinite(matrix.row2Column2);
+    return core::IsFinite(matrix.row0Column0) && core::IsFinite(matrix.row1Column0) && core::IsFinite(matrix.row2Column0) &&
+           core::IsFinite(matrix.row0Column1) && core::IsFinite(matrix.row1Column1) && core::IsFinite(matrix.row2Column1) &&
+           core::IsFinite(matrix.row0Column2) && core::IsFinite(matrix.row1Column2) && core::IsFinite(matrix.row2Column2);
 }
 
 [[nodiscard]] constexpr Matrix3x3 operator+(Matrix3x3 lhs, Matrix3x3 rhs) noexcept
 {
-    return Matrix3x3{lhs.row0Column0 + rhs.row0Column0, lhs.row0Column1 + rhs.row0Column1,
-                     lhs.row0Column2 + rhs.row0Column2, lhs.row1Column0 + rhs.row1Column0,
-                     lhs.row1Column1 + rhs.row1Column1, lhs.row1Column2 + rhs.row1Column2,
-                     lhs.row2Column0 + rhs.row2Column0, lhs.row2Column1 + rhs.row2Column1,
-                     lhs.row2Column2 + rhs.row2Column2};
+    return Matrix3x3{lhs.row0Column0 + rhs.row0Column0, lhs.row0Column1 + rhs.row0Column1, lhs.row0Column2 + rhs.row0Column2,
+                     lhs.row1Column0 + rhs.row1Column0, lhs.row1Column1 + rhs.row1Column1, lhs.row1Column2 + rhs.row1Column2,
+                     lhs.row2Column0 + rhs.row2Column0, lhs.row2Column1 + rhs.row2Column1, lhs.row2Column2 + rhs.row2Column2};
 }
 
 [[nodiscard]] constexpr Matrix3x3 operator-(Matrix3x3 lhs, Matrix3x3 rhs) noexcept
 {
-    return Matrix3x3{lhs.row0Column0 - rhs.row0Column0, lhs.row0Column1 - rhs.row0Column1,
-                     lhs.row0Column2 - rhs.row0Column2, lhs.row1Column0 - rhs.row1Column0,
-                     lhs.row1Column1 - rhs.row1Column1, lhs.row1Column2 - rhs.row1Column2,
-                     lhs.row2Column0 - rhs.row2Column0, lhs.row2Column1 - rhs.row2Column1,
-                     lhs.row2Column2 - rhs.row2Column2};
+    return Matrix3x3{lhs.row0Column0 - rhs.row0Column0, lhs.row0Column1 - rhs.row0Column1, lhs.row0Column2 - rhs.row0Column2,
+                     lhs.row1Column0 - rhs.row1Column0, lhs.row1Column1 - rhs.row1Column1, lhs.row1Column2 - rhs.row1Column2,
+                     lhs.row2Column0 - rhs.row2Column0, lhs.row2Column1 - rhs.row2Column1, lhs.row2Column2 - rhs.row2Column2};
 }
 
 [[nodiscard]] constexpr Matrix3x3 operator*(Matrix3x3 matrix, float scalar) noexcept
 {
-    return Matrix3x3{
-        matrix.row0Column0 * scalar, matrix.row0Column1 * scalar, matrix.row0Column2 * scalar,
-        matrix.row1Column0 * scalar, matrix.row1Column1 * scalar, matrix.row1Column2 * scalar,
-        matrix.row2Column0 * scalar, matrix.row2Column1 * scalar, matrix.row2Column2 * scalar};
+    return Matrix3x3{matrix.row0Column0 * scalar, matrix.row0Column1 * scalar, matrix.row0Column2 * scalar,
+                     matrix.row1Column0 * scalar, matrix.row1Column1 * scalar, matrix.row1Column2 * scalar,
+                     matrix.row2Column0 * scalar, matrix.row2Column1 * scalar, matrix.row2Column2 * scalar};
 }
 
 [[nodiscard]] constexpr Matrix3x3 operator*(float scalar, Matrix3x3 matrix) noexcept
@@ -249,37 +240,29 @@ private:
 
 [[nodiscard]] constexpr Matrix3x3 operator/(Matrix3x3 matrix, float scalar) noexcept
 {
-    return Matrix3x3{
-        matrix.row0Column0 / scalar, matrix.row0Column1 / scalar, matrix.row0Column2 / scalar,
-        matrix.row1Column0 / scalar, matrix.row1Column1 / scalar, matrix.row1Column2 / scalar,
-        matrix.row2Column0 / scalar, matrix.row2Column1 / scalar, matrix.row2Column2 / scalar};
+    return Matrix3x3{matrix.row0Column0 / scalar, matrix.row0Column1 / scalar, matrix.row0Column2 / scalar,
+                     matrix.row1Column0 / scalar, matrix.row1Column1 / scalar, matrix.row1Column2 / scalar,
+                     matrix.row2Column0 / scalar, matrix.row2Column1 / scalar, matrix.row2Column2 / scalar};
 }
 
 [[nodiscard]] constexpr Matrix3x3 Transpose(Matrix3x3 matrix) noexcept
 {
-    return Matrix3x3{matrix.row0Column0, matrix.row1Column0, matrix.row2Column0,
-                     matrix.row0Column1, matrix.row1Column1, matrix.row2Column1,
-                     matrix.row0Column2, matrix.row1Column2, matrix.row2Column2};
+    return Matrix3x3{matrix.row0Column0, matrix.row1Column0, matrix.row2Column0, matrix.row0Column1, matrix.row1Column1,
+                     matrix.row2Column1, matrix.row0Column2, matrix.row1Column2, matrix.row2Column2};
 }
 
 [[nodiscard]] constexpr float Determinant(Matrix3x3 matrix) noexcept
 {
-    return matrix.row0Column0 *
-               (matrix.row1Column1 * matrix.row2Column2 - matrix.row1Column2 * matrix.row2Column1) -
-           matrix.row0Column1 *
-               (matrix.row1Column0 * matrix.row2Column2 - matrix.row1Column2 * matrix.row2Column0) +
-           matrix.row0Column2 *
-               (matrix.row1Column0 * matrix.row2Column1 - matrix.row1Column1 * matrix.row2Column0);
+    return matrix.row0Column0 * (matrix.row1Column1 * matrix.row2Column2 - matrix.row1Column2 * matrix.row2Column1) -
+           matrix.row0Column1 * (matrix.row1Column0 * matrix.row2Column2 - matrix.row1Column2 * matrix.row2Column0) +
+           matrix.row0Column2 * (matrix.row1Column0 * matrix.row2Column1 - matrix.row1Column1 * matrix.row2Column0);
 }
 
 [[nodiscard]] constexpr Vector3 operator*(Matrix3x3 matrix, Vector3 vector) noexcept
 {
-    return Vector3{matrix.row0Column0 * vector.x + matrix.row0Column1 * vector.y +
-                       matrix.row0Column2 * vector.z,
-                   matrix.row1Column0 * vector.x + matrix.row1Column1 * vector.y +
-                       matrix.row1Column2 * vector.z,
-                   matrix.row2Column0 * vector.x + matrix.row2Column1 * vector.y +
-                       matrix.row2Column2 * vector.z};
+    return Vector3{matrix.row0Column0 * vector.x + matrix.row0Column1 * vector.y + matrix.row0Column2 * vector.z,
+                   matrix.row1Column0 * vector.x + matrix.row1Column1 * vector.y + matrix.row1Column2 * vector.z,
+                   matrix.row2Column0 * vector.x + matrix.row2Column1 * vector.y + matrix.row2Column2 * vector.z};
 }
 
 [[nodiscard]] constexpr Matrix3x3 operator*(Matrix3x3 lhs, Matrix3x3 rhs) noexcept
@@ -294,8 +277,7 @@ private:
     if (!IsFinite(matrix)) [[unlikely]]
     {
         return core::Result<Matrix3x3>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                        "Matrix3x3 inverse requires finite components."});
+            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Matrix3x3 inverse requires finite components."});
     }
 
     const double m00 = static_cast<double>(matrix.row0Column0);
@@ -322,23 +304,19 @@ private:
     if (determinant == 0.0) [[unlikely]]
     {
         return core::Result<Matrix3x3>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::SingularMatrix),
-                        "Matrix3x3 inverse requires a nonsingular matrix."});
+            core::Error{ToErrorCode(MathErrorCode::SingularMatrix), "Matrix3x3 inverse requires a nonsingular matrix."});
     }
 
     const double inverseDeterminant = 1.0 / determinant;
     const Matrix3x3 inverse{
-        static_cast<float>(c00 * inverseDeterminant), static_cast<float>(c01 * inverseDeterminant),
-        static_cast<float>(c02 * inverseDeterminant), static_cast<float>(c10 * inverseDeterminant),
-        static_cast<float>(c11 * inverseDeterminant), static_cast<float>(c12 * inverseDeterminant),
-        static_cast<float>(c20 * inverseDeterminant), static_cast<float>(c21 * inverseDeterminant),
-        static_cast<float>(c22 * inverseDeterminant)};
+        static_cast<float>(c00 * inverseDeterminant), static_cast<float>(c01 * inverseDeterminant), static_cast<float>(c02 * inverseDeterminant),
+        static_cast<float>(c10 * inverseDeterminant), static_cast<float>(c11 * inverseDeterminant), static_cast<float>(c12 * inverseDeterminant),
+        static_cast<float>(c20 * inverseDeterminant), static_cast<float>(c21 * inverseDeterminant), static_cast<float>(c22 * inverseDeterminant)};
 
     if (!IsFinite(inverse)) [[unlikely]]
     {
         return core::Result<Matrix3x3>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::SingularMatrix),
-                        "Matrix3x3 inverse is not representable as finite floats."});
+            core::Error{ToErrorCode(MathErrorCode::SingularMatrix), "Matrix3x3 inverse is not representable as finite floats."});
     }
 
     return inverse;

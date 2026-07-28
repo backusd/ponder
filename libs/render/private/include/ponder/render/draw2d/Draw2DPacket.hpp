@@ -24,11 +24,10 @@ namespace pond::render::draw2d
 using Draw2DIndex = std::uint32_t;
 inline constexpr std::uint64_t kNoDraw2DElementIndex{std::numeric_limits<std::uint64_t>::max()};
 
-inline constexpr std::string_view kDraw2DSchemaDescription{
-    "ponder.draw2d.packet.v1|extent:u32x2-positive|"
-    "vertex:position-f32x2-top-left-pixel-edge@0,rgba8-unorm-linear-premul@8,stride12|"
-    "index:u32|draw:first-index-u32,index-count-u32,base-vertex-i32,"
-    "scissor-u32-ltrb-half-open|topology:triangle-list"};
+inline constexpr std::string_view kDraw2DSchemaDescription{"ponder.draw2d.packet.v1|extent:u32x2-positive|"
+                                                           "vertex:position-f32x2-top-left-pixel-edge@0,rgba8-unorm-linear-premul@8,stride12|"
+                                                           "index:u32|draw:first-index-u32,index-count-u32,base-vertex-i32,"
+                                                           "scissor-u32-ltrb-half-open|topology:triangle-list"};
 
 [[nodiscard]] consteval std::uint64_t ComputeDraw2DSchemaFingerprint(std::string_view text)
 {
@@ -41,8 +40,7 @@ inline constexpr std::string_view kDraw2DSchemaDescription{
     return hash;
 }
 
-inline constexpr std::uint64_t kDraw2DSchemaFingerprint{
-    ComputeDraw2DSchemaFingerprint(kDraw2DSchemaDescription)};
+inline constexpr std::uint64_t kDraw2DSchemaFingerprint{ComputeDraw2DSchemaFingerprint(kDraw2DSchemaDescription)};
 static_assert(ComputeDraw2DSchemaFingerprint("hello") == 0xa430d84680aabd0bULL);
 static_assert(kDraw2DSchemaFingerprint == 0x05c436a9fda7b4f7ULL);
 
@@ -51,8 +49,8 @@ class Draw2DPackedLinearPremultipliedRgba8 final
 public:
     constexpr Draw2DPackedLinearPremultipliedRgba8() noexcept = default;
 
-    [[nodiscard]] static constexpr Draw2DPackedLinearPremultipliedRgba8 FromChannels(
-        std::uint8_t red, std::uint8_t green, std::uint8_t blue, std::uint8_t alpha) noexcept
+    [[nodiscard]] static constexpr Draw2DPackedLinearPremultipliedRgba8 FromChannels(std::uint8_t red, std::uint8_t green, std::uint8_t blue,
+                                                                                     std::uint8_t alpha) noexcept
     {
         return Draw2DPackedLinearPremultipliedRgba8{red, green, blue, alpha};
     }
@@ -77,14 +75,15 @@ public:
         return m_alpha;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DPackedLinearPremultipliedRgba8& lhs,
-        const Draw2DPackedLinearPremultipliedRgba8& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DPackedLinearPremultipliedRgba8& lhs,
+                                                   const Draw2DPackedLinearPremultipliedRgba8& rhs) noexcept = default;
 
 private:
-    constexpr Draw2DPackedLinearPremultipliedRgba8(std::uint8_t red, std::uint8_t green,
-                                                   std::uint8_t blue, std::uint8_t alpha) noexcept
-        : m_red{red}, m_green{green}, m_blue{blue}, m_alpha{alpha}
+    constexpr Draw2DPackedLinearPremultipliedRgba8(std::uint8_t red, std::uint8_t green, std::uint8_t blue, std::uint8_t alpha) noexcept :
+        m_red{red},
+        m_green{green},
+        m_blue{blue},
+        m_alpha{alpha}
     {
     }
 
@@ -100,8 +99,7 @@ struct Draw2DVertex final
     float y{};
     Draw2DPackedLinearPremultipliedRgba8 color{};
 
-    [[nodiscard]] friend constexpr bool operator==(const Draw2DVertex& lhs,
-                                                   const Draw2DVertex& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DVertex& lhs, const Draw2DVertex& rhs) noexcept = default;
 };
 
 struct Draw2DPixelExtent final
@@ -109,8 +107,7 @@ struct Draw2DPixelExtent final
     std::uint32_t width{};
     std::uint32_t height{};
 
-    [[nodiscard]] friend constexpr bool operator==(const Draw2DPixelExtent& lhs,
-                                                   const Draw2DPixelExtent& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DPixelExtent& lhs, const Draw2DPixelExtent& rhs) noexcept = default;
 };
 
 struct Draw2DScissor final
@@ -120,8 +117,7 @@ struct Draw2DScissor final
     std::uint32_t right{};
     std::uint32_t bottom{};
 
-    [[nodiscard]] friend constexpr bool operator==(const Draw2DScissor& lhs,
-                                                   const Draw2DScissor& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DScissor& lhs, const Draw2DScissor& rhs) noexcept = default;
 };
 
 struct Draw2DDrawRecord final
@@ -131,8 +127,7 @@ struct Draw2DDrawRecord final
     std::int32_t baseVertex{};
     Draw2DScissor scissor{};
 
-    [[nodiscard]] friend constexpr bool operator==(const Draw2DDrawRecord& lhs,
-                                                   const Draw2DDrawRecord& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DDrawRecord& lhs, const Draw2DDrawRecord& rhs) noexcept = default;
 };
 
 static_assert(std::is_standard_layout_v<Draw2DPackedLinearPremultipliedRgba8>);
@@ -149,8 +144,7 @@ static_assert(sizeof(Draw2DIndex) == 4U);
 
 [[nodiscard]] constexpr bool IsValid(Draw2DPackedLinearPremultipliedRgba8 color) noexcept
 {
-    return color.GetRed() <= color.GetAlpha() && color.GetGreen() <= color.GetAlpha() &&
-           color.GetBlue() <= color.GetAlpha();
+    return color.GetRed() <= color.GetAlpha() && color.GetGreen() <= color.GetAlpha() && color.GetBlue() <= color.GetAlpha();
 }
 
 [[nodiscard]] constexpr bool IsValid(Draw2DPixelExtent extent) noexcept
@@ -160,8 +154,7 @@ static_assert(sizeof(Draw2DIndex) == 4U);
 
 [[nodiscard]] constexpr bool IsValid(Draw2DScissor scissor, Draw2DPixelExtent extent) noexcept
 {
-    return scissor.left < scissor.right && scissor.top < scissor.bottom &&
-           scissor.right <= extent.width && scissor.bottom <= extent.height;
+    return scissor.left < scissor.right && scissor.top < scissor.bottom && scissor.right <= extent.width && scissor.bottom <= extent.height;
 }
 
 struct Draw2DPacketLimits final
@@ -173,16 +166,14 @@ struct Draw2DPacketLimits final
     std::uint64_t maxUploadBytes{256U * 1024U * 1024U};
     std::uint64_t maxBaseVertexValidationIndexCount{8'388'608U};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DPacketLimits& lhs, const Draw2DPacketLimits& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DPacketLimits& lhs, const Draw2DPacketLimits& rhs) noexcept = default;
 };
 
 inline constexpr Draw2DPacketLimits kDefaultDraw2DPacketLimits{};
 
 [[nodiscard]] constexpr bool IsValid(Draw2DPacketLimits limits) noexcept
 {
-    return limits.maxVertexCount > 0U && limits.maxIndexCount > 0U &&
-           limits.maxDrawRecordCount > 0U && limits.maxPacketBytes > 0U &&
+    return limits.maxVertexCount > 0U && limits.maxIndexCount > 0U && limits.maxDrawRecordCount > 0U && limits.maxPacketBytes > 0U &&
            limits.maxUploadBytes > 0U && limits.maxBaseVertexValidationIndexCount > 0U;
 }
 
@@ -192,8 +183,7 @@ struct Draw2DPacketCounts final
     std::uint64_t indexCount{};
     std::uint64_t drawRecordCount{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DPacketCounts& lhs, const Draw2DPacketCounts& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DPacketCounts& lhs, const Draw2DPacketCounts& rhs) noexcept = default;
 };
 
 struct Draw2DPacketStats final
@@ -205,8 +195,7 @@ struct Draw2DPacketStats final
     std::uint64_t packetBytes{};
     std::uint64_t uploadBytes{};
 
-    [[nodiscard]] friend constexpr bool operator==(const Draw2DPacketStats& lhs,
-                                                   const Draw2DPacketStats& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DPacketStats& lhs, const Draw2DPacketStats& rhs) noexcept = default;
 };
 
 enum class Draw2DPacketValidationIssue : std::uint8_t
@@ -252,8 +241,7 @@ struct Draw2DPacketValidation final
         return issue == Draw2DPacketValidationIssue::None;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DPacketValidation& lhs, const Draw2DPacketValidation& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DPacketValidation& lhs, const Draw2DPacketValidation& rhs) noexcept = default;
 };
 [[nodiscard]] constexpr std::string_view GetName(Draw2DPacketValidationIssue issue) noexcept
 {
@@ -317,8 +305,7 @@ struct Draw2DPacketValidation final
 
 namespace detail
 {
-[[nodiscard]] constexpr bool CheckedAdd(std::uint64_t lhs, std::uint64_t rhs,
-                                        std::uint64_t& result) noexcept
+[[nodiscard]] constexpr bool CheckedAdd(std::uint64_t lhs, std::uint64_t rhs, std::uint64_t& result) noexcept
 {
     if (rhs > std::numeric_limits<std::uint64_t>::max() - lhs)
     {
@@ -328,8 +315,7 @@ namespace detail
     return true;
 }
 
-[[nodiscard]] constexpr bool CheckedMultiply(std::uint64_t lhs, std::uint64_t rhs,
-                                             std::uint64_t& result) noexcept
+[[nodiscard]] constexpr bool CheckedMultiply(std::uint64_t lhs, std::uint64_t rhs, std::uint64_t& result) noexcept
 {
     if (lhs != 0U && rhs > std::numeric_limits<std::uint64_t>::max() / lhs)
     {
@@ -339,17 +325,14 @@ namespace detail
     return true;
 }
 
-[[nodiscard]] constexpr Draw2DPacketValidation Fail(
-    Draw2DPacketValidationIssue issue, Draw2DPacketStats stats,
-    std::uint64_t elementIndex = kNoDraw2DElementIndex, std::uint64_t requested = 0U,
-    std::uint64_t allowed = 0U) noexcept
+[[nodiscard]] constexpr Draw2DPacketValidation Fail(Draw2DPacketValidationIssue issue, Draw2DPacketStats stats,
+                                                    std::uint64_t elementIndex = kNoDraw2DElementIndex, std::uint64_t requested = 0U,
+                                                    std::uint64_t allowed = 0U) noexcept
 {
     return Draw2DPacketValidation{issue, stats, elementIndex, requested, allowed};
 }
 
-[[nodiscard]] inline core::Error MakeError(
-    RenderErrorCode code, std::string message,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] inline core::Error MakeError(RenderErrorCode code, std::string message, std::source_location location = std::source_location::current())
 {
     return core::Error{ToErrorCode(code), std::move(message), location};
 }
@@ -375,8 +358,8 @@ namespace detail
 }
 } // namespace detail
 
-[[nodiscard]] constexpr Draw2DPacketValidation InspectDraw2DPacketCounts(
-    Draw2DPacketCounts counts, Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept
+[[nodiscard]] constexpr Draw2DPacketValidation InspectDraw2DPacketCounts(Draw2DPacketCounts counts,
+                                                                         Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept
 {
     Draw2DPacketStats stats{.counts = counts};
     if (!IsValid(limits))
@@ -391,8 +374,7 @@ namespace detail
     {
         return detail::Fail(Draw2DPacketValidationIssue::IndexByteOverflow, stats);
     }
-    if (!detail::CheckedMultiply(counts.drawRecordCount, sizeof(Draw2DDrawRecord),
-                                 stats.drawRecordBytes))
+    if (!detail::CheckedMultiply(counts.drawRecordCount, sizeof(Draw2DDrawRecord), stats.drawRecordBytes))
     {
         return detail::Fail(Draw2DPacketValidationIssue::DrawRecordByteOverflow, stats);
     }
@@ -408,50 +390,43 @@ namespace detail
     constexpr std::uint64_t kMaximumAddressableCount{std::numeric_limits<std::uint32_t>::max()};
     if (counts.vertexCount > kMaximumAddressableCount)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::VertexCountUnrepresentable, stats,
-                            kNoDraw2DElementIndex, counts.vertexCount, kMaximumAddressableCount);
+        return detail::Fail(Draw2DPacketValidationIssue::VertexCountUnrepresentable, stats, kNoDraw2DElementIndex, counts.vertexCount,
+                            kMaximumAddressableCount);
     }
     if (counts.indexCount > kMaximumAddressableCount)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::IndexCountUnrepresentable, stats,
-                            kNoDraw2DElementIndex, counts.indexCount, kMaximumAddressableCount);
+        return detail::Fail(Draw2DPacketValidationIssue::IndexCountUnrepresentable, stats, kNoDraw2DElementIndex, counts.indexCount,
+                            kMaximumAddressableCount);
     }
     if (counts.vertexCount > limits.maxVertexCount)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::VertexCountLimit, stats,
-                            kNoDraw2DElementIndex, counts.vertexCount, limits.maxVertexCount);
+        return detail::Fail(Draw2DPacketValidationIssue::VertexCountLimit, stats, kNoDraw2DElementIndex, counts.vertexCount, limits.maxVertexCount);
     }
     if (counts.indexCount > limits.maxIndexCount)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::IndexCountLimit, stats,
-                            kNoDraw2DElementIndex, counts.indexCount, limits.maxIndexCount);
+        return detail::Fail(Draw2DPacketValidationIssue::IndexCountLimit, stats, kNoDraw2DElementIndex, counts.indexCount, limits.maxIndexCount);
     }
     if (counts.drawRecordCount > limits.maxDrawRecordCount)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::DrawRecordCountLimit, stats,
-                            kNoDraw2DElementIndex, counts.drawRecordCount,
+        return detail::Fail(Draw2DPacketValidationIssue::DrawRecordCountLimit, stats, kNoDraw2DElementIndex, counts.drawRecordCount,
                             limits.maxDrawRecordCount);
     }
     if (stats.packetBytes > limits.maxPacketBytes)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::PacketByteLimit, stats,
-                            kNoDraw2DElementIndex, stats.packetBytes, limits.maxPacketBytes);
+        return detail::Fail(Draw2DPacketValidationIssue::PacketByteLimit, stats, kNoDraw2DElementIndex, stats.packetBytes, limits.maxPacketBytes);
     }
     if (stats.uploadBytes > limits.maxUploadBytes)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::UploadByteLimit, stats,
-                            kNoDraw2DElementIndex, stats.uploadBytes, limits.maxUploadBytes);
+        return detail::Fail(Draw2DPacketValidationIssue::UploadByteLimit, stats, kNoDraw2DElementIndex, stats.uploadBytes, limits.maxUploadBytes);
     }
     return Draw2DPacketValidation{.stats = stats};
 }
-[[nodiscard]] inline Draw2DPacketValidation InspectDraw2DPacketData(
-    Draw2DPixelExtent extent, std::uint64_t schemaFingerprint,
-    std::span<const Draw2DVertex> vertices, std::span<const Draw2DIndex> indices,
-    std::span<const Draw2DDrawRecord> drawRecords,
-    Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept
+[[nodiscard]] inline Draw2DPacketValidation InspectDraw2DPacketData(Draw2DPixelExtent extent, std::uint64_t schemaFingerprint,
+                                                                    std::span<const Draw2DVertex> vertices, std::span<const Draw2DIndex> indices,
+                                                                    std::span<const Draw2DDrawRecord> drawRecords,
+                                                                    Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept
 {
-    const Draw2DPacketCounts counts{static_cast<std::uint64_t>(vertices.size()),
-                                    static_cast<std::uint64_t>(indices.size()),
+    const Draw2DPacketCounts counts{static_cast<std::uint64_t>(vertices.size()), static_cast<std::uint64_t>(indices.size()),
                                     static_cast<std::uint64_t>(drawRecords.size())};
     Draw2DPacketValidation validation = InspectDraw2DPacketCounts(counts, limits);
     if (!validation.IsValid())
@@ -464,8 +439,7 @@ namespace detail
     }
     if (schemaFingerprint != kDraw2DSchemaFingerprint)
     {
-        return detail::Fail(Draw2DPacketValidationIssue::SchemaFingerprintMismatch,
-                            validation.stats, kNoDraw2DElementIndex, schemaFingerprint,
+        return detail::Fail(Draw2DPacketValidationIssue::SchemaFingerprintMismatch, validation.stats, kNoDraw2DElementIndex, schemaFingerprint,
                             kDraw2DSchemaFingerprint);
     }
 
@@ -486,13 +460,11 @@ namespace detail
         const Draw2DVertex& vertex = vertices[index];
         if (!std::isfinite(vertex.x) || !std::isfinite(vertex.y))
         {
-            return detail::Fail(Draw2DPacketValidationIssue::NonFiniteVertex, validation.stats,
-                                static_cast<std::uint64_t>(index));
+            return detail::Fail(Draw2DPacketValidationIssue::NonFiniteVertex, validation.stats, static_cast<std::uint64_t>(index));
         }
         if (!IsValid(vertex.color))
         {
-            return detail::Fail(Draw2DPacketValidationIssue::InvalidPackedColor, validation.stats,
-                                static_cast<std::uint64_t>(index));
+            return detail::Fail(Draw2DPacketValidationIssue::InvalidPackedColor, validation.stats, static_cast<std::uint64_t>(index));
         }
     }
     Draw2DIndex minimumRawIndex{std::numeric_limits<Draw2DIndex>::max()};
@@ -501,8 +473,7 @@ namespace detail
     {
         if (static_cast<std::uint64_t>(indices[index]) >= counts.vertexCount)
         {
-            return detail::Fail(Draw2DPacketValidationIssue::IndexOutOfRange, validation.stats,
-                                static_cast<std::uint64_t>(index), indices[index],
+            return detail::Fail(Draw2DPacketValidationIssue::IndexOutOfRange, validation.stats, static_cast<std::uint64_t>(index), indices[index],
                                 counts.vertexCount);
         }
         minimumRawIndex = std::min(minimumRawIndex, indices[index]);
@@ -515,25 +486,22 @@ namespace detail
         const Draw2DDrawRecord& draw = drawRecords[drawIndex];
         if (draw.indexCount == 0U)
         {
-            return detail::Fail(Draw2DPacketValidationIssue::EmptyDrawRange, validation.stats,
-                                static_cast<std::uint64_t>(drawIndex));
+            return detail::Fail(Draw2DPacketValidationIssue::EmptyDrawRange, validation.stats, static_cast<std::uint64_t>(drawIndex));
         }
         if (draw.indexCount % 3U != 0U)
         {
-            return detail::Fail(Draw2DPacketValidationIssue::NonTriangleDrawRange, validation.stats,
-                                static_cast<std::uint64_t>(drawIndex), draw.indexCount, 3U);
+            return detail::Fail(Draw2DPacketValidationIssue::NonTriangleDrawRange, validation.stats, static_cast<std::uint64_t>(drawIndex),
+                                draw.indexCount, 3U);
         }
-        const std::uint64_t endIndex = static_cast<std::uint64_t>(draw.firstIndex) +
-                                       static_cast<std::uint64_t>(draw.indexCount);
+        const std::uint64_t endIndex = static_cast<std::uint64_t>(draw.firstIndex) + static_cast<std::uint64_t>(draw.indexCount);
         if (endIndex > counts.indexCount)
         {
-            return detail::Fail(Draw2DPacketValidationIssue::DrawRangeOutOfRange, validation.stats,
-                                static_cast<std::uint64_t>(drawIndex), endIndex, counts.indexCount);
+            return detail::Fail(Draw2DPacketValidationIssue::DrawRangeOutOfRange, validation.stats, static_cast<std::uint64_t>(drawIndex), endIndex,
+                                counts.indexCount);
         }
         if (!IsValid(draw.scissor, extent))
         {
-            return detail::Fail(Draw2DPacketValidationIssue::InvalidScissor, validation.stats,
-                                static_cast<std::uint64_t>(drawIndex));
+            return detail::Fail(Draw2DPacketValidationIssue::InvalidScissor, validation.stats, static_cast<std::uint64_t>(drawIndex));
         }
         if (draw.baseVertex == 0)
         {
@@ -541,26 +509,20 @@ namespace detail
         }
 
         const std::int64_t baseVertex = static_cast<std::int64_t>(draw.baseVertex);
-        const std::int64_t globalMinimumEffectiveVertex =
-            static_cast<std::int64_t>(minimumRawIndex) + baseVertex;
-        const std::int64_t globalMaximumEffectiveVertex =
-            static_cast<std::int64_t>(maximumRawIndex) + baseVertex;
-        if (globalMinimumEffectiveVertex >= 0 &&
-            static_cast<std::uint64_t>(globalMaximumEffectiveVertex) < counts.vertexCount)
+        const std::int64_t globalMinimumEffectiveVertex = static_cast<std::int64_t>(minimumRawIndex) + baseVertex;
+        const std::int64_t globalMaximumEffectiveVertex = static_cast<std::int64_t>(maximumRawIndex) + baseVertex;
+        if (globalMinimumEffectiveVertex >= 0 && static_cast<std::uint64_t>(globalMaximumEffectiveVertex) < counts.vertexCount)
         {
             continue;
         }
 
         std::uint64_t requiredValidationIndexCount{};
-        const bool countRepresentable = detail::CheckedAdd(
-            baseVertexValidationIndexCount, draw.indexCount, requiredValidationIndexCount);
-        if (!countRepresentable ||
-            requiredValidationIndexCount > limits.maxBaseVertexValidationIndexCount)
+        const bool countRepresentable = detail::CheckedAdd(baseVertexValidationIndexCount, draw.indexCount, requiredValidationIndexCount);
+        if (!countRepresentable || requiredValidationIndexCount > limits.maxBaseVertexValidationIndexCount)
         {
-            return detail::Fail(Draw2DPacketValidationIssue::BaseVertexValidationIndexCountLimit,
-                                validation.stats, static_cast<std::uint64_t>(drawIndex),
-                                countRepresentable ? requiredValidationIndexCount
-                                                   : std::numeric_limits<std::uint64_t>::max(),
+            return detail::Fail(Draw2DPacketValidationIssue::BaseVertexValidationIndexCountLimit, validation.stats,
+                                static_cast<std::uint64_t>(drawIndex),
+                                countRepresentable ? requiredValidationIndexCount : std::numeric_limits<std::uint64_t>::max(),
                                 limits.maxBaseVertexValidationIndexCount);
         }
         baseVertexValidationIndexCount = requiredValidationIndexCount;
@@ -568,13 +530,10 @@ namespace detail
         for (std::uint64_t index = draw.firstIndex; index < endIndex; ++index)
         {
             const std::int64_t effectiveVertex =
-                static_cast<std::int64_t>(indices[static_cast<std::size_t>(index)]) +
-                static_cast<std::int64_t>(draw.baseVertex);
-            if (effectiveVertex < 0 ||
-                static_cast<std::uint64_t>(effectiveVertex) >= counts.vertexCount)
+                static_cast<std::int64_t>(indices[static_cast<std::size_t>(index)]) + static_cast<std::int64_t>(draw.baseVertex);
+            if (effectiveVertex < 0 || static_cast<std::uint64_t>(effectiveVertex) >= counts.vertexCount)
             {
-                return detail::Fail(Draw2DPacketValidationIssue::BaseVertexOutOfRange,
-                                    validation.stats, static_cast<std::uint64_t>(drawIndex));
+                return detail::Fail(Draw2DPacketValidationIssue::BaseVertexOutOfRange, validation.stats, static_cast<std::uint64_t>(drawIndex));
             }
         }
     }
@@ -587,10 +546,13 @@ class Draw2DPacket final
 {
 public:
     Draw2DPacket(const Draw2DPacket&) = delete;
-    Draw2DPacket(Draw2DPacket&& other) noexcept
-        : m_extent{other.m_extent}, m_schemaFingerprint{other.m_schemaFingerprint},
-          m_vertices{std::move(other.m_vertices)}, m_indices{std::move(other.m_indices)},
-          m_drawRecords{std::move(other.m_drawRecords)}, m_stats{other.m_stats}
+    Draw2DPacket(Draw2DPacket&& other) noexcept :
+        m_extent{other.m_extent},
+        m_schemaFingerprint{other.m_schemaFingerprint},
+        m_vertices{std::move(other.m_vertices)},
+        m_indices{std::move(other.m_indices)},
+        m_drawRecords{std::move(other.m_drawRecords)},
+        m_stats{other.m_stats}
     {
         other.NormalizeAfterMove();
     }
@@ -669,22 +631,21 @@ private:
     Draw2DPacketStats m_stats{};
 };
 
-[[nodiscard]] inline Draw2DPacketValidation InspectDraw2DPacket(
-    const Draw2DPacket& packet, Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept
+[[nodiscard]] inline Draw2DPacketValidation InspectDraw2DPacket(const Draw2DPacket& packet,
+                                                                Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept
 {
-    return InspectDraw2DPacketData(packet.GetPixelExtent(), packet.GetSchemaFingerprint(),
-                                   packet.GetVertices(), packet.GetIndices(),
+    return InspectDraw2DPacketData(packet.GetPixelExtent(), packet.GetSchemaFingerprint(), packet.GetVertices(), packet.GetIndices(),
                                    packet.GetDrawRecords(), limits);
 }
 
-[[nodiscard]] inline core::Result<Draw2DPacketStats> ValidateDraw2DPacket(
-    const Draw2DPacket& packet, Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits)
+[[nodiscard]] inline core::Result<Draw2DPacketStats> ValidateDraw2DPacket(const Draw2DPacket& packet,
+                                                                          Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits)
 {
     const Draw2DPacketValidation validation = InspectDraw2DPacket(packet, limits);
     if (!validation.IsValid())
     {
-        return core::Result<Draw2DPacketStats>::FromError(detail::MakeError(
-            RenderErrorCode::InvalidArgument, detail::MakeValidationMessage(validation)));
+        return core::Result<Draw2DPacketStats>::FromError(
+            detail::MakeError(RenderErrorCode::InvalidArgument, detail::MakeValidationMessage(validation)));
     }
     return validation.stats;
 }
@@ -702,24 +663,25 @@ struct Draw2DPacketBuilderSnapshot final
     Draw2DPacketCounts counts{};
     Draw2DPacketCounts capacities{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DPacketBuilderSnapshot& lhs,
-        const Draw2DPacketBuilderSnapshot& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DPacketBuilderSnapshot& lhs, const Draw2DPacketBuilderSnapshot& rhs) noexcept = default;
 };
 class Draw2DPacketBuilder final
 {
 public:
-    explicit Draw2DPacketBuilder(Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept
-        : m_limits{limits}
+    explicit Draw2DPacketBuilder(Draw2DPacketLimits limits = kDefaultDraw2DPacketLimits) noexcept :
+        m_limits{limits}
     {
     }
 
     Draw2DPacketBuilder(const Draw2DPacketBuilder&) = delete;
-    Draw2DPacketBuilder(Draw2DPacketBuilder&& other) noexcept
-        : m_limits{other.m_limits}, m_state{other.m_state}, m_extent{other.m_extent},
-          m_vertices{std::move(other.m_vertices)}, m_indices{std::move(other.m_indices)},
-          m_drawRecords{std::move(other.m_drawRecords)},
-          m_reusablePacket{std::move(other.m_reusablePacket)}
+    Draw2DPacketBuilder(Draw2DPacketBuilder&& other) noexcept :
+        m_limits{other.m_limits},
+        m_state{other.m_state},
+        m_extent{other.m_extent},
+        m_vertices{std::move(other.m_vertices)},
+        m_indices{std::move(other.m_indices)},
+        m_drawRecords{std::move(other.m_drawRecords)},
+        m_reusablePacket{std::move(other.m_reusablePacket)}
     {
         other.m_reusablePacket.reset();
         other.Reset();
@@ -751,13 +713,11 @@ public:
         }
         if (!IsEmpty())
         {
-            return MakeFailure(RenderErrorCode::InvalidState,
-                               "Draw2D packet extent must be set before packet data is appended.");
+            return MakeFailure(RenderErrorCode::InvalidState, "Draw2D packet extent must be set before packet data is appended.");
         }
         if (!IsValid(extent))
         {
-            return MakeFailure(RenderErrorCode::InvalidArgument,
-                               "Draw2D packet extent must have positive width and height.");
+            return MakeFailure(RenderErrorCode::InvalidArgument, "Draw2D packet extent must have positive width and height.");
         }
         m_extent = extent;
         return core::VoidResult::Success();
@@ -770,25 +730,20 @@ public:
             return open;
         }
         const Draw2DPacketCounts current = GetCounts();
-        if (counts.vertexCount < current.vertexCount || counts.indexCount < current.indexCount ||
-            counts.drawRecordCount < current.drawRecordCount)
+        if (counts.vertexCount < current.vertexCount || counts.indexCount < current.indexCount || counts.drawRecordCount < current.drawRecordCount)
         {
-            return MakeFailure(RenderErrorCode::InvalidArgument,
-                               "Draw2D reserve counts cannot be smaller than current storage.");
+            return MakeFailure(RenderErrorCode::InvalidArgument, "Draw2D reserve counts cannot be smaller than current storage.");
         }
         const Draw2DPacketValidation validation = InspectDraw2DPacketCounts(counts, m_limits);
         if (!validation.IsValid())
         {
-            return MakeFailure(RenderErrorCode::InvalidArgument,
-                               detail::MakeValidationMessage(validation));
+            return MakeFailure(RenderErrorCode::InvalidArgument, detail::MakeValidationMessage(validation));
         }
-        if (core::VoidResult result = ReserveVector(m_vertices, counts.vertexCount, "vertex");
-            !result.HasValue())
+        if (core::VoidResult result = ReserveVector(m_vertices, counts.vertexCount, "vertex"); !result.HasValue())
         {
             return result;
         }
-        if (core::VoidResult result = ReserveVector(m_indices, counts.indexCount, "index");
-            !result.HasValue())
+        if (core::VoidResult result = ReserveVector(m_indices, counts.indexCount, "index"); !result.HasValue())
         {
             return result;
         }
@@ -822,16 +777,15 @@ public:
             return core::Result<Draw2DPacket>::FromError(std::move(open).GetError());
         }
 
-        const Draw2DPacketValidation validation = InspectDraw2DPacketData(
-            m_extent, kDraw2DSchemaFingerprint, m_vertices, m_indices, m_drawRecords, m_limits);
+        const Draw2DPacketValidation validation =
+            InspectDraw2DPacketData(m_extent, kDraw2DSchemaFingerprint, m_vertices, m_indices, m_drawRecords, m_limits);
         if (!validation.IsValid())
         {
-            return core::Result<Draw2DPacket>::FromError(detail::MakeError(
-                RenderErrorCode::InvalidArgument, detail::MakeValidationMessage(validation)));
+            return core::Result<Draw2DPacket>::FromError(
+                detail::MakeError(RenderErrorCode::InvalidArgument, detail::MakeValidationMessage(validation)));
         }
 
-        Draw2DPacket packet =
-            m_reusablePacket.has_value() ? std::move(*m_reusablePacket) : Draw2DPacket{};
+        Draw2DPacket packet = m_reusablePacket.has_value() ? std::move(*m_reusablePacket) : Draw2DPacket{};
         m_reusablePacket.reset();
         try
         {
@@ -849,15 +803,13 @@ public:
         }
         catch (const std::bad_alloc&)
         {
-            return core::Result<Draw2DPacket>::FromError(detail::MakeError(
-                RenderErrorCode::OutOfMemory,
-                "Draw2D packet builder could not allocate sealed packet storage."));
+            return core::Result<Draw2DPacket>::FromError(
+                detail::MakeError(RenderErrorCode::OutOfMemory, "Draw2D packet builder could not allocate sealed packet storage."));
         }
         catch (const std::length_error&)
         {
-            return core::Result<Draw2DPacket>::FromError(detail::MakeError(
-                RenderErrorCode::OutOfMemory,
-                "Draw2D packet sealed storage exceeds the host container maximum."));
+            return core::Result<Draw2DPacket>::FromError(
+                detail::MakeError(RenderErrorCode::OutOfMemory, "Draw2D packet sealed storage exceeds the host container maximum."));
         }
 
         m_state = Draw2DPacketBuilderState::Sealed;
@@ -906,11 +858,10 @@ public:
 
     [[nodiscard]] Draw2DPacketBuilderSnapshot GetSnapshot() const noexcept
     {
-        return Draw2DPacketBuilderSnapshot{
-            m_state, m_extent, GetCounts(),
-            Draw2DPacketCounts{static_cast<std::uint64_t>(m_vertices.capacity()),
-                               static_cast<std::uint64_t>(m_indices.capacity()),
-                               static_cast<std::uint64_t>(m_drawRecords.capacity())}};
+        return Draw2DPacketBuilderSnapshot{m_state, m_extent, GetCounts(),
+                                           Draw2DPacketCounts{static_cast<std::uint64_t>(m_vertices.capacity()),
+                                                              static_cast<std::uint64_t>(m_indices.capacity()),
+                                                              static_cast<std::uint64_t>(m_drawRecords.capacity())}};
     }
 
 private:
@@ -923,8 +874,7 @@ private:
 
     [[nodiscard]] Draw2DPacketCounts GetCounts() const noexcept
     {
-        return Draw2DPacketCounts{static_cast<std::uint64_t>(m_vertices.size()),
-                                  static_cast<std::uint64_t>(m_indices.size()),
+        return Draw2DPacketCounts{static_cast<std::uint64_t>(m_vertices.size()), static_cast<std::uint64_t>(m_indices.size()),
                                   static_cast<std::uint64_t>(m_drawRecords.size())};
     }
 
@@ -932,28 +882,23 @@ private:
     {
         if (!IsValid(m_limits))
         {
-            return MakeFailure(RenderErrorCode::InvalidArgument,
-                               "Draw2D packet builder limits must all be non-zero.");
+            return MakeFailure(RenderErrorCode::InvalidArgument, "Draw2D packet builder limits must all be non-zero.");
         }
         if (!IsOpen())
         {
-            return MakeFailure(RenderErrorCode::InvalidState,
-                               "Draw2D packet builder is sealed; call Reset before reuse.");
+            return MakeFailure(RenderErrorCode::InvalidState, "Draw2D packet builder is sealed; call Reset before reuse.");
         }
         return core::VoidResult::Success();
     }
 
-    [[nodiscard]] static core::VoidResult MakeFailure(
-        RenderErrorCode code, std::string message,
-        std::source_location location = std::source_location::current())
+    [[nodiscard]] static core::VoidResult MakeFailure(RenderErrorCode code, std::string message,
+                                                      std::source_location location = std::source_location::current())
     {
         return core::VoidResult::FromError(detail::MakeError(code, std::move(message), location));
     }
 
     template <typename Value>
-    [[nodiscard]] core::VoidResult ReserveVector(std::vector<Value>& storage,
-                                                 std::uint64_t requested,
-                                                 std::string_view storageName)
+    [[nodiscard]] core::VoidResult ReserveVector(std::vector<Value>& storage, std::uint64_t requested, std::string_view storageName)
     {
         if (requested <= static_cast<std::uint64_t>(storage.capacity()))
         {
@@ -963,8 +908,7 @@ private:
             requested > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
         {
             return MakeFailure(RenderErrorCode::InvalidArgument,
-                               "Draw2D " + std::string{storageName} +
-                                   " capacity is not representable by the host container.");
+                               "Draw2D " + std::string{storageName} + " capacity is not representable by the host container.");
         }
         try
         {
@@ -972,22 +916,17 @@ private:
         }
         catch (const std::bad_alloc&)
         {
-            return MakeFailure(RenderErrorCode::OutOfMemory,
-                               "Draw2D packet builder could not reserve " +
-                                   std::string{storageName} + " storage.");
+            return MakeFailure(RenderErrorCode::OutOfMemory, "Draw2D packet builder could not reserve " + std::string{storageName} + " storage.");
         }
         catch (const std::length_error&)
         {
-            return MakeFailure(RenderErrorCode::OutOfMemory,
-                               "Draw2D " + std::string{storageName} +
-                                   " storage exceeds the host container maximum.");
+            return MakeFailure(RenderErrorCode::OutOfMemory, "Draw2D " + std::string{storageName} + " storage exceeds the host container maximum.");
         }
         return core::VoidResult::Success();
     }
 
     template <typename Value>
-    [[nodiscard]] core::VoidResult AppendRange(std::vector<Value>& storage,
-                                               std::span<const Value> values, StorageKind kind)
+    [[nodiscard]] core::VoidResult AppendRange(std::vector<Value>& storage, std::span<const Value> values, StorageKind kind)
     {
         if (core::VoidResult open = EnsureOpen(); !open.HasValue())
         {
@@ -995,15 +934,12 @@ private:
         }
         if (!IsValid(m_extent))
         {
-            return MakeFailure(RenderErrorCode::InvalidState,
-                               "Draw2D packet extent must be set before appending packet data.");
+            return MakeFailure(RenderErrorCode::InvalidState, "Draw2D packet extent must be set before appending packet data.");
         }
         std::uint64_t required{};
-        if (!detail::CheckedAdd(static_cast<std::uint64_t>(storage.size()),
-                                static_cast<std::uint64_t>(values.size()), required))
+        if (!detail::CheckedAdd(static_cast<std::uint64_t>(storage.size()), static_cast<std::uint64_t>(values.size()), required))
         {
-            return MakeFailure(RenderErrorCode::InvalidArgument,
-                               "Draw2D packet append count overflowed uint64.");
+            return MakeFailure(RenderErrorCode::InvalidArgument, "Draw2D packet append count overflowed uint64.");
         }
 
         Draw2DPacketCounts counts = GetCounts();
@@ -1031,8 +967,7 @@ private:
         const Draw2DPacketValidation validation = InspectDraw2DPacketCounts(counts, m_limits);
         if (!validation.IsValid())
         {
-            return MakeFailure(RenderErrorCode::InvalidArgument,
-                               detail::MakeValidationMessage(validation));
+            return MakeFailure(RenderErrorCode::InvalidArgument, detail::MakeValidationMessage(validation));
         }
 
         std::uint64_t desiredCapacity = required;
@@ -1040,15 +975,13 @@ private:
         if (currentCapacity < required)
         {
             std::uint64_t grownCapacity{};
-            if (!detail::CheckedMultiply(std::max<std::uint64_t>(currentCapacity, 4U), 2U,
-                                         grownCapacity))
+            if (!detail::CheckedMultiply(std::max<std::uint64_t>(currentCapacity, 4U), 2U, grownCapacity))
             {
                 grownCapacity = hardMaximum;
             }
             desiredCapacity = std::min(hardMaximum, std::max(required, grownCapacity));
         }
-        if (core::VoidResult reserved = ReserveVector(storage, desiredCapacity, storageName);
-            !reserved.HasValue())
+        if (core::VoidResult reserved = ReserveVector(storage, desiredCapacity, storageName); !reserved.HasValue())
         {
             return reserved;
         }
@@ -1059,13 +992,11 @@ private:
         }
         catch (const std::bad_alloc&)
         {
-            return MakeFailure(RenderErrorCode::OutOfMemory,
-                               "Draw2D packet append could not allocate storage.");
+            return MakeFailure(RenderErrorCode::OutOfMemory, "Draw2D packet append could not allocate storage.");
         }
         catch (const std::length_error&)
         {
-            return MakeFailure(RenderErrorCode::OutOfMemory,
-                               "Draw2D packet append exceeds the host container maximum.");
+            return MakeFailure(RenderErrorCode::OutOfMemory, "Draw2D packet append exceeds the host container maximum.");
         }
         return core::VoidResult::Success();
     }

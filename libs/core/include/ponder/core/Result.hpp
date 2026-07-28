@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ponder/core/Assert.hpp>
 #include <ponder/core/StackTrace.hpp>
 
 #include <concepts>
@@ -14,7 +15,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace pond::core
+namespace ponder::core
 {
 enum class ErrorCategory : std::uint8_t
 {
@@ -33,8 +34,9 @@ class ErrorCode final
 {
 public:
     constexpr ErrorCode() noexcept = default;
-    constexpr ErrorCode(ErrorCategory category, ErrorCodeValue value) noexcept
-        : m_category(category), m_value(value)
+    constexpr ErrorCode(ErrorCategory category, ErrorCodeValue value) noexcept :
+        m_category(category),
+        m_value(value)
     {
     }
 
@@ -48,8 +50,7 @@ public:
         return m_value;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const ErrorCode& lhs,
-                                                   const ErrorCode& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const ErrorCode& lhs, const ErrorCode& rhs) noexcept = default;
 
 private:
     ErrorCategory m_category{ErrorCategory::General};
@@ -59,12 +60,9 @@ private:
 class Error final
 {
 public:
-    explicit Error(std::string message,
-                   std::source_location location = std::source_location::current());
-    Error(ErrorCode code, std::string message,
-          std::source_location location = std::source_location::current());
-    Error(ErrorCode code, std::string message, StackTrace stackTrace,
-          std::source_location location = std::source_location::current());
+    explicit Error(std::string message, std::source_location location = std::source_location::current());
+    Error(ErrorCode code, std::string message, std::source_location location = std::source_location::current());
+    Error(ErrorCode code, std::string message, StackTrace stackTrace, std::source_location location = std::source_location::current());
 
     [[nodiscard]] ErrorCode GetCode() const noexcept;
     [[nodiscard]] std::string_view GetMessage() const noexcept;
@@ -79,11 +77,9 @@ private:
 };
 
 template <typename ErrorType>
-concept ConvertToErrorCode =
-    std::same_as<std::remove_cvref_t<ErrorType>, ErrorCode> ||
-    requires(ErrorType error) {
-        { ToErrorCode(error) } -> std::same_as<ErrorCode>;
-    };
+concept ConvertToErrorCode = std::same_as<std::remove_cvref_t<ErrorType>, ErrorCode> || requires(ErrorType error) {
+    { ToErrorCode(error) } -> std::same_as<ErrorCode>;
+};
 
 [[nodiscard]] inline bool operator==(const Error& error, ErrorCode code) noexcept
 {
@@ -96,23 +92,20 @@ concept ConvertToErrorCode =
 }
 
 template <typename ErrorType>
-    requires(!std::same_as<std::remove_cvref_t<ErrorType>, ErrorCode> &&
-             ConvertToErrorCode<ErrorType>)
-[[nodiscard]] bool operator==(const Error& error, ErrorType code) noexcept(
-    noexcept(ToErrorCode(code)))
+    requires(!std::same_as<std::remove_cvref_t<ErrorType>, ErrorCode> && ConvertToErrorCode<ErrorType>)
+[[nodiscard]] bool operator==(const Error& error, ErrorType code) noexcept(noexcept(ToErrorCode(code)))
 {
     return error.GetCode() == ToErrorCode(code);
 }
 
 template <typename ErrorType>
-    requires(!std::same_as<std::remove_cvref_t<ErrorType>, ErrorCode> &&
-             ConvertToErrorCode<ErrorType>)
+    requires(!std::same_as<std::remove_cvref_t<ErrorType>, ErrorCode> && ConvertToErrorCode<ErrorType>)
 [[nodiscard]] bool operator==(ErrorType code, const Error& error) noexcept(noexcept(error == code))
 {
     return error == code;
 }
 
-[[nodiscard]] constexpr std::string_view GetErrorCategoryName(ErrorCategory category) noexcept
+[[nodiscard]] constexpr std::string_view GetErrorCategoryName(ErrorCategory category)
 {
     switch (category)
     {
@@ -132,7 +125,7 @@ template <typename ErrorType>
         return "internal";
     }
 
-    return "unknown";
+    PONDER_UNREACHABLE("Invalid ErrorCategory value: {}", static_cast<unsigned int>(category));
 }
 
 inline std::ostream& operator<<(std::ostream& output, ErrorCategory category)
@@ -147,16 +140,15 @@ inline std::ostream& operator<<(std::ostream& output, ErrorCode code)
 
 inline std::ostream& operator<<(std::ostream& output, const Error& error)
 {
-    return output << '[' << error.GetCode() << "] " << error.GetMessage() << " ("
-                  << FormatSourceLocation(error.GetLocation()) << ')';
+    return output << '[' << error.GetCode() << "] " << error.GetMessage() << " (" << FormatSourceLocation(error.GetLocation()) << ')';
 }
-
 
 namespace detail
 {
 [[noreturn]] consteval void RejectConstexprErrorConstruction()
 {
-    throw "pond::core::Error is runtime-only and cannot be constructed during constant evaluation.";
+    throw "ponder::core::Error is runtime-only and cannot be constructed during constant "
+          "evaluation.";
 }
 } // namespace detail
 
@@ -172,32 +164,27 @@ public:
         requires std::default_initializable<ValueType>
     = default;
     constexpr Result(const Result&) = default;
-    constexpr Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) =
-        default;
+    constexpr Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) = default;
     constexpr Result& operator=(const Result&) = default;
-    constexpr Result& operator=(Result&&) noexcept(
-        std::is_nothrow_move_assignable_v<ExpectedType>) = default;
+    constexpr Result& operator=(Result&&) noexcept(std::is_nothrow_move_assignable_v<ExpectedType>) = default;
     ~Result() = default;
 
     template <typename Input>
-        requires(!std::same_as<std::remove_cvref_t<Input>, Result> &&
-                 !std::same_as<std::remove_cvref_t<Input>, std::unexpected<ErrorType>> &&
+        requires(!std::same_as<std::remove_cvref_t<Input>, Result> && !std::same_as<std::remove_cvref_t<Input>, std::unexpected<ErrorType>> &&
                  std::constructible_from<ValueType, Input &&>)
-    constexpr Result(Input&& value) noexcept(std::is_nothrow_constructible_v<ValueType, Input&&>)
-        : m_expected(std::in_place, std::forward<Input>(value))
+    constexpr Result(Input&& value) noexcept(std::is_nothrow_constructible_v<ValueType, Input&&>) :
+        m_expected(std::in_place, std::forward<Input>(value))
     {
     }
 
-    constexpr Result(std::unexpected<ErrorType> unexpected) noexcept(
-        std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
-        : m_expected(std::move(unexpected))
+    constexpr Result(std::unexpected<ErrorType> unexpected) noexcept(std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>) :
+        m_expected(std::move(unexpected))
     {
     }
 
     template <typename... Args>
         requires std::constructible_from<ValueType, Args&&...>
-    [[nodiscard]] static constexpr Result FromValue(Args&&... args) noexcept(
-        std::is_nothrow_constructible_v<ValueType, Args&&...>)
+    [[nodiscard]] static constexpr Result FromValue(Args&&... args) noexcept(std::is_nothrow_constructible_v<ValueType, Args&&...>)
     {
         return Result{std::in_place, std::forward<Args>(args)...};
     }
@@ -295,9 +282,8 @@ public:
 private:
     template <typename... Args>
         requires std::constructible_from<ValueType, Args&&...>
-    constexpr explicit Result(std::in_place_t, Args&&... args) noexcept(
-        std::is_nothrow_constructible_v<ValueType, Args&&...>)
-        : m_expected(std::in_place, std::forward<Args>(args)...)
+    constexpr explicit Result(std::in_place_t, Args&&... args) noexcept(std::is_nothrow_constructible_v<ValueType, Args&&...>) :
+        m_expected(std::in_place, std::forward<Args>(args)...)
     {
     }
 
@@ -314,16 +300,13 @@ public:
 
     constexpr Result() = default;
     constexpr Result(const Result&) = default;
-    constexpr Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) =
-        default;
+    constexpr Result(Result&&) noexcept(std::is_nothrow_move_constructible_v<ExpectedType>) = default;
     constexpr Result& operator=(const Result&) = default;
-    constexpr Result& operator=(Result&&) noexcept(
-        std::is_nothrow_move_assignable_v<ExpectedType>) = default;
+    constexpr Result& operator=(Result&&) noexcept(std::is_nothrow_move_assignable_v<ExpectedType>) = default;
     ~Result() = default;
 
-    constexpr Result(std::unexpected<ErrorType> unexpected) noexcept(
-        std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>)
-        : m_expected(std::move(unexpected))
+    constexpr Result(std::unexpected<ErrorType> unexpected) noexcept(std::is_nothrow_constructible_v<ExpectedType, std::unexpected<ErrorType>&&>) :
+        m_expected(std::move(unexpected))
     {
     }
 
@@ -386,16 +369,10 @@ using VoidResult = Result<void>;
 namespace detail
 {
 template <typename Value>
-concept StreamableResultValue = requires(std::ostream& output, const Value& value)
-{
-    output << value;
-};
+concept StreamableResultValue = requires(std::ostream& output, const Value& value) { output << value; };
 
 template <typename Value>
-concept FormattableResultValue = requires(const Value& value)
-{
-    std::format("{}", value);
-};
+concept FormattableResultValue = requires(const Value& value) { std::format("{}", value); };
 } // namespace detail
 
 template <typename Value>
@@ -435,58 +412,52 @@ template <typename... Args>
     }
     return std::unexpected<Error>(Error(std::forward<Args>(args)...));
 }
-} // namespace pond::core
+} // namespace ponder::core
 
 namespace std
 {
 template <>
-struct formatter<pond::core::ErrorCategory> : formatter<string_view>
+struct formatter<ponder::core::ErrorCategory> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::core::ErrorCategory category, FormatContext& context) const
+    auto format(ponder::core::ErrorCategory category, FormatContext& context) const
     {
-        return formatter<string_view>::format(pond::core::GetErrorCategoryName(category), context);
+        return formatter<string_view>::format(ponder::core::GetErrorCategoryName(category), context);
     }
 };
 
 template <>
-struct formatter<pond::core::ErrorCode> : formatter<string>
+struct formatter<ponder::core::ErrorCode> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::core::ErrorCode code, FormatContext& context) const
+    auto format(ponder::core::ErrorCode code, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("{}:{}", pond::core::GetErrorCategoryName(code.GetCategory()),
-                        code.GetValue()),
-            context);
+        return formatter<string>::format(std::format("{}:{}", ponder::core::GetErrorCategoryName(code.GetCategory()), code.GetValue()), context);
     }
 };
 
 template <>
-struct formatter<pond::core::Error> : formatter<string>
+struct formatter<ponder::core::Error> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::core::Error& error, FormatContext& context) const
+    auto format(const ponder::core::Error& error, FormatContext& context) const
     {
         return formatter<string>::format(
-            std::format("[{}] {} ({})", error.GetCode(), error.GetMessage(),
-                   pond::core::FormatSourceLocation(error.GetLocation())),
-            context);
+            std::format("[{}] {} ({})", error.GetCode(), error.GetMessage(), ponder::core::FormatSourceLocation(error.GetLocation())), context);
     }
 };
 
 template <typename Value>
-struct formatter<pond::core::Result<Value>> : formatter<string>
+struct formatter<ponder::core::Result<Value>> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::core::Result<Value>& result, FormatContext& context) const
+    auto format(const ponder::core::Result<Value>& result, FormatContext& context) const
     {
         if (result)
         {
-            if constexpr (pond::core::detail::FormattableResultValue<Value>)
+            if constexpr (ponder::core::detail::FormattableResultValue<Value>)
             {
-                return formatter<string>::format(
-                    std::format("Result{{value={}}}", result.GetValue()), context);
+                return formatter<string>::format(std::format("Result{{value={}}}", result.GetValue()), context);
             }
             else
             {
@@ -494,24 +465,22 @@ struct formatter<pond::core::Result<Value>> : formatter<string>
             }
         }
 
-        return formatter<string>::format(std::format("Result{{error={}}}", result.GetError()),
-                                         context);
+        return formatter<string>::format(std::format("Result{{error={}}}", result.GetError()), context);
     }
 };
 
 template <>
-struct formatter<pond::core::Result<void>> : formatter<string>
+struct formatter<ponder::core::Result<void>> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::core::Result<void>& result, FormatContext& context) const
+    auto format(const ponder::core::Result<void>& result, FormatContext& context) const
     {
         if (result)
         {
             return formatter<string>::format("Result{success}", context);
         }
 
-        return formatter<string>::format(std::format("Result{{error={}}}", result.GetError()),
-                                         context);
+        return formatter<string>::format(std::format("Result{{error={}}}", result.GetError()), context);
     }
 };
 } // namespace std
@@ -519,64 +488,60 @@ struct formatter<pond::core::Result<void>> : formatter<string>
 #define PONDER_CORE_DETAIL_CONCAT_IMPL(lhs, rhs) lhs##rhs
 #define PONDER_CORE_DETAIL_CONCAT(lhs, rhs) PONDER_CORE_DETAIL_CONCAT_IMPL(lhs, rhs)
 
-#define RETURN_VOID_IF_FAILED(resultExpr)                                                        \
-    PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_IMPL(                                                \
-        resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__))
+#define RETURN_VOID_IF_FAILED(resultExpr)                                                                                                            \
+    PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_IMPL(resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__))
 
-#define PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_IMPL(resultExpr, resultName)                     \
-    do                                                                                            \
-    {                                                                                             \
-        auto&& resultName = (resultExpr);                                                         \
-        if (!resultName) [[unlikely]]                                                            \
-        {                                                                                         \
-            return;                                                                               \
-        }                                                                                         \
+#define PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_IMPL(resultExpr, resultName)                                                                        \
+    do                                                                                                                                               \
+    {                                                                                                                                                \
+        auto&& resultName = (resultExpr);                                                                                                            \
+        if (!resultName) [[unlikely]]                                                                                                                \
+        {                                                                                                                                            \
+            return;                                                                                                                                  \
+        }                                                                                                                                            \
     } while (false)
 
-#define RETURN_VOID_IF_FAILED_FN(resultExpr, ...)                                                 \
-    PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_FN_IMPL(                                             \
-        resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__),                        \
-        PONDER_CORE_DETAIL_CONCAT(ponderError_, __COUNTER__), __VA_ARGS__)
+#define RETURN_VOID_IF_FAILED_FN(resultExpr, ...)                                                                                                    \
+    PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_FN_IMPL(resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__),                              \
+                                                     PONDER_CORE_DETAIL_CONCAT(ponderError_, __COUNTER__), __VA_ARGS__)
 
-#define PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_FN_IMPL(resultExpr, resultName, errorName, ...)  \
-    do                                                                                            \
-    {                                                                                             \
-        auto&& resultName = (resultExpr);                                                         \
-        if (!resultName) [[unlikely]]                                                            \
-        {                                                                                         \
-            const ::pond::core::Error& errorName = resultName.GetError();                         \
-            (__VA_ARGS__)(errorName);                                                            \
-            return;                                                                               \
-        }                                                                                         \
+#define PONDER_CORE_DETAIL_RETURN_VOID_IF_FAILED_FN_IMPL(resultExpr, resultName, errorName, ...)                                                     \
+    do                                                                                                                                               \
+    {                                                                                                                                                \
+        auto&& resultName = (resultExpr);                                                                                                            \
+        if (!resultName) [[unlikely]]                                                                                                                \
+        {                                                                                                                                            \
+            const ::ponder::core::Error& errorName = resultName.GetError();                                                                          \
+            (__VA_ARGS__)(errorName);                                                                                                                \
+            return;                                                                                                                                  \
+        }                                                                                                                                            \
     } while (false)
 
-#define RETURN_ERROR_IF_FAILED(resultExpr)                                                        \
-    PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_IMPL(                                               \
-        resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__))
+#define RETURN_ERROR_IF_FAILED(resultExpr)                                                                                                           \
+    PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_IMPL(resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__))
 
-#define PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_IMPL(resultExpr, resultName)                    \
-    do                                                                                            \
-    {                                                                                             \
-        auto&& resultName = (resultExpr);                                                         \
-        if (!resultName) [[unlikely]]                                                            \
-        {                                                                                         \
-            return std::unexpected<::pond::core::Error>{std::move(resultName).GetError()};        \
-        }                                                                                         \
+#define PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_IMPL(resultExpr, resultName)                                                                       \
+    do                                                                                                                                               \
+    {                                                                                                                                                \
+        auto&& resultName = (resultExpr);                                                                                                            \
+        if (!resultName) [[unlikely]]                                                                                                                \
+        {                                                                                                                                            \
+            return std::unexpected<::ponder::core::Error>{std::move(resultName).GetError()};                                                         \
+        }                                                                                                                                            \
     } while (false)
 
-#define RETURN_ERROR_IF_FAILED_FN(resultExpr, ...)                                                \
-    PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_FN_IMPL(                                            \
-        resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__),                        \
-        PONDER_CORE_DETAIL_CONCAT(ponderError_, __COUNTER__), __VA_ARGS__)
+#define RETURN_ERROR_IF_FAILED_FN(resultExpr, ...)                                                                                                   \
+    PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_FN_IMPL(resultExpr, PONDER_CORE_DETAIL_CONCAT(ponderResult_, __COUNTER__),                             \
+                                                      PONDER_CORE_DETAIL_CONCAT(ponderError_, __COUNTER__), __VA_ARGS__)
 
-#define PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_FN_IMPL(resultExpr, resultName, errorName, ...) \
-    do                                                                                            \
-    {                                                                                             \
-        auto&& resultName = (resultExpr);                                                         \
-        if (!resultName) [[unlikely]]                                                            \
-        {                                                                                         \
-            const ::pond::core::Error& errorName = resultName.GetError();                         \
-            (__VA_ARGS__)(errorName);                                                            \
-            return std::unexpected<::pond::core::Error>{std::move(resultName).GetError()};        \
-        }                                                                                         \
+#define PONDER_CORE_DETAIL_RETURN_ERROR_IF_FAILED_FN_IMPL(resultExpr, resultName, errorName, ...)                                                    \
+    do                                                                                                                                               \
+    {                                                                                                                                                \
+        auto&& resultName = (resultExpr);                                                                                                            \
+        if (!resultName) [[unlikely]]                                                                                                                \
+        {                                                                                                                                            \
+            const ::ponder::core::Error& errorName = resultName.GetError();                                                                          \
+            (__VA_ARGS__)(errorName);                                                                                                                \
+            return std::unexpected<::ponder::core::Error>{std::move(resultName).GetError()};                                                         \
+        }                                                                                                                                            \
     } while (false)

@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <functional>
 
-namespace pond::core
+namespace ponder::core
 {
 template <typename Tag>
 class Identifier final
@@ -16,7 +16,10 @@ public:
     using ValueType = std::uint64_t;
 
     constexpr Identifier() noexcept = default;
-    explicit constexpr Identifier(ValueType value) noexcept : m_value{value} {}
+    explicit constexpr Identifier(ValueType value) noexcept :
+        m_value{value}
+    {
+    }
 
     [[nodiscard]] static constexpr Identifier Invalid() noexcept
     {
@@ -33,22 +36,21 @@ public:
         return m_value != 0;
     }
 
-    [[nodiscard]] friend constexpr auto operator<=>(const Identifier& lhs,
-                                                    const Identifier& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const Identifier& lhs, const Identifier& rhs) noexcept = default;
 
 private:
     ValueType m_value{};
 };
-} // namespace pond::core
+} // namespace ponder::core
 
 namespace std
 {
 template <typename Tag>
-struct hash<pond::core::Identifier<Tag>>
+struct hash<ponder::core::Identifier<Tag>>
 {
-    [[nodiscard]] constexpr std::size_t operator()(pond::core::Identifier<Tag> id) const noexcept
+    [[nodiscard]] constexpr std::size_t operator()(ponder::core::Identifier<Tag> id) const noexcept
     {
-        return pond::core::HashIdentifierValue(id.GetValue());
+        return ponder::core::HashIdentifierValue(id.GetValue());
     }
 };
 } // namespace std

@@ -4,11 +4,9 @@ namespace
 {
 [[nodiscard]] constexpr bool TriangleFactoryIsConstantEvaluable()
 {
-    const auto triangle = pond::math::Triangle::Create(pond::math::Vector3{0.0F, 0.0F, 0.0F},
-                                                       pond::math::Vector3{1.0F, 0.0F, 0.0F},
+    const auto triangle = pond::math::Triangle::Create(pond::math::Vector3{0.0F, 0.0F, 0.0F}, pond::math::Vector3{1.0F, 0.0F, 0.0F},
                                                        pond::math::Vector3{0.0F, 1.0F, 0.0F});
-    return triangle.HasValue() &&
-           triangle.GetValue().GetVertex0() == pond::math::Vector3{0.0F, 0.0F, 0.0F} &&
+    return triangle.HasValue() && triangle.GetValue().GetVertex0() == pond::math::Vector3{0.0F, 0.0F, 0.0F} &&
            triangle.GetValue().GetVertex1() == pond::math::Vector3{1.0F, 0.0F, 0.0F} &&
            triangle.GetValue().GetVertex2() == pond::math::Vector3{0.0F, 1.0F, 0.0F};
 }
@@ -17,8 +15,7 @@ static_assert(TriangleFactoryIsConstantEvaluable());
 
 [[maybe_unused]] void UseTriangleHeader()
 {
-    auto triangle = pond::math::Triangle::Create(pond::math::Vector3{0.0F, 0.0F, 0.0F},
-                                                 pond::math::Vector3{1.0F, 0.0F, 0.0F},
+    auto triangle = pond::math::Triangle::Create(pond::math::Vector3{0.0F, 0.0F, 0.0F}, pond::math::Vector3{1.0F, 0.0F, 0.0F},
                                                  pond::math::Vector3{0.0F, 1.0F, 0.0F});
     (void)triangle;
 }

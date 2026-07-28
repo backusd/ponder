@@ -17,10 +17,9 @@ namespace pond::render::draw2d
 {
 struct Draw2DPacketTestFactory final
 {
-    [[nodiscard]] static Draw2DPacket Create(
-        Draw2DPixelExtent extent, std::vector<Draw2DVertex> vertices = {},
-        std::vector<Draw2DIndex> indices = {}, std::vector<Draw2DDrawRecord> drawRecords = {},
-        std::uint64_t schemaFingerprint = kDraw2DSchemaFingerprint)
+    [[nodiscard]] static Draw2DPacket Create(Draw2DPixelExtent extent, std::vector<Draw2DVertex> vertices = {}, std::vector<Draw2DIndex> indices = {},
+                                             std::vector<Draw2DDrawRecord> drawRecords = {},
+                                             std::uint64_t schemaFingerprint = kDraw2DSchemaFingerprint)
     {
         Draw2DPacket packet;
         packet.m_extent = extent;
@@ -28,13 +27,10 @@ struct Draw2DPacketTestFactory final
         packet.m_vertices = std::move(vertices);
         packet.m_indices = std::move(indices);
         packet.m_drawRecords = std::move(drawRecords);
-        packet.m_stats =
-            InspectDraw2DPacketCounts(
-                Draw2DPacketCounts{
-                    .vertexCount = static_cast<std::uint64_t>(packet.m_vertices.size()),
-                    .indexCount = static_cast<std::uint64_t>(packet.m_indices.size()),
-                    .drawRecordCount = static_cast<std::uint64_t>(packet.m_drawRecords.size())})
-                .stats;
+        packet.m_stats = InspectDraw2DPacketCounts(Draw2DPacketCounts{.vertexCount = static_cast<std::uint64_t>(packet.m_vertices.size()),
+                                                                      .indexCount = static_cast<std::uint64_t>(packet.m_indices.size()),
+                                                                      .drawRecordCount = static_cast<std::uint64_t>(packet.m_drawRecords.size())})
+                             .stats;
         return packet;
     }
 };
@@ -60,12 +56,9 @@ using pond::render::draw2d::Draw2DScissor;
 using pond::render::draw2d::Draw2DVertex;
 
 constexpr Draw2DPixelExtent kExtent{.width = 64U, .height = 48U};
-constexpr Draw2DScissor kFullScissor{
-    .left = 0U, .top = 0U, .right = kExtent.width, .bottom = kExtent.height};
-constexpr Draw2DPackedLinearPremultipliedRgba8 kWhite =
-    Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U);
-constexpr Draw2DPackedLinearPremultipliedRgba8 kRed =
-    Draw2DPackedLinearPremultipliedRgba8::FromChannels(128U, 0U, 0U, 128U);
+constexpr Draw2DScissor kFullScissor{.left = 0U, .top = 0U, .right = kExtent.width, .bottom = kExtent.height};
+constexpr Draw2DPackedLinearPremultipliedRgba8 kWhite = Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U);
+constexpr Draw2DPackedLinearPremultipliedRgba8 kRed = Draw2DPackedLinearPremultipliedRgba8::FromChannels(128U, 0U, 0U, 128U);
 
 static_assert(std::same_as<Draw2DIndex, std::uint32_t>);
 static_assert(std::is_standard_layout_v<Draw2DVertex>);
@@ -82,18 +75,14 @@ static_assert(!std::copy_constructible<Draw2DPacketBuilder>);
 static_assert(std::move_constructible<Draw2DPacketBuilder>);
 static_assert(std::is_nothrow_move_constructible_v<Draw2DPacket>);
 static_assert(std::is_nothrow_move_constructible_v<Draw2DPacketBuilder>);
-static_assert(std::same_as<decltype(std::declval<const Draw2DPacket&>().GetVertices()),
-                           std::span<const Draw2DVertex>>);
-static_assert(std::same_as<decltype(std::declval<const Draw2DPacket&>().GetIndices()),
-                           std::span<const Draw2DIndex>>);
-static_assert(std::same_as<decltype(std::declval<const Draw2DPacket&>().GetDrawRecords()),
-                           std::span<const Draw2DDrawRecord>>);
-static_assert(pond::render::draw2d::ComputeDraw2DSchemaFingerprint("hello") ==
-              0xa430d84680aabd0bULL);
+static_assert(std::same_as<decltype(std::declval<const Draw2DPacket&>().GetVertices()), std::span<const Draw2DVertex>>);
+static_assert(std::same_as<decltype(std::declval<const Draw2DPacket&>().GetIndices()), std::span<const Draw2DIndex>>);
+static_assert(std::same_as<decltype(std::declval<const Draw2DPacket&>().GetDrawRecords()), std::span<const Draw2DDrawRecord>>);
+static_assert(pond::render::draw2d::ComputeDraw2DSchemaFingerprint("hello") == 0xa430d84680aabd0bULL);
 static_assert(pond::render::draw2d::kDraw2DSchemaFingerprint == 0x05c436a9fda7b4f7ULL);
 
-[[nodiscard]] std::vector<Draw2DVertex> MakeQuadVertices(
-    Draw2DPackedLinearPremultipliedRgba8 color = kWhite, float offsetX = 0.0F, float offsetY = 0.0F)
+[[nodiscard]] std::vector<Draw2DVertex> MakeQuadVertices(Draw2DPackedLinearPremultipliedRgba8 color = kWhite, float offsetX = 0.0F,
+                                                         float offsetY = 0.0F)
 {
     return {{.x = offsetX, .y = offsetY, .color = color},
             {.x = offsetX + 16.0F, .y = offsetY, .color = color},
@@ -108,14 +97,12 @@ static_assert(pond::render::draw2d::kDraw2DSchemaFingerprint == 0x05c436a9fda7b4
 
 [[nodiscard]] Draw2DDrawRecord MakeQuadDraw(Draw2DScissor scissor = kFullScissor)
 {
-    return Draw2DDrawRecord{
-        .firstIndex = 0U, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
+    return Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
 }
 
 [[nodiscard]] Draw2DPacket MakeValidQuadPacket()
 {
-    return Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
-                                           {MakeQuadDraw()});
+    return Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(), {MakeQuadDraw()});
 }
 
 void ExpectRenderErrorCode(const pond::core::Error& error, RenderErrorCode code)
@@ -133,10 +120,8 @@ void ExpectIssue(const Draw2DPacket& packet, Draw2DPacketValidationIssue issue,
 
 TEST(RenderDraw2DPacketTests, FreezesVertexMemoryAndColorByteOrder)
 {
-    constexpr Draw2DPackedLinearPremultipliedRgba8 color =
-        Draw2DPackedLinearPremultipliedRgba8::FromChannels(0x12U, 0x34U, 0x56U, 0x78U);
-    constexpr std::array<std::uint8_t, 4U> bytes =
-        std::bit_cast<std::array<std::uint8_t, 4U>>(color);
+    constexpr Draw2DPackedLinearPremultipliedRgba8 color = Draw2DPackedLinearPremultipliedRgba8::FromChannels(0x12U, 0x34U, 0x56U, 0x78U);
+    constexpr std::array<std::uint8_t, 4U> bytes = std::bit_cast<std::array<std::uint8_t, 4U>>(color);
 
     EXPECT_EQ(bytes, (std::array<std::uint8_t, 4U>{0x12U, 0x34U, 0x56U, 0x78U}));
     EXPECT_EQ(color.GetRed(), 0x12U);
@@ -171,21 +156,16 @@ TEST(RenderDraw2DPacketTests, PreservesOrderedDrawsAndPermitsSharedIndexRanges)
     vertices.insert(vertices.end(), secondVertices.begin(), secondVertices.end());
 
     const std::vector<Draw2DIndex> indices = MakeQuadIndices();
-    const std::vector<Draw2DDrawRecord> draws{
-        Draw2DDrawRecord{.firstIndex = 0U,
-                         .indexCount = 6U,
-                         .baseVertex = 0,
-                         .scissor =
-                             Draw2DScissor{.left = 0U, .top = 0U, .right = 32U, .bottom = 24U}},
-        Draw2DDrawRecord{.firstIndex = 0U,
-                         .indexCount = 3U,
-                         .baseVertex = 4,
-                         .scissor =
-                             Draw2DScissor{.left = 8U, .top = 4U, .right = 48U, .bottom = 32U}},
-        Draw2DDrawRecord{
-            .firstIndex = 3U, .indexCount = 3U, .baseVertex = 4, .scissor = kFullScissor}};
-    Draw2DPacket packet =
-        Draw2DPacketTestFactory::Create(kExtent, std::move(vertices), indices, draws);
+    const std::vector<Draw2DDrawRecord> draws{Draw2DDrawRecord{.firstIndex = 0U,
+                                                               .indexCount = 6U,
+                                                               .baseVertex = 0,
+                                                               .scissor = Draw2DScissor{.left = 0U, .top = 0U, .right = 32U, .bottom = 24U}},
+                                              Draw2DDrawRecord{.firstIndex = 0U,
+                                                               .indexCount = 3U,
+                                                               .baseVertex = 4,
+                                                               .scissor = Draw2DScissor{.left = 8U, .top = 4U, .right = 48U, .bottom = 32U}},
+                                              Draw2DDrawRecord{.firstIndex = 3U, .indexCount = 3U, .baseVertex = 4, .scissor = kFullScissor}};
+    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, std::move(vertices), indices, draws);
 
     const Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacket(packet);
     ASSERT_TRUE(validation.IsValid());
@@ -199,8 +179,7 @@ TEST(RenderDraw2DPacketTests, PreservesOrderedDrawsAndPermitsSharedIndexRanges)
 TEST(RenderDraw2DPacketTests, AcceptsFiniteGeometryOutsideThePacketExtent)
 {
     std::vector<Draw2DVertex> vertices = MakeQuadVertices(kWhite, -100.5F, 200.25F);
-    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, std::move(vertices),
-                                                          MakeQuadIndices(), {MakeQuadDraw()});
+    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, std::move(vertices), MakeQuadIndices(), {MakeQuadDraw()});
 
     EXPECT_TRUE(pond::render::draw2d::InspectDraw2DPacket(packet).IsValid());
 }
@@ -211,14 +190,12 @@ TEST(RenderDraw2DPacketTests, ComputesExactCountsAndByteStatistics)
     const Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacket(packet);
     ASSERT_TRUE(validation.IsValid());
 
-    const Draw2DPacketStats expected{
-        .counts = Draw2DPacketCounts{.vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 1U},
-        .vertexBytes = 4U * sizeof(Draw2DVertex),
-        .indexBytes = 6U * sizeof(Draw2DIndex),
-        .drawRecordBytes = sizeof(Draw2DDrawRecord),
-        .packetBytes =
-            (4U * sizeof(Draw2DVertex)) + (6U * sizeof(Draw2DIndex)) + sizeof(Draw2DDrawRecord),
-        .uploadBytes = (4U * sizeof(Draw2DVertex)) + (6U * sizeof(Draw2DIndex))};
+    const Draw2DPacketStats expected{.counts = Draw2DPacketCounts{.vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 1U},
+                                     .vertexBytes = 4U * sizeof(Draw2DVertex),
+                                     .indexBytes = 6U * sizeof(Draw2DIndex),
+                                     .drawRecordBytes = sizeof(Draw2DDrawRecord),
+                                     .packetBytes = (4U * sizeof(Draw2DVertex)) + (6U * sizeof(Draw2DIndex)) + sizeof(Draw2DDrawRecord),
+                                     .uploadBytes = (4U * sizeof(Draw2DVertex)) + (6U * sizeof(Draw2DIndex))};
     EXPECT_EQ(validation.stats, expected);
 }
 
@@ -228,10 +205,7 @@ TEST(RenderDraw2DPacketTests, RejectsInvalidLimitsBeforeCountArithmetic)
     limits.maxVertexCount = 0U;
 
     const Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacketCounts(
-        Draw2DPacketCounts{.vertexCount = std::numeric_limits<std::uint64_t>::max(),
-                           .indexCount = 0U,
-                           .drawRecordCount = 0U},
-        limits);
+        Draw2DPacketCounts{.vertexCount = std::numeric_limits<std::uint64_t>::max(), .indexCount = 0U, .drawRecordCount = 0U}, limits);
     EXPECT_EQ(validation.issue, Draw2DPacketValidationIssue::InvalidLimits);
 }
 
@@ -240,55 +214,42 @@ TEST(RenderDraw2DPacketTests, ReportsEveryCountAndByteArithmeticOverflow)
     constexpr std::uint64_t kMaximum = std::numeric_limits<std::uint64_t>::max();
 
     const Draw2DPacketValidation vertexOverflow = pond::render::draw2d::InspectDraw2DPacketCounts(
-        Draw2DPacketCounts{.vertexCount = (kMaximum / sizeof(Draw2DVertex)) + 1U,
-                           .indexCount = 0U,
-                           .drawRecordCount = 0U});
+        Draw2DPacketCounts{.vertexCount = (kMaximum / sizeof(Draw2DVertex)) + 1U, .indexCount = 0U, .drawRecordCount = 0U});
     EXPECT_EQ(vertexOverflow.issue, Draw2DPacketValidationIssue::VertexByteOverflow);
 
     const Draw2DPacketValidation indexOverflow = pond::render::draw2d::InspectDraw2DPacketCounts(
-        Draw2DPacketCounts{.vertexCount = 0U,
-                           .indexCount = (kMaximum / sizeof(Draw2DIndex)) + 1U,
-                           .drawRecordCount = 0U});
+        Draw2DPacketCounts{.vertexCount = 0U, .indexCount = (kMaximum / sizeof(Draw2DIndex)) + 1U, .drawRecordCount = 0U});
     EXPECT_EQ(indexOverflow.issue, Draw2DPacketValidationIssue::IndexByteOverflow);
 
     const Draw2DPacketValidation drawOverflow = pond::render::draw2d::InspectDraw2DPacketCounts(
-        Draw2DPacketCounts{.vertexCount = 0U,
-                           .indexCount = 0U,
-                           .drawRecordCount = (kMaximum / sizeof(Draw2DDrawRecord)) + 1U});
+        Draw2DPacketCounts{.vertexCount = 0U, .indexCount = 0U, .drawRecordCount = (kMaximum / sizeof(Draw2DDrawRecord)) + 1U});
     EXPECT_EQ(drawOverflow.issue, Draw2DPacketValidationIssue::DrawRecordByteOverflow);
 
     const std::uint64_t nearlyMaximumVertexCount = kMaximum / sizeof(Draw2DVertex);
-    const Draw2DPacketValidation uploadOverflow =
-        pond::render::draw2d::InspectDraw2DPacketCounts(Draw2DPacketCounts{
-            .vertexCount = nearlyMaximumVertexCount, .indexCount = 1U, .drawRecordCount = 0U});
+    const Draw2DPacketValidation uploadOverflow = pond::render::draw2d::InspectDraw2DPacketCounts(
+        Draw2DPacketCounts{.vertexCount = nearlyMaximumVertexCount, .indexCount = 1U, .drawRecordCount = 0U});
     EXPECT_EQ(uploadOverflow.issue, Draw2DPacketValidationIssue::UploadByteOverflow);
 
     const std::uint64_t nearlyMaximumDrawCount = kMaximum / sizeof(Draw2DDrawRecord);
-    const std::uint64_t remainingPacketBytes =
-        kMaximum - (nearlyMaximumDrawCount * sizeof(Draw2DDrawRecord));
+    const std::uint64_t remainingPacketBytes = kMaximum - (nearlyMaximumDrawCount * sizeof(Draw2DDrawRecord));
     const std::uint64_t indicesToOverflowPacket = (remainingPacketBytes / sizeof(Draw2DIndex)) + 1U;
     const Draw2DPacketValidation packetOverflow = pond::render::draw2d::InspectDraw2DPacketCounts(
-        Draw2DPacketCounts{.vertexCount = 0U,
-                           .indexCount = indicesToOverflowPacket,
-                           .drawRecordCount = nearlyMaximumDrawCount});
+        Draw2DPacketCounts{.vertexCount = 0U, .indexCount = indicesToOverflowPacket, .drawRecordCount = nearlyMaximumDrawCount});
     EXPECT_EQ(packetOverflow.issue, Draw2DPacketValidationIssue::PacketByteOverflow);
 }
 
 TEST(RenderDraw2DPacketTests, RejectsCountsThatCannotBeAddressedByPacketFields)
 {
-    constexpr std::uint64_t kFirstUnrepresentable =
-        static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 1U;
+    constexpr std::uint64_t kFirstUnrepresentable = static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 1U;
 
-    const Draw2DPacketValidation vertices =
-        pond::render::draw2d::InspectDraw2DPacketCounts(Draw2DPacketCounts{
-            .vertexCount = kFirstUnrepresentable, .indexCount = 0U, .drawRecordCount = 0U});
+    const Draw2DPacketValidation vertices = pond::render::draw2d::InspectDraw2DPacketCounts(
+        Draw2DPacketCounts{.vertexCount = kFirstUnrepresentable, .indexCount = 0U, .drawRecordCount = 0U});
     EXPECT_EQ(vertices.issue, Draw2DPacketValidationIssue::VertexCountUnrepresentable);
     EXPECT_EQ(vertices.requested, kFirstUnrepresentable);
     EXPECT_EQ(vertices.allowed, std::numeric_limits<std::uint32_t>::max());
 
-    const Draw2DPacketValidation indices =
-        pond::render::draw2d::InspectDraw2DPacketCounts(Draw2DPacketCounts{
-            .vertexCount = 0U, .indexCount = kFirstUnrepresentable, .drawRecordCount = 0U});
+    const Draw2DPacketValidation indices = pond::render::draw2d::InspectDraw2DPacketCounts(
+        Draw2DPacketCounts{.vertexCount = 0U, .indexCount = kFirstUnrepresentable, .drawRecordCount = 0U});
     EXPECT_EQ(indices.issue, Draw2DPacketValidationIssue::IndexCountUnrepresentable);
     EXPECT_EQ(indices.requested, kFirstUnrepresentable);
     EXPECT_EQ(indices.allowed, std::numeric_limits<std::uint32_t>::max());
@@ -296,10 +257,8 @@ TEST(RenderDraw2DPacketTests, RejectsCountsThatCannotBeAddressedByPacketFields)
 
 TEST(RenderDraw2DPacketTests, AcceptsExactConfiguredCountAndByteLimits)
 {
-    constexpr Draw2DPacketCounts kCounts{
-        .vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 2U};
-    const Draw2DPacketValidation computed =
-        pond::render::draw2d::InspectDraw2DPacketCounts(kCounts);
+    constexpr Draw2DPacketCounts kCounts{.vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 2U};
+    const Draw2DPacketValidation computed = pond::render::draw2d::InspectDraw2DPacketCounts(kCounts);
     ASSERT_TRUE(computed.IsValid());
 
     const Draw2DPacketLimits exactLimits{.maxVertexCount = kCounts.vertexCount,
@@ -307,24 +266,20 @@ TEST(RenderDraw2DPacketTests, AcceptsExactConfiguredCountAndByteLimits)
                                          .maxDrawRecordCount = kCounts.drawRecordCount,
                                          .maxPacketBytes = computed.stats.packetBytes,
                                          .maxUploadBytes = computed.stats.uploadBytes};
-    const Draw2DPacketValidation exact =
-        pond::render::draw2d::InspectDraw2DPacketCounts(kCounts, exactLimits);
+    const Draw2DPacketValidation exact = pond::render::draw2d::InspectDraw2DPacketCounts(kCounts, exactLimits);
     EXPECT_TRUE(exact.IsValid());
     EXPECT_EQ(exact.stats, computed.stats);
 }
 
 TEST(RenderDraw2DPacketTests, ReportsEachConfiguredLimitWithRequestedAndAllowedValues)
 {
-    constexpr Draw2DPacketCounts kCounts{
-        .vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 2U};
-    const Draw2DPacketValidation computed =
-        pond::render::draw2d::InspectDraw2DPacketCounts(kCounts);
+    constexpr Draw2DPacketCounts kCounts{.vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 2U};
+    const Draw2DPacketValidation computed = pond::render::draw2d::InspectDraw2DPacketCounts(kCounts);
     ASSERT_TRUE(computed.IsValid());
 
     Draw2DPacketLimits limits = pond::render::draw2d::kDefaultDraw2DPacketLimits;
     limits.maxVertexCount = kCounts.vertexCount - 1U;
-    Draw2DPacketValidation validation =
-        pond::render::draw2d::InspectDraw2DPacketCounts(kCounts, limits);
+    Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacketCounts(kCounts, limits);
     EXPECT_EQ(validation.issue, Draw2DPacketValidationIssue::VertexCountLimit);
     EXPECT_EQ(validation.requested, kCounts.vertexCount);
     EXPECT_EQ(validation.allowed, limits.maxVertexCount);
@@ -360,20 +315,15 @@ TEST(RenderDraw2DPacketTests, ReportsEachConfiguredLimitWithRequestedAndAllowedV
 
 TEST(RenderDraw2DPacketTests, RejectsZeroExtentAndSchemaFingerprintMismatch)
 {
-    Draw2DPacket zeroWidth =
-        Draw2DPacketTestFactory::Create({.width = 0U, .height = kExtent.height});
+    Draw2DPacket zeroWidth = Draw2DPacketTestFactory::Create({.width = 0U, .height = kExtent.height});
     ExpectIssue(zeroWidth, Draw2DPacketValidationIssue::InvalidExtent);
 
-    Draw2DPacket zeroHeight =
-        Draw2DPacketTestFactory::Create({.width = kExtent.width, .height = 0U});
+    Draw2DPacket zeroHeight = Draw2DPacketTestFactory::Create({.width = kExtent.width, .height = 0U});
     ExpectIssue(zeroHeight, Draw2DPacketValidationIssue::InvalidExtent);
 
-    constexpr std::uint64_t kWrongFingerprint =
-        pond::render::draw2d::kDraw2DSchemaFingerprint ^ 0x1U;
-    Draw2DPacket wrongFingerprint =
-        Draw2DPacketTestFactory::Create(kExtent, {}, {}, {}, kWrongFingerprint);
-    const Draw2DPacketValidation validation =
-        pond::render::draw2d::InspectDraw2DPacket(wrongFingerprint);
+    constexpr std::uint64_t kWrongFingerprint = pond::render::draw2d::kDraw2DSchemaFingerprint ^ 0x1U;
+    Draw2DPacket wrongFingerprint = Draw2DPacketTestFactory::Create(kExtent, {}, {}, {}, kWrongFingerprint);
+    const Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacket(wrongFingerprint);
     EXPECT_EQ(validation.issue, Draw2DPacketValidationIssue::SchemaFingerprintMismatch);
     EXPECT_EQ(validation.requested, kWrongFingerprint);
     EXPECT_EQ(validation.allowed, pond::render::draw2d::kDraw2DSchemaFingerprint);
@@ -390,8 +340,7 @@ TEST(RenderDraw2DPacketTests, RejectsEveryPartiallyEmptyPacketShape)
     Draw2DPacket drawsOnly = Draw2DPacketTestFactory::Create(kExtent, {}, {}, {MakeQuadDraw()});
     ExpectIssue(drawsOnly, Draw2DPacketValidationIssue::NonCanonicalEmptyPacket);
 
-    Draw2DPacket missingDraws =
-        Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices());
+    Draw2DPacket missingDraws = Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices());
     ExpectIssue(missingDraws, Draw2DPacketValidationIssue::NonCanonicalEmptyPacket);
 }
 
@@ -412,8 +361,7 @@ TEST(RenderDraw2DPacketTests, RejectsEveryNonFiniteVertexComponentAtItsIndex)
         std::vector<Draw2DVertex> vertices = MakeQuadVertices();
         vertices[2].x = kInvalidPositions[caseIndex].first;
         vertices[2].y = kInvalidPositions[caseIndex].second;
-        Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, std::move(vertices),
-                                                              MakeQuadIndices(), {MakeQuadDraw()});
+        Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, std::move(vertices), MakeQuadIndices(), {MakeQuadDraw()});
         ExpectIssue(packet, Draw2DPacketValidationIssue::NonFiniteVertex, 2U);
     }
 }
@@ -422,8 +370,7 @@ TEST(RenderDraw2DPacketTests, RejectsColorThatIsNotLinearPremultiplied)
 {
     std::vector<Draw2DVertex> vertices = MakeQuadVertices();
     vertices[1].color = Draw2DPackedLinearPremultipliedRgba8::FromChannels(129U, 0U, 0U, 128U);
-    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, std::move(vertices),
-                                                          MakeQuadIndices(), {MakeQuadDraw()});
+    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, std::move(vertices), MakeQuadIndices(), {MakeQuadDraw()});
 
     ExpectIssue(packet, Draw2DPacketValidationIssue::InvalidPackedColor, 1U);
 }
@@ -432,8 +379,7 @@ TEST(RenderDraw2DPacketTests, RejectsOutOfRangeIndexBeforeInspectingDraws)
 {
     std::vector<Draw2DIndex> indices = MakeQuadIndices();
     indices[2] = 4U;
-    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(),
-                                                          std::move(indices), {MakeQuadDraw()});
+    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), std::move(indices), {MakeQuadDraw()});
 
     const Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacket(packet);
     EXPECT_EQ(validation.issue, Draw2DPacketValidationIssue::IndexOutOfRange);
@@ -444,22 +390,19 @@ TEST(RenderDraw2DPacketTests, RejectsOutOfRangeIndexBeforeInspectingDraws)
 
 TEST(RenderDraw2DPacketTests, RejectsEmptyNonTriangleAndTruncatedDrawRanges)
 {
-    Draw2DPacket emptyRange = Draw2DPacketTestFactory::Create(
-        kExtent, MakeQuadVertices(), MakeQuadIndices(),
-        {Draw2DDrawRecord{
-            .firstIndex = 0U, .indexCount = 0U, .baseVertex = 0, .scissor = kFullScissor}});
+    Draw2DPacket emptyRange =
+        Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
+                                        {Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 0U, .baseVertex = 0, .scissor = kFullScissor}});
     ExpectIssue(emptyRange, Draw2DPacketValidationIssue::EmptyDrawRange, 0U);
 
-    Draw2DPacket nonTriangle = Draw2DPacketTestFactory::Create(
-        kExtent, MakeQuadVertices(), MakeQuadIndices(),
-        {Draw2DDrawRecord{
-            .firstIndex = 0U, .indexCount = 4U, .baseVertex = 0, .scissor = kFullScissor}});
+    Draw2DPacket nonTriangle =
+        Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
+                                        {Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 4U, .baseVertex = 0, .scissor = kFullScissor}});
     ExpectIssue(nonTriangle, Draw2DPacketValidationIssue::NonTriangleDrawRange, 0U);
 
-    Draw2DPacket truncated = Draw2DPacketTestFactory::Create(
-        kExtent, MakeQuadVertices(), MakeQuadIndices(),
-        {Draw2DDrawRecord{
-            .firstIndex = 4U, .indexCount = 3U, .baseVertex = 0, .scissor = kFullScissor}});
+    Draw2DPacket truncated =
+        Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
+                                        {Draw2DDrawRecord{.firstIndex = 4U, .indexCount = 3U, .baseVertex = 0, .scissor = kFullScissor}});
     const Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacket(truncated);
     EXPECT_EQ(validation.issue, Draw2DPacketValidationIssue::DrawRangeOutOfRange);
     EXPECT_EQ(validation.elementIndex, 0U);
@@ -469,43 +412,34 @@ TEST(RenderDraw2DPacketTests, RejectsEmptyNonTriangleAndTruncatedDrawRanges)
 
 TEST(RenderDraw2DPacketTests, ChecksDrawRangeArithmeticInPromotedWidth)
 {
-    Draw2DPacket packet = Draw2DPacketTestFactory::Create(
-        kExtent, MakeQuadVertices(), MakeQuadIndices(),
-        {Draw2DDrawRecord{.firstIndex = std::numeric_limits<std::uint32_t>::max(),
-                          .indexCount = std::numeric_limits<std::uint32_t>::max(),
-                          .baseVertex = 0,
-                          .scissor = kFullScissor}});
+    Draw2DPacket packet = Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
+                                                          {Draw2DDrawRecord{.firstIndex = std::numeric_limits<std::uint32_t>::max(),
+                                                                            .indexCount = std::numeric_limits<std::uint32_t>::max(),
+                                                                            .baseVertex = 0,
+                                                                            .scissor = kFullScissor}});
     const Draw2DPacketValidation validation = pond::render::draw2d::InspectDraw2DPacket(packet);
 
     EXPECT_EQ(validation.issue, Draw2DPacketValidationIssue::DrawRangeOutOfRange);
-    EXPECT_EQ(validation.requested,
-              2U * static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()));
+    EXPECT_EQ(validation.requested, 2U * static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()));
 
     Draw2DPacket promotedRange = Draw2DPacketTestFactory::Create(
         kExtent, MakeQuadVertices(), MakeQuadIndices(),
-        {Draw2DDrawRecord{.firstIndex = std::numeric_limits<std::uint32_t>::max() - 1U,
-                          .indexCount = 3U,
-                          .baseVertex = 0,
-                          .scissor = kFullScissor}});
-    const Draw2DPacketValidation promotedValidation =
-        pond::render::draw2d::InspectDraw2DPacket(promotedRange);
+        {Draw2DDrawRecord{.firstIndex = std::numeric_limits<std::uint32_t>::max() - 1U, .indexCount = 3U, .baseVertex = 0, .scissor = kFullScissor}});
+    const Draw2DPacketValidation promotedValidation = pond::render::draw2d::InspectDraw2DPacket(promotedRange);
     EXPECT_EQ(promotedValidation.issue, Draw2DPacketValidationIssue::DrawRangeOutOfRange);
-    EXPECT_EQ(promotedValidation.requested,
-              static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 2U);
+    EXPECT_EQ(promotedValidation.requested, static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) + 2U);
 }
 
 TEST(RenderDraw2DPacketTests, RejectsPositiveAndNegativeBaseVertexEscapes)
 {
-    Draw2DPacket positive = Draw2DPacketTestFactory::Create(
-        kExtent, MakeQuadVertices(), MakeQuadIndices(),
-        {Draw2DDrawRecord{
-            .firstIndex = 0U, .indexCount = 6U, .baseVertex = 1, .scissor = kFullScissor}});
+    Draw2DPacket positive =
+        Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
+                                        {Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 6U, .baseVertex = 1, .scissor = kFullScissor}});
     ExpectIssue(positive, Draw2DPacketValidationIssue::BaseVertexOutOfRange, 0U);
 
-    Draw2DPacket negative = Draw2DPacketTestFactory::Create(
-        kExtent, MakeQuadVertices(), MakeQuadIndices(),
-        {Draw2DDrawRecord{
-            .firstIndex = 0U, .indexCount = 6U, .baseVertex = -1, .scissor = kFullScissor}});
+    Draw2DPacket negative =
+        Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
+                                        {Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 6U, .baseVertex = -1, .scissor = kFullScissor}});
     ExpectIssue(negative, Draw2DPacketValidationIssue::BaseVertexOutOfRange, 0U);
 }
 
@@ -520,23 +454,18 @@ TEST(RenderDraw2DPacketTests, BoundsBaseVertexValidationWorkAndUsesSafeShortcuts
     std::vector<Draw2DVertex> shortcutVertices = MakeQuadVertices();
     std::vector<Draw2DVertex> secondVertices = MakeQuadVertices(kRed, 20.0F, 10.0F);
     shortcutVertices.insert(shortcutVertices.end(), secondVertices.begin(), secondVertices.end());
-    Draw2DPacket globallySafe = Draw2DPacketTestFactory::Create(
-        kExtent, std::move(shortcutVertices), MakeQuadIndices(),
-        {Draw2DDrawRecord{
-            .firstIndex = 0U, .indexCount = 6U, .baseVertex = 4, .scissor = kFullScissor}});
+    Draw2DPacket globallySafe =
+        Draw2DPacketTestFactory::Create(kExtent, std::move(shortcutVertices), MakeQuadIndices(),
+                                        {Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 6U, .baseVertex = 4, .scissor = kFullScissor}});
     EXPECT_TRUE(pond::render::draw2d::InspectDraw2DPacket(globallySafe, shortcutLimits).IsValid());
 
     std::vector<Draw2DVertex> scannedVertices = MakeQuadVertices();
     secondVertices = MakeQuadVertices(kRed, 20.0F, 10.0F);
     scannedVertices.insert(scannedVertices.end(), secondVertices.begin(), secondVertices.end());
     const std::vector<Draw2DIndex> scannedIndices{0U, 1U, 2U, 7U, 7U, 7U};
-    const std::vector<Draw2DDrawRecord> scannedDraws{
-        Draw2DDrawRecord{
-            .firstIndex = 0U, .indexCount = 3U, .baseVertex = 1, .scissor = kFullScissor},
-        Draw2DDrawRecord{
-            .firstIndex = 0U, .indexCount = 3U, .baseVertex = 1, .scissor = kFullScissor}};
-    Draw2DPacket requiresScans = Draw2DPacketTestFactory::Create(
-        kExtent, std::move(scannedVertices), scannedIndices, scannedDraws);
+    const std::vector<Draw2DDrawRecord> scannedDraws{Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 3U, .baseVertex = 1, .scissor = kFullScissor},
+                                                     Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 3U, .baseVertex = 1, .scissor = kFullScissor}};
+    Draw2DPacket requiresScans = Draw2DPacketTestFactory::Create(kExtent, std::move(scannedVertices), scannedIndices, scannedDraws);
 
     Draw2DPacketLimits exactLimits = pond::render::draw2d::kDefaultDraw2DPacketLimits;
     exactLimits.maxBaseVertexValidationIndexCount = 6U;
@@ -544,8 +473,7 @@ TEST(RenderDraw2DPacketTests, BoundsBaseVertexValidationWorkAndUsesSafeShortcuts
 
     Draw2DPacketLimits boundedLimits = exactLimits;
     boundedLimits.maxBaseVertexValidationIndexCount = 5U;
-    const Draw2DPacketValidation bounded =
-        pond::render::draw2d::InspectDraw2DPacket(requiresScans, boundedLimits);
+    const Draw2DPacketValidation bounded = pond::render::draw2d::InspectDraw2DPacket(requiresScans, boundedLimits);
     EXPECT_EQ(bounded.issue, Draw2DPacketValidationIssue::BaseVertexValidationIndexCountLimit);
     EXPECT_EQ(bounded.elementIndex, 1U);
     EXPECT_EQ(bounded.requested, 6U);
@@ -567,21 +495,18 @@ TEST(RenderDraw2DPacketTests, RejectsEveryMalformedOrUnclampedScissor)
     {
         SCOPED_TRACE(caseIndex);
         Draw2DPacket packet =
-            Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(),
-                                            {MakeQuadDraw(kInvalidScissors[caseIndex])});
+            Draw2DPacketTestFactory::Create(kExtent, MakeQuadVertices(), MakeQuadIndices(), {MakeQuadDraw(kInvalidScissors[caseIndex])});
         ExpectIssue(packet, Draw2DPacketValidationIssue::InvalidScissor, 0U);
     }
 }
 
 TEST(RenderDraw2DPacketTests, ConvertsValidationFailureToRenderInvalidArgument)
 {
-    Draw2DPacket malformed =
-        Draw2DPacketTestFactory::Create({.width = 0U, .height = kExtent.height});
+    Draw2DPacket malformed = Draw2DPacketTestFactory::Create({.width = 0U, .height = kExtent.height});
     const auto result = pond::render::draw2d::ValidateDraw2DPacket(malformed);
     ASSERT_FALSE(result.HasValue());
     ExpectRenderErrorCode(result.GetError(), RenderErrorCode::InvalidArgument);
-    EXPECT_NE(std::string{result.GetError().GetMessage()}.find("invalid_extent"),
-              std::string::npos);
+    EXPECT_NE(std::string{result.GetError().GetMessage()}.find("invalid_extent"), std::string::npos);
 }
 
 TEST(RenderDraw2DPacketTests, BuilderRequiresPositiveExtentBeforeAppendingData)
@@ -606,8 +531,7 @@ TEST(RenderDraw2DPacketTests, BuilderRequiresPositiveExtentBeforeAppendingData)
     const auto indicesWithoutExtent = builder.AppendIndices(indices);
     const auto drawWithoutExtent = builder.AppendDrawRecord(draw);
 
-    for (const pond::core::VoidResult* result :
-         std::array{&verticesWithoutExtent, &indicesWithoutExtent, &drawWithoutExtent})
+    for (const pond::core::VoidResult* result : std::array{&verticesWithoutExtent, &indicesWithoutExtent, &drawWithoutExtent})
     {
         ASSERT_FALSE(result->HasValue());
         ExpectRenderErrorCode(result->GetError(), RenderErrorCode::InvalidState);
@@ -620,10 +544,8 @@ TEST(RenderDraw2DPacketTests, BuilderRequiresPositiveExtentBeforeAppendingData)
 
 TEST(RenderDraw2DPacketTests, BuilderPreflightsExactReservationAndRejectsGrowthPastLimits)
 {
-    constexpr Draw2DPacketCounts kCounts{
-        .vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 1U};
-    const Draw2DPacketValidation computed =
-        pond::render::draw2d::InspectDraw2DPacketCounts(kCounts);
+    constexpr Draw2DPacketCounts kCounts{.vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 1U};
+    const Draw2DPacketValidation computed = pond::render::draw2d::InspectDraw2DPacketCounts(kCounts);
     ASSERT_TRUE(computed.IsValid());
     const Draw2DPacketLimits limits{.maxVertexCount = kCounts.vertexCount,
                                     .maxIndexCount = kCounts.indexCount,
@@ -639,8 +561,7 @@ TEST(RenderDraw2DPacketTests, BuilderPreflightsExactReservationAndRejectsGrowthP
     EXPECT_GE(reserved.capacities.indexCount, kCounts.indexCount);
     EXPECT_GE(reserved.capacities.drawRecordCount, kCounts.drawRecordCount);
 
-    const auto tooManyVertices = builder.Reserve(
-        Draw2DPacketCounts{.vertexCount = 5U, .indexCount = 6U, .drawRecordCount = 1U});
+    const auto tooManyVertices = builder.Reserve(Draw2DPacketCounts{.vertexCount = 5U, .indexCount = 6U, .drawRecordCount = 1U});
     ASSERT_FALSE(tooManyVertices.HasValue());
     ExpectRenderErrorCode(tooManyVertices.GetError(), RenderErrorCode::InvalidArgument);
     EXPECT_EQ(builder.GetSnapshot(), reserved);
@@ -652,14 +573,12 @@ TEST(RenderDraw2DPacketTests, BuilderPreflightsExactReservationAndRejectsGrowthP
     const auto full = builder.GetSnapshot();
 
     const Draw2DVertex extraVertex{.x = 1.0F, .y = 1.0F, .color = kWhite};
-    const auto appendPastLimit =
-        builder.AppendVertices(std::span<const Draw2DVertex>{&extraVertex, 1U});
+    const auto appendPastLimit = builder.AppendVertices(std::span<const Draw2DVertex>{&extraVertex, 1U});
     ASSERT_FALSE(appendPastLimit.HasValue());
     ExpectRenderErrorCode(appendPastLimit.GetError(), RenderErrorCode::InvalidArgument);
     EXPECT_EQ(builder.GetSnapshot(), full);
 
-    const auto reserveBelowCurrent = builder.Reserve(
-        Draw2DPacketCounts{.vertexCount = 3U, .indexCount = 6U, .drawRecordCount = 1U});
+    const auto reserveBelowCurrent = builder.Reserve(Draw2DPacketCounts{.vertexCount = 3U, .indexCount = 6U, .drawRecordCount = 1U});
     ASSERT_FALSE(reserveBelowCurrent.HasValue());
     ExpectRenderErrorCode(reserveBelowCurrent.GetError(), RenderErrorCode::InvalidArgument);
     EXPECT_EQ(builder.GetSnapshot(), full);
@@ -670,9 +589,7 @@ TEST(RenderDraw2DPacketTests, BuilderRejectsArithmeticOverflowWithoutGrowingStor
     Draw2DPacketBuilder builder;
     const auto before = builder.GetSnapshot();
     const auto result =
-        builder.Reserve(Draw2DPacketCounts{.vertexCount = std::numeric_limits<std::uint64_t>::max(),
-                                           .indexCount = 0U,
-                                           .drawRecordCount = 0U});
+        builder.Reserve(Draw2DPacketCounts{.vertexCount = std::numeric_limits<std::uint64_t>::max(), .indexCount = 0U, .drawRecordCount = 0U});
 
     ASSERT_FALSE(result.HasValue());
     ExpectRenderErrorCode(result.GetError(), RenderErrorCode::InvalidArgument);
@@ -750,15 +667,13 @@ TEST(RenderDraw2DPacketTests, BuilderRejectsEveryMutationAfterSealUntilReset)
     const Draw2DIndex index{0U};
     const Draw2DDrawRecord draw = MakeQuadDraw();
     const auto extent = builder.SetPixelExtent(kExtent);
-    const auto reserve =
-        builder.Reserve({.vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 1U});
+    const auto reserve = builder.Reserve({.vertexCount = 4U, .indexCount = 6U, .drawRecordCount = 1U});
     const auto vertices = builder.AppendVertices(std::span<const Draw2DVertex>{&vertex, 1U});
     const auto indices = builder.AppendIndices(std::span<const Draw2DIndex>{&index, 1U});
     const auto draws = builder.AppendDrawRecord(draw);
     auto reseal = builder.Seal();
 
-    for (const pond::core::VoidResult* result :
-         std::array{&extent, &reserve, &vertices, &indices, &draws})
+    for (const pond::core::VoidResult* result : std::array{&extent, &reserve, &vertices, &indices, &draws})
     {
         ASSERT_FALSE(result->HasValue());
         ExpectRenderErrorCode(result->GetError(), RenderErrorCode::InvalidState);
@@ -799,11 +714,10 @@ TEST(RenderDraw2DPacketTests, ResetPreservesCapacityAndSealedPacketOwnsItsStorag
     ASSERT_TRUE(builder.SetPixelExtent({32U, 24U}).HasValue());
     ASSERT_TRUE(builder.AppendVertices(MakeQuadVertices(kRed, 4.0F, 5.0F)).HasValue());
     ASSERT_TRUE(builder.AppendIndices(MakeQuadIndices()).HasValue());
-    const Draw2DDrawRecord secondDraw{
-        .firstIndex = 0U,
-        .indexCount = 6U,
-        .baseVertex = 0,
-        .scissor = Draw2DScissor{.left = 0U, .top = 0U, .right = 32U, .bottom = 24U}};
+    const Draw2DDrawRecord secondDraw{.firstIndex = 0U,
+                                      .indexCount = 6U,
+                                      .baseVertex = 0,
+                                      .scissor = Draw2DScissor{.left = 0U, .top = 0U, .right = 32U, .bottom = 24U}};
     ASSERT_TRUE(builder.AppendDrawRecord(secondDraw).HasValue());
 
     ASSERT_EQ(sealed.GetVertices().size(), 4U);

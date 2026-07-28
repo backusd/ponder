@@ -83,19 +83,17 @@ enum class PresentationRecreationStatus : std::uint8_t
     return RenderErrorCode::BackendFailure;
 }
 
-[[nodiscard]] std::string FormatWindowId(platform::WindowId windowId)
+[[nodiscard]] std::string FormatWindowId(ponder::platform::WindowId windowId)
 {
     return windowId.IsValid() ? std::to_string(windowId.GetValue()) : std::string{"invalid"};
 }
 
-[[nodiscard]] std::string MakeTargetDiagnosticLabel(platform::WindowId windowId)
+[[nodiscard]] std::string MakeTargetDiagnosticLabel(ponder::platform::WindowId windowId)
 {
     return std::string{"target/window:"} + FormatWindowId(windowId);
 }
 
-[[nodiscard]] std::string MakeTargetDiagnosticMessage(std::string_view targetLabel,
-                                                      std::string_view operation,
-                                                      std::string_view message)
+[[nodiscard]] std::string MakeTargetDiagnosticMessage(std::string_view targetLabel, std::string_view operation, std::string_view message)
 {
     std::string result;
     result.reserve(targetLabel.size() + operation.size() + message.size() + 32U);
@@ -108,13 +106,11 @@ enum class PresentationRecreationStatus : std::uint8_t
     return result;
 }
 
-[[nodiscard]] BackendDiagnostic MakeBackendDiagnostic(
-    const core::Error& error, std::string_view operation,
-    OptionalBackendDiagnostic nativeDiagnostic = {}, platform::WindowId windowId = {},
-    std::string_view targetLabel = {})
+[[nodiscard]] BackendDiagnostic MakeBackendDiagnostic(const core::Error& error, std::string_view operation,
+                                                      OptionalBackendDiagnostic nativeDiagnostic = {}, ponder::platform::WindowId windowId = {},
+                                                      std::string_view targetLabel = {})
 {
-    BackendDiagnostic diagnostic =
-        nativeDiagnostic.has_value() ? std::move(*nativeDiagnostic) : BackendDiagnostic{};
+    BackendDiagnostic diagnostic = nativeDiagnostic.has_value() ? std::move(*nativeDiagnostic) : BackendDiagnostic{};
     diagnostic.backend = RenderBackendKind::Vulkan;
     diagnostic.renderCode = GetRenderErrorCode(error);
     if (diagnostic.operation.empty())
@@ -157,7 +153,10 @@ thread_local bool g_failNextRetirementAllocationForTesting{};
 
 struct ChildRegistry final
 {
-    explicit ChildRegistry(std::thread::id ownerThreadId) noexcept : ownerThread{ownerThreadId} {}
+    explicit ChildRegistry(std::thread::id ownerThreadId) noexcept :
+        ownerThread{ownerThreadId}
+    {
+    }
 
     [[nodiscard]] bool IsOwnerThread() const noexcept
     {
@@ -267,8 +266,9 @@ struct ChildRegistry final
 struct ChildToken final
 {
     ChildToken() noexcept = default;
-    ChildToken(std::shared_ptr<ChildRegistry> inputRegistry, ChildKind inputKind)
-        : registry{std::move(inputRegistry)}, kind{inputKind}
+    ChildToken(std::shared_ptr<ChildRegistry> inputRegistry, ChildKind inputKind) :
+        registry{std::move(inputRegistry)},
+        kind{inputKind}
     {
         active = registry != nullptr && registry->TryRegister(kind);
     }
@@ -276,8 +276,10 @@ struct ChildToken final
     ChildToken(const ChildToken&) = delete;
     ChildToken& operator=(const ChildToken&) = delete;
 
-    ChildToken(ChildToken&& other) noexcept
-        : registry{std::move(other.registry)}, kind{other.kind}, active{other.active}
+    ChildToken(ChildToken&& other) noexcept :
+        registry{std::move(other.registry)},
+        kind{other.kind},
+        active{other.active}
     {
         other.active = false;
     }
@@ -320,8 +322,7 @@ struct ChildToken final
     bool active{};
 };
 
-[[nodiscard]] core::VoidResult ValidateLiveRegistry(const ChildToken& token,
-                                                    std::string_view roleName)
+[[nodiscard]] core::VoidResult ValidateLiveRegistry(const ChildToken& token, std::string_view roleName)
 {
     if (!token.active || token.registry == nullptr)
     {
@@ -329,8 +330,7 @@ struct ChildToken final
                              "lifecycle_misuse operation=ValidateLiveRegistry role={} "
                              "reason=moved_or_empty",
                              roleName);
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 std::string{roleName} + " is moved-from or empty.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, std::string{roleName} + " is moved-from or empty.");
     }
 
     if (token.registry->IsShutdown())
@@ -339,55 +339,43 @@ struct ChildToken final
                              "lifecycle_misuse operation=ValidateLiveRegistry role={} "
                              "reason=bootstrap_shutdown",
                              roleName);
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 std::string{roleName} + " belongs to a shut-down bootstrap.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, std::string{roleName} + " belongs to a shut-down bootstrap.");
     }
 
     return Success();
 }
 
-[[nodiscard]] core::VoidResult ValidateCurrentThread(std::thread::id expectedThread,
-                                                     std::string_view operation)
+[[nodiscard]] core::VoidResult ValidateCurrentThread(std::thread::id expectedThread, std::string_view operation)
 {
     if (std::this_thread::get_id() != expectedThread)
     {
-        LOG_WARNING_CATEGORY(kRenderLogCategory,
-                             "lifecycle_misuse operation={} reason=wrong_thread", operation);
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 std::string{operation} + " was called from the wrong thread.");
+        LOG_WARNING_CATEGORY(kRenderLogCategory, "lifecycle_misuse operation={} reason=wrong_thread", operation);
+        return MakeRenderFailure(RenderErrorCode::InvalidState, std::string{operation} + " was called from the wrong thread.");
     }
 
     return Success();
 }
 
-[[nodiscard]] core::VoidResult ValidateTargetSnapshotSuccessor(RenderTargetSnapshot current,
-                                                               RenderTargetSnapshot next,
-                                                               bool allowIdentical)
+[[nodiscard]] core::VoidResult ValidateTargetSnapshotSuccessor(RenderTargetSnapshot current, RenderTargetSnapshot next, bool allowIdentical)
 {
     if (!pond::render::IsValid(current) || !pond::render::IsValid(next))
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidArgument,
-                                 "Target snapshot succession contains invalid state.");
+        return MakeRenderFailure(RenderErrorCode::InvalidArgument, "Target snapshot succession contains invalid state.");
     }
 
     if (current.GetWindowId() != next.GetWindowId())
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidArgument,
-                                 "Target snapshot succession references the wrong window.");
+        return MakeRenderFailure(RenderErrorCode::InvalidArgument, "Target snapshot succession references the wrong window.");
     }
 
     if (next.GetRevision() < current.GetRevision())
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "Target snapshot succession is older than the current state.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "Target snapshot succession is older than the current state.");
     }
 
-    if (next.GetPresentationEnvironmentRevision().GetValue() <
-        current.GetPresentationEnvironmentRevision().GetValue())
+    if (next.GetPresentationEnvironmentRevision().GetValue() < current.GetPresentationEnvironmentRevision().GetValue())
     {
-        return MakeRenderFailure(
-            RenderErrorCode::InvalidState,
-            "Target snapshot succession regresses the presentation-environment revision.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "Target snapshot succession regresses the presentation-environment revision.");
     }
 
     if (next.GetRevision() == current.GetRevision())
@@ -397,10 +385,8 @@ struct ChildToken final
             return Success();
         }
 
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 next == current
-                                     ? "Target snapshot succession does not advance the revision."
-                                     : "Target snapshots conflict at the same revision.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, next == current ? "Target snapshot succession does not advance the revision."
+                                                                                : "Target snapshots conflict at the same revision.");
     }
 
     return Success();
@@ -408,7 +394,7 @@ struct ChildToken final
 
 [[nodiscard]] constexpr TargetStatus DetermineTargetStatus(RenderTargetSnapshot snapshot) noexcept
 {
-    if (snapshot.GetWindowState() == platform::WindowState::Minimized)
+    if (snapshot.GetWindowState() == ponder::platform::WindowState::Minimized)
     {
         return TargetStatus::Minimized;
     }
@@ -418,7 +404,7 @@ struct ChildToken final
         return TargetStatus::Hidden;
     }
 
-    const platform::PixelSize pixelSize = snapshot.GetPixelSize();
+    const ponder::platform::PixelSize pixelSize = snapshot.GetPixelSize();
     if (pixelSize.width == 0U || pixelSize.height == 0U)
     {
         return TargetStatus::Suspended;
@@ -429,37 +415,32 @@ struct ChildToken final
 
 [[nodiscard]] constexpr bool IsSuspendedStatus(TargetStatus status) noexcept
 {
-    return status == TargetStatus::Hidden || status == TargetStatus::Minimized ||
-           status == TargetStatus::Suspended;
+    return status == TargetStatus::Hidden || status == TargetStatus::Minimized || status == TargetStatus::Suspended;
 }
 
 } // namespace
 
 struct RenderBootstrap::State final
 {
-    State(std::shared_ptr<ChildRegistry> inputRegistry,
-          RenderValidationMode inputValidationMode) noexcept
-        : registry{std::move(inputRegistry)}, validationMode{inputValidationMode},
-          diagnostics{.backend = RenderBackendKind::Vulkan,
-                      .requestedValidationMode = inputValidationMode}
+    State(std::shared_ptr<ChildRegistry> inputRegistry, RenderValidationMode inputValidationMode) noexcept :
+        registry{std::move(inputRegistry)},
+        validationMode{inputValidationMode},
+        diagnostics{.backend = RenderBackendKind::Vulkan, .requestedValidationMode = inputValidationMode}
     {
     }
 
     ~State()
     {
         VerifyDestruction();
-        PONDER_VERIFY(registry->TryShutdown(),
-                      "Cannot destroy RenderBootstrap while renderer children are still active");
+        PONDER_VERIFY(registry->TryShutdown(), "Cannot destroy RenderBootstrap while renderer children are still active");
         std::scoped_lock lock{instanceMutex};
         vulkanInstance.Reset();
     }
 
     void VerifyDestruction() const noexcept
     {
-        PONDER_VERIFY(registry->IsOwnerThread(),
-                      "Cannot destroy RenderBootstrap from a thread other than its owner thread");
-        PONDER_VERIFY(!registry->HasActiveChildren(),
-                      "Cannot destroy RenderBootstrap while renderer children are still active");
+        PONDER_VERIFY(registry->IsOwnerThread(), "Cannot destroy RenderBootstrap from a thread other than its owner thread");
+        PONDER_VERIFY(!registry->HasActiveChildren(), "Cannot destroy RenderBootstrap while renderer children are still active");
     }
 
     void RecordInstanceInfo(const detail::VulkanInstanceInfo& info) noexcept
@@ -467,23 +448,20 @@ struct RenderBootstrap::State final
         diagnostics.enabledValidationMode = info.enabledValidationMode;
         diagnostics.negotiatedApiVersion = info.apiVersion;
         diagnostics.validationEnabled = info.validationEnabled;
-        diagnostics.debugInstrumentation =
-            RenderDebugInstrumentation{.objectNames = info.debugUtilityHooks.objectNames,
-                                       .commandLabels = info.debugUtilityHooks.commandLabels,
-                                       .timingMarkers = info.debugUtilityHooks.timingMarkers,
-                                       .captureRegions = info.debugUtilityHooks.captureRegions};
+        diagnostics.debugInstrumentation = RenderDebugInstrumentation{.objectNames = info.debugUtilityHooks.objectNames,
+                                                                      .commandLabels = info.debugUtilityHooks.commandLabels,
+                                                                      .timingMarkers = info.debugUtilityHooks.timingMarkers,
+                                                                      .captureRegions = info.debugUtilityHooks.captureRegions};
     }
 
-    void RecordFailure(const core::Error& error, std::string_view operation,
-                       OptionalBackendDiagnostic nativeDiagnostic = {},
-                       platform::WindowId windowId = {}, std::string_view targetLabel = {})
+    void RecordFailure(const core::Error& error, std::string_view operation, OptionalBackendDiagnostic nativeDiagnostic = {},
+                       ponder::platform::WindowId windowId = {}, std::string_view targetLabel = {})
     {
         if (!nativeDiagnostic.has_value())
         {
             nativeDiagnostic = detail::VulkanDiagnosticScope::TakeCurrentLastFailure();
         }
-        diagnostics.lastFailure = MakeBackendDiagnostic(
-            error, operation, std::move(nativeDiagnostic), windowId, targetLabel);
+        diagnostics.lastFailure = MakeBackendDiagnostic(error, operation, std::move(nativeDiagnostic), windowId, targetLabel);
     }
 
     std::shared_ptr<ChildRegistry> registry;
@@ -512,14 +490,12 @@ struct OrphanedPresentationResources final
 
 [[nodiscard]] bool HasPresentationResources(const RetiredPresentationResources& resources) noexcept
 {
-    return resources.vulkanSwapchain.IsValid() || resources.vulkanFrameResources.IsValid() ||
-           resources.vulkanPresentationTracker.IsValid();
+    return resources.vulkanSwapchain.IsValid() || resources.vulkanFrameResources.IsValid() || resources.vulkanPresentationTracker.IsValid();
 }
 
 void RecordCompletedFrameSubmissions(RetiredPresentationResources& resources) noexcept
 {
-    for (const std::uint32_t slotIndex :
-         resources.vulkanFrameResources.ConsumeCompletedSubmissionSlots())
+    for (const std::uint32_t slotIndex : resources.vulkanFrameResources.ConsumeCompletedSubmissionSlots())
     {
         resources.vulkanPresentationTracker.RecordFrameFenceCompletion(slotIndex);
     }
@@ -527,10 +503,11 @@ void RecordCompletedFrameSubmissions(RetiredPresentationResources& resources) no
 
 struct RenderDevice::State final
 {
-    State(ChildToken inputToken, detail::VulkanDeviceOwner inputVulkanDevice) noexcept
-        : token{std::move(inputToken)}, renderThread{std::this_thread::get_id()},
-          vulkanDispatch{inputVulkanDevice.GetDispatch()},
-          vulkanDevice{std::move(inputVulkanDevice)}
+    State(ChildToken inputToken, detail::VulkanDeviceOwner inputVulkanDevice) noexcept :
+        token{std::move(inputToken)},
+        renderThread{std::this_thread::get_id()},
+        vulkanDispatch{inputVulkanDevice.GetDispatch()},
+        vulkanDevice{std::move(inputVulkanDevice)}
     {
     }
 
@@ -542,24 +519,19 @@ struct RenderDevice::State final
 
     void VerifyDestruction() const noexcept
     {
-        PONDER_VERIFY(std::this_thread::get_id() == renderThread,
-                      "RenderDevice destruction must occur on its render thread");
-        PONDER_VERIFY(GetTargetCount() == 0U,
-                      "RenderDevice destruction requires every RenderTarget to be destroyed "
-                      "first");
-        PONDER_VERIFY(GetDraw2DLayerCount() == 0U,
-                      "RenderDevice destruction requires every Draw2DLayer to be destroyed "
-                      "first");
+        PONDER_VERIFY(std::this_thread::get_id() == renderThread, "RenderDevice destruction must occur on its render thread");
+        PONDER_VERIFY(GetTargetCount() == 0U, "RenderDevice destruction requires every RenderTarget to be destroyed "
+                                              "first");
+        PONDER_VERIFY(GetDraw2DLayerCount() == 0U, "RenderDevice destruction requires every Draw2DLayer to be destroyed "
+                                                   "first");
     }
 
-    void AdoptPresentationResourcesForFinalShutdown(
-        detail::VulkanSurfaceOwner&& surface, detail::VulkanSwapchainOwner&& swapchain,
-        detail::VulkanFrameResourcesOwner&& frameResources,
-        detail::VulkanPresentationTrackerOwner&& presentationTracker,
-        std::vector<RetiredPresentationResources>&& resources) noexcept
+    void AdoptPresentationResourcesForFinalShutdown(detail::VulkanSurfaceOwner&& surface, detail::VulkanSwapchainOwner&& swapchain,
+                                                    detail::VulkanFrameResourcesOwner&& frameResources,
+                                                    detail::VulkanPresentationTrackerOwner&& presentationTracker,
+                                                    std::vector<RetiredPresentationResources>&& resources) noexcept
     {
-        const bool hasCurrentResources =
-            swapchain.IsValid() || frameResources.IsValid() || presentationTracker.IsValid();
+        const bool hasCurrentResources = swapchain.IsValid() || frameResources.IsValid() || presentationTracker.IsValid();
         if (!hasCurrentResources && resources.empty())
         {
             return;
@@ -586,16 +558,14 @@ struct RenderDevice::State final
 
             if (adoptionSlotReserved)
             {
-                PONDER_VERIFY(orphanedPresentationResources.size() <
-                                  orphanedPresentationResources.capacity(),
+                PONDER_VERIFY(orphanedPresentationResources.size() < orphanedPresentationResources.capacity(),
                               "Final presentation-resource adoption requires a reserved slot");
                 orphanedPresentationResources.push_back(OrphanedPresentationResources{
                     .vulkanSurface = std::move(surface),
                     .retiredResources = std::move(resources),
-                    .currentResources = RetiredPresentationResources{
-                        .vulkanSwapchain = std::move(swapchain),
-                        .vulkanFrameResources = std::move(frameResources),
-                        .vulkanPresentationTracker = std::move(presentationTracker)}});
+                    .currentResources = RetiredPresentationResources{.vulkanSwapchain = std::move(swapchain),
+                                                                     .vulkanFrameResources = std::move(frameResources),
+                                                                     .vulkanPresentationTracker = std::move(presentationTracker)}});
                 return;
             }
         }
@@ -644,8 +614,7 @@ struct RenderDevice::State final
 
         constexpr std::uint64_t kInfiniteTimeout = std::numeric_limits<std::uint64_t>::max();
         bool requiresPracticalFallback = false;
-        const auto pollPresentation = [this, &requiresPracticalFallback](
-                                          RetiredPresentationResources& retired) -> core::VoidResult
+        const auto pollPresentation = [this, &requiresPracticalFallback](RetiredPresentationResources& retired) -> core::VoidResult
         {
             if (!HasPresentationResources(retired))
             {
@@ -658,17 +627,15 @@ struct RenderDevice::State final
             }
 
             core::Result<detail::VulkanPresentationCompletionResult> completion =
-                retired.vulkanPresentationTracker.PollCompletion(
-                    vulkanDispatch, retired.vulkanSwapchain.GetHandle(), kInfiniteTimeout);
+                retired.vulkanPresentationTracker.PollCompletion(vulkanDispatch, retired.vulkanSwapchain.GetHandle(), kInfiniteTimeout);
             if (!completion)
             {
                 RecordDeviceFailure(completion.GetError());
                 return core::VoidResult::FromError(std::move(completion).GetError());
             }
 
-            requiresPracticalFallback = requiresPracticalFallback ||
-                                        completion.GetValue().status !=
-                                            detail::VulkanPresentationCompletionStatus::Complete;
+            requiresPracticalFallback =
+                requiresPracticalFallback || completion.GetValue().status != detail::VulkanPresentationCompletionStatus::Complete;
             return Success();
         };
         for (OrphanedPresentationResources& orphaned : orphanedPresentationResources)
@@ -708,16 +675,14 @@ struct RenderDevice::State final
             return wait;
         }
 
-        const auto waitForGraphics =
-            [this](RetiredPresentationResources& retired) -> core::VoidResult
+        const auto waitForGraphics = [this](RetiredPresentationResources& retired) -> core::VoidResult
         {
             if (!retired.vulkanFrameResources.IsValid())
             {
                 return Success();
             }
 
-            core::Result<bool> graphicsComplete =
-                retired.vulkanFrameResources.AreAllFencesSignaled(vulkanDispatch, kInfiniteTimeout);
+            core::Result<bool> graphicsComplete = retired.vulkanFrameResources.AreAllFencesSignaled(vulkanDispatch, kInfiniteTimeout);
             if (retired.vulkanPresentationTracker.IsValid())
             {
                 RecordCompletedFrameSubmissions(retired);
@@ -729,9 +694,7 @@ struct RenderDevice::State final
             }
             if (!graphicsComplete.GetValue())
             {
-                return MakeRenderFailure(
-                    RenderErrorCode::BackendFailure,
-                    "An infinite Vulkan frame-resource wait returned incomplete.");
+                return MakeRenderFailure(RenderErrorCode::BackendFailure, "An infinite Vulkan frame-resource wait returned incomplete.");
             }
 
             return Success();
@@ -825,16 +788,14 @@ struct RenderDevice::State final
         return Success();
     }
 
-    void RecordDeviceFailure(const core::Error& error, std::string_view operation = "device",
-                             OptionalBackendDiagnostic nativeDiagnostic = {},
-                             platform::WindowId windowId = {}, std::string_view targetLabel = {})
+    void RecordDeviceFailure(const core::Error& error, std::string_view operation = "device", OptionalBackendDiagnostic nativeDiagnostic = {},
+                             ponder::platform::WindowId windowId = {}, std::string_view targetLabel = {})
     {
         if (!nativeDiagnostic.has_value())
         {
             nativeDiagnostic = detail::VulkanDiagnosticScope::CopyCurrentLastFailure();
         }
-        lastFailure = MakeBackendDiagnostic(error, operation, std::move(nativeDiagnostic), windowId,
-                                            targetLabel);
+        lastFailure = MakeBackendDiagnostic(error, operation, std::move(nativeDiagnostic), windowId, targetLabel);
         if (IsRenderError(error, RenderErrorCode::DeviceLost) && !deviceLostError.has_value())
         {
             deviceLostError = error;
@@ -864,17 +825,19 @@ struct RenderDevice::State final
 
 struct PreparedSurface::State final
 {
-    State(ChildToken inputToken, RenderTargetSnapshot inputSnapshot,
-          SurfacePreparationReason inputReason) noexcept
-        : token{std::move(inputToken)}, targetSnapshot{inputSnapshot}, reason{inputReason}
+    State(ChildToken inputToken, RenderTargetSnapshot inputSnapshot, SurfacePreparationReason inputReason) noexcept :
+        token{std::move(inputToken)},
+        targetSnapshot{inputSnapshot},
+        reason{inputReason}
     {
     }
 
-    State(ChildToken inputToken, RenderTargetSnapshot inputSnapshot,
-          SurfacePreparationReason inputReason,
-          detail::VulkanSurfaceOwner inputVulkanSurface) noexcept
-        : token{std::move(inputToken)}, targetSnapshot{inputSnapshot}, reason{inputReason},
-          vulkanSurface{std::move(inputVulkanSurface)}
+    State(ChildToken inputToken, RenderTargetSnapshot inputSnapshot, SurfacePreparationReason inputReason,
+          detail::VulkanSurfaceOwner inputVulkanSurface) noexcept :
+        token{std::move(inputToken)},
+        targetSnapshot{inputSnapshot},
+        reason{inputReason},
+        vulkanSurface{std::move(inputVulkanSurface)}
     {
     }
 
@@ -886,12 +849,9 @@ struct PreparedSurface::State final
     void VerifyDestruction() const noexcept
     {
         const bool isExpectedThread =
-            renderThread.has_value() ? std::this_thread::get_id() == *renderThread
-                                     : token.registry != nullptr && token.registry->IsOwnerThread();
-        PONDER_VERIFY(
-            isExpectedThread,
-            "PreparedSurface destruction must occur on its owner thread before transfer or its "
-            "bound render thread after transfer");
+            renderThread.has_value() ? std::this_thread::get_id() == *renderThread : token.registry != nullptr && token.registry->IsOwnerThread();
+        PONDER_VERIFY(isExpectedThread, "PreparedSurface destruction must occur on its owner thread before transfer or its "
+                                        "bound render thread after transfer");
     }
 
     ChildToken token;
@@ -903,23 +863,23 @@ struct PreparedSurface::State final
 
 struct RenderTarget::State final
 {
-    State(ChildToken inputToken, std::shared_ptr<RenderDevice::State> inputDeviceState,
-          RenderTargetDesc inputDesc, std::string inputTargetLabel,
-          detail::VulkanDeviceQueuePlan inputQueuePlan,
-          detail::VulkanSurfaceOwner inputVulkanSurface,
-          detail::VulkanSwapchainOwner inputVulkanSwapchain,
-          detail::VulkanFrameResourcesOwner inputVulkanFrameResources,
-          detail::VulkanPresentationTrackerOwner inputVulkanPresentationTracker) noexcept
-        : token{std::move(inputToken)}, deviceState{std::move(inputDeviceState)},
-          vulkanSurface{std::move(inputVulkanSurface)},
-          vulkanSwapchain{std::move(inputVulkanSwapchain)},
-          vulkanFrameResources{std::move(inputVulkanFrameResources)},
-          vulkanPresentationTracker{std::move(inputVulkanPresentationTracker)},
-          targetDesc{inputDesc}, targetSnapshot{inputDesc.targetSnapshot},
-          status{DetermineTargetStatus(inputDesc.targetSnapshot)},
-          targetLabel{std::move(inputTargetLabel)}, queuePlan{std::move(inputQueuePlan)},
-          swapchainGeneration{vulkanSwapchain.IsValid() ? 1U : 0U},
-          renderThread{std::this_thread::get_id()}
+    State(ChildToken inputToken, std::shared_ptr<RenderDevice::State> inputDeviceState, RenderTargetDesc inputDesc, std::string inputTargetLabel,
+          detail::VulkanDeviceQueuePlan inputQueuePlan, detail::VulkanSurfaceOwner inputVulkanSurface,
+          detail::VulkanSwapchainOwner inputVulkanSwapchain, detail::VulkanFrameResourcesOwner inputVulkanFrameResources,
+          detail::VulkanPresentationTrackerOwner inputVulkanPresentationTracker) noexcept :
+        token{std::move(inputToken)},
+        deviceState{std::move(inputDeviceState)},
+        vulkanSurface{std::move(inputVulkanSurface)},
+        vulkanSwapchain{std::move(inputVulkanSwapchain)},
+        vulkanFrameResources{std::move(inputVulkanFrameResources)},
+        vulkanPresentationTracker{std::move(inputVulkanPresentationTracker)},
+        targetDesc{inputDesc},
+        targetSnapshot{inputDesc.targetSnapshot},
+        status{DetermineTargetStatus(inputDesc.targetSnapshot)},
+        targetLabel{std::move(inputTargetLabel)},
+        queuePlan{std::move(inputQueuePlan)},
+        swapchainGeneration{vulkanSwapchain.IsValid() ? 1U : 0U},
+        renderThread{std::this_thread::get_id()}
     {
     }
 
@@ -928,13 +888,12 @@ struct RenderTarget::State final
         VerifyDestruction();
         if (deviceState != nullptr)
         {
-            if (vulkanSwapchain.IsValid() || vulkanFrameResources.IsValid() ||
-                vulkanPresentationTracker.IsValid() || !retiredPresentationResources.empty())
+            if (vulkanSwapchain.IsValid() || vulkanFrameResources.IsValid() || vulkanPresentationTracker.IsValid() ||
+                !retiredPresentationResources.empty())
             {
-                deviceState->AdoptPresentationResourcesForFinalShutdown(
-                    std::move(vulkanSurface), std::move(vulkanSwapchain),
-                    std::move(vulkanFrameResources), std::move(vulkanPresentationTracker),
-                    std::move(retiredPresentationResources));
+                deviceState->AdoptPresentationResourcesForFinalShutdown(std::move(vulkanSurface), std::move(vulkanSwapchain),
+                                                                        std::move(vulkanFrameResources), std::move(vulkanPresentationTracker),
+                                                                        std::move(retiredPresentationResources));
             }
 
             vulkanPresentationTracker.Reset();
@@ -946,30 +905,24 @@ struct RenderTarget::State final
 
     void VerifyDestruction() const noexcept
     {
-        PONDER_VERIFY(std::this_thread::get_id() == renderThread,
-                      "RenderTarget destruction must occur on its render thread");
-        PONDER_VERIFY(!activeFrame,
-                      "RenderTarget destruction requires its live RenderFrame token to be "
-                      "finished or abandoned first");
+        PONDER_VERIFY(std::this_thread::get_id() == renderThread, "RenderTarget destruction must occur on its render thread");
+        PONDER_VERIFY(!activeFrame, "RenderTarget destruction requires its live RenderFrame token to be "
+                                    "finished or abandoned first");
     }
 
-    void MarkWindowRecreationPending(TargetRecreationReason reason, std::uint64_t previousRevision,
-                                     std::uint64_t currentRevision) noexcept;
+    void MarkWindowRecreationPending(TargetRecreationReason reason, std::uint64_t previousRevision, std::uint64_t currentRevision) noexcept;
     void MarkBackendRecreationPending(TargetRecreationReason reason) noexcept;
     void ClearRecreationPending() noexcept;
     [[nodiscard]] TargetStatus GetEffectiveStatus() const noexcept;
     [[nodiscard]] core::VoidResult PreparePresentationResourcesForRetirement();
     [[nodiscard]] bool HasUsablePresentationResources() const noexcept;
     [[nodiscard]] VkSwapchainKHR FindOldSwapchainForReplacement() const noexcept;
-    [[nodiscard]] core::VoidResult ReserveRetirementSlotForOldSwapchain(
-        VkSwapchainKHR oldSwapchain);
+    [[nodiscard]] core::VoidResult ReserveRetirementSlotForOldSwapchain(VkSwapchainKHR oldSwapchain);
     [[nodiscard]] core::VoidResult ReserveRetirementSlotForCurrentPresentationResources();
-    [[nodiscard]] core::VoidResult RetirePresentationResources(
-        bool canBeUsedAsOldSwapchain = false);
+    [[nodiscard]] core::VoidResult RetirePresentationResources(bool canBeUsedAsOldSwapchain = false);
     void RecordNativeSwapchainRetirement(VkSwapchainKHR oldSwapchain) noexcept;
     void RecordCorePresentationCompletion() noexcept;
-    [[nodiscard]] core::Error RecordFailure(core::Error error, std::string_view operation,
-                                            OptionalBackendDiagnostic nativeDiagnostic = {});
+    [[nodiscard]] core::Error RecordFailure(core::Error error, std::string_view operation, OptionalBackendDiagnostic nativeDiagnostic = {});
     [[nodiscard]] core::VoidResult DrainRetiredPresentationResources();
     [[nodiscard]] core::VoidResult UsePracticalPresentationWaitFallback();
     [[nodiscard]] core::VoidResult MarkSurfaceLost();
@@ -1010,31 +963,30 @@ struct RenderTarget::State final
 
 struct RenderFrame::State final
 {
-    State(std::shared_ptr<RenderTarget::State> inputTargetState, FrameStatus inputStatus,
-          bool inputHoldsActiveFrame,
-          detail::VulkanFrameRecordingState inputRecording = {}) noexcept
-        : targetState{std::move(inputTargetState)}, status{inputStatus},
-          targetStatus{targetState == nullptr ? TargetStatus::Suspended
-                                              : targetState->GetEffectiveStatus()},
-          clearColor{targetState == nullptr ? ClearColor{} : targetState->targetDesc.clearColor},
-          recording{std::move(inputRecording)}, renderThread{std::this_thread::get_id()},
-          holdsActiveFrame{inputHoldsActiveFrame}
+    State(std::shared_ptr<RenderTarget::State> inputTargetState, FrameStatus inputStatus, bool inputHoldsActiveFrame,
+          detail::VulkanFrameRecordingState inputRecording = {}) noexcept :
+        targetState{std::move(inputTargetState)},
+        status{inputStatus},
+        targetStatus{targetState == nullptr ? TargetStatus::Suspended : targetState->GetEffectiveStatus()},
+        clearColor{targetState == nullptr ? ClearColor{} : targetState->targetDesc.clearColor},
+        recording{std::move(inputRecording)},
+        renderThread{std::this_thread::get_id()},
+        holdsActiveFrame{inputHoldsActiveFrame}
     {
         if (targetState != nullptr)
         {
             const RenderTargetSnapshot snapshot = targetState->targetSnapshot;
-            platform::PixelSize pixelSize = snapshot.GetPixelSize();
+            ponder::platform::PixelSize pixelSize = snapshot.GetPixelSize();
             if (recording.IsActive() && targetState->vulkanSwapchain.IsValid())
             {
                 const VkExtent2D extent = targetState->vulkanSwapchain.GetConfig().extent;
-                pixelSize = platform::PixelSize{.width = extent.width, .height = extent.height};
+                pixelSize = ponder::platform::PixelSize{.width = extent.width, .height = extent.height};
             }
-            metrics =
-                RenderFrameMetrics{.windowId = snapshot.GetWindowId(),
-                                   .logicalSize = snapshot.GetLogicalSize(),
-                                   .pixelSize = pixelSize,
-                                   .metricsRevision = snapshot.GetPresentationEnvironmentRevision(),
-                                   .targetRevision = snapshot.GetRevision()};
+            metrics = RenderFrameMetrics{.windowId = snapshot.GetWindowId(),
+                                         .logicalSize = snapshot.GetLogicalSize(),
+                                         .pixelSize = pixelSize,
+                                         .metricsRevision = snapshot.GetPresentationEnvironmentRevision(),
+                                         .targetRevision = snapshot.GetRevision()};
         }
     }
 
@@ -1043,12 +995,10 @@ struct RenderFrame::State final
         VerifyDestruction();
         if (holdsActiveFrame && !completed && targetState != nullptr && recording.IsActive())
         {
-            detail::AbandonVulkanFrame(targetState->vulkanFrameResources,
-                                       targetState->vulkanPresentationTracker, recording);
+            detail::AbandonVulkanFrame(targetState->vulkanFrameResources, targetState->vulkanPresentationTracker, recording);
             if (targetState->deviceState != nullptr && !targetState->deviceState->IsDeviceLost())
             {
-                targetState->MarkBackendRecreationPending(
-                    TargetRecreationReason::PresentationChanged);
+                targetState->MarkBackendRecreationPending(TargetRecreationReason::PresentationChanged);
             }
 
             ++targetState->frameFailures;
@@ -1059,8 +1009,7 @@ struct RenderFrame::State final
 
     void VerifyDestruction() const noexcept
     {
-        PONDER_VERIFY(std::this_thread::get_id() == renderThread,
-                      "RenderFrame destruction must occur on its render thread");
+        PONDER_VERIFY(std::this_thread::get_id() == renderThread, "RenderFrame destruction must occur on its render thread");
     }
 
     State(const State&) = delete;
@@ -1088,44 +1037,38 @@ struct RenderFrame::State final
     bool holdsActiveFrame{};
 };
 
-core::Result<detail::RenderLifetimeContractOwners> detail::RenderBackendTestAccess::
-    CreateLifetimeContractOwners(const RenderTargetDesc& desc)
+core::Result<detail::RenderLifetimeContractOwners> detail::RenderBackendTestAccess::CreateLifetimeContractOwners(const RenderTargetDesc& desc)
 {
-    if (!pond::render::IsValid(desc) ||
-        !IsSuspendedStatus(DetermineTargetStatus(desc.targetSnapshot)))
+    if (!pond::render::IsValid(desc) || !IsSuspendedStatus(DetermineTargetStatus(desc.targetSnapshot)))
     {
-        return core::Result<detail::RenderLifetimeContractOwners>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Render lifetime test access requires a valid suspended target descriptor."));
+        return core::Result<detail::RenderLifetimeContractOwners>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Render lifetime test access requires a valid suspended target descriptor."));
     }
 
     auto registry = std::make_shared<ChildRegistry>(std::this_thread::get_id());
     ChildToken deviceToken{registry, ChildKind::Device};
     if (!deviceToken.active)
     {
-        return core::Result<detail::RenderLifetimeContractOwners>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the lifetime test device."));
+        return core::Result<detail::RenderLifetimeContractOwners>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Could not register the lifetime test device."));
     }
 
-    auto deviceState =
-        std::make_shared<RenderDevice::State>(std::move(deviceToken), detail::VulkanDeviceOwner{});
+    auto deviceState = std::make_shared<RenderDevice::State>(std::move(deviceToken), detail::VulkanDeviceOwner{});
     ChildToken targetToken{registry, ChildKind::Target};
     if (!targetToken.active)
     {
-        return core::Result<detail::RenderLifetimeContractOwners>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the lifetime test target token."));
+        return core::Result<detail::RenderLifetimeContractOwners>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Could not register the lifetime test target token."));
     }
 
     std::string targetLabel = MakeTargetDiagnosticLabel(desc.targetSnapshot.GetWindowId());
     auto targetState = std::make_shared<RenderTarget::State>(
-        std::move(targetToken), deviceState, desc, std::move(targetLabel),
-        detail::VulkanDeviceQueuePlan{}, detail::VulkanSurfaceOwner{},
-        detail::VulkanSwapchainOwner{}, detail::VulkanFrameResourcesOwner{},
-        detail::VulkanPresentationTrackerOwner{});
+        std::move(targetToken), deviceState, desc, std::move(targetLabel), detail::VulkanDeviceQueuePlan{}, detail::VulkanSurfaceOwner{},
+        detail::VulkanSwapchainOwner{}, detail::VulkanFrameResourcesOwner{}, detail::VulkanPresentationTrackerOwner{});
     if (!deviceState->TryRegisterTarget())
     {
-        return core::Result<detail::RenderLifetimeContractOwners>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the lifetime test target."));
+        return core::Result<detail::RenderLifetimeContractOwners>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Could not register the lifetime test target."));
     }
 
     detail::RenderLifetimeContractOwners owners;
@@ -1134,16 +1077,13 @@ core::Result<detail::RenderLifetimeContractOwners> detail::RenderBackendTestAcce
     return core::Result<detail::RenderLifetimeContractOwners>::FromValue(std::move(owners));
 }
 
-core::Result<detail::RenderDeviceSurfaceTestOwners> detail::RenderBackendTestAccess::
-    CreateDeviceAndPreparedSurface(detail::VulkanGlobalDispatch, detail::VulkanDeviceOwner&& device,
-                                   detail::VulkanSurfaceOwner&& surface,
-                                   const SurfacePreparationDesc& desc)
+core::Result<detail::RenderDeviceSurfaceTestOwners> detail::RenderBackendTestAccess::CreateDeviceAndPreparedSurface(
+    detail::VulkanGlobalDispatch, detail::VulkanDeviceOwner&& device, detail::VulkanSurfaceOwner&& surface, const SurfacePreparationDesc& desc)
 {
     if (!device.IsValid() || !surface.IsValid() || !pond::render::IsValid(desc))
     {
-        return core::Result<detail::RenderDeviceSurfaceTestOwners>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Render test access requires a live device, surface, and valid surface descriptor."));
+        return core::Result<detail::RenderDeviceSurfaceTestOwners>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Render test access requires a live device, surface, and valid surface descriptor."));
     }
 
     auto registry = std::make_shared<ChildRegistry>(std::this_thread::get_id());
@@ -1151,15 +1091,12 @@ core::Result<detail::RenderDeviceSurfaceTestOwners> detail::RenderBackendTestAcc
     ChildToken surfaceToken{registry, ChildKind::PreparedSurface};
     if (!deviceToken.active || !surfaceToken.active)
     {
-        return core::Result<detail::RenderDeviceSurfaceTestOwners>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "Could not register the render device and prepared surface test owners."));
+        return core::Result<detail::RenderDeviceSurfaceTestOwners>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Could not register the render device and prepared surface test owners."));
     }
 
-    auto deviceState =
-        std::make_shared<RenderDevice::State>(std::move(deviceToken), std::move(device));
-    auto surfaceState = std::make_unique<PreparedSurface::State>(
-        std::move(surfaceToken), desc.targetSnapshot, desc.reason, std::move(surface));
+    auto deviceState = std::make_shared<RenderDevice::State>(std::move(deviceToken), std::move(device));
+    auto surfaceState = std::make_unique<PreparedSurface::State>(std::move(surfaceToken), desc.targetSnapshot, desc.reason, std::move(surface));
     surfaceState->renderThread = std::this_thread::get_id();
 
     detail::RenderDeviceSurfaceTestOwners owners;
@@ -1168,53 +1105,41 @@ core::Result<detail::RenderDeviceSurfaceTestOwners> detail::RenderBackendTestAcc
     return core::Result<detail::RenderDeviceSurfaceTestOwners>::FromValue(std::move(owners));
 }
 
-core::Result<detail::RenderPublicLifecycleTestOwners> detail::RenderBackendTestAccess::
-    CreatePublicLifecycleOwners(detail::VulkanDeviceOwner&& device,
-                                detail::VulkanSurfaceOwner&& surface,
-                                detail::VulkanSwapchainOwner&& swapchain,
-                                detail::VulkanFrameResourcesOwner&& frameResources,
-                                detail::VulkanPresentationTrackerOwner&& presentationTracker,
-                                const RenderTargetDesc& desc)
+core::Result<detail::RenderPublicLifecycleTestOwners> detail::RenderBackendTestAccess::CreatePublicLifecycleOwners(
+    detail::VulkanDeviceOwner&& device, detail::VulkanSurfaceOwner&& surface, detail::VulkanSwapchainOwner&& swapchain,
+    detail::VulkanFrameResourcesOwner&& frameResources, detail::VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc)
 {
     using OwnersResult = core::Result<detail::RenderPublicLifecycleTestOwners>;
-    if (!pond::render::IsValid(desc) ||
-        DetermineTargetStatus(desc.targetSnapshot) != TargetStatus::Active || !device.IsValid() ||
-        !surface.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() ||
-        !presentationTracker.IsValid())
+    if (!pond::render::IsValid(desc) || DetermineTargetStatus(desc.targetSnapshot) != TargetStatus::Active || !device.IsValid() ||
+        !surface.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() || !presentationTracker.IsValid())
     {
-        return OwnersResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Public lifecycle test access requires a complete active target resource set."));
+        return OwnersResult::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Public lifecycle test access requires a complete active target resource set."));
     }
 
     const detail::VulkanDeviceQueuePlan queuePlan = device.GetInfo().queuePlan;
     const detail::VulkanGlobalDispatch dispatch = device.GetDispatch();
     auto registry = std::make_shared<ChildRegistry>(std::this_thread::get_id());
-    auto bootstrapState =
-        std::make_unique<RenderBootstrap::State>(registry, RenderValidationMode::Disabled);
+    auto bootstrapState = std::make_unique<RenderBootstrap::State>(registry, RenderValidationMode::Disabled);
     bootstrapState->vulkanDispatch = dispatch;
 
     ChildToken deviceToken{registry, ChildKind::Device};
     if (!deviceToken.active)
     {
-        return OwnersResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the public lifecycle test device."));
+        return OwnersResult::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Could not register the public lifecycle test device."));
     }
 
-    auto deviceState =
-        std::make_shared<RenderDevice::State>(std::move(deviceToken), std::move(device));
+    auto deviceState = std::make_shared<RenderDevice::State>(std::move(deviceToken), std::move(device));
     ChildToken targetToken{registry, ChildKind::Target};
     if (!targetToken.active || !deviceState->TryRegisterTarget())
     {
-        return OwnersResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the public lifecycle test target."));
+        return OwnersResult::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Could not register the public lifecycle test target."));
     }
 
     std::string targetLabel = MakeTargetDiagnosticLabel(desc.targetSnapshot.GetWindowId());
-    auto targetState = std::make_shared<RenderTarget::State>(
-        std::move(targetToken), deviceState, desc, std::move(targetLabel), queuePlan,
-        std::move(surface), std::move(swapchain), std::move(frameResources),
-        std::move(presentationTracker));
+    auto targetState =
+        std::make_shared<RenderTarget::State>(std::move(targetToken), deviceState, desc, std::move(targetLabel), queuePlan, std::move(surface),
+                                              std::move(swapchain), std::move(frameResources), std::move(presentationTracker));
 
     detail::RenderPublicLifecycleTestOwners owners;
     owners.bootstrap = RenderBootstrap{std::move(bootstrapState)};
@@ -1223,38 +1148,33 @@ core::Result<detail::RenderPublicLifecycleTestOwners> detail::RenderBackendTestA
     return OwnersResult::FromValue(std::move(owners));
 }
 
-core::Result<RenderTarget> detail::RenderBackendTestAccess::CreateAdditionalTarget(
-    RenderDevice& device, detail::VulkanSurfaceOwner&& surface,
-    detail::VulkanSwapchainOwner&& swapchain, detail::VulkanFrameResourcesOwner&& frameResources,
-    detail::VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc)
+core::Result<RenderTarget> detail::RenderBackendTestAccess::CreateAdditionalTarget(RenderDevice& device, detail::VulkanSurfaceOwner&& surface,
+                                                                                   detail::VulkanSwapchainOwner&& swapchain,
+                                                                                   detail::VulkanFrameResourcesOwner&& frameResources,
+                                                                                   detail::VulkanPresentationTrackerOwner&& presentationTracker,
+                                                                                   const RenderTargetDesc& desc)
 {
-    if (device.m_state == nullptr || !device.m_state->token.IsActive() ||
-        std::this_thread::get_id() != device.m_state->renderThread ||
-        device.m_state->IsDeviceLost() || !pond::render::IsValid(desc) ||
-        DetermineTargetStatus(desc.targetSnapshot) != TargetStatus::Active || !surface.IsValid() ||
-        !swapchain.IsValid() || !frameResources.IsValid() || !presentationTracker.IsValid())
+    if (device.m_state == nullptr || !device.m_state->token.IsActive() || std::this_thread::get_id() != device.m_state->renderThread ||
+        device.m_state->IsDeviceLost() || !pond::render::IsValid(desc) || DetermineTargetStatus(desc.targetSnapshot) != TargetStatus::Active ||
+        !surface.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() || !presentationTracker.IsValid())
     {
-        return core::Result<RenderTarget>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Additional target test access requires a compatible device and complete active "
-            "target resource set."));
+        return core::Result<RenderTarget>::FromError(MakeRenderError(RenderErrorCode::InvalidArgument,
+                                                                     "Additional target test access requires a compatible device and complete active "
+                                                                     "target resource set."));
     }
 
     ChildToken targetToken{device.m_state->token.registry, ChildKind::Target};
     if (!targetToken.active || !device.m_state->TryRegisterTarget())
     {
         return core::Result<RenderTarget>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Could not register the additional public lifecycle test target."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Could not register the additional public lifecycle test target."));
     }
 
-    const detail::VulkanDeviceQueuePlan queuePlan =
-        device.m_state->vulkanDevice.GetInfo().queuePlan;
+    const detail::VulkanDeviceQueuePlan queuePlan = device.m_state->vulkanDevice.GetInfo().queuePlan;
     std::string targetLabel = MakeTargetDiagnosticLabel(desc.targetSnapshot.GetWindowId());
-    return core::Result<RenderTarget>::FromValue(RenderTarget{std::make_shared<RenderTarget::State>(
-        std::move(targetToken), device.m_state, desc, std::move(targetLabel), queuePlan,
-        std::move(surface), std::move(swapchain), std::move(frameResources),
-        std::move(presentationTracker))});
+    return core::Result<RenderTarget>::FromValue(RenderTarget{
+        std::make_shared<RenderTarget::State>(std::move(targetToken), device.m_state, desc, std::move(targetLabel), queuePlan, std::move(surface),
+                                              std::move(swapchain), std::move(frameResources), std::move(presentationTracker))});
 }
 
 void detail::RenderBackendTestAccess::FailNextTargetStateAllocation() noexcept
@@ -1272,8 +1192,7 @@ void detail::RenderBackendTestAccess::FailNextRetirementAllocation() noexcept
     g_failNextRetirementAllocationForTesting = true;
 }
 
-std::uint32_t detail::RenderBackendTestAccess::GetBootstrapTargetCount(
-    const RenderDevice& device) noexcept
+std::uint32_t detail::RenderBackendTestAccess::GetBootstrapTargetCount(const RenderDevice& device) noexcept
 {
     if (device.m_state == nullptr || device.m_state->token.registry == nullptr)
     {
@@ -1283,52 +1202,46 @@ std::uint32_t detail::RenderBackendTestAccess::GetBootstrapTargetCount(
     return device.m_state->token.registry->GetTargetCount();
 }
 
-detail::Draw2DDeviceLiveStats detail::RenderBackendTestAccess::GetDraw2DDeviceStats(
-    const RenderDevice& device) noexcept
+detail::Draw2DDeviceLiveStats detail::RenderBackendTestAccess::GetDraw2DDeviceStats(const RenderDevice& device) noexcept
 {
     if (device.m_state == nullptr)
     {
         return {};
     }
 
-    const detail::VulkanDraw2DPipelineCacheStats pipelineStats =
-        device.m_state->vulkanDraw2DPipelineCache.GetStats();
+    const detail::VulkanDraw2DPipelineCacheStats pipelineStats = device.m_state->vulkanDraw2DPipelineCache.GetStats();
     return detail::Draw2DDeviceLiveStats{.pipelineCreationCount = pipelineStats.creationCount,
                                          .pipelineReuseCount = pipelineStats.reuseCount,
                                          .pipelineReplacementCount = pipelineStats.replacementCount,
                                          .activeLayerCount = device.m_state->GetDraw2DLayerCount(),
-                                         .hasPipeline =
-                                             device.m_state->vulkanDraw2DPipelineCache.IsValid()};
+                                         .hasPipeline = device.m_state->vulkanDraw2DPipelineCache.IsValid()};
 }
 
-detail::Draw2DTargetLiveStats detail::RenderBackendTestAccess::GetDraw2DTargetStats(
-    const RenderTarget& target) noexcept
+detail::Draw2DTargetLiveStats detail::RenderBackendTestAccess::GetDraw2DTargetStats(const RenderTarget& target) noexcept
 {
     if (target.m_state == nullptr || !target.m_state->vulkanFrameResources.IsValid())
     {
         return {};
     }
 
-    const detail::VulkanDraw2DUploadArena& arena =
-        target.m_state->vulkanFrameResources.GetDraw2DUploadArena();
+    const detail::VulkanDraw2DUploadArena& arena = target.m_state->vulkanFrameResources.GetDraw2DUploadArena();
     if (!arena.IsValid())
     {
         return {};
     }
 
     const detail::VulkanDraw2DUploadStats uploadStats = arena.GetStats();
-    detail::Draw2DTargetLiveStats stats{
-        .currentCapacityBytes = static_cast<std::uint64_t>(uploadStats.currentCapacityBytes),
-        .reservedBytes = static_cast<std::uint64_t>(uploadStats.reservedBytes),
-        .uploadedBytes = static_cast<std::uint64_t>(uploadStats.uploadedBytes),
-        .highWaterReservedBytes = static_cast<std::uint64_t>(uploadStats.highWaterReservedBytes),
-        .allocationCount = uploadStats.allocationCount,
-        .growthCount = uploadStats.growthCount,
-        .generationCount = uploadStats.generationCount,
-        .flushCount = uploadStats.flushCount,
-        .retirementCount = uploadStats.retirementCount,
-        .slotCount = arena.GetSlotCount(),
-        .hasUploadArena = true};
+    detail::Draw2DTargetLiveStats stats{.currentCapacityBytes = static_cast<std::uint64_t>(uploadStats.currentCapacityBytes),
+                                        .reservedBytes = static_cast<std::uint64_t>(uploadStats.reservedBytes),
+                                        .uploadedBytes = static_cast<std::uint64_t>(uploadStats.uploadedBytes),
+                                        .highWaterReservedBytes = static_cast<std::uint64_t>(uploadStats.highWaterReservedBytes),
+                                        .allocationCount = uploadStats.allocationCount,
+                                        .growthCount = uploadStats.growthCount,
+                                        .generationCount = uploadStats.generationCount,
+                                        .flushCount = uploadStats.flushCount,
+                                        .retirementCount = uploadStats.retirementCount,
+                                        .slotCount = arena.GetSlotCount(),
+                                        .hasUploadArena = true};
     for (std::uint32_t slotIndex = 0U; slotIndex < stats.slotCount; ++slotIndex)
     {
         switch (arena.GetSlotSnapshot(slotIndex).state)
@@ -1347,20 +1260,17 @@ detail::Draw2DTargetLiveStats detail::RenderBackendTestAccess::GetDraw2DTargetSt
     return stats;
 }
 
-detail::Draw2DDeviceLiveStats detail::RenderLiveTestAccess::GetDraw2DDeviceStats(
-    const RenderDevice& device) noexcept
+detail::Draw2DDeviceLiveStats detail::RenderLiveTestAccess::GetDraw2DDeviceStats(const RenderDevice& device) noexcept
 {
     return detail::RenderBackendTestAccess::GetDraw2DDeviceStats(device);
 }
 
-detail::Draw2DTargetLiveStats detail::RenderLiveTestAccess::GetDraw2DTargetStats(
-    const RenderTarget& target) noexcept
+detail::Draw2DTargetLiveStats detail::RenderLiveTestAccess::GetDraw2DTargetStats(const RenderTarget& target) noexcept
 {
     return detail::RenderBackendTestAccess::GetDraw2DTargetStats(target);
 }
 
-core::VoidResult detail::RenderBackendTestAccess::DrainOrphanedPresentationResources(
-    RenderDevice& device)
+core::VoidResult detail::RenderBackendTestAccess::DrainOrphanedPresentationResources(RenderDevice& device)
 {
     if (core::VoidResult renderThread = device.VerifyRenderThread(); !renderThread)
     {
@@ -1377,24 +1287,18 @@ core::VoidResult detail::RenderBackendTestAccess::WaitPresentationQueueIdle(Rend
         return renderThread;
     }
 
-    return device.m_state->vulkanDevice.WaitQueueIdle(
-        device.m_state->vulkanDevice.GetInfo().queuePlan.presentationQueueFamilyIndex);
+    return device.m_state->vulkanDevice.WaitQueueIdle(device.m_state->vulkanDevice.GetInfo().queuePlan.presentationQueueFamilyIndex);
 }
 
 core::Result<RenderTarget> detail::RenderBackendTestAccess::CreateTarget(
-    detail::VulkanGlobalDispatch, detail::VulkanDeviceOwner&& device,
-    detail::VulkanSurfaceOwner&& surface, detail::VulkanSwapchainOwner&& swapchain,
-    detail::VulkanFrameResourcesOwner&& frameResources,
-    detail::VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc)
+    detail::VulkanGlobalDispatch, detail::VulkanDeviceOwner&& device, detail::VulkanSurfaceOwner&& surface, detail::VulkanSwapchainOwner&& swapchain,
+    detail::VulkanFrameResourcesOwner&& frameResources, detail::VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc)
 {
-    if (!pond::render::IsValid(desc) ||
-        DetermineTargetStatus(desc.targetSnapshot) != TargetStatus::Active || !device.IsValid() ||
-        !surface.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() ||
-        !presentationTracker.IsValid())
+    if (!pond::render::IsValid(desc) || DetermineTargetStatus(desc.targetSnapshot) != TargetStatus::Active || !device.IsValid() ||
+        !surface.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() || !presentationTracker.IsValid())
     {
-        return core::Result<RenderTarget>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Render backend test access requires a complete active target resource set."));
+        return core::Result<RenderTarget>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Render backend test access requires a complete active target resource set."));
     }
 
     const detail::VulkanDeviceQueuePlan queuePlan = device.GetInfo().queuePlan;
@@ -1402,74 +1306,64 @@ core::Result<RenderTarget> detail::RenderBackendTestAccess::CreateTarget(
     ChildToken deviceToken{registry, ChildKind::Device};
     if (!deviceToken.active)
     {
-        return core::Result<RenderTarget>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the test render device."));
+        return core::Result<RenderTarget>::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Could not register the test render device."));
     }
 
-    auto deviceState =
-        std::make_shared<RenderDevice::State>(std::move(deviceToken), std::move(device));
+    auto deviceState = std::make_shared<RenderDevice::State>(std::move(deviceToken), std::move(device));
     if (!deviceState->TryRegisterTarget())
     {
-        return core::Result<RenderTarget>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the test render target."));
+        return core::Result<RenderTarget>::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Could not register the test render target."));
     }
 
     ChildToken targetToken{registry, ChildKind::Target};
     if (!targetToken.active)
     {
         deviceState->ReleaseTarget();
-        return core::Result<RenderTarget>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not create the test render target token."));
+        return core::Result<RenderTarget>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Could not create the test render target token."));
     }
 
     std::string targetLabel = MakeTargetDiagnosticLabel(desc.targetSnapshot.GetWindowId());
-    return core::Result<RenderTarget>::FromValue(RenderTarget{std::make_shared<RenderTarget::State>(
-        std::move(targetToken), std::move(deviceState), desc, std::move(targetLabel), queuePlan,
-        std::move(surface), std::move(swapchain), std::move(frameResources),
-        std::move(presentationTracker))});
+    return core::Result<RenderTarget>::FromValue(RenderTarget{
+        std::make_shared<RenderTarget::State>(std::move(targetToken), std::move(deviceState), desc, std::move(targetLabel), queuePlan,
+                                              std::move(surface), std::move(swapchain), std::move(frameResources), std::move(presentationTracker))});
 }
 
-core::Result<PreparedSurface> detail::RenderBackendTestAccess::CreateRecoverySurface(
-    RenderTarget& target, detail::VulkanSurfaceOwner&& surface, RenderTargetSnapshot snapshot)
+core::Result<PreparedSurface> detail::RenderBackendTestAccess::CreateRecoverySurface(RenderTarget& target, detail::VulkanSurfaceOwner&& surface,
+                                                                                     RenderTargetSnapshot snapshot)
 {
-    if (target.m_state == nullptr || !target.m_state->token.IsActive() || !surface.IsValid() ||
-        !pond::render::IsValid(snapshot) ||
+    if (target.m_state == nullptr || !target.m_state->token.IsActive() || !surface.IsValid() || !pond::render::IsValid(snapshot) ||
         snapshot.GetWindowId() != target.m_state->targetSnapshot.GetWindowId() ||
-        snapshot.GetRevision() < target.m_state->targetSnapshot.GetRevision() ||
-        std::this_thread::get_id() != target.m_state->renderThread)
+        snapshot.GetRevision() < target.m_state->targetSnapshot.GetRevision() || std::this_thread::get_id() != target.m_state->renderThread)
     {
-        return core::Result<PreparedSurface>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Render backend test recovery requires a compatible live target and surface."));
+        return core::Result<PreparedSurface>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Render backend test recovery requires a compatible live target and surface."));
     }
 
     ChildToken surfaceToken{target.m_state->token.registry, ChildKind::PreparedSurface};
     if (!surfaceToken.active)
     {
-        return core::Result<PreparedSurface>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Could not register the test recovery surface."));
+        return core::Result<PreparedSurface>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Could not register the test recovery surface."));
     }
 
-    auto state = std::make_unique<PreparedSurface::State>(
-        std::move(surfaceToken), snapshot, SurfacePreparationReason::SurfaceLossRecovery,
-        std::move(surface));
+    auto state = std::make_unique<PreparedSurface::State>(std::move(surfaceToken), snapshot, SurfacePreparationReason::SurfaceLossRecovery,
+                                                          std::move(surface));
     state->renderThread = std::this_thread::get_id();
     return core::Result<PreparedSurface>::FromValue(PreparedSurface{std::move(state)});
 }
 
-void RenderTarget::State::MarkWindowRecreationPending(TargetRecreationReason reason,
-                                                      std::uint64_t previousRevision,
+void RenderTarget::State::MarkWindowRecreationPending(TargetRecreationReason reason, std::uint64_t previousRevision,
                                                       std::uint64_t currentRevision) noexcept
 {
-    const TargetRecreationInfo nextRecreation{
-        .reason = reason, .previousRevision = previousRevision, .currentRevision = currentRevision};
+    const TargetRecreationInfo nextRecreation{.reason = reason, .previousRevision = previousRevision, .currentRevision = currentRevision};
     if (!recreationPending || pendingRecreation != nextRecreation)
     {
         LOG_INFO_CATEGORY(kRenderLogCategory,
                           "target_recreation_requested target={} window_id={} reason={} "
                           "previous_revision={} current_revision={}",
-                          targetLabel, targetSnapshot.GetWindowId().GetValue(),
-                          static_cast<std::uint32_t>(reason), previousRevision, currentRevision);
+                          targetLabel, targetSnapshot.GetWindowId().GetValue(), static_cast<std::uint32_t>(reason), previousRevision,
+                          currentRevision);
     }
     recreationPending = true;
     pendingRecreation = nextRecreation;
@@ -1483,8 +1377,7 @@ void RenderTarget::State::MarkBackendRecreationPending(TargetRecreationReason re
         LOG_INFO_CATEGORY(kRenderLogCategory,
                           "target_recreation_requested target={} window_id={} reason={} "
                           "previous_revision=none current_revision=none",
-                          targetLabel, targetSnapshot.GetWindowId().GetValue(),
-                          static_cast<std::uint32_t>(reason));
+                          targetLabel, targetSnapshot.GetWindowId().GetValue(), static_cast<std::uint32_t>(reason));
     }
     recreationPending = true;
     pendingRecreation = nextRecreation;
@@ -1514,22 +1407,18 @@ core::VoidResult RenderTarget::State::PreparePresentationResourcesForRetirement(
 {
     constexpr std::uint64_t kPresentCompletionTimeoutNanoseconds = 100'000'000ULL;
 
-    if (deviceState == nullptr || !vulkanPresentationTracker.IsValid() ||
-        !vulkanSwapchain.IsValid())
+    if (deviceState == nullptr || !vulkanPresentationTracker.IsValid() || !vulkanSwapchain.IsValid())
     {
         return Success();
     }
 
-    if (vulkanPresentationTracker.GetCompletionPath() ==
-        detail::VulkanPresentationCompletionPath::SwapchainMaintenanceFence)
+    if (vulkanPresentationTracker.GetCompletionPath() == detail::VulkanPresentationCompletionPath::SwapchainMaintenanceFence)
     {
         return Success();
     }
 
     core::Result<detail::VulkanPresentationCompletionResult> completion =
-        vulkanPresentationTracker.PollCompletion(deviceState->vulkanDispatch,
-                                                 vulkanSwapchain.GetHandle(),
-                                                 kPresentCompletionTimeoutNanoseconds);
+        vulkanPresentationTracker.PollCompletion(deviceState->vulkanDispatch, vulkanSwapchain.GetHandle(), kPresentCompletionTimeoutNanoseconds);
     if (!completion)
     {
         deviceState->RecordDeviceFailure(completion.GetError());
@@ -1538,8 +1427,7 @@ core::VoidResult RenderTarget::State::PreparePresentationResourcesForRetirement(
 
     if (completion.GetValue().status == detail::VulkanPresentationCompletionStatus::Complete)
     {
-        usedExplicitPresentationCompletion =
-            usedExplicitPresentationCompletion || completion.GetValue().usedExplicitCompletion;
+        usedExplicitPresentationCompletion = usedExplicitPresentationCompletion || completion.GetValue().usedExplicitCompletion;
         return Success();
     }
 
@@ -1549,8 +1437,7 @@ core::VoidResult RenderTarget::State::PreparePresentationResourcesForRetirement(
 
 bool RenderTarget::State::HasUsablePresentationResources() const noexcept
 {
-    return vulkanSwapchain.IsValid() && vulkanFrameResources.IsValid() &&
-           !vulkanFrameResources.IsPoisoned() && vulkanPresentationTracker.IsValid();
+    return vulkanSwapchain.IsValid() && vulkanFrameResources.IsValid() && !vulkanFrameResources.IsPoisoned() && vulkanPresentationTracker.IsValid();
 }
 
 VkSwapchainKHR RenderTarget::State::FindOldSwapchainForReplacement() const noexcept
@@ -1560,18 +1447,15 @@ VkSwapchainKHR RenderTarget::State::FindOldSwapchainForReplacement() const noexc
         return vulkanSwapchain.GetHandle();
     }
 
-    const auto eligible = std::ranges::find_if(
-        retiredPresentationResources.rbegin(), retiredPresentationResources.rend(),
-        [](const RetiredPresentationResources& retired) noexcept
-        {
-            return retired.canBeUsedAsOldSwapchain && retired.vulkanSwapchain.IsValid();
-        });
-    return eligible == retiredPresentationResources.rend() ? VK_NULL_HANDLE
-                                                           : eligible->vulkanSwapchain.GetHandle();
+    const auto eligible = std::ranges::find_if(retiredPresentationResources.rbegin(), retiredPresentationResources.rend(),
+                                               [](const RetiredPresentationResources& retired) noexcept
+                                               {
+                                                   return retired.canBeUsedAsOldSwapchain && retired.vulkanSwapchain.IsValid();
+                                               });
+    return eligible == retiredPresentationResources.rend() ? VK_NULL_HANDLE : eligible->vulkanSwapchain.GetHandle();
 }
 
-core::VoidResult RenderTarget::State::ReserveRetirementSlotForOldSwapchain(
-    VkSwapchainKHR oldSwapchain)
+core::VoidResult RenderTarget::State::ReserveRetirementSlotForOldSwapchain(VkSwapchainKHR oldSwapchain)
 {
     if (oldSwapchain == VK_NULL_HANDLE || vulkanSwapchain.GetHandle() != oldSwapchain)
     {
@@ -1583,8 +1467,7 @@ core::VoidResult RenderTarget::State::ReserveRetirementSlotForOldSwapchain(
 
 core::VoidResult RenderTarget::State::ReserveRetirementSlotForCurrentPresentationResources()
 {
-    if ((!vulkanSwapchain.IsValid() && !vulkanFrameResources.IsValid() &&
-         !vulkanPresentationTracker.IsValid()) ||
+    if ((!vulkanSwapchain.IsValid() && !vulkanFrameResources.IsValid() && !vulkanPresentationTracker.IsValid()) ||
         retiredPresentationResources.size() < retiredPresentationResources.capacity())
     {
         return Success();
@@ -1592,9 +1475,7 @@ core::VoidResult RenderTarget::State::ReserveRetirementSlotForCurrentPresentatio
 
     if (retiredPresentationResources.size() == retiredPresentationResources.max_size())
     {
-        return MakeRenderFailure(
-            RenderErrorCode::OutOfMemory,
-            "The Vulkan presentation-resource retirement queue reached its maximum size.");
+        return MakeRenderFailure(RenderErrorCode::OutOfMemory, "The Vulkan presentation-resource retirement queue reached its maximum size.");
     }
 
     try
@@ -1608,9 +1489,7 @@ core::VoidResult RenderTarget::State::ReserveRetirementSlotForCurrentPresentatio
     }
     catch (const std::bad_alloc&)
     {
-        return MakeRenderFailure(
-            RenderErrorCode::OutOfMemory,
-            "Could not reserve the rollback-safe Vulkan presentation-resource retirement slot.");
+        return MakeRenderFailure(RenderErrorCode::OutOfMemory, "Could not reserve the rollback-safe Vulkan presentation-resource retirement slot.");
     }
 
     return Success();
@@ -1618,8 +1497,7 @@ core::VoidResult RenderTarget::State::ReserveRetirementSlotForCurrentPresentatio
 
 core::VoidResult RenderTarget::State::RetirePresentationResources(bool canBeUsedAsOldSwapchain)
 {
-    if (!vulkanSwapchain.IsValid() && !vulkanFrameResources.IsValid() &&
-        !vulkanPresentationTracker.IsValid())
+    if (!vulkanSwapchain.IsValid() && !vulkanFrameResources.IsValid() && !vulkanPresentationTracker.IsValid())
     {
         nextFrameSlot = 0U;
         return Success();
@@ -1632,12 +1510,11 @@ core::VoidResult RenderTarget::State::RetirePresentationResources(bool canBeUsed
 
     PONDER_VERIFY(retiredPresentationResources.size() < retiredPresentationResources.capacity(),
                   "Presentation retirement requires a pre-reserved ownership slot");
-    retiredPresentationResources.push_back(RetiredPresentationResources{
-        .generation = swapchainGeneration,
-        .vulkanSwapchain = std::move(vulkanSwapchain),
-        .vulkanFrameResources = std::move(vulkanFrameResources),
-        .vulkanPresentationTracker = std::move(vulkanPresentationTracker),
-        .canBeUsedAsOldSwapchain = canBeUsedAsOldSwapchain});
+    retiredPresentationResources.push_back(RetiredPresentationResources{.generation = swapchainGeneration,
+                                                                        .vulkanSwapchain = std::move(vulkanSwapchain),
+                                                                        .vulkanFrameResources = std::move(vulkanFrameResources),
+                                                                        .vulkanPresentationTracker = std::move(vulkanPresentationTracker),
+                                                                        .canBeUsedAsOldSwapchain = canBeUsedAsOldSwapchain});
     nextFrameSlot = 0U;
     return Success();
 }
@@ -1652,17 +1529,15 @@ void RenderTarget::State::RecordNativeSwapchainRetirement(VkSwapchainKHR oldSwap
     if (vulkanSwapchain.GetHandle() == oldSwapchain)
     {
         const core::VoidResult retirement = RetirePresentationResources(false);
-        PONDER_VERIFY(retirement.HasValue(),
-                      "Native swapchain retirement must use its pre-reserved ownership slot");
+        PONDER_VERIFY(retirement.HasValue(), "Native swapchain retirement must use its pre-reserved ownership slot");
         return;
     }
 
-    const auto retired =
-        std::ranges::find_if(retiredPresentationResources,
-                             [oldSwapchain](const RetiredPresentationResources& resources) noexcept
-                             {
-                                 return resources.vulkanSwapchain.GetHandle() == oldSwapchain;
-                             });
+    const auto retired = std::ranges::find_if(retiredPresentationResources,
+                                              [oldSwapchain](const RetiredPresentationResources& resources) noexcept
+                                              {
+                                                  return resources.vulkanSwapchain.GetHandle() == oldSwapchain;
+                                              });
     if (retired != retiredPresentationResources.end())
     {
         retired->canBeUsedAsOldSwapchain = false;
@@ -1674,8 +1549,7 @@ void RenderTarget::State::RecordCorePresentationCompletion() noexcept
     bool completedRetiredGeneration = false;
     for (RetiredPresentationResources& retired : retiredPresentationResources)
     {
-        if (retired.vulkanPresentationTracker.GetCompletionPath() ==
-                detail::VulkanPresentationCompletionPath::CoreAcquireHistory &&
+        if (retired.vulkanPresentationTracker.GetCompletionPath() == detail::VulkanPresentationCompletionPath::CoreAcquireHistory &&
             retired.vulkanPresentationTracker.HasQueuedPresentation())
         {
             retired.vulkanPresentationTracker.MarkSuccessorPresentationComplete();
@@ -1685,28 +1559,21 @@ void RenderTarget::State::RecordCorePresentationCompletion() noexcept
 
     usedCoreAcquireHistory = usedCoreAcquireHistory || completedRetiredGeneration;
 }
-core::Error RenderTarget::State::RecordFailure(core::Error error, std::string_view operation,
-                                               OptionalBackendDiagnostic nativeDiagnostic)
+core::Error RenderTarget::State::RecordFailure(core::Error error, std::string_view operation, OptionalBackendDiagnostic nativeDiagnostic)
 {
     const RenderErrorCode renderCode = GetRenderErrorCode(error);
     if (!nativeDiagnostic.has_value())
     {
         nativeDiagnostic = detail::VulkanDiagnosticScope::TakeCurrentLastFailure();
     }
-    lastFailure = MakeBackendDiagnostic(error, operation, std::move(nativeDiagnostic),
-                                        targetSnapshot.GetWindowId(), targetLabel);
-    LOG_WARNING_CATEGORY(kRenderLogCategory,
-                         "target_failure target={} operation={} code={} message={}", targetLabel,
-                         operation, static_cast<std::uint32_t>(ToErrorCode(renderCode).GetValue()),
-                         error.GetMessage());
+    lastFailure = MakeBackendDiagnostic(error, operation, std::move(nativeDiagnostic), targetSnapshot.GetWindowId(), targetLabel);
+    LOG_WARNING_CATEGORY(kRenderLogCategory, "target_failure target={} operation={} code={} message={}", targetLabel, operation,
+                         static_cast<std::uint32_t>(ToErrorCode(renderCode).GetValue()), error.GetMessage());
     if (renderCode == RenderErrorCode::InvalidState)
     {
-        LOG_WARNING_CATEGORY(kRenderLogCategory,
-                             "lifecycle_misuse operation={} target={} message={}", operation,
-                             targetLabel, error.GetMessage());
+        LOG_WARNING_CATEGORY(kRenderLogCategory, "lifecycle_misuse operation={} target={} message={}", operation, targetLabel, error.GetMessage());
     }
-    return core::Error{error.GetCode(),
-                       MakeTargetDiagnosticMessage(targetLabel, operation, error.GetMessage())};
+    return core::Error{error.GetCode(), MakeTargetDiagnosticMessage(targetLabel, operation, error.GetMessage())};
 }
 
 core::VoidResult RenderTarget::State::DrainRetiredPresentationResources()
@@ -1721,29 +1588,23 @@ core::VoidResult RenderTarget::State::DrainRetiredPresentationResources()
     {
         if (!retired->vulkanPresentationTracker.IsValid())
         {
-            return MakeRenderFailure(
-                RenderErrorCode::BackendFailure,
-                "Retired Vulkan resources are missing presentation completion tracking.");
+            return MakeRenderFailure(RenderErrorCode::BackendFailure, "Retired Vulkan resources are missing presentation completion tracking.");
         }
 
         core::Result<detail::VulkanPresentationCompletionResult> completion =
-            retired->vulkanPresentationTracker.PollCompletion(
-                deviceState->vulkanDispatch, retired->vulkanSwapchain.GetHandle(), 0U);
+            retired->vulkanPresentationTracker.PollCompletion(deviceState->vulkanDispatch, retired->vulkanSwapchain.GetHandle(), 0U);
         if (!completion)
         {
             deviceState->RecordDeviceFailure(completion.GetError());
             return core::VoidResult::FromError(std::move(completion).GetError());
         }
 
-        bool canDestroy =
-            completion.GetValue().status == detail::VulkanPresentationCompletionStatus::Complete;
-        usedExplicitPresentationCompletion =
-            usedExplicitPresentationCompletion || completion.GetValue().usedExplicitCompletion;
+        bool canDestroy = completion.GetValue().status == detail::VulkanPresentationCompletionStatus::Complete;
+        usedExplicitPresentationCompletion = usedExplicitPresentationCompletion || completion.GetValue().usedExplicitCompletion;
 
         if (canDestroy && retired->vulkanFrameResources.IsValid())
         {
-            core::Result<bool> fencesSignaled =
-                retired->vulkanFrameResources.AreAllFencesSignaled(deviceState->vulkanDispatch);
+            core::Result<bool> fencesSignaled = retired->vulkanFrameResources.AreAllFencesSignaled(deviceState->vulkanDispatch);
             RecordCompletedFrameSubmissions(*retired);
             if (!fencesSignaled)
             {
@@ -1776,12 +1637,10 @@ core::VoidResult RenderTarget::State::UsePracticalPresentationWaitFallback()
 
     ++practicalWaitFallbackCount;
     ++deviceState->practicalWaitFallbackCount;
-    LOG_WARNING_CATEGORY(kRenderLogCategory,
-                         "presentation_queue_idle_fallback target={} queue_family={}", targetLabel,
+    LOG_WARNING_CATEGORY(kRenderLogCategory, "presentation_queue_idle_fallback target={} queue_family={}", targetLabel,
                          queuePlan.presentationQueueFamilyIndex);
 
-    core::VoidResult wait =
-        deviceState->vulkanDevice.WaitQueueIdle(queuePlan.presentationQueueFamilyIndex);
+    core::VoidResult wait = deviceState->vulkanDevice.WaitQueueIdle(queuePlan.presentationQueueFamilyIndex);
     if (!wait)
     {
         deviceState->RecordDeviceFailure(wait.GetError());
@@ -1800,8 +1659,7 @@ core::VoidResult RenderTarget::State::MarkSurfaceLost()
 
     if (!surfaceLost)
     {
-        LOG_WARNING_CATEGORY(kRenderLogCategory, "surface_lost target={} revision={}", targetLabel,
-                             targetSnapshot.GetRevision());
+        LOG_WARNING_CATEGORY(kRenderLogCategory, "surface_lost target={} revision={}", targetLabel, targetSnapshot.GetRevision());
     }
 
     surfaceLost = true;
@@ -1816,8 +1674,7 @@ core::VoidResult RenderTarget::State::MarkSurfaceLost()
     for (RetiredPresentationResources& retired : retiredPresentationResources)
     {
         core::Result<detail::VulkanPresentationCompletionResult> completion =
-            retired.vulkanPresentationTracker.PollCompletion(
-                deviceState->vulkanDispatch, retired.vulkanSwapchain.GetHandle(), kInfiniteTimeout);
+            retired.vulkanPresentationTracker.PollCompletion(deviceState->vulkanDispatch, retired.vulkanSwapchain.GetHandle(), kInfiniteTimeout);
         if (!completion)
         {
             deviceState->RecordDeviceFailure(completion.GetError());
@@ -1830,8 +1687,7 @@ core::VoidResult RenderTarget::State::MarkSurfaceLost()
             continue;
         }
 
-        usedExplicitPresentationCompletion =
-            usedExplicitPresentationCompletion || completion.GetValue().usedExplicitCompletion;
+        usedExplicitPresentationCompletion = usedExplicitPresentationCompletion || completion.GetValue().usedExplicitCompletion;
     }
 
     if (requiresPracticalFallback)
@@ -1844,8 +1700,7 @@ core::VoidResult RenderTarget::State::MarkSurfaceLost()
 
     for (RetiredPresentationResources& retired : retiredPresentationResources)
     {
-        core::Result<bool> graphicsComplete = retired.vulkanFrameResources.AreAllFencesSignaled(
-            deviceState->vulkanDispatch, kInfiniteTimeout);
+        core::Result<bool> graphicsComplete = retired.vulkanFrameResources.AreAllFencesSignaled(deviceState->vulkanDispatch, kInfiniteTimeout);
         RecordCompletedFrameSubmissions(retired);
         if (!graphicsComplete)
         {
@@ -1854,8 +1709,7 @@ core::VoidResult RenderTarget::State::MarkSurfaceLost()
         }
         if (!graphicsComplete.GetValue())
         {
-            return MakeRenderFailure(RenderErrorCode::BackendFailure,
-                                     "An infinite Vulkan graphics-fence wait returned incomplete.");
+            return MakeRenderFailure(RenderErrorCode::BackendFailure, "An infinite Vulkan graphics-fence wait returned incomplete.");
         }
     }
 
@@ -1871,14 +1725,12 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
 
     if (deviceState == nullptr)
     {
-        return RecreationResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "RenderTarget no longer has a valid RenderDevice."));
+        return RecreationResult::FromError(MakeRenderError(RenderErrorCode::InvalidState, "RenderTarget no longer has a valid RenderDevice."));
     }
 
     if (core::VoidResult usable = deviceState->CheckDeviceUsable(); !usable)
     {
-        return RecreationResult::FromError(
-            RecordFailure(std::move(usable).GetError(), "RecreatePresentationResources"));
+        return RecreationResult::FromError(RecordFailure(std::move(usable).GetError(), "RecreatePresentationResources"));
     }
 
     if (status != TargetStatus::Active)
@@ -1893,10 +1745,9 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
 
     if (surfaceLost || !vulkanSurface.IsValid())
     {
-        return RecreationResult::FromError(RecordFailure(
-            MakeRenderError(RenderErrorCode::SurfaceLost,
-                            "RenderTarget requires a fresh prepared surface after surface loss."),
-            "RecreatePresentationResources"));
+        return RecreationResult::FromError(
+            RecordFailure(MakeRenderError(RenderErrorCode::SurfaceLost, "RenderTarget requires a fresh prepared surface after surface loss."),
+                          "RecreatePresentationResources"));
     }
 
     if (!recreationPending && HasUsablePresentationResources())
@@ -1927,8 +1778,7 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
     };
 
     core::Result<detail::VulkanSwapchainConfig> selectedConfig =
-        detail::SelectVulkanSwapchainConfig(deviceState->vulkanDispatch, deviceState->vulkanDevice,
-                                            vulkanSurface.GetHandle(), queuePlan, targetDesc);
+        detail::SelectVulkanSwapchainConfig(deviceState->vulkanDispatch, deviceState->vulkanDevice, vulkanSurface.GetHandle(), queuePlan, targetDesc);
     if (!selectedConfig)
     {
         return fail(std::move(selectedConfig).GetError(), "SelectVulkanSwapchainConfig");
@@ -1938,8 +1788,7 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
     const VkSwapchainKHR oldSwapchain = FindOldSwapchainForReplacement();
     if (core::VoidResult reserve = ReserveRetirementSlotForOldSwapchain(oldSwapchain); !reserve)
     {
-        return RecreationResult::FromError(
-            RecordFailure(std::move(reserve).GetError(), "ReserveRetirementSlotForOldSwapchain"));
+        return RecreationResult::FromError(RecordFailure(std::move(reserve).GetError(), "ReserveRetirementSlotForOldSwapchain"));
     }
 
     if (core::VoidResult prepare = PreparePresentationResourcesForRetirement(); !prepare)
@@ -1948,10 +1797,8 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
     }
 
     detail::VulkanSwapchainCreationState creationState;
-    core::Result<detail::VulkanSwapchainOwner> swapchain =
-        detail::CreateVulkanSwapchainForSelectedConfig(
-            deviceState->vulkanDispatch, deviceState->vulkanDevice, vulkanSurface.GetHandle(),
-            config, oldSwapchain, creationState);
+    core::Result<detail::VulkanSwapchainOwner> swapchain = detail::CreateVulkanSwapchainForSelectedConfig(
+        deviceState->vulkanDispatch, deviceState->vulkanDevice, vulkanSurface.GetHandle(), config, oldSwapchain, creationState);
 
     if (creationState.oldSwapchainRetired)
     {
@@ -1965,8 +1812,7 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
             MarkBackendRecreationPending(TargetRecreationReason::PresentationChanged);
             if (core::VoidResult drain = DrainRetiredPresentationResources(); !drain)
             {
-                return RecreationResult::FromError(RecordFailure(
-                    std::move(drain).GetError(), "DrainRetiredPresentationResources"));
+                return RecreationResult::FromError(RecordFailure(std::move(drain).GetError(), "DrainRetiredPresentationResources"));
             }
 
             return RecreationResult::FromValue(PresentationRecreationStatus::Pending);
@@ -1976,24 +1822,20 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
     }
 
     detail::VulkanSwapchainOwner replacementSwapchain = std::move(swapchain).GetValue();
-    core::Result<detail::VulkanFrameResourcesOwner> frameResources =
-        detail::CreateVulkanFrameResourcesForTarget(
-            deviceState->vulkanDispatch, deviceState->vulkanDevice, targetSnapshot.GetWindowId(),
-            queuePlan, replacementSwapchain.GetConfig().presentation.actualQueuedLatency,
-            replacementSwapchain.GetFramebufferCount());
+    core::Result<detail::VulkanFrameResourcesOwner> frameResources = detail::CreateVulkanFrameResourcesForTarget(
+        deviceState->vulkanDispatch, deviceState->vulkanDevice, targetSnapshot.GetWindowId(), queuePlan,
+        replacementSwapchain.GetConfig().presentation.actualQueuedLatency, replacementSwapchain.GetFramebufferCount());
     if (!frameResources)
     {
         return fail(std::move(frameResources).GetError(), "CreateVulkanFrameResourcesForTarget");
     }
 
     core::Result<detail::VulkanPresentationTrackerOwner> presentationTracker =
-        detail::CreateVulkanPresentationTrackerForTarget(
-            deviceState->vulkanDispatch, deviceState->vulkanDevice, targetSnapshot.GetWindowId(),
-            frameResources.GetValue().GetSlotCount(), replacementSwapchain.GetFramebufferCount());
+        detail::CreateVulkanPresentationTrackerForTarget(deviceState->vulkanDispatch, deviceState->vulkanDevice, targetSnapshot.GetWindowId(),
+                                                         frameResources.GetValue().GetSlotCount(), replacementSwapchain.GetFramebufferCount());
     if (!presentationTracker)
     {
-        return fail(std::move(presentationTracker).GetError(),
-                    "CreateVulkanPresentationTrackerForTarget");
+        return fail(std::move(presentationTracker).GetError(), "CreateVulkanPresentationTrackerForTarget");
     }
 
     vulkanFrameResources = std::move(frameResources).GetValue();
@@ -2005,46 +1847,38 @@ core::Result<PresentationRecreationStatus> RenderTarget::State::RecreatePresenta
     LOG_INFO_CATEGORY(kRenderLogCategory,
                       "target_recreation_completed target={} window_id={} reason={} generation={} "
                       "previous_revision={} current_revision={}",
-                      targetLabel, targetSnapshot.GetWindowId().GetValue(),
-                      static_cast<std::uint32_t>(pendingRecreation.reason), swapchainGeneration,
-                      pendingRecreation.previousRevision.value_or(0U),
-                      pendingRecreation.currentRevision.value_or(0U));
+                      targetLabel, targetSnapshot.GetWindowId().GetValue(), static_cast<std::uint32_t>(pendingRecreation.reason), swapchainGeneration,
+                      pendingRecreation.previousRevision.value_or(0U), pendingRecreation.currentRevision.value_or(0U));
     ClearRecreationPending();
     if (core::VoidResult drain = DrainRetiredPresentationResources(); !drain)
     {
-        return RecreationResult::FromError(
-            RecordFailure(std::move(drain).GetError(), "DrainRetiredPresentationResources"));
+        return RecreationResult::FromError(RecordFailure(std::move(drain).GetError(), "DrainRetiredPresentationResources"));
     }
 
     return RecreationResult::FromValue(PresentationRecreationStatus::Completed);
 }
-core::VoidResult ValidateSurfacePreparationRequest(
-    platform::WindowGraphicsCompatibility compatibility, platform::WindowId actualWindowId,
-    const SurfacePreparationDesc& desc)
+core::VoidResult ValidateSurfacePreparationRequest(ponder::platform::WindowGraphicsCompatibility compatibility,
+                                                   ponder::platform::WindowId actualWindowId, const SurfacePreparationDesc& desc)
 {
     if (!pond::render::IsValid(desc))
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidArgument,
-                                 "Surface preparation descriptor is invalid.");
+        return MakeRenderFailure(RenderErrorCode::InvalidArgument, "Surface preparation descriptor is invalid.");
     }
 
     if (compatibility != GetRequiredWindowGraphicsCompatibility())
     {
-        return MakeRenderFailure(RenderErrorCode::UnsupportedSurface,
-                                 "Window graphics compatibility does not match this render build.");
+        return MakeRenderFailure(RenderErrorCode::UnsupportedSurface, "Window graphics compatibility does not match this render build.");
     }
 
     if (actualWindowId != desc.targetSnapshot.GetWindowId())
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidArgument,
-                                 "Surface preparation descriptor references the wrong window.");
+        return MakeRenderFailure(RenderErrorCode::InvalidArgument, "Surface preparation descriptor references the wrong window.");
     }
 
     return Success();
 }
 
-core::VoidResult ValidateTargetSnapshotUpdate(RenderTargetSnapshot current,
-                                              RenderTargetSnapshot next)
+core::VoidResult ValidateTargetSnapshotUpdate(RenderTargetSnapshot current, RenderTargetSnapshot next)
 {
     return ValidateTargetSnapshotSuccessor(current, next, false);
 }
@@ -2053,17 +1887,16 @@ core::Result<RenderBootstrap> RenderBootstrap::Create(const RenderBootstrapDesc&
 {
     if (!pond::render::IsValid(desc))
     {
-        return core::Result<RenderBootstrap>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Render bootstrap descriptor is invalid."));
+        return core::Result<RenderBootstrap>::FromError(MakeRenderError(RenderErrorCode::InvalidArgument, "Render bootstrap descriptor is invalid."));
     }
 
     auto registry = std::make_shared<ChildRegistry>(std::this_thread::get_id());
-    return core::Result<RenderBootstrap>::FromValue(
-        RenderBootstrap{std::make_unique<State>(std::move(registry), desc.validationMode)});
+    return core::Result<RenderBootstrap>::FromValue(RenderBootstrap{std::make_unique<State>(std::move(registry), desc.validationMode)});
 }
 
 RenderBootstrap::RenderBootstrap() noexcept = default;
-RenderBootstrap::RenderBootstrap(std::unique_ptr<State> state) noexcept : m_state{std::move(state)}
+RenderBootstrap::RenderBootstrap(std::unique_ptr<State> state) noexcept :
+    m_state{std::move(state)}
 {
 }
 RenderBootstrap::RenderBootstrap(RenderBootstrap&& other) noexcept = default;
@@ -2131,8 +1964,7 @@ RenderBootstrapDiagnostics RenderBootstrap::GetDiagnostics() const
 
 RenderValidationReport RenderBootstrap::GetValidationReport() const noexcept
 {
-    return m_state == nullptr ? RenderValidationReport{}
-                              : m_state->vulkanInstance.GetValidationReport();
+    return m_state == nullptr ? RenderValidationReport{} : m_state->vulkanInstance.GetValidationReport();
 }
 
 core::VoidResult RenderBootstrap::Shutdown()
@@ -2144,15 +1976,13 @@ core::VoidResult RenderBootstrap::Shutdown()
 
     if (!m_state->registry->IsOwnerThread())
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderBootstrap shutdown must run on its owner thread.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderBootstrap shutdown must run on its owner thread.");
     }
 
     if (!m_state->registry->TryShutdown())
     {
-        core::VoidResult failure = MakeRenderFailure(
-            RenderErrorCode::InvalidState,
-            "RenderBootstrap shutdown requires every renderer child to be destroyed first.");
+        core::VoidResult failure =
+            MakeRenderFailure(RenderErrorCode::InvalidState, "RenderBootstrap shutdown requires every renderer child to be destroyed first.");
         m_state->RecordFailure(failure.GetError(), "Shutdown");
         return failure;
     }
@@ -2161,19 +1991,17 @@ core::VoidResult RenderBootstrap::Shutdown()
     return Success();
 }
 
-core::Result<PreparedSurface> RenderBootstrap::PrepareSurface(platform::Window& window,
-                                                              const SurfacePreparationDesc& desc)
+core::Result<PreparedSurface> RenderBootstrap::PrepareSurface(ponder::platform::Window& window, const SurfacePreparationDesc& desc)
 {
     if (m_state == nullptr)
     {
-        return core::Result<PreparedSurface>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "PrepareSurface requires a valid RenderBootstrap."));
+        return core::Result<PreparedSurface>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "PrepareSurface requires a valid RenderBootstrap."));
     }
 
     ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
-    const auto fail = [this, &diagnosticScope, windowId = window.GetId()](
-                          core::Error error,
-                          std::string_view operation) -> core::Result<PreparedSurface>
+    const auto fail = [this, &diagnosticScope, windowId = window.GetId()](core::Error error,
+                                                                          std::string_view operation) -> core::Result<PreparedSurface>
     {
         m_state->RecordFailure(error, operation, diagnosticScope.TakeLastFailure(), windowId);
         return core::Result<PreparedSurface>::FromError(std::move(error));
@@ -2181,58 +2009,48 @@ core::Result<PreparedSurface> RenderBootstrap::PrepareSurface(platform::Window& 
 
     if (m_state->registry->IsShutdown())
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "PrepareSurface cannot run after shutdown."),
-                    "PrepareSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "PrepareSurface cannot run after shutdown."), "PrepareSurface");
     }
 
     if (!IsOwnerThread())
     {
-        return core::Result<PreparedSurface>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Surface preparation must run on the owner thread."));
+        return core::Result<PreparedSurface>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Surface preparation must run on the owner thread."));
     }
 
-    if (core::VoidResult validation = ValidateSurfacePreparationRequest(
-            window.GetGraphicsCompatibility(), window.GetId(), desc);
-        !validation)
+    if (core::VoidResult validation = ValidateSurfacePreparationRequest(window.GetGraphicsCompatibility(), window.GetId(), desc); !validation)
     {
         return fail(std::move(validation).GetError(), "PrepareSurface");
     }
 
-    core::Result<platform::NativeWindowHandle> nativeHandleResult = window.GetNativeHandle();
+    core::Result<ponder::platform::NativeWindowHandle> nativeHandleResult = window.GetNativeHandle();
     if (!nativeHandleResult)
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                            "Window native handle is unavailable for Vulkan surface creation: " +
-                                std::string{nativeHandleResult.GetError().GetMessage()}),
-            "PrepareSurface.nativeHandle");
+        return fail(MakeRenderError(RenderErrorCode::UnsupportedSurface, "Window native handle is unavailable for Vulkan surface creation: " +
+                                                                             std::string{nativeHandleResult.GetError().GetMessage()}),
+                    "PrepareSurface.nativeHandle");
     }
 
-    const platform::NativeWindowHandle nativeHandle = std::move(nativeHandleResult).GetValue();
+    const ponder::platform::NativeWindowHandle nativeHandle = std::move(nativeHandleResult).GetValue();
     const detail::VulkanWsiKind wsiKind = detail::GetVulkanWsiKind(nativeHandle);
 
     detail::VulkanSurfaceOwner vulkanSurface;
     {
         std::scoped_lock lock{m_state->instanceMutex};
         core::Result<detail::VulkanInstanceInfo> instance =
-            m_state->vulkanInstance.EnsureInitialized(m_state->vulkanDispatch, wsiKind,
-                                                      m_state->validationMode);
+            m_state->vulkanInstance.EnsureInitialized(m_state->vulkanDispatch, wsiKind, m_state->validationMode);
         if (!instance)
         {
             return fail(std::move(instance).GetError(), "PrepareSurface.instance");
         }
         m_state->RecordInstanceInfo(instance.GetValue());
-        LOG_INFO_CATEGORY(
-            kRenderLogCategory,
-            "validation_configuration requested={} enabled={} active={} api_version={}",
-            static_cast<std::uint32_t>(m_state->diagnostics.requestedValidationMode),
-            static_cast<std::uint32_t>(m_state->diagnostics.enabledValidationMode),
-            m_state->diagnostics.validationEnabled, m_state->diagnostics.negotiatedApiVersion);
+        LOG_INFO_CATEGORY(kRenderLogCategory, "validation_configuration requested={} enabled={} active={} api_version={}",
+                          static_cast<std::uint32_t>(m_state->diagnostics.requestedValidationMode),
+                          static_cast<std::uint32_t>(m_state->diagnostics.enabledValidationMode), m_state->diagnostics.validationEnabled,
+                          m_state->diagnostics.negotiatedApiVersion);
 
         core::Result<detail::VulkanSurfaceOwner> surface =
-            detail::CreateVulkanSurfaceForNativeWindow(
-                m_state->vulkanDispatch, m_state->vulkanInstance.GetOwner(), nativeHandle);
+            detail::CreateVulkanSurfaceForNativeWindow(m_state->vulkanDispatch, m_state->vulkanInstance.GetOwner(), nativeHandle);
         if (!surface)
         {
             return fail(std::move(surface).GetError(), "PrepareSurface.surface");
@@ -2244,69 +2062,58 @@ core::Result<PreparedSurface> RenderBootstrap::PrepareSurface(platform::Window& 
     ChildToken token{m_state->registry, ChildKind::PreparedSurface};
     if (!token.active)
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."),
-            "PrepareSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."), "PrepareSurface");
     }
 
     return core::Result<PreparedSurface>::FromValue(
-        PreparedSurface{std::make_unique<PreparedSurface::State>(
-            std::move(token), desc.targetSnapshot, desc.reason, std::move(vulkanSurface))});
+        PreparedSurface{std::make_unique<PreparedSurface::State>(std::move(token), desc.targetSnapshot, desc.reason, std::move(vulkanSurface))});
 }
-core::Result<PreparedSurface> detail::RenderBootstrapTestAccess::CreatePreparedSurface(
-    RenderBootstrap& bootstrap, const SurfacePreparationDesc& desc)
+core::Result<PreparedSurface> detail::RenderBootstrapTestAccess::CreatePreparedSurface(RenderBootstrap& bootstrap, const SurfacePreparationDesc& desc)
 {
     if (bootstrap.m_state == nullptr)
     {
         return core::Result<PreparedSurface>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Test prepared-surface creation requires a valid RenderBootstrap."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Test prepared-surface creation requires a valid RenderBootstrap."));
     }
 
     if (bootstrap.m_state->registry->IsShutdown())
     {
         return core::Result<PreparedSurface>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Test prepared-surface creation cannot run after shutdown."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Test prepared-surface creation cannot run after shutdown."));
     }
 
     if (!bootstrap.IsOwnerThread())
     {
         return core::Result<PreparedSurface>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Prepared surface creation must run on the owner thread."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Prepared surface creation must run on the owner thread."));
     }
 
     if (!pond::render::IsValid(desc))
     {
-        return core::Result<PreparedSurface>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Surface preparation descriptor is invalid."));
+        return core::Result<PreparedSurface>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Surface preparation descriptor is invalid."));
     }
 
     ChildToken token{bootstrap.m_state->registry, ChildKind::PreparedSurface};
     if (!token.active)
     {
-        return core::Result<PreparedSurface>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."));
+        return core::Result<PreparedSurface>::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."));
     }
 
     return core::Result<PreparedSurface>::FromValue(
-        PreparedSurface{std::make_unique<PreparedSurface::State>(
-            std::move(token), desc.targetSnapshot, desc.reason)});
+        PreparedSurface{std::make_unique<PreparedSurface::State>(std::move(token), desc.targetSnapshot, desc.reason)});
 }
 
-core::Result<RenderAdapterSelection> RenderBootstrap::SelectAdapter(
-    const PreparedSurface& firstSurface, const RenderAdapterSelectionDesc& desc)
+core::Result<RenderAdapterSelection> RenderBootstrap::SelectAdapter(const PreparedSurface& firstSurface, const RenderAdapterSelectionDesc& desc)
 {
     if (m_state == nullptr)
     {
-        return core::Result<RenderAdapterSelection>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "SelectAdapter requires a valid RenderBootstrap."));
+        return core::Result<RenderAdapterSelection>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "SelectAdapter requires a valid RenderBootstrap."));
     }
 
     ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
-    const auto fail = [this, &diagnosticScope, windowId = firstSurface.GetWindowId()](
-                          core::Error error) -> core::Result<RenderAdapterSelection>
+    const auto fail = [this, &diagnosticScope, windowId = firstSurface.GetWindowId()](core::Error error) -> core::Result<RenderAdapterSelection>
     {
         m_state->RecordFailure(error, "SelectAdapter", diagnosticScope.TakeLastFailure(), windowId);
         return core::Result<RenderAdapterSelection>::FromError(std::move(error));
@@ -2314,32 +2121,25 @@ core::Result<RenderAdapterSelection> RenderBootstrap::SelectAdapter(
 
     if (m_state->registry->IsShutdown())
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "SelectAdapter cannot run after shutdown."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "SelectAdapter cannot run after shutdown."));
     }
 
     if (!pond::render::IsValid(desc))
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidArgument,
-                                    "Render adapter selection descriptor is invalid."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "Render adapter selection descriptor is invalid."));
     }
 
     if (firstSurface.m_state == nullptr)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "SelectAdapter requires a valid first prepared surface."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "SelectAdapter requires a valid first prepared surface."));
     }
 
     if (firstSurface.m_state->token.registry != m_state->registry)
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidArgument,
-                            "First prepared surface belongs to a different RenderBootstrap."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "First prepared surface belongs to a different RenderBootstrap."));
     }
 
-    if (core::VoidResult live =
-            ValidateLiveRegistry(firstSurface.m_state->token, "PreparedSurface");
-        !live)
+    if (core::VoidResult live = ValidateLiveRegistry(firstSurface.m_state->token, "PreparedSurface"); !live)
     {
         return fail(std::move(live).GetError());
     }
@@ -2351,22 +2151,17 @@ core::Result<RenderAdapterSelection> RenderBootstrap::SelectAdapter(
 
     if (!firstSurface.m_state->vulkanSurface.IsValid())
     {
-        return fail(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "SelectAdapter requires a first prepared surface with a live Vulkan surface."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "SelectAdapter requires a first prepared surface with a live Vulkan surface."));
     }
 
-    std::shared_ptr<detail::VulkanInstanceOwner> instance =
-        firstSurface.m_state->vulkanSurface.GetInstanceOwner();
+    std::shared_ptr<detail::VulkanInstanceOwner> instance = firstSurface.m_state->vulkanSurface.GetInstanceOwner();
     const VkSurfaceKHR surface = firstSurface.m_state->vulkanSurface.GetHandle();
 
     core::Result<RenderAdapterSelection> selection =
-        core::Result<RenderAdapterSelection>::FromError(
-            MakeRenderError(RenderErrorCode::BackendFailure, "Adapter selection did not run."));
+        core::Result<RenderAdapterSelection>::FromError(MakeRenderError(RenderErrorCode::BackendFailure, "Adapter selection did not run."));
     {
         std::scoped_lock lock{m_state->instanceMutex};
-        selection = detail::SelectVulkanAdapterForSurface(m_state->vulkanDispatch,
-                                                          std::move(instance), surface, desc);
+        selection = detail::SelectVulkanAdapterForSurface(m_state->vulkanDispatch, std::move(instance), surface, desc);
     }
     if (!selection)
     {
@@ -2374,27 +2169,22 @@ core::Result<RenderAdapterSelection> RenderBootstrap::SelectAdapter(
     }
 
     const RenderAdapterSelection& selected = selection.GetValue();
-    LOG_INFO_CATEGORY(
-        kRenderLogCategory,
-        "adapter_selected name={} api_version={} preference={} preference_fallback={}",
-        selected.selectedAdapter.identity.name, selected.selectedAdapter.apiVersion,
-        static_cast<std::uint32_t>(selected.request.adapterPreference),
-        selected.selectedByPreferenceFallback);
+    LOG_INFO_CATEGORY(kRenderLogCategory, "adapter_selected name={} api_version={} preference={} preference_fallback={}",
+                      selected.selectedAdapter.identity.name, selected.selectedAdapter.apiVersion,
+                      static_cast<std::uint32_t>(selected.request.adapterPreference), selected.selectedByPreferenceFallback);
     return selection;
 }
-core::Result<RenderDevice> RenderBootstrap::CreateDevice(
-    const PreparedSurface& firstSurface, const RenderAdapterSelection& adapterSelection,
-    const RenderDeviceDesc& desc)
+core::Result<RenderDevice> RenderBootstrap::CreateDevice(const PreparedSurface& firstSurface, const RenderAdapterSelection& adapterSelection,
+                                                         const RenderDeviceDesc& desc)
 {
     if (m_state == nullptr)
     {
-        return core::Result<RenderDevice>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "CreateDevice requires a valid RenderBootstrap."));
+        return core::Result<RenderDevice>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "CreateDevice requires a valid RenderBootstrap."));
     }
 
     ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
-    const auto fail = [this, &diagnosticScope, windowId = firstSurface.GetWindowId()](
-                          core::Error error) -> core::Result<RenderDevice>
+    const auto fail = [this, &diagnosticScope, windowId = firstSurface.GetWindowId()](core::Error error) -> core::Result<RenderDevice>
     {
         m_state->RecordFailure(error, "CreateDevice", diagnosticScope.TakeLastFailure(), windowId);
         return core::Result<RenderDevice>::FromError(std::move(error));
@@ -2402,38 +2192,30 @@ core::Result<RenderDevice> RenderBootstrap::CreateDevice(
 
     if (m_state->registry->IsShutdown())
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "CreateDevice cannot run after shutdown."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "CreateDevice cannot run after shutdown."));
     }
 
     if (!pond::render::IsValid(desc))
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidArgument,
-                                    "Render device descriptor is invalid."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "Render device descriptor is invalid."));
     }
 
     if (!pond::render::IsValid(adapterSelection))
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidArgument,
-                                    "Render adapter selection is invalid."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "Render adapter selection is invalid."));
     }
 
     if (firstSurface.m_state == nullptr)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "CreateDevice requires a valid first prepared surface."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "CreateDevice requires a valid first prepared surface."));
     }
 
     if (firstSurface.m_state->token.registry != m_state->registry)
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidArgument,
-                            "First prepared surface belongs to a different RenderBootstrap."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "First prepared surface belongs to a different RenderBootstrap."));
     }
 
-    if (core::VoidResult live =
-            ValidateLiveRegistry(firstSurface.m_state->token, "PreparedSurface");
-        !live)
+    if (core::VoidResult live = ValidateLiveRegistry(firstSurface.m_state->token, "PreparedSurface"); !live)
     {
         return fail(std::move(live).GetError());
     }
@@ -2445,22 +2227,17 @@ core::Result<RenderDevice> RenderBootstrap::CreateDevice(
 
     if (!firstSurface.m_state->vulkanSurface.IsValid())
     {
-        return fail(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "CreateDevice requires a first prepared surface with a live Vulkan surface."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "CreateDevice requires a first prepared surface with a live Vulkan surface."));
     }
 
-    std::shared_ptr<detail::VulkanInstanceOwner> instance =
-        firstSurface.m_state->vulkanSurface.GetInstanceOwner();
+    std::shared_ptr<detail::VulkanInstanceOwner> instance = firstSurface.m_state->vulkanSurface.GetInstanceOwner();
     const VkSurfaceKHR surface = firstSurface.m_state->vulkanSurface.GetHandle();
 
     core::Result<detail::VulkanDeviceOwner> vulkanDevice =
-        core::Result<detail::VulkanDeviceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure, "Vulkan device creation did not run."));
+        core::Result<detail::VulkanDeviceOwner>::FromError(MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan device creation did not run."));
     {
         std::scoped_lock lock{m_state->instanceMutex};
-        vulkanDevice = detail::CreateVulkanDeviceForAdapterSelection(
-            m_state->vulkanDispatch, std::move(instance), surface, adapterSelection, desc);
+        vulkanDevice = detail::CreateVulkanDeviceForAdapterSelection(m_state->vulkanDispatch, std::move(instance), surface, adapterSelection, desc);
     }
 
     if (!vulkanDevice)
@@ -2471,26 +2248,25 @@ core::Result<RenderDevice> RenderBootstrap::CreateDevice(
     ChildToken token{m_state->registry, ChildKind::Device};
     if (!token.active)
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."));
     }
 
-    const detail::VulkanDeviceOptionalCapabilities& enabledCapabilities =
-        vulkanDevice.GetValue().GetInfo().optionalCapabilities;
-    LOG_INFO_CATEGORY(
-        kRenderLogCategory,
-        "device_requirements adapter={} swapchain_required=true allocator_ready={} "
-        "swapchain_maintenance1_preference_enabled={} present_id_preference_enabled={} "
-        "present_wait_preference_enabled={}",
-        adapterSelection.selectedAdapter.identity.name, enabledCapabilities.vmaAllocator,
-        enabledCapabilities.swapchainMaintenance1, enabledCapabilities.presentId,
-        enabledCapabilities.presentWait);
-    return core::Result<RenderDevice>::FromValue(RenderDevice{std::make_shared<RenderDevice::State>(
-        std::move(token), std::move(vulkanDevice).GetValue())});
+    const detail::VulkanDeviceOptionalCapabilities& enabledCapabilities = vulkanDevice.GetValue().GetInfo().optionalCapabilities;
+    LOG_INFO_CATEGORY(kRenderLogCategory,
+                      "device_requirements adapter={} swapchain_required=true allocator_ready={} "
+                      "swapchain_maintenance1_preference_enabled={} present_id_preference_enabled={} "
+                      "present_wait_preference_enabled={}",
+                      adapterSelection.selectedAdapter.identity.name, enabledCapabilities.vmaAllocator, enabledCapabilities.swapchainMaintenance1,
+                      enabledCapabilities.presentId, enabledCapabilities.presentWait);
+    return core::Result<RenderDevice>::FromValue(
+        RenderDevice{std::make_shared<RenderDevice::State>(std::move(token), std::move(vulkanDevice).GetValue())});
 }
 
 RenderDevice::RenderDevice() noexcept = default;
-RenderDevice::RenderDevice(std::shared_ptr<State> state) noexcept : m_state{std::move(state)} {}
+RenderDevice::RenderDevice(std::shared_ptr<State> state) noexcept :
+    m_state{std::move(state)}
+{
+}
 RenderDevice::RenderDevice(RenderDevice&& other) noexcept = default;
 RenderDevice& RenderDevice::operator=(RenderDevice&& other) noexcept
 {
@@ -2528,8 +2304,7 @@ core::VoidResult RenderDevice::VerifyRenderThread() const
 {
     if (m_state == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderDevice is moved-from or empty.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderDevice is moved-from or empty.");
     }
 
     if (core::VoidResult live = ValidateLiveRegistry(m_state->token, "RenderDevice"); !live)
@@ -2593,8 +2368,7 @@ std::uint32_t RenderDevice::GetActiveTargetCount() const noexcept
     return m_state == nullptr ? 0U : m_state->GetTargetCount();
 }
 
-core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& preparedSurface,
-                                                            const RenderTargetDesc& desc)
+core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& preparedSurface, const RenderTargetDesc& desc)
 {
     ::pond::render::detail::VulkanDiagnosticScope diagnosticScope;
     std::string targetLabel;
@@ -2603,24 +2377,20 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
         if (m_state != nullptr)
         {
             ++m_state->targetCreateFailures;
-            m_state->RecordDeviceFailure(error, "CreateRenderTarget",
-                                         diagnosticScope.TakeLastFailure(),
-                                         desc.targetSnapshot.GetWindowId(), targetLabel);
+            m_state->RecordDeviceFailure(error, "CreateRenderTarget", diagnosticScope.TakeLastFailure(), desc.targetSnapshot.GetWindowId(),
+                                         targetLabel);
         }
 
         const RenderErrorCode renderCode = GetRenderErrorCode(error);
         if (renderCode == RenderErrorCode::InvalidState)
         {
-            LOG_WARNING_CATEGORY(
-                kRenderLogCategory,
-                "lifecycle_misuse operation=CreateRenderTarget target={} message={}", targetLabel,
-                error.GetMessage());
+            LOG_WARNING_CATEGORY(kRenderLogCategory, "lifecycle_misuse operation=CreateRenderTarget target={} message={}", targetLabel,
+                                 error.GetMessage());
         }
         if (!targetLabel.empty())
         {
-            return core::Result<RenderTarget>::FromError(core::Error{
-                error.GetCode(), MakeTargetDiagnosticMessage(targetLabel, "CreateRenderTarget",
-                                                             error.GetMessage())});
+            return core::Result<RenderTarget>::FromError(
+                core::Error{error.GetCode(), MakeTargetDiagnosticMessage(targetLabel, "CreateRenderTarget", error.GetMessage())});
         }
 
         return core::Result<RenderTarget>::FromError(std::move(error));
@@ -2628,8 +2398,7 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
 
     if (m_state == nullptr)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "CreateRenderTarget requires a valid RenderDevice."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "CreateRenderTarget requires a valid RenderDevice."));
     }
 
     if (core::VoidResult renderThread = VerifyRenderThread(); !renderThread)
@@ -2641,8 +2410,7 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
 
     if (!pond::render::IsValid(desc))
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidArgument,
-                                    "Render target descriptor is invalid."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "Render target descriptor is invalid."));
     }
 
     try
@@ -2651,26 +2419,21 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
     }
     catch (const std::bad_alloc&)
     {
-        return fail(MakeRenderError(RenderErrorCode::OutOfMemory,
-                                    "Could not allocate the render target diagnostic label."));
+        return fail(MakeRenderError(RenderErrorCode::OutOfMemory, "Could not allocate the render target diagnostic label."));
     }
 
     if (preparedSurface.m_state == nullptr)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "CreateRenderTarget requires a valid prepared surface."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "CreateRenderTarget requires a valid prepared surface."));
     }
 
     if (preparedSurface.m_state->token.registry != m_state->token.registry)
     {
-        return fail(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Prepared surface belongs to a different RenderBootstrap than this RenderDevice."));
+        return fail(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Prepared surface belongs to a different RenderBootstrap than this RenderDevice."));
     }
 
-    if (core::VoidResult live =
-            ValidateLiveRegistry(preparedSurface.m_state->token, "PreparedSurface");
-        !live)
+    if (core::VoidResult live = ValidateLiveRegistry(preparedSurface.m_state->token, "PreparedSurface"); !live)
     {
         return fail(std::move(live).GetError());
     }
@@ -2682,23 +2445,17 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
 
     if (!preparedSurface.m_state->vulkanSurface.IsValid())
     {
-        return fail(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "CreateRenderTarget requires a prepared surface with a live Vulkan surface."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "CreateRenderTarget requires a prepared surface with a live Vulkan surface."));
     }
 
     const RenderTargetSnapshot preparedSnapshot = preparedSurface.m_state->targetSnapshot;
-    if (core::VoidResult snapshot =
-            ValidateTargetSnapshotSuccessor(preparedSnapshot, desc.targetSnapshot, true);
-        !snapshot)
+    if (core::VoidResult snapshot = ValidateTargetSnapshotSuccessor(preparedSnapshot, desc.targetSnapshot, true); !snapshot)
     {
         return fail(std::move(snapshot).GetError());
     }
 
-    core::Result<detail::VulkanDeviceQueuePlan> targetQueuePlan =
-        detail::ValidateVulkanDeviceSurfaceCompatibility(
-            m_state->vulkanDispatch, m_state->vulkanDevice,
-            preparedSurface.m_state->vulkanSurface.GetHandle());
+    core::Result<detail::VulkanDeviceQueuePlan> targetQueuePlan = detail::ValidateVulkanDeviceSurfaceCompatibility(
+        m_state->vulkanDispatch, m_state->vulkanDevice, preparedSurface.m_state->vulkanSurface.GetHandle());
     if (!targetQueuePlan)
     {
         return fail(std::move(targetQueuePlan).GetError());
@@ -2709,11 +2466,8 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
     detail::VulkanPresentationTrackerOwner vulkanPresentationTracker;
     if (DetermineTargetStatus(desc.targetSnapshot) == TargetStatus::Active)
     {
-        core::Result<detail::VulkanSwapchainOwner> swapchain =
-            detail::CreateVulkanSwapchainForTarget(
-                m_state->vulkanDispatch, m_state->vulkanDevice,
-                preparedSurface.m_state->vulkanSurface.GetHandle(), targetQueuePlan.GetValue(),
-                desc);
+        core::Result<detail::VulkanSwapchainOwner> swapchain = detail::CreateVulkanSwapchainForTarget(
+            m_state->vulkanDispatch, m_state->vulkanDevice, preparedSurface.m_state->vulkanSurface.GetHandle(), targetQueuePlan.GetValue(), desc);
         if (!swapchain)
         {
             return fail(std::move(swapchain).GetError());
@@ -2721,21 +2475,17 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
 
         vulkanSwapchain = std::move(swapchain).GetValue();
 
-        core::Result<detail::VulkanFrameResourcesOwner> frameResources =
-            detail::CreateVulkanFrameResourcesForTarget(
-                m_state->vulkanDispatch, m_state->vulkanDevice, desc.targetSnapshot.GetWindowId(),
-                targetQueuePlan.GetValue(),
-                vulkanSwapchain.GetConfig().presentation.actualQueuedLatency,
-                vulkanSwapchain.GetFramebufferCount());
+        core::Result<detail::VulkanFrameResourcesOwner> frameResources = detail::CreateVulkanFrameResourcesForTarget(
+            m_state->vulkanDispatch, m_state->vulkanDevice, desc.targetSnapshot.GetWindowId(), targetQueuePlan.GetValue(),
+            vulkanSwapchain.GetConfig().presentation.actualQueuedLatency, vulkanSwapchain.GetFramebufferCount());
         if (!frameResources)
         {
             return fail(std::move(frameResources).GetError());
         }
 
         core::Result<detail::VulkanPresentationTrackerOwner> presentationTracker =
-            detail::CreateVulkanPresentationTrackerForTarget(
-                m_state->vulkanDispatch, m_state->vulkanDevice, desc.targetSnapshot.GetWindowId(),
-                frameResources.GetValue().GetSlotCount(), vulkanSwapchain.GetFramebufferCount());
+            detail::CreateVulkanPresentationTrackerForTarget(m_state->vulkanDispatch, m_state->vulkanDevice, desc.targetSnapshot.GetWindowId(),
+                                                             frameResources.GetValue().GetSlotCount(), vulkanSwapchain.GetFramebufferCount());
         if (!presentationTracker)
         {
             return fail(std::move(presentationTracker).GetError());
@@ -2747,16 +2497,14 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
 
     if (!m_state->TryRegisterTarget())
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "RenderDevice cannot create targets after shutdown."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "RenderDevice cannot create targets after shutdown."));
     }
 
     ChildToken targetToken{preparedSurface.m_state->token.registry, ChildKind::Target};
     if (!targetToken.active)
     {
         m_state->ReleaseTarget();
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "Render bootstrap is shutting down."));
     }
 
     std::shared_ptr<RenderTarget::State> targetState;
@@ -2767,45 +2515,36 @@ core::Result<RenderTarget> RenderDevice::CreateRenderTarget(PreparedSurface&& pr
             throw std::bad_alloc{};
         }
 
-        targetState = std::make_shared<RenderTarget::State>(
-            std::move(targetToken), m_state, desc, std::move(targetLabel),
-            std::move(targetQueuePlan).GetValue(),
-            std::move(preparedSurface.m_state->vulkanSurface), std::move(vulkanSwapchain),
-            std::move(vulkanFrameResources), std::move(vulkanPresentationTracker));
+        targetState =
+            std::make_shared<RenderTarget::State>(std::move(targetToken), m_state, desc, std::move(targetLabel),
+                                                  std::move(targetQueuePlan).GetValue(), std::move(preparedSurface.m_state->vulkanSurface),
+                                                  std::move(vulkanSwapchain), std::move(vulkanFrameResources), std::move(vulkanPresentationTracker));
     }
     catch (const std::bad_alloc&)
     {
         m_state->ReleaseTarget();
-        return fail(MakeRenderError(RenderErrorCode::OutOfMemory,
-                                    "Could not allocate the render target ownership state."));
+        return fail(MakeRenderError(RenderErrorCode::OutOfMemory, "Could not allocate the render target ownership state."));
     }
 
     preparedSurface.m_state.reset();
     ++m_state->targetCreateSuccesses;
-    LOG_INFO_CATEGORY(kRenderLogCategory, "target_created target={} revision={} active={}",
-                      targetState->targetLabel, desc.targetSnapshot.GetRevision(),
-                      DetermineTargetStatus(desc.targetSnapshot) == TargetStatus::Active);
-    LOG_INFO_CATEGORY(
-        kRenderLogCategory,
-        "presentation_requirements target={} policy={} policy_strength={} queued_frames={} "
-        "queued_strength={}",
-        targetState->targetLabel, static_cast<std::uint32_t>(desc.presentation.policy),
-        static_cast<std::uint32_t>(desc.presentation.strength),
-        desc.queuedLatency.maximumQueuedFrames.frameCount,
-        static_cast<std::uint32_t>(desc.queuedLatency.strength));
+    LOG_INFO_CATEGORY(kRenderLogCategory, "target_created target={} revision={} active={}", targetState->targetLabel,
+                      desc.targetSnapshot.GetRevision(), DetermineTargetStatus(desc.targetSnapshot) == TargetStatus::Active);
+    LOG_INFO_CATEGORY(kRenderLogCategory,
+                      "presentation_requirements target={} policy={} policy_strength={} queued_frames={} "
+                      "queued_strength={}",
+                      targetState->targetLabel, static_cast<std::uint32_t>(desc.presentation.policy),
+                      static_cast<std::uint32_t>(desc.presentation.strength), desc.queuedLatency.maximumQueuedFrames.frameCount,
+                      static_cast<std::uint32_t>(desc.queuedLatency.strength));
     if (targetState->vulkanSwapchain.IsValid())
     {
-        const SelectedPresentationConfig& presentation =
-            targetState->vulkanSwapchain.GetConfig().presentation;
+        const SelectedPresentationConfig& presentation = targetState->vulkanSwapchain.GetConfig().presentation;
         LOG_INFO_CATEGORY(kRenderLogCategory,
                           "presentation_settings target={} actual_policy={} policy_fallback={} "
                           "actual_queued_frames={} queued_fallback={} output={}",
-                          targetState->targetLabel,
-                          static_cast<std::uint32_t>(presentation.actualPolicy),
-                          static_cast<std::uint32_t>(presentation.policyFallback),
-                          presentation.actualQueuedLatency.frameCount,
-                          static_cast<std::uint32_t>(presentation.queuedLatencyFallback),
-                          static_cast<std::uint32_t>(presentation.output));
+                          targetState->targetLabel, static_cast<std::uint32_t>(presentation.actualPolicy),
+                          static_cast<std::uint32_t>(presentation.policyFallback), presentation.actualQueuedLatency.frameCount,
+                          static_cast<std::uint32_t>(presentation.queuedLatencyFallback), static_cast<std::uint32_t>(presentation.output));
     }
 
     return core::Result<RenderTarget>::FromValue(RenderTarget{std::move(targetState)});
@@ -2817,11 +2556,10 @@ namespace
 {
 [[nodiscard]] bool IsNonRecordingFrameStatus(FrameStatus status) noexcept
 {
-    return status == FrameStatus::SkippedSuspended || status == FrameStatus::TimedOut ||
-           status == FrameStatus::RecreationPending;
+    return status == FrameStatus::SkippedSuspended || status == FrameStatus::TimedOut || status == FrameStatus::RecreationPending;
 }
 
-[[nodiscard]] Draw2DPixelExtent ToDraw2DPixelExtent(platform::PixelSize extent) noexcept
+[[nodiscard]] Draw2DPixelExtent ToDraw2DPixelExtent(ponder::platform::PixelSize extent) noexcept
 {
     return Draw2DPixelExtent{.width = extent.width, .height = extent.height};
 }
@@ -2829,14 +2567,15 @@ namespace
 
 Draw2DLayer::Draw2DLayer() noexcept = default;
 
-Draw2DLayer::Draw2DLayer(std::shared_ptr<RenderDevice::State> state) noexcept
-    : m_state{std::move(state)},
-      m_renderThread{m_state == nullptr ? std::thread::id{} : m_state->renderThread}
+Draw2DLayer::Draw2DLayer(std::shared_ptr<RenderDevice::State> state) noexcept :
+    m_state{std::move(state)},
+    m_renderThread{m_state == nullptr ? std::thread::id{} : m_state->renderThread}
 {
 }
 
-Draw2DLayer::Draw2DLayer(Draw2DLayer&& other) noexcept
-    : m_state{std::move(other.m_state)}, m_renderThread{std::exchange(other.m_renderThread, {})}
+Draw2DLayer::Draw2DLayer(Draw2DLayer&& other) noexcept :
+    m_state{std::move(other.m_state)},
+    m_renderThread{std::exchange(other.m_renderThread, {})}
 {
 }
 
@@ -2866,8 +2605,8 @@ core::Result<Draw2DLayer> Draw2DLayer::Create(RenderDevice& device)
 
     if (!device.m_state->TryRegisterDraw2DLayer())
     {
-        return core::Result<Draw2DLayer>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Draw2DLayer cannot be created after device shutdown."));
+        return core::Result<Draw2DLayer>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Draw2DLayer cannot be created after device shutdown."));
     }
 
     return core::Result<Draw2DLayer>::FromValue(Draw2DLayer{device.m_state});
@@ -2882,8 +2621,7 @@ core::VoidResult Draw2DLayer::VerifyRenderThread() const
 {
     if (m_state == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "Draw2DLayer is moved-from or empty.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "Draw2DLayer is moved-from or empty.");
     }
 
     if (core::VoidResult live = ValidateLiveRegistry(m_state->token, "RenderDevice"); !live)
@@ -2916,9 +2654,7 @@ core::VoidResult Draw2DLayer::ValidateFrameAccess(RenderFrame& frame) const
     if (target.deviceState == nullptr || target.deviceState.get() != m_state.get())
     {
         return core::VoidResult::FromError(target.RecordFailure(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Draw2DLayer belongs to a different RenderDevice than the frame."),
-            "Draw2DStage"));
+            MakeRenderError(RenderErrorCode::InvalidState, "Draw2DLayer belongs to a different RenderDevice than the frame."), "Draw2DStage"));
     }
 
     return Success();
@@ -2941,9 +2677,7 @@ core::VoidResult Draw2DLayer::Record(RenderFrame& frame, const Draw2DPacket& pac
     if (target.deviceState == nullptr || target.deviceState.get() != m_state.get())
     {
         return core::VoidResult::FromError(target.RecordFailure(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Draw2DLayer belongs to a different RenderDevice than the frame."),
-            "Draw2DStage"));
+            MakeRenderError(RenderErrorCode::InvalidState, "Draw2DLayer belongs to a different RenderDevice than the frame."), "Draw2DStage"));
     }
 
     if (IsNonRecordingFrameStatus(frameState.status))
@@ -2954,30 +2688,25 @@ core::VoidResult Draw2DLayer::Record(RenderFrame& frame, const Draw2DPacket& pac
     core::Result<Draw2DPacketStats> packetStats = ValidateDraw2DPacket(packet);
     if (!packetStats)
     {
-        return core::VoidResult::FromError(
-            target.RecordFailure(std::move(packetStats).GetError(), "Draw2DStagePacket"));
+        return core::VoidResult::FromError(target.RecordFailure(std::move(packetStats).GetError(), "Draw2DStagePacket"));
     }
 
     const Draw2DPixelExtent frameExtent = ToDraw2DPixelExtent(frame.GetMetrics().pixelSize);
     if (packet.GetPixelExtent() != frameExtent)
     {
         return core::VoidResult::FromError(target.RecordFailure(
-            MakeRenderError(RenderErrorCode::InvalidArgument,
-                            "Draw2D packet extent does not match the active frame pixel extent."),
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Draw2D packet extent does not match the active frame pixel extent."),
             "Draw2DStageTarget"));
     }
 
     if (!frameState.clearRecorded)
     {
         return core::VoidResult::FromError(target.RecordFailure(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Draw2D stage recording requires a cleared active frame."),
-            "Draw2DStageFrame"));
+            MakeRenderError(RenderErrorCode::InvalidState, "Draw2D stage recording requires a cleared active frame."), "Draw2DStageFrame"));
     }
 
     core::VoidResult recorded = ::pond::render::detail::RecordVulkanDraw2DStage(
-        target.deviceState->vulkanDispatch, target.deviceState->vulkanDevice,
-        target.vulkanSwapchain, target.vulkanFrameResources,
+        target.deviceState->vulkanDispatch, target.deviceState->vulkanDevice, target.vulkanSwapchain, target.vulkanFrameResources,
         target.deviceState->vulkanDraw2DPipelineCache, frameState.recording, packet);
     if (!recorded)
     {
@@ -2985,13 +2714,11 @@ core::VoidResult Draw2DLayer::Record(RenderFrame& frame, const Draw2DPacket& pac
         core::Error error = std::move(recorded).GetError();
         if (IsRenderError(error, RenderErrorCode::DeviceLost))
         {
-            target.deviceState->RecordDeviceFailure(
-                error, "RecordVulkanDraw2DStage",
-                ::pond::render::detail::VulkanDiagnosticScope::CopyCurrentLastFailure(),
-                target.targetSnapshot.GetWindowId(), target.targetLabel);
+            target.deviceState->RecordDeviceFailure(error, "RecordVulkanDraw2DStage",
+                                                    ::pond::render::detail::VulkanDiagnosticScope::CopyCurrentLastFailure(),
+                                                    target.targetSnapshot.GetWindowId(), target.targetLabel);
         }
-        return core::VoidResult::FromError(target.RecordFailure(
-            std::move(error), "RecordVulkanDraw2DStage", diagnosticScope.TakeLastFailure()));
+        return core::VoidResult::FromError(target.RecordFailure(std::move(error), "RecordVulkanDraw2DStage", diagnosticScope.TakeLastFailure()));
     }
 
     return Success();
@@ -3004,15 +2731,15 @@ void Draw2DLayer::Release() noexcept
         return;
     }
 
-    PONDER_VERIFY(std::this_thread::get_id() == m_renderThread,
-                  "Draw2DLayer destruction must occur on its render thread");
+    PONDER_VERIFY(std::this_thread::get_id() == m_renderThread, "Draw2DLayer destruction must occur on its render thread");
     m_state->ReleaseDraw2DLayer();
     m_state.reset();
     m_renderThread = {};
 }
 } // namespace draw2d
 PreparedSurface::PreparedSurface() noexcept = default;
-PreparedSurface::PreparedSurface(std::unique_ptr<State> state) noexcept : m_state{std::move(state)}
+PreparedSurface::PreparedSurface(std::unique_ptr<State> state) noexcept :
+    m_state{std::move(state)}
 {
 }
 PreparedSurface::PreparedSurface(PreparedSurface&& other) noexcept = default;
@@ -3053,7 +2780,7 @@ RenderTargetSnapshot PreparedSurface::GetTargetSnapshot() const noexcept
     return m_state == nullptr ? RenderTargetSnapshot{} : m_state->targetSnapshot;
 }
 
-platform::WindowId PreparedSurface::GetWindowId() const noexcept
+ponder::platform::WindowId PreparedSurface::GetWindowId() const noexcept
 {
     return GetTargetSnapshot().GetWindowId();
 }
@@ -3062,8 +2789,7 @@ core::VoidResult PreparedSurface::TransferToCurrentThread(RenderTargetSnapshot l
 {
     if (m_state == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "PreparedSurface is moved-from or empty.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "PreparedSurface is moved-from or empty.");
     }
 
     if (core::VoidResult live = ValidateLiveRegistry(m_state->token, "PreparedSurface"); !live)
@@ -3073,13 +2799,10 @@ core::VoidResult PreparedSurface::TransferToCurrentThread(RenderTargetSnapshot l
 
     if (m_state->renderThread.has_value())
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "PreparedSurface has already been transferred.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "PreparedSurface has already been transferred.");
     }
 
-    if (core::VoidResult update =
-            ValidateTargetSnapshotSuccessor(m_state->targetSnapshot, latestSnapshot, true);
-        !update)
+    if (core::VoidResult update = ValidateTargetSnapshotSuccessor(m_state->targetSnapshot, latestSnapshot, true); !update)
     {
         return update;
     }
@@ -3093,8 +2816,7 @@ core::VoidResult PreparedSurface::VerifyRenderThread() const
 {
     if (m_state == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "PreparedSurface is moved-from or empty.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "PreparedSurface is moved-from or empty.");
     }
 
     if (core::VoidResult live = ValidateLiveRegistry(m_state->token, "PreparedSurface"); !live)
@@ -3104,15 +2826,17 @@ core::VoidResult PreparedSurface::VerifyRenderThread() const
 
     if (!m_state->renderThread.has_value())
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "PreparedSurface has not been transferred yet.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "PreparedSurface has not been transferred yet.");
     }
 
     return ValidateCurrentThread(*m_state->renderThread, "PreparedSurface operation");
 }
 
 RenderTarget::RenderTarget() noexcept = default;
-RenderTarget::RenderTarget(std::shared_ptr<State> state) noexcept : m_state{std::move(state)} {}
+RenderTarget::RenderTarget(std::shared_ptr<State> state) noexcept :
+    m_state{std::move(state)}
+{
+}
 RenderTarget::RenderTarget(RenderTarget&& other) noexcept = default;
 RenderTarget& RenderTarget::operator=(RenderTarget&& other) noexcept
 {
@@ -3143,16 +2867,14 @@ bool RenderTarget::IsValid() const noexcept
 
 bool RenderTarget::IsDeviceLost() const noexcept
 {
-    return m_state != nullptr && m_state->deviceState != nullptr &&
-           m_state->deviceState->IsDeviceLost();
+    return m_state != nullptr && m_state->deviceState != nullptr && m_state->deviceState->IsDeviceLost();
 }
 
 core::VoidResult RenderTarget::VerifyRenderThread() const
 {
     if (m_state == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderTarget is moved-from or empty.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderTarget is moved-from or empty.");
     }
 
     if (core::VoidResult live = ValidateLiveRegistry(m_state->token, "RenderTarget"); !live)
@@ -3162,13 +2884,10 @@ core::VoidResult RenderTarget::VerifyRenderThread() const
 
     if (m_state->deviceState == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderTarget no longer has a valid RenderDevice.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderTarget no longer has a valid RenderDevice.");
     }
 
-    if (core::VoidResult deviceLive =
-            ValidateLiveRegistry(m_state->deviceState->token, "RenderDevice");
-        !deviceLive)
+    if (core::VoidResult deviceLive = ValidateLiveRegistry(m_state->deviceState->token, "RenderDevice"); !deviceLive)
     {
         return deviceLive;
     }
@@ -3181,7 +2900,7 @@ core::VoidResult RenderTarget::VerifyRenderThread() const
     return ValidateCurrentThread(m_state->renderThread, "RenderTarget operation");
 }
 
-platform::WindowId RenderTarget::GetWindowId() const noexcept
+ponder::platform::WindowId RenderTarget::GetWindowId() const noexcept
 {
     return GetTargetSnapshot().GetWindowId();
 }
@@ -3238,18 +2957,16 @@ PresentationRetirementStats RenderTarget::GetPresentationRetirementStats() const
         return {};
     }
 
-    return PresentationRetirementStats{
-        .pendingResourceSets = m_state->retiredPresentationResources.size(),
-        .retiredResourceSets = m_state->retiredResourceSetCount,
-        .practicalWaitFallbacks = m_state->practicalWaitFallbackCount,
-        .usedExplicitPresentationCompletion = m_state->usedExplicitPresentationCompletion,
-        .usedCoreAcquireHistory = m_state->usedCoreAcquireHistory,
-        .surfaceLost = m_state->surfaceLost,
-        .deviceLost = m_state->deviceState != nullptr && m_state->deviceState->IsDeviceLost()};
+    return PresentationRetirementStats{.pendingResourceSets = m_state->retiredPresentationResources.size(),
+                                       .retiredResourceSets = m_state->retiredResourceSetCount,
+                                       .practicalWaitFallbacks = m_state->practicalWaitFallbackCount,
+                                       .usedExplicitPresentationCompletion = m_state->usedExplicitPresentationCompletion,
+                                       .usedCoreAcquireHistory = m_state->usedCoreAcquireHistory,
+                                       .surfaceLost = m_state->surfaceLost,
+                                       .deviceLost = m_state->deviceState != nullptr && m_state->deviceState->IsDeviceLost()};
 }
 
-std::optional<SelectedPresentationConfig> RenderTarget::GetSelectedPresentationConfig()
-    const noexcept
+std::optional<SelectedPresentationConfig> RenderTarget::GetSelectedPresentationConfig() const noexcept
 {
     if (!HasSwapchain())
     {
@@ -3296,12 +3013,9 @@ core::Result<RenderFrame> RenderTarget::AcquireFrame()
     auto fail = [this](core::Error error)
     {
         ++m_state->frameAcquireFailures;
-        return core::Result<RenderFrame>::FromError(
-            m_state->RecordFailure(std::move(error), "AcquireFrame"));
+        return core::Result<RenderFrame>::FromError(m_state->RecordFailure(std::move(error), "AcquireFrame"));
     };
-    auto makeFrame =
-        [this, &fail](FrameStatus status,
-                      detail::VulkanFrameRecordingState recording) -> core::Result<RenderFrame>
+    auto makeFrame = [this, &fail](FrameStatus status, detail::VulkanFrameRecordingState recording) -> core::Result<RenderFrame>
     {
         try
         {
@@ -3310,8 +3024,7 @@ core::Result<RenderFrame> RenderTarget::AcquireFrame()
                 throw std::bad_alloc{};
             }
 
-            auto frameState =
-                std::make_unique<RenderFrame::State>(m_state, status, true, std::move(recording));
+            auto frameState = std::make_unique<RenderFrame::State>(m_state, status, true, std::move(recording));
             m_state->activeFrame = true;
             return core::Result<RenderFrame>::FromValue(RenderFrame{std::move(frameState)});
         }
@@ -3319,33 +3032,26 @@ core::Result<RenderFrame> RenderTarget::AcquireFrame()
         {
             if (recording.IsActive())
             {
-                detail::AbandonVulkanFrame(m_state->vulkanFrameResources,
-                                           m_state->vulkanPresentationTracker, recording);
+                detail::AbandonVulkanFrame(m_state->vulkanFrameResources, m_state->vulkanPresentationTracker, recording);
                 if (m_state->deviceState != nullptr && !m_state->deviceState->IsDeviceLost())
                 {
-                    m_state->MarkBackendRecreationPending(
-                        TargetRecreationReason::PresentationChanged);
+                    m_state->MarkBackendRecreationPending(TargetRecreationReason::PresentationChanged);
                 }
                 ++m_state->frameFailures;
             }
 
-            return fail(
-                MakeRenderError(RenderErrorCode::OutOfMemory,
-                                "Could not allocate the acquired render frame ownership state."));
+            return fail(MakeRenderError(RenderErrorCode::OutOfMemory, "Could not allocate the acquired render frame ownership state."));
         }
     };
 
     if (m_state->activeFrame)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "RenderTarget already has an active frame."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "RenderTarget already has an active frame."));
     }
 
     if (m_state->surfaceLost)
     {
-        return fail(MakeRenderError(
-            RenderErrorCode::SurfaceLost,
-            "RenderTarget requires RecoverSurface before another frame can be acquired."));
+        return fail(MakeRenderError(RenderErrorCode::SurfaceLost, "RenderTarget requires RecoverSurface before another frame can be acquired."));
     }
 
     if (IsSuspendedStatus(m_state->status))
@@ -3353,8 +3059,7 @@ core::Result<RenderFrame> RenderTarget::AcquireFrame()
         return makeFrame(FrameStatus::SkippedSuspended, {});
     }
 
-    core::Result<PresentationRecreationStatus> recreation =
-        m_state->RecreatePresentationResources();
+    core::Result<PresentationRecreationStatus> recreation = m_state->RecreatePresentationResources();
     if (!recreation)
     {
         ++m_state->frameAcquireFailures;
@@ -3368,15 +3073,12 @@ core::Result<RenderFrame> RenderTarget::AcquireFrame()
 
     if (!m_state->HasUsablePresentationResources())
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Active RenderTarget is missing usable Vulkan frame resources."));
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "Active RenderTarget is missing usable Vulkan frame resources."));
     }
 
-    core::Result<detail::VulkanFrameBeginResult> begin = detail::BeginVulkanFrame(
-        m_state->deviceState->vulkanDispatch, m_state->deviceState->vulkanDevice,
-        m_state->vulkanSwapchain, m_state->vulkanFrameResources, m_state->vulkanPresentationTracker,
-        m_state->queuePlan, m_state->nextFrameSlot);
+    core::Result<detail::VulkanFrameBeginResult> begin =
+        detail::BeginVulkanFrame(m_state->deviceState->vulkanDispatch, m_state->deviceState->vulkanDevice, m_state->vulkanSwapchain,
+                                 m_state->vulkanFrameResources, m_state->vulkanPresentationTracker, m_state->queuePlan, m_state->nextFrameSlot);
 
     if (m_state->vulkanPresentationTracker.ConsumeCorePresentationCompletion())
     {
@@ -3420,13 +3122,10 @@ core::Result<RenderFrame> RenderTarget::AcquireFrame()
 
     if (beginResult.status != FrameStatus::Ready || !beginResult.recording.IsActive())
     {
-        return fail(MakeRenderError(RenderErrorCode::BackendFailure,
-                                    "Vulkan frame begin returned an invalid recording state."));
+        return fail(MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan frame begin returned an invalid recording state."));
     }
 
-    const FrameStatus frameStatus = recreation.GetValue() == PresentationRecreationStatus::Completed
-                                        ? FrameStatus::Recreated
-                                        : FrameStatus::Ready;
+    const FrameStatus frameStatus = recreation.GetValue() == PresentationRecreationStatus::Completed ? FrameStatus::Recreated : FrameStatus::Ready;
     return makeFrame(frameStatus, std::move(beginResult.recording));
 }
 core::VoidResult RenderTarget::UpdateTargetSnapshot(RenderTargetSnapshot latestSnapshot)
@@ -3442,18 +3141,14 @@ core::VoidResult RenderTarget::UpdateTargetSnapshot(RenderTargetSnapshot latestS
         return core::VoidResult::FromError(m_state->RecordFailure(std::move(error), operation));
     };
 
-    if (core::VoidResult update =
-            ValidateTargetSnapshotUpdate(m_state->targetSnapshot, latestSnapshot);
-        !update)
+    if (core::VoidResult update = ValidateTargetSnapshotUpdate(m_state->targetSnapshot, latestSnapshot); !update)
     {
         return fail(std::move(update).GetError(), "UpdateTargetSnapshot");
     }
 
     if (m_state->activeFrame)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "Cannot update a render target while a frame is active."),
-                    "UpdateTargetSnapshot");
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "Cannot update a render target while a frame is active."), "UpdateTargetSnapshot");
     }
 
     const RenderTargetSnapshot previousSnapshot = m_state->targetSnapshot;
@@ -3481,16 +3176,12 @@ core::VoidResult RenderTarget::UpdateTargetSnapshot(RenderTargetSnapshot latestS
 
     if (IsSuspendedStatus(nextStatus))
     {
-        if (core::VoidResult reserve =
-                m_state->ReserveRetirementSlotForCurrentPresentationResources();
-            !reserve)
+        if (core::VoidResult reserve = m_state->ReserveRetirementSlotForCurrentPresentationResources(); !reserve)
         {
-            return fail(std::move(reserve).GetError(),
-                        "ReserveRetirementSlotForCurrentPresentationResources");
+            return fail(std::move(reserve).GetError(), "ReserveRetirementSlotForCurrentPresentationResources");
         }
 
-        if (core::VoidResult prepare = m_state->PreparePresentationResourcesForRetirement();
-            !prepare)
+        if (core::VoidResult prepare = m_state->PreparePresentationResourcesForRetirement(); !prepare)
         {
             return fail(std::move(prepare).GetError(), "PreparePresentationResourcesForRetirement");
         }
@@ -3503,8 +3194,8 @@ core::VoidResult RenderTarget::UpdateTargetSnapshot(RenderTargetSnapshot latestS
         if (!IsSuspendedStatus(previousStatus))
         {
             ++m_state->suspensionCount;
-            LOG_INFO_CATEGORY(kRenderLogCategory, "target_suspended target={} status={}",
-                              m_state->targetLabel, static_cast<std::uint32_t>(nextStatus));
+            LOG_INFO_CATEGORY(kRenderLogCategory, "target_suspended target={} status={}", m_state->targetLabel,
+                              static_cast<std::uint32_t>(nextStatus));
         }
 
         m_state->targetDesc = nextDesc;
@@ -3526,34 +3217,27 @@ core::VoidResult RenderTarget::UpdateTargetSnapshot(RenderTargetSnapshot latestS
     const bool pixelSizeChanged = latestSnapshot.GetPixelSize() != previousSnapshot.GetPixelSize();
     const bool restored = IsSuspendedStatus(previousStatus);
     const bool presentationEnvironmentChanged =
-        latestSnapshot.GetPresentationEnvironmentRevision().GetValue() !=
-        previousSnapshot.GetPresentationEnvironmentRevision().GetValue();
+        latestSnapshot.GetPresentationEnvironmentRevision().GetValue() != previousSnapshot.GetPresentationEnvironmentRevision().GetValue();
     const bool missingPresentationResources = !m_state->HasUsablePresentationResources();
     if (restored || pixelSizeChanged || presentationEnvironmentChanged)
     {
-        TargetRecreationReason reason = restored ? TargetRecreationReason::Restored
-                                        : pixelSizeChanged
-                                            ? TargetRecreationReason::SizeChanged
-                                            : TargetRecreationReason::PresentationChanged;
+        TargetRecreationReason reason = restored           ? TargetRecreationReason::Restored
+                                        : pixelSizeChanged ? TargetRecreationReason::SizeChanged
+                                                           : TargetRecreationReason::PresentationChanged;
         std::uint64_t previousRevision = previousSnapshot.GetRevision();
-        if (alreadyPending && previousPending.previousRevision.has_value() &&
-            previousPending.currentRevision.has_value())
+        if (alreadyPending && previousPending.previousRevision.has_value() && previousPending.currentRevision.has_value())
         {
             reason = previousPending.reason;
             previousRevision = *previousPending.previousRevision;
         }
 
-        m_state->MarkWindowRecreationPending(reason, previousRevision,
-                                             latestSnapshot.GetRevision());
+        m_state->MarkWindowRecreationPending(reason, previousRevision, latestSnapshot.GetRevision());
     }
     else if (alreadyPending)
     {
-        if (previousPending.previousRevision.has_value() &&
-            previousPending.currentRevision.has_value())
+        if (previousPending.previousRevision.has_value() && previousPending.currentRevision.has_value())
         {
-            m_state->MarkWindowRecreationPending(previousPending.reason,
-                                                 *previousPending.previousRevision,
-                                                 latestSnapshot.GetRevision());
+            m_state->MarkWindowRecreationPending(previousPending.reason, *previousPending.previousRevision, latestSnapshot.GetRevision());
         }
         else
         {
@@ -3575,54 +3259,41 @@ core::VoidResult RenderTarget::RecoverSurface(PreparedSurface&& preparedSurface)
         return renderThread;
     }
 
-    const auto fail = [this, &diagnosticScope](core::Error error, std::string_view operation,
-                                               bool recordDeviceFailure = false) -> core::VoidResult
+    const auto fail = [this, &diagnosticScope](core::Error error, std::string_view operation, bool recordDeviceFailure = false) -> core::VoidResult
     {
         OptionalBackendDiagnostic nativeDiagnostic = diagnosticScope.TakeLastFailure();
         if (recordDeviceFailure && m_state->deviceState != nullptr)
         {
-            m_state->deviceState->RecordDeviceFailure(error, operation, nativeDiagnostic,
-                                                      m_state->targetSnapshot.GetWindowId(),
+            m_state->deviceState->RecordDeviceFailure(error, operation, nativeDiagnostic, m_state->targetSnapshot.GetWindowId(),
                                                       m_state->targetLabel);
         }
-        return core::VoidResult::FromError(
-            m_state->RecordFailure(std::move(error), operation, std::move(nativeDiagnostic)));
+        return core::VoidResult::FromError(m_state->RecordFailure(std::move(error), operation, std::move(nativeDiagnostic)));
     };
 
     if (!m_state->surfaceLost)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "RecoverSurface is only valid after surface loss."),
-                    "RecoverSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "RecoverSurface is only valid after surface loss."), "RecoverSurface");
     }
 
     if (m_state->activeFrame)
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Cannot recover a render target surface while a frame is active."),
-            "RecoverSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "Cannot recover a render target surface while a frame is active."),
+                    "RecoverSurface");
     }
 
     if (preparedSurface.m_state == nullptr)
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "RecoverSurface requires a valid prepared surface."),
-                    "RecoverSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "RecoverSurface requires a valid prepared surface."), "RecoverSurface");
     }
 
     if (preparedSurface.m_state->token.registry != m_state->token.registry)
     {
-        return fail(
-            MakeRenderError(RenderErrorCode::InvalidArgument,
-                            "Replacement surface belongs to a different RenderBootstrap than this "
-                            "RenderTarget."),
-            "RecoverSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "Replacement surface belongs to a different RenderBootstrap than this "
+                                                                      "RenderTarget."),
+                    "RecoverSurface");
     }
 
-    if (core::VoidResult live =
-            ValidateLiveRegistry(preparedSurface.m_state->token, "PreparedSurface");
-        !live)
+    if (core::VoidResult live = ValidateLiveRegistry(preparedSurface.m_state->token, "PreparedSurface"); !live)
     {
         return fail(std::move(live).GetError(), "RecoverSurface");
     }
@@ -3634,36 +3305,26 @@ core::VoidResult RenderTarget::RecoverSurface(PreparedSurface&& preparedSurface)
 
     if (preparedSurface.m_state->reason != SurfacePreparationReason::SurfaceLossRecovery)
     {
-        return fail(
-            MakeRenderError(
-                RenderErrorCode::InvalidArgument,
-                "RecoverSurface requires a surface prepared with SurfaceLossRecovery reason."),
-            "RecoverSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidArgument, "RecoverSurface requires a surface prepared with SurfaceLossRecovery reason."),
+                    "RecoverSurface");
     }
 
     if (!preparedSurface.m_state->vulkanSurface.IsValid())
     {
-        return fail(MakeRenderError(RenderErrorCode::InvalidState,
-                                    "RecoverSurface requires a live Vulkan replacement surface."),
-                    "RecoverSurface");
+        return fail(MakeRenderError(RenderErrorCode::InvalidState, "RecoverSurface requires a live Vulkan replacement surface."), "RecoverSurface");
     }
 
     const RenderTargetSnapshot replacementSnapshot = preparedSurface.m_state->targetSnapshot;
-    if (core::VoidResult snapshot =
-            ValidateTargetSnapshotSuccessor(m_state->targetSnapshot, replacementSnapshot, true);
-        !snapshot)
+    if (core::VoidResult snapshot = ValidateTargetSnapshotSuccessor(m_state->targetSnapshot, replacementSnapshot, true); !snapshot)
     {
         return fail(std::move(snapshot).GetError(), "RecoverSurface");
     }
 
-    core::Result<detail::VulkanDeviceQueuePlan> replacementQueuePlan =
-        detail::ValidateVulkanDeviceSurfaceCompatibility(
-            m_state->deviceState->vulkanDispatch, m_state->deviceState->vulkanDevice,
-            preparedSurface.m_state->vulkanSurface.GetHandle());
+    core::Result<detail::VulkanDeviceQueuePlan> replacementQueuePlan = detail::ValidateVulkanDeviceSurfaceCompatibility(
+        m_state->deviceState->vulkanDispatch, m_state->deviceState->vulkanDevice, preparedSurface.m_state->vulkanSurface.GetHandle());
     if (!replacementQueuePlan)
     {
-        return fail(std::move(replacementQueuePlan).GetError(),
-                    "ValidateVulkanDeviceSurfaceCompatibility", true);
+        return fail(std::move(replacementQueuePlan).GetError(), "ValidateVulkanDeviceSurfaceCompatibility", true);
     }
 
     const TargetStatus replacementStatus = DetermineTargetStatus(replacementSnapshot);
@@ -3673,25 +3334,20 @@ core::VoidResult RenderTarget::RecoverSurface(PreparedSurface&& preparedSurface)
     if (replacementStatus == TargetStatus::Active)
     {
         core::Result<detail::VulkanSwapchainConfig> replacementConfig =
-            detail::SelectVulkanSwapchainConfig(m_state->deviceState->vulkanDispatch,
-                                                m_state->deviceState->vulkanDevice,
-                                                preparedSurface.m_state->vulkanSurface.GetHandle(),
-                                                replacementQueuePlan.GetValue(), replacementDesc);
+            detail::SelectVulkanSwapchainConfig(m_state->deviceState->vulkanDispatch, m_state->deviceState->vulkanDevice,
+                                                preparedSurface.m_state->vulkanSurface.GetHandle(), replacementQueuePlan.GetValue(), replacementDesc);
         if (!replacementConfig)
         {
-            return fail(std::move(replacementConfig).GetError(), "SelectVulkanSwapchainConfig",
-                        true);
+            return fail(std::move(replacementConfig).GetError(), "SelectVulkanSwapchainConfig", true);
         }
     }
     else
     {
         core::VoidResult outputCompatibility = detail::ValidateVulkanSurfaceOutputCompatibility(
-            m_state->deviceState->vulkanDispatch, m_state->deviceState->vulkanDevice,
-            preparedSurface.m_state->vulkanSurface.GetHandle());
+            m_state->deviceState->vulkanDispatch, m_state->deviceState->vulkanDevice, preparedSurface.m_state->vulkanSurface.GetHandle());
         if (!outputCompatibility)
         {
-            return fail(std::move(outputCompatibility).GetError(),
-                        "ValidateVulkanSurfaceOutputCompatibility", true);
+            return fail(std::move(outputCompatibility).GetError(), "ValidateVulkanSurfaceOutputCompatibility", true);
         }
     }
 
@@ -3717,14 +3373,16 @@ core::VoidResult RenderTarget::RecoverSurface(PreparedSurface&& preparedSurface)
         m_state->ClearRecreationPending();
     }
 
-    LOG_INFO_CATEGORY(
-        kRenderLogCategory, "surface_recovered target={} window_id={} revision={} status={}",
-        m_state->targetLabel, m_state->targetSnapshot.GetWindowId().GetValue(),
-        m_state->targetSnapshot.GetRevision(), static_cast<std::uint32_t>(m_state->status));
+    LOG_INFO_CATEGORY(kRenderLogCategory, "surface_recovered target={} window_id={} revision={} status={}", m_state->targetLabel,
+                      m_state->targetSnapshot.GetWindowId().GetValue(), m_state->targetSnapshot.GetRevision(),
+                      static_cast<std::uint32_t>(m_state->status));
     return Success();
 }
 RenderFrame::RenderFrame() noexcept = default;
-RenderFrame::RenderFrame(std::unique_ptr<State> state) noexcept : m_state{std::move(state)} {}
+RenderFrame::RenderFrame(std::unique_ptr<State> state) noexcept :
+    m_state{std::move(state)}
+{
+}
 RenderFrame::RenderFrame(RenderFrame&& other) noexcept = default;
 RenderFrame& RenderFrame::operator=(RenderFrame&& other) noexcept
 {
@@ -3782,37 +3440,30 @@ core::VoidResult RenderFrame::VerifyRenderThread() const
 {
     if (m_state == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderFrame is moved-from or empty.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderFrame is moved-from or empty.");
     }
 
     if (m_state->completed)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderFrame is already completed.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderFrame is already completed.");
     }
 
     if (m_state->targetState == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderFrame no longer has a valid RenderTarget.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderFrame no longer has a valid RenderTarget.");
     }
 
-    if (core::VoidResult live = ValidateLiveRegistry(m_state->targetState->token, "RenderTarget");
-        !live)
+    if (core::VoidResult live = ValidateLiveRegistry(m_state->targetState->token, "RenderTarget"); !live)
     {
         return live;
     }
 
     if (m_state->targetState->deviceState == nullptr)
     {
-        return MakeRenderFailure(RenderErrorCode::InvalidState,
-                                 "RenderFrame no longer has a valid RenderDevice.");
+        return MakeRenderFailure(RenderErrorCode::InvalidState, "RenderFrame no longer has a valid RenderDevice.");
     }
 
-    if (core::VoidResult deviceLive =
-            ValidateLiveRegistry(m_state->targetState->deviceState->token, "RenderDevice");
-        !deviceLive)
+    if (core::VoidResult deviceLive = ValidateLiveRegistry(m_state->targetState->deviceState->token, "RenderDevice"); !deviceLive)
     {
         return deviceLive;
     }
@@ -3848,13 +3499,10 @@ core::VoidResult RenderFrame::Clear(ClearColor clearColor)
     if (!pond::render::IsValid(clearColor))
     {
         return core::VoidResult::FromError(
-            target.RecordFailure(MakeRenderError(RenderErrorCode::InvalidArgument,
-                                                 "RenderFrame clear color is invalid."),
-                                 "Clear"));
+            target.RecordFailure(MakeRenderError(RenderErrorCode::InvalidArgument, "RenderFrame clear color is invalid."), "Clear"));
     }
 
-    if (m_state->status == FrameStatus::SkippedSuspended ||
-        m_state->status == FrameStatus::TimedOut ||
+    if (m_state->status == FrameStatus::SkippedSuspended || m_state->status == FrameStatus::TimedOut ||
         m_state->status == FrameStatus::RecreationPending)
     {
         return Success();
@@ -3862,28 +3510,22 @@ core::VoidResult RenderFrame::Clear(ClearColor clearColor)
 
     if (m_state->status != FrameStatus::Ready && m_state->status != FrameStatus::Recreated)
     {
-        return core::VoidResult::FromError(target.RecordFailure(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "RenderFrame cannot clear from its current status."),
-            "Clear"));
+        return core::VoidResult::FromError(
+            target.RecordFailure(MakeRenderError(RenderErrorCode::InvalidState, "RenderFrame cannot clear from its current status."), "Clear"));
     }
 
     if (m_state->clearRecorded)
     {
-        return core::VoidResult::FromError(target.RecordFailure(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "RenderFrame has already established its clear pass."),
-            "Clear"));
+        return core::VoidResult::FromError(
+            target.RecordFailure(MakeRenderError(RenderErrorCode::InvalidState, "RenderFrame has already established its clear pass."), "Clear"));
     }
 
-    core::VoidResult clear =
-        detail::RecordVulkanFrameClear(target.deviceState->vulkanDispatch, target.vulkanSwapchain,
-                                       target.vulkanFrameResources, m_state->recording, clearColor);
+    core::VoidResult clear = detail::RecordVulkanFrameClear(target.deviceState->vulkanDispatch, target.vulkanSwapchain, target.vulkanFrameResources,
+                                                            m_state->recording, clearColor);
     if (!clear)
     {
         ++target.frameFailures;
-        return core::VoidResult::FromError(
-            target.RecordFailure(std::move(clear).GetError(), "RecordVulkanFrameClear"));
+        return core::VoidResult::FromError(target.RecordFailure(std::move(clear).GetError(), "RecordVulkanFrameClear"));
     }
 
     m_state->clearColor = clearColor;
@@ -3911,8 +3553,7 @@ core::Result<RenderFrameResult> RenderFrame::FinishAndPresent()
                                  .suboptimal = suboptimal};
     };
 
-    if (m_state->status == FrameStatus::SkippedSuspended ||
-        m_state->status == FrameStatus::TimedOut ||
+    if (m_state->status == FrameStatus::SkippedSuspended || m_state->status == FrameStatus::TimedOut ||
         m_state->status == FrameStatus::RecreationPending)
     {
         RenderFrameResult result = makeResult(m_state->status, false, false);
@@ -3928,16 +3569,12 @@ core::Result<RenderFrameResult> RenderFrame::FinishAndPresent()
     {
         ++target.frameFailures;
         return core::Result<RenderFrameResult>::FromError(target.RecordFailure(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "RenderFrame must be cleared before it is presented."),
-            "FinishAndPresent"));
+            MakeRenderError(RenderErrorCode::InvalidState, "RenderFrame must be cleared before it is presented."), "FinishAndPresent"));
     }
 
     core::Result<detail::VulkanFramePresentationResult> frameResult =
-        detail::FinishAndPresentVulkanFrame(device.vulkanDispatch, device.vulkanDevice,
-                                            target.vulkanSwapchain, target.vulkanFrameResources,
-                                            target.vulkanPresentationTracker, target.queuePlan,
-                                            m_state->recording);
+        detail::FinishAndPresentVulkanFrame(device.vulkanDispatch, device.vulkanDevice, target.vulkanSwapchain, target.vulkanFrameResources,
+                                            target.vulkanPresentationTracker, target.queuePlan, m_state->recording);
 
     if (!frameResult)
     {
@@ -3974,12 +3611,10 @@ core::Result<RenderFrameResult> RenderFrame::FinishAndPresent()
 
     if (vulkanResult.presented && target.vulkanFrameResources.GetSlotCount() > 0U)
     {
-        target.nextFrameSlot =
-            (target.nextFrameSlot + 1U) % target.vulkanFrameResources.GetSlotCount();
+        target.nextFrameSlot = (target.nextFrameSlot + 1U) % target.vulkanFrameResources.GetSlotCount();
     }
 
-    if (vulkanResult.status == FrameStatus::RecreationPending ||
-        vulkanResult.status == FrameStatus::Suboptimal)
+    if (vulkanResult.status == FrameStatus::RecreationPending || vulkanResult.status == FrameStatus::Suboptimal)
     {
         target.MarkBackendRecreationPending(TargetRecreationReason::PresentationChanged);
     }
@@ -3989,8 +3624,7 @@ core::Result<RenderFrameResult> RenderFrame::FinishAndPresent()
         ++target.frameFailures;
         m_state->ReleaseActiveFrame();
         m_state->completed = true;
-        core::Error error =
-            target.RecordFailure(std::move(drain).GetError(), "DrainRetiredPresentationResources");
+        core::Error error = target.RecordFailure(std::move(drain).GetError(), "DrainRetiredPresentationResources");
         m_state.reset();
         return core::Result<RenderFrameResult>::FromError(std::move(error));
     }
@@ -4001,15 +3635,14 @@ core::Result<RenderFrameResult> RenderFrame::FinishAndPresent()
         resultStatus = FrameStatus::Recreated;
     }
 
-    RenderFrameResult result =
-        makeResult(resultStatus, vulkanResult.presented, vulkanResult.suboptimal);
+    RenderFrameResult result = makeResult(resultStatus, vulkanResult.presented, vulkanResult.suboptimal);
     m_state->ReleaseActiveFrame();
     m_state->completed = true;
     m_state.reset();
     return core::Result<RenderFrameResult>::FromValue(result);
 }
-platform::WindowGraphicsCompatibility GetRequiredWindowGraphicsCompatibility() noexcept
+ponder::platform::WindowGraphicsCompatibility GetRequiredWindowGraphicsCompatibility() noexcept
 {
-    return platform::WindowGraphicsCompatibility::Vulkan;
+    return ponder::platform::WindowGraphicsCompatibility::Vulkan;
 }
 } // namespace pond::render

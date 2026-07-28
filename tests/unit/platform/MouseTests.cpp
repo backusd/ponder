@@ -8,15 +8,14 @@
 
 namespace
 {
-static_assert(std::is_scoped_enum_v<pond::platform::MouseButton>);
-static_assert(std::is_same_v<std::underlying_type_t<pond::platform::MouseButton>, std::uint8_t>);
-static_assert(std::is_scoped_enum_v<pond::platform::SystemCursorShape>);
-static_assert(
-    std::is_same_v<std::underlying_type_t<pond::platform::SystemCursorShape>, std::uint8_t>);
-static_assert(pond::platform::MouseButton{} == pond::platform::MouseButton::Unknown);
-static_assert(pond::platform::SystemCursorShape{} == pond::platform::SystemCursorShape::Default);
-static_assert(std::is_aggregate_v<pond::platform::MousePosition>);
-static_assert(pond::platform::MousePosition{} == pond::platform::MousePosition{0.0F, 0.0F});
+static_assert(std::is_scoped_enum_v<ponder::platform::MouseButton>);
+static_assert(std::is_same_v<std::underlying_type_t<ponder::platform::MouseButton>, std::uint8_t>);
+static_assert(std::is_scoped_enum_v<ponder::platform::SystemCursorShape>);
+static_assert(std::is_same_v<std::underlying_type_t<ponder::platform::SystemCursorShape>, std::uint8_t>);
+static_assert(ponder::platform::MouseButton{} == ponder::platform::MouseButton::Unknown);
+static_assert(ponder::platform::SystemCursorShape{} == ponder::platform::SystemCursorShape::Default);
+static_assert(std::is_aggregate_v<ponder::platform::MousePosition>);
+static_assert(ponder::platform::MousePosition{} == ponder::platform::MousePosition{0.0F, 0.0F});
 
 template <typename Value, std::size_t Size>
 void ExpectUnique(const std::array<Value, Size>& values)
@@ -32,33 +31,31 @@ void ExpectUnique(const std::array<Value, Size>& values)
 
 TEST(MouseTests, DefinesDistinctSupportedButtons)
 {
-    constexpr std::array buttons{
-        pond::platform::MouseButton::Unknown, pond::platform::MouseButton::Left,
-        pond::platform::MouseButton::Right,   pond::platform::MouseButton::Middle,
-        pond::platform::MouseButton::X1,      pond::platform::MouseButton::X2};
+    constexpr std::array buttons{ponder::platform::MouseButton::Unknown, ponder::platform::MouseButton::Left, ponder::platform::MouseButton::Right,
+                                 ponder::platform::MouseButton::Middle,  ponder::platform::MouseButton::X1,   ponder::platform::MouseButton::X2};
 
     ExpectUnique(buttons);
 }
 
 TEST(MouseTests, DefinesDistinctSupportedSystemCursorShapes)
 {
-    constexpr std::array shapes{pond::platform::SystemCursorShape::Default,
-                                pond::platform::SystemCursorShape::TextInput,
-                                pond::platform::SystemCursorShape::Move,
-                                pond::platform::SystemCursorShape::ResizeNorthSouth,
-                                pond::platform::SystemCursorShape::ResizeEastWest,
-                                pond::platform::SystemCursorShape::ResizeNortheastSouthwest,
-                                pond::platform::SystemCursorShape::ResizeNorthwestSoutheast,
-                                pond::platform::SystemCursorShape::Pointer,
-                                pond::platform::SystemCursorShape::Wait,
-                                pond::platform::SystemCursorShape::Progress,
-                                pond::platform::SystemCursorShape::NotAllowed};
+    constexpr std::array shapes{ponder::platform::SystemCursorShape::Default,
+                                ponder::platform::SystemCursorShape::TextInput,
+                                ponder::platform::SystemCursorShape::Move,
+                                ponder::platform::SystemCursorShape::ResizeNorthSouth,
+                                ponder::platform::SystemCursorShape::ResizeEastWest,
+                                ponder::platform::SystemCursorShape::ResizeNortheastSouthwest,
+                                ponder::platform::SystemCursorShape::ResizeNorthwestSoutheast,
+                                ponder::platform::SystemCursorShape::Pointer,
+                                ponder::platform::SystemCursorShape::Wait,
+                                ponder::platform::SystemCursorShape::Progress,
+                                ponder::platform::SystemCursorShape::NotAllowed};
 
     ExpectUnique(shapes);
 }
 TEST(MouseTests, StoresBackendMouseCoordinatesAsAValue)
 {
-    constexpr pond::platform::MousePosition position{-12.5F, 300.25F};
+    constexpr ponder::platform::MousePosition position{-12.5F, 300.25F};
     EXPECT_FLOAT_EQ(position.x, -12.5F);
     EXPECT_FLOAT_EQ(position.y, 300.25F);
 }

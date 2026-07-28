@@ -10,40 +10,33 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteViewportVector(Vector3 value) noexcept
 {
-    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
-           ::pond::core::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) && ::pond::core::IsFinite(value.z);
 }
 
 [[nodiscard]] inline core::Error MakeViewportNonFiniteInputError()
 {
-    return core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                       "Viewport mapping requires finite input values."};
+    return core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Viewport mapping requires finite input values."};
 }
 
 [[nodiscard]] inline core::Error MakeViewportInvalidArgumentError()
 {
-    return core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
-                       "Viewport dimensions and depth interval are outside the valid domain."};
+    return core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Viewport dimensions and depth interval are outside the valid domain."};
 }
 
 [[nodiscard]] inline core::Error MakeViewportUnrepresentableResultError()
 {
-    return core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
-                       "Viewport mapping result is not representable as finite coordinates."};
+    return core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Viewport mapping result is not representable as finite coordinates."};
 }
 } // namespace detail
 
 class Viewport final
 {
 public:
-    [[nodiscard]] static constexpr core::Result<Viewport> Create(float originX, float originY,
-                                                                 float width, float height,
-                                                                 float minimumDepth = 0.0F,
+    [[nodiscard]] static constexpr core::Result<Viewport> Create(float originX, float originY, float width, float height, float minimumDepth = 0.0F,
                                                                  float maximumDepth = 1.0F)
     {
-        if (!core::IsFinite(originX) || !core::IsFinite(originY) || !core::IsFinite(width) ||
-            !core::IsFinite(height) || !core::IsFinite(minimumDepth) ||
-            !core::IsFinite(maximumDepth)) [[unlikely]]
+        if (!core::IsFinite(originX) || !core::IsFinite(originY) || !core::IsFinite(width) || !core::IsFinite(height) ||
+            !core::IsFinite(minimumDepth) || !core::IsFinite(maximumDepth)) [[unlikely]]
         {
             return core::Result<Viewport>::FromError(detail::MakeViewportNonFiniteInputError());
         }
@@ -86,14 +79,16 @@ public:
         return m_maximumDepth;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Viewport& lhs,
-                                                   const Viewport& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Viewport& lhs, const Viewport& rhs) noexcept = default;
 
 private:
-    constexpr Viewport(float originX, float originY, float width, float height, float minimumDepth,
-                       float maximumDepth) noexcept
-        : m_originX(originX), m_originY(originY), m_width(width), m_height(height),
-          m_minimumDepth(minimumDepth), m_maximumDepth(maximumDepth)
+    constexpr Viewport(float originX, float originY, float width, float height, float minimumDepth, float maximumDepth) noexcept :
+        m_originX(originX),
+        m_originY(originY),
+        m_width(width),
+        m_height(height),
+        m_minimumDepth(minimumDepth),
+        m_maximumDepth(maximumDepth)
     {
     }
 
@@ -112,22 +107,18 @@ private:
         return core::Result<Vector3>::FromError(detail::MakeViewportNonFiniteInputError());
     }
 
-    const double depthSpan = static_cast<double>(viewport.GetMaximumDepth()) -
-                             static_cast<double>(viewport.GetMinimumDepth());
+    const double depthSpan = static_cast<double>(viewport.GetMaximumDepth()) - static_cast<double>(viewport.GetMinimumDepth());
     const double mappedX =
-        static_cast<double>(viewport.GetOriginX()) +
-        (static_cast<double>(ndc.x) + 1.0) * static_cast<double>(viewport.GetWidth()) * 0.5;
+        static_cast<double>(viewport.GetOriginX()) + (static_cast<double>(ndc.x) + 1.0) * static_cast<double>(viewport.GetWidth()) * 0.5;
     const double mappedY =
-        static_cast<double>(viewport.GetOriginY()) +
-        (1.0 - static_cast<double>(ndc.y)) * static_cast<double>(viewport.GetHeight()) * 0.5;
-    const double mappedZ =
-        static_cast<double>(viewport.GetMinimumDepth()) + static_cast<double>(ndc.z) * depthSpan;
+        static_cast<double>(viewport.GetOriginY()) + (1.0 - static_cast<double>(ndc.y)) * static_cast<double>(viewport.GetHeight()) * 0.5;
+    const double mappedZ = static_cast<double>(viewport.GetMinimumDepth()) + static_cast<double>(ndc.z) * depthSpan;
 
     float x{0.0F};
     float y{0.0F};
     float z{0.0F};
-    if (!detail::TryConvertFiniteFloat(mappedX, x) || !detail::TryConvertFiniteFloat(mappedY, y) ||
-        !detail::TryConvertFiniteFloat(mappedZ, z)) [[unlikely]]
+    if (!detail::TryConvertFiniteFloat(mappedX, x) || !detail::TryConvertFiniteFloat(mappedY, y) || !detail::TryConvertFiniteFloat(mappedZ, z))
+        [[unlikely]]
     {
         return core::Result<Vector3>::FromError(detail::MakeViewportUnrepresentableResultError());
     }
@@ -142,26 +133,17 @@ private:
         return core::Result<Vector3>::FromError(detail::MakeViewportNonFiniteInputError());
     }
 
-    const double depthSpan = static_cast<double>(viewport.GetMaximumDepth()) -
-                             static_cast<double>(viewport.GetMinimumDepth());
+    const double depthSpan = static_cast<double>(viewport.GetMaximumDepth()) - static_cast<double>(viewport.GetMinimumDepth());
     const double ndcX =
-        ((static_cast<double>(point.x) - static_cast<double>(viewport.GetOriginX())) /
-         static_cast<double>(viewport.GetWidth())) *
-            2.0 -
-        1.0;
+        ((static_cast<double>(point.x) - static_cast<double>(viewport.GetOriginX())) / static_cast<double>(viewport.GetWidth())) * 2.0 - 1.0;
     const double ndcY =
-        1.0 - ((static_cast<double>(point.y) - static_cast<double>(viewport.GetOriginY())) /
-               static_cast<double>(viewport.GetHeight())) *
-                  2.0;
-    const double ndcZ =
-        (static_cast<double>(point.z) - static_cast<double>(viewport.GetMinimumDepth())) /
-        depthSpan;
+        1.0 - ((static_cast<double>(point.y) - static_cast<double>(viewport.GetOriginY())) / static_cast<double>(viewport.GetHeight())) * 2.0;
+    const double ndcZ = (static_cast<double>(point.z) - static_cast<double>(viewport.GetMinimumDepth())) / depthSpan;
 
     float x{0.0F};
     float y{0.0F};
     float z{0.0F};
-    if (!detail::TryConvertFiniteFloat(ndcX, x) || !detail::TryConvertFiniteFloat(ndcY, y) ||
-        !detail::TryConvertFiniteFloat(ndcZ, z)) [[unlikely]]
+    if (!detail::TryConvertFiniteFloat(ndcX, x) || !detail::TryConvertFiniteFloat(ndcY, y) || !detail::TryConvertFiniteFloat(ndcZ, z)) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(detail::MakeViewportUnrepresentableResultError());
     }
@@ -169,8 +151,7 @@ private:
     return Vector3{x, y, z};
 }
 
-[[nodiscard]] constexpr core::Result<Vector3> Project(Matrix4x4 worldToClip, Viewport viewport,
-                                                      Vector3 point)
+[[nodiscard]] constexpr core::Result<Vector3> Project(Matrix4x4 worldToClip, Viewport viewport, Vector3 point)
 {
     auto ndc = TransformPointToNdc(worldToClip, point);
     if (!ndc.HasValue()) [[unlikely]]
@@ -181,9 +162,7 @@ private:
     return NdcToViewport(viewport, ndc.GetValue());
 }
 
-[[nodiscard]] constexpr core::Result<Vector3> UnprojectFromClipToWorld(Matrix4x4 clipToWorld,
-                                                                       Viewport viewport,
-                                                                       Vector3 point)
+[[nodiscard]] constexpr core::Result<Vector3> UnprojectFromClipToWorld(Matrix4x4 clipToWorld, Viewport viewport, Vector3 point)
 {
     auto ndc = ViewportToNdc(viewport, point);
     if (!ndc.HasValue()) [[unlikely]]
@@ -199,8 +178,7 @@ private:
     return TransformPointToNdc(clipToWorld, ndc.GetValue());
 }
 
-[[nodiscard]] constexpr core::Result<Vector3> Unproject(Matrix4x4 worldToClip, Viewport viewport,
-                                                        Vector3 point)
+[[nodiscard]] constexpr core::Result<Vector3> Unproject(Matrix4x4 worldToClip, Viewport viewport, Vector3 point)
 {
     auto ndc = ViewportToNdc(viewport, point);
     if (!ndc.HasValue()) [[unlikely]]

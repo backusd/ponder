@@ -10,7 +10,7 @@ privately by SDL3.
 ## Local Rules
 
 - Keep public headers under `include/ponder/platform/` and use the
-  `pond::platform` namespace.
+  `ponder::platform` namespace.
 - Public headers may use standard-library and `ponder_core` types. Never expose
   SDL headers, SDL types, direct OS types, or OS headers.
 - Declare `ponder::core` as a public target dependency and `ponder::io` plus
@@ -22,33 +22,69 @@ privately by SDL3.
   deliberately revised.
 - Keep SDL and OS-specific helpers under `src/`. Use PIMPL or another
   heap-stable private representation for native resource owners.
-- Runtime state owns its `IPlatformRuntimeBackend`, `IPlatformWindowBackend`, and
-  `IPlatformDisplayBackend` instances through `std::unique_ptr`s produced by private
-  factories. A `WindowImpl` may borrow the runtime-owned window backend only while it is
-  registered as a runtime child, and stores native identity as the strong,
-  zero-invalid `BackendWindowHandle`.
-- Keep `IPlatformWindowBackend` backend-agnostic and value-oriented: use typed
-  `Result<T>` queries, `VoidResult` commands, `std::string_view` inputs, and
-  owned string outputs instead of raw window pointers, C-style out parameters,
-  or backend-specific status enums. Preserve plain `bool` only for infallible
-  state queries where false is data. Convert between `BackendWindowHandle` and
-  `SDL_Window*` only inside the SDL backend, and capture documented SDL failures
-  there before returning an error.
+- Public `Runtime` owns exactly one heap-stable `detail::RuntimeImpl` through
+  `std::unique_ptr` and forwards its complete subsystem-prefixed interface.
+  Production resolves `RuntimeImpl` directly to `SdlRuntime`. The test-only
+  `PONDER_PLATFORM_USE_MOCK_RUNTIME` selector resolves it to the API-compatible
+  `MockRuntime`; do not reintroduce a builder, provider, virtual
+  runtime interface, intermediate runtime-state object, or runtime-backend
+  aggregate.
+- `SdlRuntime` owns runtime initialization, hints, clipboard synchronization,
+  dialog requests, event/display routing, cursor caches, child/window
+  registries, and narrow window/display SDL adapters directly. There are no
+  public or private `*Manager` service facades. `WindowImpl` may borrow the
+  window adapter only while registered as a runtime child and stores native
+  identity as the strong, zero-invalid `BackendWindowHandle`.
+- Keep `IPlatformWindowBackend` backend-agnostic and value-oriented. Use direct
+  values or `void` and platform exceptions for ordinary fallible
+  operations; retain `Result<T>` only when the operation feeds one of the
+  approved public value-based outcomes. Use `std::string_view` inputs and owned
+  string outputs instead of raw window pointers, C-style out parameters, or
+  backend-specific status enums. Preserve plain `bool` only for infallible state
+  queries where false is data. Convert between `BackendWindowHandle` and
+  `SDL_Window*` only inside the SDL backend.
 - Keep `IPlatformDisplayBackend` backend-agnostic and value-oriented too. Return
-  owned names and display lists, use `Result<T>` for every SDL query with a
-  documented failure sentinel, and capture SDL diagnostics in `SdlDisplayBackend`.
-  Preserve `BackendDisplayOrientation::Unknown` as valid unavailable data rather
-  than treating it as a failure.
-- Apply the same result boundary to `IPlatformRuntimeBackend`: reserve plain
-  `bool` for infallible state, capability, and event-availability queries; use
-  `VoidResult` for fallible commands and `Result<T>` for fallible value-producing
-  operations. `SdlRuntimeBackend` must capture a documented SDL error immediately
-  after observing failure so callers never need SDL-specific diagnostics.
-- Keep `SdlRuntimeBackend`, `SdlWindowBackend`, and `SdlDisplayBackend` declarations
-  and implementations in their dedicated private files. Put only genuinely shared SDL
-  conversion and context helpers in `SdlCommon`.
-- Permit only one logical `PlatformRuntime` per process. Create runtime and
-  windows through fallible factories returning `pond::core::Result<T>`.
+  owned names and display lists, and throw platform exceptions for SDL
+  query failures or malformed backend data. Preserve
+  `BackendDisplayOrientation::Unknown` as valid unavailable data rather than
+  treating it as a failure.
+- Apply the same mixed boundary directly to `SdlRuntime`. Reserve plain `bool`
+  for infallible state, capability, and event-availability queries; use direct
+  values or `void` for exceptional operations, and preserve `Result<T>` only
+  for the approved URI, global-capture, and global-position outcomes.
+  `SdlRuntime` must capture a documented SDL error immediately after observing
+  failure.
+- Keep `SdlRuntime`, `SdlWindowBackend`, and `SdlDisplayBackend` declarations
+  and implementations in dedicated private files. Keep direct SDL dialog
+  submission, request translation, callback translation, and completion
+  handoff cohesive inside `SdlRuntime.cpp`; do not add a dialog backend
+  interface or virtual dispatch. Put only genuinely shared SDL conversions in
+  `SdlCommon`.
+- Permit only one logical `Runtime` per process. Protect creation with a
+  private atomic 0/1 reservation acquired before fallible construction and held
+  through complete construction rollback or complete runtime teardown. The
+  reservation prevents reentrant creation from observing partial startup or
+  teardown; releasing it after either path permits sequential runtime
+  recreation. Do not model creating, active, and destroying as distinct global
+  states. `Runtime::Create` validates the descriptor and process-entry thread,
+  creates one `RuntimeImpl`, permits only `Hint*` calls during descriptor hint
+  configuration, and then initializes it. Runtime and window factories return
+  values directly and throw platform exceptions on construction failure.
+- Arm no-throw SDL rollback immediately before video initialization.
+  Construction failure must quit SDL when initialization was entered, deactivate
+  the dialog completion handoff, restore managed hints only after quit, destroy
+  `RuntimeImpl`, and release the 0/1 reservation last. Normal teardown verifies
+  owner-thread, child, dialog, window, and subsystem invariants; requires every
+  owned window and outstanding dialog request to be gone; destroys cached
+  cursors; deactivates the dialog completion handoff; calls `SDL_Quit()`; and
+  restores managed hints. Only after `RuntimeImpl` is destroyed may `Runtime`
+  release the process reservation.
+- Do not add production `*ForTesting` functions, global stage-hook registries, or
+  mutable backend-override globals. Test construction and backend failures
+  through the isolated mock-runtime source variant and fixture-owned
+  `MockRuntime` state, and test rollback through observable production
+  contracts. A mock executable must compile every `Runtime.hpp` consumer with
+  `PONDER_PLATFORM_USE_MOCK_RUNTIME` and must not link `ponder::platform`.
 - Treat SDL lifecycle ownership as exclusive. Reject creation when an SDL
   subsystem is already initialized; otherwise platform's `SDL_Quit()` could
   invalidate another owner. Before teardown, verify that no subsystem outside
@@ -57,9 +93,12 @@ privately by SDL3.
   metadata function and apply descriptor metadata before video initialization.
   Clear absent optional descriptor properties and do not snapshot or restore
   prior metadata. After `SDL_Quit()`, leave the resulting process state to SDL.
-- Manage the curated SDL hint catalog exclusively through the public, strongly
-  typed `HintManager`; never expose SDL names or an arbitrary string-hint map.
-  Keep an independent value stack per hint, enforce value and initialization
+- Manage the curated SDL hint catalog exclusively through the explicitly
+  specialized `Runtime::HintPush<T>`, `HintPop<T>`, `HintClear<T>`, and
+  `HintGet<T>` templates for the public strongly typed hint values. Keep the
+  primary templates deleted so unsupported types fail at compile time; never
+  expose SDL names or an arbitrary string-hint map. Keep an
+  independent value stack per hint, enforce value and initialization
   constraints, and invoke descriptor hint configuration before SDL initialization.
   The runtime must not apply implicit hint policies; applications opt into every
   managed hint explicitly. Restore every managed prior effective value after
@@ -67,9 +106,11 @@ privately by SDL3.
   provenance, so do not claim to preserve either one.
 - Keep runtime and resource owners non-copyable and movable. Define moved-from
   behavior and keep child lifetime safe in release builds.
-- Treat SDL-backed APIs as runtime-owner-thread APIs unless explicitly documented
-  otherwise. Call `PONDER_VERIFY` before SDL for wrong-thread, moved-from, and
-  teardown invariants that must remain active in release builds.
+- Treat SDL-backed APIs as runtime-owner-thread APIs unless explicitly
+  documented otherwise. Before SDL, throw a `WrongThread` platform
+  exception for a wrong-thread public call. Use `PONDER_VERIFY` for moved-from,
+  teardown, and impossible ownership invariants that must remain active in
+  release builds.
 - Require runtime creation on the startup thread captured during module
   initialization and independently verify SDL's main-thread predicate. Treat
   that check as defense in depth; executable entry remains responsible for the
@@ -80,16 +121,31 @@ privately by SDL3.
 - Give runtime-owned objects strong, zero-invalid, monotonic IDs that are not
   reused during the runtime lifetime. Ignore stale backend events
   deterministically.
-- Use `pond::core::Result<T>` and `pond::core::VoidResult` for recoverable
-  failures. Capture SDL errors through one private helper immediately after a
-  documented SDL failure; never parse error text for control flow.
-- Use public `PlatformErrorCode` values for machine-actionable failures and keep
-  their numeric mappings stable once published.
+- Follow ADR 0013's exception-first failure policy and its exact eleven-operation
+  public `Result` surface. A retained-result function may still throw for
+  programming, lifecycle, threading, or backend-contract failures.
+- Throw `ponder::core::Exception` for exceptional platform failures. Construct
+  code-bearing failures with `PLATFORM_EXCEPTION`; it embeds the formatted
+  `PlatformErrorCode` in the message without adding a typed payload. Do not use
+  `ExceptionWithData<PlatformErrorCode>` or add a public platform exception
+  alias. Introduce a dedicated exception type only when a real handler needs
+  type-specific recovery.
+- Keep `PlatformErrorCode` names and numeric mappings stable once published.
+  Preserve `ToErrorCode`, enum formatting, stream insertion, and forged-value
+  fallback behavior.
+- Copy an SDL error immediately after the documented failure and before another
+  SDL call. Provide an exception path and, only for an approved retained
+  result, a `ponder::core::Error` path. Never parse diagnostic text for control
+  flow.
 - Use project assertion and logging macros. Log lifecycle messages with the
   `platform` category and keep ignored-event logging at trace level or silent.
 - Use a `std::variant` of typed, owned event payloads. Do not add a redundant
   event-kind enum or raw SDL escape hatch. Give every event the original SDL
-  monotonic nanosecond timestamp; never resample it with `Now()`.
+  monotonic nanosecond timestamp; never resample it with `TimeNow()`.
+- Preserve `Runtime::TimeNow()` as an owner-thread observer of SDL's
+  monotonic tick domain. Public platform declarations use
+  `ponder::core::Timestamp` and `ponder::core::Duration` directly; do not add a
+  platform timing header or forwarding aliases.
 - Map keyboard input to project-owned physical keys, closed logical
   Unknown/Unicode/named values, and side-specific modifier flags. Never expose
   SDL keycodes, scancodes, raw platform scan values, or keyboard device IDs.
@@ -112,10 +168,16 @@ privately by SDL3.
   file names become owned `std::filesystem::path` values. Treat every SDL drop
   event independently and do not retain global sequence state just to match
   begin/complete pairs.
-- Clipboard text and external-URI APIs are owner-thread `PlatformRuntime`
-  services. Validate null-free UTF-8 before set/open calls, copy incoming views
-  to null-terminated storage before SDL, and keep all SDL allocation/free and
-  `SDL_OpenURL` details private.
+- Clipboard text is exposed through `Runtime::ClipboardGetText()` returning
+  `ponder::core::Result<std::string>` and `ClipboardSetText()` returning
+  `ponder::core::VoidResult`. Serialize operations inside `SdlRuntime`; SDL
+  access remains owner-thread-only. Invalid input, unsupported/unavailable
+  access, malformed external text, and host failures are locally actionable
+  result errors. Wrong-thread and lifecycle misuse still throw.
+- External-URI opening remains an owner-thread `Runtime` service.
+  Validate null-free UTF-8 before clipboard set and URI open calls, copy
+  incoming views to null-terminated storage before SDL, and keep all SDL
+  allocation/free and `SDL_OpenURL` details private.
 - Clipboard reads are the one SDL error-snapshot exception: clear SDL error
   state immediately before `SDL_GetClipboardText()`, copy the error string
   immediately afterward, then copy/free the returned text. Treat empty text plus
@@ -131,7 +193,7 @@ privately by SDL3.
   polling. Resolve required backend IDs through injected private callbacks.
   Preserve an unresolved destination display only on
   `WindowDisplayChangedEvent`; drop events whose required identity is stale.
-- Make `PlatformRuntime::PollEvent()` consume SDL events on the runtime owner
+- Make `Runtime::EventPoll()` consume SDL events on the runtime owner
   thread until it can return one translated event or the queue is empty. Never
   let an unsupported, malformed, or stale event masquerade as an empty queue,
   and never destroy a window in response to a close request.
@@ -147,11 +209,12 @@ privately by SDL3.
   orientations to `DisplayOrientation::Unknown`.
 - Keep window text-input activation live and idempotent rather than caching it.
   Validate IME areas before SDL, round logical coordinates to the nearest
-  backend integer, and return contextual failures from fallible text-input
-  operations.
+  backend integer, and throw contextual platform exceptions from fallible
+  text-input operations.
 - Keep mouse-grab and relative-mode state live on `Window`; do not cache their
   infallible backend queries. Keep global capture, global mouse position,
-  system-cursor selection, and cursor visibility on `PlatformRuntime`.
+  system-cursor selection, and cursor visibility on `Runtime` through `Mouse*`
+  methods.
 - Always forward `SetMouseGrab()` requests to SDL. A hidden window can retain
   a pending grab request while SDL's live grab query reports false, so using the
   query to suppress a release would leave stale pending state.
@@ -200,10 +263,11 @@ privately by SDL3.
   flags without the hidden marker as `BackendFailure`.
 - Select the null SDL fullscreen mode before entering desktop fullscreen. Keep
   exclusive fullscreen absent until platform owns display-mode selection.
-- Classify known unavailable state transitions as `Unsupported` without parsing
-  SDL error text. Detect silently ignored decoration, resizability, and
-  always-on-top setters by comparing the project-relevant backend flag before
-  and after the successful synchronous SDL setter.
+- Classify known unavailable state transitions as `Unsupported` platform
+  exceptions without parsing SDL error text. Detect silently ignored
+  decoration, resizability, and always-on-top setters by comparing the
+  project-relevant backend flag before and after the successful synchronous SDL
+  setter.
 - Keep frame-delta calculation, fixed timestep, frame limiting, event-wait idle
   policy, rendering, UI behavior, project policy, chemistry, IO,
   workflow, compute, plugins, and desktop application policy out of platform.
@@ -226,8 +290,9 @@ privately by SDL3.
   from ADR 0008. Values are tagged, borrowed, narrow, and OS-header-free.
 - Return `InvalidArgument` for native-handle queries on non-Vulkan windows,
   `Unsupported` for video drivers outside `"windows"`, `"x11"`, and
-  `"wayland"`, and `BackendFailure` for malformed or missing approved backend
-  data. Do not return a partially populated handle.
+  `"wayland"`. These are the only value-based outcomes. Throw
+  `BackendFailure` for malformed or missing approved backend data, and never
+  return a partially populated handle.
 - No Cocoa or Metal-layer payload is part of the current Vulkan native-handle
   contract. The future Metal backend must define its own exact macOS payload
   before platform exposes it. Consumers re-query borrowed native snapshots after
@@ -238,9 +303,25 @@ privately by SDL3.
   caller-enforced because the platform registry cannot observe render resources.
 - Copy all asynchronous dialog inputs and callback outputs. Marshal completion
   to the runtime owner thread and distinguish selection, cancellation, and
-  failure. Keep callback fallback storage and FIFO links request-owned so the C
-  callback can enqueue without allocating after a failure and owner-thread
-  polling can test/pop completions in O(1) without scanning every request.
+  failure. `SdlRuntime` directly owns every accepted request until its completion
+  is polled, is the sole request registry, exposes owner-thread pending
+  snapshots through the flat `Dialog*` methods, and attaches immutable request
+  metadata to `DialogCompletedEvent`. Keep direct project/backend window indices
+  in the private `WindowRegistry`. A dialog parent lease
+  holds stable shared lease state rather than a `WindowImpl` pointer; multiple
+  requests may lease one parent independently. Give the asynchronous backend a
+  weak completion token so duplicate or late callbacks cannot retain request
+  state or use a destroyed runtime. Submit directly to SDL without a dialog
+  backend interface. Keep SDL launch/callback translation,
+  callback fallback storage, and the RAII parent lease request-owned within the
+  dialog implementation. Store completed request IDs in a mutex-protected
+  standard FIFO queue so owner-thread polling can test and pop completions in
+  O(1) without scanning every request.
+- Return `DialogRequestId` directly from synchronous dialog submission and
+  return `void` from shutdown. Descriptor, parent, request-registration, and
+  SDL launch failures throw platform exceptions. Keep asynchronous
+  `DialogFailure{ponder::core::Error}` as outcome data because completion occurs
+  after the initiating stack has gone.
 - Keep process launch shell-free. Process destruction must not terminate the
   child or block the caller; abandoned live process handles stay privately
   waitable until cleanup can reap them.
@@ -256,15 +337,59 @@ privately by SDL3.
 - Treat process exit translation as host-aware backend work. Preserve normal exit
   statuses as unsigned 32-bit values, and translate POSIX signal/unknown
   conventions only in the host-specific backend adapter.
-- Process creation does not require `PlatformRuntime`. Bind each `Process` to its
+- Process creation does not require `Runtime`. Bind each `Process` to its
   launching thread and require its operations and public destruction on that
   thread without concurrent access. The internal abandoned-process reaper may
   wait and destroy after public ownership has ended.
 - Treat `Process::Wait()` as a blocking operation. Do not call it from the
   desktop event loop or any UI/platform/render pumping thread; use a worker or a
   higher-level orchestration point when waiting for long-running children.
+- Preserve `Result` for `LaunchProcess`, `Process::Wait`, and
+  `Process::Terminate` because executable, child, wait, and termination failures
+  can be handled at the immediate orchestration layer. These operations still
+  throw for programming, lifecycle, and unexpected internal failures.
+- Do not allow a C++ exception to escape an SDL or operating-system callback, a
+  thread entry point, or a destructor. Destructors, move operations, and
+  release paths remain `noexcept` and contain operational cleanup failures.
 - Add tests with every implementation task. Late roadmap test tasks are coverage
   audits, not a substitute for incremental tests.
+
+## Public Failure Contract
+
+ADR 0013 governs the original exception-first migration and
+`error-handling-update.txt` records that completed history. The consolidated
+runtime exposes exactly eleven public `Result` operations:
+
+- `Runtime::ClipboardGetText` for unavailable access, malformed external text,
+  or host failures;
+- `Runtime::ClipboardSetText` for invalid input, unavailable access, or host
+  failures;
+- `Runtime::DisplayGetInfo` for `NotFound` on a stale nonzero
+  `DisplayId`;
+- `Runtime::MouseSetCapture` for an unsupported or rejected host
+  capability;
+- `Runtime::MouseGetGlobalPosition` for unsupported or unavailable
+  global coordinates;
+- `Runtime::UriOpenExternal` for invalid user input and host
+  launch/capability failure;
+- `LaunchProcess`, `Process::Wait`, and `Process::Terminate` for input,
+  child-state, and operating-system failures that immediate orchestration can
+  handle;
+- `Window::GetNativeHandle` for incompatible graphics mode or an unsupported
+  native driver; and
+- `Window::GetDisplayId` for a transiently unresolved or disconnected display.
+
+These operations throw for wrong-thread use, lifecycle violations, programming
+errors, or unexpected backend corruption. Synchronous dialog submission does
+not return `Result`; only asynchronous `DialogFailure` retains
+`ponder::core::Error` as event data.
+
+`Runtime::Create`, `WindowCreate`, `DisplayEnumerate`, and all synchronous dialog
+submission return values directly. System-cursor commands and dialog shutdown
+return `void`. Supported hint template specializations return `void` for
+mutations and `std::optional<T>` for lookup. Every `Window` result operation is a
+direct value or `void` except `GetNativeHandle` and `GetDisplayId`. Existing
+optional event polling and infallible observers remain unchanged.
 
 ## Verification
 
@@ -287,15 +412,15 @@ For intermediate implementation tasks:
 - Defer Release, sanitizer, full formatting, clang-tidy, broad whitespace, and
   portability checks to the roadmap gates unless the task changes that tooling.
 
-At the renderer and completion gates:
+At the migration and completion gates:
 
-- PLAT-013 runs the complete renderer-ready platform target/test subset on the
-  normal host Debug preset.
-- PLAT-021 runs the full host-local Debug, Release, test, formatting, clang-tidy,
-  whitespace, dependency-boundary, and applicable manual checks. Clang-tidy uses
-  a configuration that provides `compile_commands.json`: the Windows Ninja
-  analysis preset or a normal supported single-configuration Linux/macOS
-  preset.
+- PLAT-EH-013 runs the complete platform target/test subset on the normal host
+  Debug preset with render and UI disabled.
+- PLAT-EH-018 runs the full platform-and-example host-local Debug, true Release,
+  test, formatting, clang-tidy, whitespace, dependency-boundary, and applicable
+  manual checks. Clang-tidy uses a configuration that provides
+  `compile_commands.json`: the Windows Ninja analysis preset or a normal
+  supported single-configuration Linux/macOS preset.
 - `future.txt` records the Windows, Linux, and macOS compiler/sanitizer matrix.
 - Serialize integration tests that touch process-global SDL state or the system
   clipboard, record capability-based skips, and describe local success as

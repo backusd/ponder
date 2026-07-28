@@ -18,8 +18,10 @@ struct Vector3 final
 
     constexpr Vector3() noexcept = default;
 
-    explicit constexpr Vector3(float xValue, float yValue, float zValue) noexcept
-        : x(xValue), y(yValue), z(zValue)
+    explicit constexpr Vector3(float xValue, float yValue, float zValue) noexcept :
+        x(xValue),
+        y(yValue),
+        z(zValue)
     {
     }
 
@@ -39,13 +41,12 @@ struct Vector3 final
         case 2:
             return std::ref(z);
         default:
-            [[unlikely]] return core::Result<std::reference_wrapper<float>>::FromError(core::Error{
-                ToErrorCode(MathErrorCode::InvalidArgument), "Vector3 index is out of range."});
+            [[unlikely]] return core::Result<std::reference_wrapper<float>>::FromError(
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Vector3 index is out of range."});
         }
     }
 
-    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(
-        std::size_t index) const
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(std::size_t index) const
     {
         switch (index)
         {
@@ -57,13 +58,11 @@ struct Vector3 final
             return std::cref(z);
         default:
             [[unlikely]] return core::Result<std::reference_wrapper<const float>>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
-                            "Vector3 index is out of range."});
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Vector3 index is out of range."});
         }
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Vector3& lhs,
-                                                   const Vector3& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Vector3& lhs, const Vector3& rhs) noexcept = default;
 };
 
 [[nodiscard]] constexpr Vector3 operator+(Vector3 lhs, Vector3 rhs) noexcept
@@ -113,8 +112,7 @@ struct Vector3 final
 
 [[nodiscard]] constexpr Vector3 Cross(Vector3 lhs, Vector3 rhs) noexcept
 {
-    return Vector3{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z,
-                   lhs.x * rhs.y - lhs.y * rhs.x};
+    return Vector3{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z, lhs.x * rhs.y - lhs.y * rhs.x};
 }
 
 [[nodiscard]] constexpr float SquaredLength(Vector3 vector) noexcept
@@ -139,45 +137,37 @@ struct Vector3 final
 
 [[nodiscard]] constexpr Vector3 ComponentMin(Vector3 lhs, Vector3 rhs) noexcept
 {
-    return Vector3{lhs.x < rhs.x ? lhs.x : rhs.x, lhs.y < rhs.y ? lhs.y : rhs.y,
-                   lhs.z < rhs.z ? lhs.z : rhs.z};
+    return Vector3{lhs.x < rhs.x ? lhs.x : rhs.x, lhs.y < rhs.y ? lhs.y : rhs.y, lhs.z < rhs.z ? lhs.z : rhs.z};
 }
 
 [[nodiscard]] constexpr Vector3 ComponentMax(Vector3 lhs, Vector3 rhs) noexcept
 {
-    return Vector3{lhs.x < rhs.x ? rhs.x : lhs.x, lhs.y < rhs.y ? rhs.y : lhs.y,
-                   lhs.z < rhs.z ? rhs.z : lhs.z};
+    return Vector3{lhs.x < rhs.x ? rhs.x : lhs.x, lhs.y < rhs.y ? rhs.y : lhs.y, lhs.z < rhs.z ? rhs.z : lhs.z};
 }
 
 [[nodiscard]] constexpr Vector3 Lerp(Vector3 start, Vector3 end, float amount) noexcept
 {
-    return Vector3{core::Lerp(start.x, end.x, amount), core::Lerp(start.y, end.y, amount),
-                   core::Lerp(start.z, end.z, amount)};
+    return Vector3{core::Lerp(start.x, end.x, amount), core::Lerp(start.y, end.y, amount), core::Lerp(start.z, end.z, amount)};
 }
 
 [[nodiscard]] constexpr bool IsNear(Vector3 lhs, Vector3 rhs, core::Tolerance tolerance) noexcept
 {
-    return core::IsNear(lhs.x, rhs.x, tolerance) && core::IsNear(lhs.y, rhs.y, tolerance) &&
-           core::IsNear(lhs.z, rhs.z, tolerance);
+    return core::IsNear(lhs.x, rhs.x, tolerance) && core::IsNear(lhs.y, rhs.y, tolerance) && core::IsNear(lhs.z, rhs.z, tolerance);
 }
 
 [[nodiscard]] inline core::Result<Vector3> Normalize(Vector3 vector)
 {
-    if (!core::IsFinite(vector.x) || !core::IsFinite(vector.y) || !core::IsFinite(vector.z))
-        [[unlikely]]
+    if (!core::IsFinite(vector.x) || !core::IsFinite(vector.y) || !core::IsFinite(vector.z)) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                        "Vector3 normalization requires finite components."});
+            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Vector3 normalization requires finite components."});
     }
 
-    const float maxMagnitude =
-        std::max(std::max(std::abs(vector.x), std::abs(vector.y)), std::abs(vector.z));
+    const float maxMagnitude = std::max(std::max(std::abs(vector.x), std::abs(vector.y)), std::abs(vector.z));
     if (maxMagnitude == 0.0F) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
-                        "Vector3 normalization requires non-zero length."});
+            core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Vector3 normalization requires non-zero length."});
     }
 
     const Vector3 scaled = vector / maxMagnitude;
@@ -185,17 +175,14 @@ struct Vector3 final
     if (!core::IsFinite(scaledLength) || scaledLength == 0.0F) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
-                        "Vector3 normalization input is numerically unnormalizable."});
+            core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Vector3 normalization input is numerically unnormalizable."});
     }
 
     const Vector3 normalized = scaled / scaledLength;
-    if (!core::IsFinite(normalized.x) || !core::IsFinite(normalized.y) ||
-        !core::IsFinite(normalized.z)) [[unlikely]]
+    if (!core::IsFinite(normalized.x) || !core::IsFinite(normalized.y) || !core::IsFinite(normalized.z)) [[unlikely]]
     {
         return core::Result<Vector3>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
-                        "Vector3 normalization result is numerically unnormalizable."});
+            core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Vector3 normalization result is numerically unnormalizable."});
     }
 
     return normalized;

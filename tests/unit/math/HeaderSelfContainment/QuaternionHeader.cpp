@@ -16,36 +16,26 @@ static_assert(std::is_trivially_move_assignable_v<pond::math::Quaternion>);
 static_assert(std::is_trivially_destructible_v<pond::math::Quaternion>);
 static_assert(!std::is_aggregate_v<pond::math::Quaternion>);
 static_assert(!std::is_constructible_v<pond::math::Quaternion, float, float, float, float>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const pond::math::Quaternion&>().GetX()), float>);
+static_assert(std::is_same_v<decltype(std::declval<const pond::math::Quaternion&>().GetX()), float>);
 static_assert(pond::math::Quaternion{}.GetX() == 0.0F);
 static_assert(pond::math::Quaternion{}.GetY() == 0.0F);
 static_assert(pond::math::Quaternion{}.GetZ() == 0.0F);
 static_assert(pond::math::Quaternion{}.GetW() == 1.0F);
 static_assert(pond::math::Quaternion{} == pond::math::Quaternion::Identity());
-static_assert(pond::math::Conjugate(pond::math::Quaternion::Identity()) ==
-              pond::math::Quaternion::Identity());
-static_assert(pond::math::Inverse(pond::math::Quaternion::Identity()) ==
-              pond::math::Quaternion::Identity());
-static_assert(pond::math::Rotate(pond::math::Quaternion::Identity(),
-                                 pond::math::Vector3{1.0F, 2.0F, 3.0F}) ==
-              pond::math::Vector3{1.0F, 2.0F, 3.0F});
-static_assert(pond::math::ToMatrix3x3(pond::math::Quaternion::Identity()) ==
-              pond::math::Matrix3x3::Identity());
-static_assert(pond::math::ToMatrix4x4(pond::math::Quaternion::Identity()) ==
-              pond::math::Matrix4x4::Identity());
-static_assert(pond::math::Matrix4x4::Rotation(pond::math::Quaternion::Identity()) ==
-              pond::math::Matrix4x4::Identity());
+static_assert(pond::math::Conjugate(pond::math::Quaternion::Identity()) == pond::math::Quaternion::Identity());
+static_assert(pond::math::Inverse(pond::math::Quaternion::Identity()) == pond::math::Quaternion::Identity());
+static_assert(pond::math::Rotate(pond::math::Quaternion::Identity(), pond::math::Vector3{1.0F, 2.0F, 3.0F}) == pond::math::Vector3{1.0F, 2.0F, 3.0F});
+static_assert(pond::math::ToMatrix3x3(pond::math::Quaternion::Identity()) == pond::math::Matrix3x3::Identity());
+static_assert(pond::math::ToMatrix4x4(pond::math::Quaternion::Identity()) == pond::math::Matrix4x4::Identity());
+static_assert(pond::math::Matrix4x4::Rotation(pond::math::Quaternion::Identity()) == pond::math::Matrix4x4::Identity());
 static_assert(noexcept(pond::math::Quaternion::Identity() * pond::math::Quaternion::Identity()));
 
 [[nodiscard]] constexpr bool SlerpEndpointsAreConstantEvaluable()
 {
-    auto start = pond::math::Slerp(pond::math::Quaternion::Identity(),
-                                   pond::math::Quaternion::Identity(), 0.0F);
-    auto end = pond::math::Slerp(pond::math::Quaternion::Identity(),
-                                 pond::math::Quaternion::Identity(), 1.0F);
-    return start.HasValue() && start.GetValue() == pond::math::Quaternion::Identity() &&
-           end.HasValue() && end.GetValue() == pond::math::Quaternion::Identity();
+    auto start = pond::math::Slerp(pond::math::Quaternion::Identity(), pond::math::Quaternion::Identity(), 0.0F);
+    auto end = pond::math::Slerp(pond::math::Quaternion::Identity(), pond::math::Quaternion::Identity(), 1.0F);
+    return start.HasValue() && start.GetValue() == pond::math::Quaternion::Identity() && end.HasValue() &&
+           end.GetValue() == pond::math::Quaternion::Identity();
 }
 
 [[nodiscard]] constexpr bool QuaternionNearComparisonsAreConstantEvaluable()
@@ -56,12 +46,9 @@ static_assert(noexcept(pond::math::Quaternion::Identity() * pond::math::Quaterni
         return false;
     }
 
-    auto validation = pond::math::detail::ValidateRotationMatrix(pond::math::Matrix3x3::Identity(),
-                                                                 tolerance.GetValue());
-    return pond::math::IsNear(pond::math::Quaternion::Identity(),
-                              pond::math::Quaternion::Identity(), tolerance.GetValue()) &&
-           pond::math::IsSameRotation(pond::math::Quaternion::Identity(),
-                                      pond::math::Quaternion::Identity(), tolerance.GetValue()) &&
+    auto validation = pond::math::detail::ValidateRotationMatrix(pond::math::Matrix3x3::Identity(), tolerance.GetValue());
+    return pond::math::IsNear(pond::math::Quaternion::Identity(), pond::math::Quaternion::Identity(), tolerance.GetValue()) &&
+           pond::math::IsSameRotation(pond::math::Quaternion::Identity(), pond::math::Quaternion::Identity(), tolerance.GetValue()) &&
            validation.HasValue();
 }
 

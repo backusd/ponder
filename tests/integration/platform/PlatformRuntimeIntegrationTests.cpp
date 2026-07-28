@@ -1,7 +1,9 @@
+#include <ponder/core/Exception.hpp>
 #include <ponder/core/ScopeExit.hpp>
+#include <ponder/core/Timing.hpp>
 #include <ponder/platform/PlatformError.hpp>
-#include <ponder/platform/PlatformRuntime.hpp>
 #include <ponder/platform/Process.hpp>
+#include <ponder/platform/Runtime.hpp>
 
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_events.h>
@@ -15,6 +17,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <optional>
@@ -30,6 +33,11 @@ namespace
 {
 constexpr char kFocusClickThroughHint[]{"SDL_MOUSE_FOCUS_CLICKTHROUGH"};
 constexpr char kAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
+
+[[nodiscard]] bool HasPlatformErrorPrefix(const ponder::core::Exception& exception, ponder::platform::PlatformErrorCode code)
+{
+    return exception.GetMessage().starts_with(std::format("Platform error [{}]: ", code));
+}
 
 [[nodiscard]] SDL_Window* FindBackendWindow(std::string_view title)
 {
@@ -74,8 +82,7 @@ constexpr char kAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
 {
     const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
     return std::filesystem::temp_directory_path() /
-           (std::string{"ponder-platform-integration-"} + std::to_string(nonce) + "-" +
-            std::string{suffix} + ".txt");
+           (std::string{"ponder-platform-integration-"} + std::to_string(nonce) + "-" + std::string{suffix} + ".txt");
 }
 
 [[nodiscard]] std::vector<std::string> ReadLines(const std::filesystem::path& path)
@@ -89,7 +96,7 @@ constexpr char kAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
     return lines;
 }
 
-class PlatformRuntimeIntegrationTests : public testing::Test
+class RuntimeIntegrationTests : public testing::Test
 {
 protected:
     void SetUp() override
@@ -108,60 +115,47 @@ private:
     static void ClearTestState()
     {
         static_cast<void>(SDL_ResetHint(SDL_HINT_VIDEO_DRIVER));
+        static_cast<void>(SDL_ResetHint(SDL_HINT_FILE_DIALOG_DRIVER));
         static_cast<void>(SDL_ResetHint(kFocusClickThroughHint));
         static_cast<void>(SDL_ResetHint(kAutoCaptureHint));
         static_cast<void>(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, nullptr));
-        static_cast<void>(
-            SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING, nullptr));
-        static_cast<void>(
-            SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, nullptr));
+        static_cast<void>(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING, nullptr));
+        static_cast<void>(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, nullptr));
         static_cast<void>(SDL_ClearError());
     }
 };
 
-TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
+TEST_F(RuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(kFocusClickThroughHint, "prior-focus", SDL_HINT_OVERRIDE));
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING, "Prior App"));
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING, "1.0"));
-    ASSERT_TRUE(
-        SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, "org.ponder.prior"));
+    ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, "org.ponder.prior"));
 
-    const pond::platform::PlatformRuntimeDesc desc{
-        .applicationName = "Ponder Integration Test",
-        .applicationVersion = std::string{"2.0"},
-        .applicationIdentifier = std::string{"org.ponder.integration"},
-        .configureHintsBeforeInitialization = [](pond::platform::HintManager& hints)
-        {
-            const auto videoResult =
-                hints.PushHint(pond::platform::hints::VideoDriver{"dummy"});
-            EXPECT_TRUE(videoResult.HasValue());
-            const auto focusResult =
-                hints.PushHint(pond::platform::hints::MouseFocusClickThrough{true});
-            EXPECT_TRUE(focusResult.HasValue());
-            const auto captureResult =
-                hints.PushHint(pond::platform::hints::MouseAutoCapture{false});
-            EXPECT_TRUE(captureResult.HasValue());
-        }};
+    const ponder::platform::RuntimeDesc desc{.applicationName = "Ponder Integration Test",
+                                             .applicationVersion = std::string{"2.0"},
+                                             .applicationIdentifier = std::string{"org.ponder.integration"},
+                                             .configureHintsBeforeInitialization = [](ponder::platform::Runtime& runtime)
+                                             {
+                                                 runtime.HintPush(ponder::platform::hints::VideoDriver{"dummy"});
+                                                 runtime.HintPush(ponder::platform::hints::MouseFocusClickThrough{true});
+                                                 runtime.HintPush(ponder::platform::hints::MouseAutoCapture{false});
+                                             }};
 
     const std::uint64_t ticksBefore = SDL_GetTicksNS();
     {
-        auto result = pond::platform::PlatformRuntime::Create(desc);
-        ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
-        pond::platform::PlatformRuntime runtime = std::move(result).GetValue();
+        ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(desc);
 
         EXPECT_NE(SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO, 0U);
         EXPECT_NE(SDL_WasInit(SDL_INIT_EVENTS) & SDL_INIT_EVENTS, 0U);
         EXPECT_STREQ(SDL_GetCurrentVideoDriver(), "dummy");
         EXPECT_STREQ(SDL_GetHint(kFocusClickThroughHint), "1");
         EXPECT_STREQ(SDL_GetHint(kAutoCaptureHint), "0");
-        EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING),
-                     "Ponder Integration Test");
+        EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING), "Ponder Integration Test");
         EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING), "2.0");
-        EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING),
-                     "org.ponder.integration");
+        EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING), "org.ponder.integration");
 
-        const std::int64_t timestamp = runtime.Now().GetTimeSinceEpoch().count();
+        const std::int64_t timestamp = runtime.TimeNow().GetTimeSinceEpoch().count();
         const std::uint64_t ticksAfter = SDL_GetTicksNS();
         EXPECT_LE(static_cast<std::int64_t>(ticksBefore), timestamp);
         EXPECT_LE(timestamp, static_cast<std::int64_t>(ticksAfter));
@@ -171,111 +165,145 @@ TEST_F(PlatformRuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
     EXPECT_STREQ(SDL_GetHint(kFocusClickThroughHint), "prior-focus");
     EXPECT_EQ(SDL_GetHint(kAutoCaptureHint), nullptr);
     EXPECT_EQ(SDL_GetHint(SDL_HINT_VIDEO_DRIVER), nullptr);
-
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, ReportsLiveSdlVideoInitializationFailure)
+TEST_F(RuntimeIntegrationTests, ReportsLiveSdlVideoInitializationFailure)
 {
-    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "ponder-driver-that-does-not-exist",
-                                        SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "ponder-driver-that-does-not-exist", SDL_HINT_OVERRIDE));
 
-    const auto result =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
+    try
+    {
+        static_cast<void>(ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{}));
+        FAIL() << "Expected live SDL video initialization to throw";
+    }
+    catch (const ponder::core::Exception& exception)
+    {
+        EXPECT_TRUE(HasPlatformErrorPrefix(exception, ponder::platform::PlatformErrorCode::BackendFailure)) << exception.GetMessage();
+        EXPECT_NE(exception.GetMessage().find("SDL_Init"), std::string_view::npos);
+    }
+    catch (...)
+    {
+        FAIL() << "Expected ponder::core::Exception";
+    }
+    EXPECT_EQ(SDL_WasInit(0), 0U);
 
-    ASSERT_FALSE(result.HasValue());
-    EXPECT_EQ(result.GetError().GetCode(),
-              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
-    EXPECT_NE(result.GetError().GetMessage().find("SDL_Init"), std::string_view::npos);
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    {
+        ponder::platform::Runtime retry = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+        EXPECT_NE(SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO, 0U);
+    }
     EXPECT_EQ(SDL_WasInit(0), 0U);
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, OwnsMultipleLiveHiddenWindows)
+TEST_F(RuntimeIntegrationTests, ConvertsLiveDummyDialogCallbackFailuresWithoutEscaping)
+{
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_FILE_DIALOG_DRIVER, "ponder-unsupported-dialog-driver", SDL_HINT_OVERRIDE));
+
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+
+    const ponder::platform::DialogRequestId firstId = runtime.DialogShowOpenFile(ponder::platform::OpenFileDialogDesc{});
+    EXPECT_EQ(firstId, ponder::platform::DialogRequestId{1});
+    EXPECT_EQ(runtime.DialogGetOutstandingRequestCount(), 1U);
+
+    std::optional<ponder::platform::DialogCompletedEvent> completion = runtime.DialogPollCompletion();
+    ASSERT_TRUE(completion.has_value());
+    EXPECT_EQ(completion->request.id, firstId);
+    const auto* failure = std::get_if<ponder::platform::DialogFailure>(&completion->outcome);
+    ASSERT_NE(failure, nullptr);
+    EXPECT_EQ(failure->error.GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::BackendFailure));
+    EXPECT_NE(failure->error.GetMessage().find("SDL_ShowOpenFileDialog"), std::string_view::npos);
+    EXPECT_EQ(runtime.DialogGetOutstandingRequestCount(), 0U);
+
+    const ponder::platform::DialogRequestId secondId = runtime.DialogShowOpenFolder(ponder::platform::OpenFolderDialogDesc{});
+    EXPECT_EQ(secondId, ponder::platform::DialogRequestId{2});
+
+    completion = runtime.DialogPollCompletion();
+    ASSERT_TRUE(completion.has_value());
+    EXPECT_EQ(completion->request.id, secondId);
+    EXPECT_TRUE(std::holds_alternative<ponder::platform::DialogFailure>(completion->outcome));
+    EXPECT_EQ(runtime.DialogGetOutstandingRequestCount(), 0U);
+    EXPECT_NO_THROW(runtime.DialogShutdown());
+}
+
+TEST_F(RuntimeIntegrationTests, OwnsMultipleLiveHiddenWindows)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
 
-    const pond::platform::WindowDesc desc{.title = "Live Hidden Window",
-                                          .logicalSize = {320, 240},
-                                          .visible = false,
-                                          .resizable = true,
-                                          .highPixelDensity = true,
-                                          .minimumLogicalSize = pond::platform::LogicalSize{64, 48},
-                                          .graphicsCompatibility =
-                                              pond::platform::WindowGraphicsCompatibility::Default};
+    const ponder::platform::WindowDesc desc{.title = "Live Hidden Window",
+                                            .logicalSize = {320, 240},
+                                            .visible = false,
+                                            .resizable = true,
+                                            .highPixelDensity = true,
+                                            .minimumLogicalSize = ponder::platform::LogicalSize{64, 48},
+                                            .graphicsCompatibility = ponder::platform::WindowGraphicsCompatibility::Default};
 
-    auto firstResult = runtime.CreateWindow(desc);
-    ASSERT_TRUE(firstResult.HasValue()) << firstResult.GetError().GetMessage();
-    std::optional<pond::platform::Window> first;
-    first.emplace(std::move(firstResult).GetValue());
+    std::optional<ponder::platform::Window> first;
+    first.emplace(runtime.WindowCreate(desc));
 
-    auto secondResult = runtime.CreateWindow(desc);
-    ASSERT_TRUE(secondResult.HasValue()) << secondResult.GetError().GetMessage();
-    std::optional<pond::platform::Window> second;
-    second.emplace(std::move(secondResult).GetValue());
+    std::optional<ponder::platform::Window> second;
+    second.emplace(runtime.WindowCreate(desc));
 
     EXPECT_TRUE(first->GetId().IsValid());
     EXPECT_TRUE(second->GetId().IsValid());
     EXPECT_NE(first->GetId(), second->GetId());
     EXPECT_EQ(first->GetTitle(), "Live Hidden Window");
 
-    auto logicalSize = first->GetLogicalSize();
-    ASSERT_TRUE(logicalSize.HasValue());
-    EXPECT_GT(logicalSize.GetValue().width, 0U);
-    EXPECT_GT(logicalSize.GetValue().height, 0U);
-    auto pixelSize = first->GetPixelSize();
-    ASSERT_TRUE(pixelSize.HasValue());
-    EXPECT_GT(pixelSize.GetValue().width, 0U);
-    EXPECT_GT(pixelSize.GetValue().height, 0U);
-    ASSERT_TRUE(first->GetPosition().HasValue());
+    EXPECT_EQ(first->GetLogicalSize(), desc.logicalSize);
+    const ponder::platform::PixelSize pixelSize = first->GetPixelSize();
+    EXPECT_GT(pixelSize.width, 0U);
+    EXPECT_GT(pixelSize.height, 0U);
+    static_cast<void>(first->GetPosition());
 
-    ASSERT_TRUE(first->SetTitle("Renamed Live Window").HasValue());
+    first->SetTitle("Renamed Live Window");
     EXPECT_EQ(first->GetTitle(), "Renamed Live Window");
-    EXPECT_TRUE(first->SetLogicalSize({400, 300}).HasValue());
-    EXPECT_TRUE(first->SetPosition({25, 35}).HasValue());
-    EXPECT_TRUE(first->Show().HasValue());
-    EXPECT_TRUE(first->Hide().HasValue());
+    const ponder::platform::LogicalSize resizedLogicalSize{400, 300};
+    first->SetLogicalSize(resizedLogicalSize);
+    EXPECT_EQ(first->GetLogicalSize(), resizedLogicalSize);
+    const ponder::platform::ScreenPosition movedPosition{25, 35};
+    first->SetPosition(movedPosition);
+    EXPECT_EQ(first->GetPosition(), movedPosition);
 
-    pond::platform::Window moved = std::move(*first);
+    first->Show();
+    first->Show();
+    EXPECT_TRUE(first->IsVisible());
+    first->Hide();
+    first->Hide();
+    EXPECT_FALSE(first->IsVisible());
+
+    ponder::platform::Window moved = std::move(*first);
     first.reset();
     EXPECT_TRUE(moved.GetId().IsValid());
 
     second.reset();
-    EXPECT_TRUE(moved.GetLogicalSize().HasValue());
+    EXPECT_EQ(moved.GetLogicalSize(), resizedLogicalSize);
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
+TEST_F(RuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
 
-    pond::platform::WindowDesc desc;
+    ponder::platform::WindowDesc desc;
     desc.title = "Live Text Input Window";
     desc.visible = false;
-    auto windowResult = runtime.CreateWindow(desc);
-    ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
-    pond::platform::Window window = std::move(windowResult).GetValue();
+    ponder::platform::Window window = runtime.WindowCreate(desc);
 
     SDL_Window* const backendWindow = FindBackendWindow(desc.title);
     ASSERT_NE(backendWindow, nullptr);
     EXPECT_FALSE(window.IsTextInputActive());
     EXPECT_FALSE(SDL_TextInputActive(backendWindow));
 
-    ASSERT_TRUE(window.StartTextInput().HasValue());
+    ASSERT_NO_THROW(window.StartTextInput());
     EXPECT_TRUE(window.IsTextInputActive());
     EXPECT_TRUE(SDL_TextInputActive(backendWindow));
-    EXPECT_TRUE(window.StartTextInput().HasValue());
+    EXPECT_NO_THROW(window.StartTextInput());
 
-    const pond::platform::TextInputArea area{
-        .rectangle = {.origin = {12.4F, -8.6F}, .extent = {140.2F, 22.8F}}, .cursorOffset = 19.6F};
-    ASSERT_TRUE(window.SetTextInputArea(area).HasValue());
+    const ponder::platform::TextInputArea area{.rectangle = {.origin = {12.4F, -8.6F}, .extent = {140.2F, 22.8F}}, .cursorOffset = 19.6F};
+    ASSERT_NO_THROW(window.SetTextInputArea(area));
 
     SDL_Rect backendArea{};
     int backendCursor{};
@@ -286,8 +314,31 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     EXPECT_EQ(backendArea.h, 23);
     EXPECT_EQ(backendCursor, 20);
 
-    EXPECT_TRUE(window.ClearTextComposition().HasValue());
-    ASSERT_TRUE(window.ClearTextInputArea().HasValue());
+    ponder::platform::TextInputArea invalidArea = area;
+    invalidArea.rectangle.extent.width = -1.0F;
+    try
+    {
+        window.SetTextInputArea(invalidArea);
+        FAIL() << "Expected an invalid text input area to throw";
+    }
+    catch (const ponder::core::Exception& exception)
+    {
+        EXPECT_TRUE(HasPlatformErrorPrefix(exception, ponder::platform::PlatformErrorCode::InvalidArgument)) << exception.GetMessage();
+    }
+    catch (...)
+    {
+        FAIL() << "Expected ponder::core::Exception";
+    }
+
+    ASSERT_TRUE(SDL_GetTextInputArea(backendWindow, &backendArea, &backendCursor));
+    EXPECT_EQ(backendArea.x, 12);
+    EXPECT_EQ(backendArea.y, -9);
+    EXPECT_EQ(backendArea.w, 140);
+    EXPECT_EQ(backendArea.h, 23);
+    EXPECT_EQ(backendCursor, 20);
+
+    EXPECT_NO_THROW(window.ClearTextComposition());
+    ASSERT_NO_THROW(window.ClearTextInputArea());
     ASSERT_TRUE(SDL_GetTextInputArea(backendWindow, &backendArea, &backendCursor));
     EXPECT_EQ(backendArea.x, 0);
     EXPECT_EQ(backendArea.y, 0);
@@ -324,103 +375,137 @@ TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     composition.edit.length = 2;
     ASSERT_TRUE(SDL_PushEvent(&composition));
 
-    auto keyEvent = runtime.PollEvent();
+    auto keyEvent = runtime.EventPoll();
     ASSERT_TRUE(keyEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::KeyboardKeyEvent>(*keyEvent));
-    EXPECT_EQ(std::get<pond::platform::KeyboardKeyEvent>(*keyEvent),
-              (pond::platform::KeyboardKeyEvent{
-                  .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{100}},
-                  .windowId = window.GetId(),
-                  .physicalKey = pond::platform::PhysicalKey::Q,
-                  .logicalKey = pond::platform::LogicalKey::FromCharacter(U'a'),
-                  .modifiers = pond::platform::KeyModifiers::LeftControl |
-                               pond::platform::KeyModifiers::RightShift,
-                  .pressed = true,
-                  .repeat = true}));
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::KeyboardKeyEvent>(*keyEvent));
+    EXPECT_EQ(
+        std::get<ponder::platform::KeyboardKeyEvent>(*keyEvent),
+        (ponder::platform::KeyboardKeyEvent{.timestamp = ponder::core::Timestamp{std::chrono::nanoseconds{100}},
+                                            .windowId = window.GetId(),
+                                            .physicalKey = ponder::platform::PhysicalKey::Q,
+                                            .logicalKey = ponder::platform::LogicalKey::FromCharacter(U'a'),
+                                            .modifiers = ponder::platform::KeyModifiers::LeftControl | ponder::platform::KeyModifiers::RightShift,
+                                            .pressed = true,
+                                            .repeat = true}));
 
-    auto textEvent = runtime.PollEvent();
+    auto textEvent = runtime.EventPoll();
     ASSERT_TRUE(textEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::TextInputEvent>(*textEvent));
-    EXPECT_EQ(std::get<pond::platform::TextInputEvent>(*textEvent),
-              (pond::platform::TextInputEvent{
-                  .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{200}},
-                  .windowId = window.GetId(),
-                  .text = "typed"}));
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::TextInputEvent>(*textEvent));
+    EXPECT_EQ(std::get<ponder::platform::TextInputEvent>(*textEvent),
+              (ponder::platform::TextInputEvent{.timestamp = ponder::core::Timestamp{std::chrono::nanoseconds{200}},
+                                                .windowId = window.GetId(),
+                                                .text = "typed"}));
 
-    auto compositionEvent = runtime.PollEvent();
+    auto compositionEvent = runtime.EventPoll();
     ASSERT_TRUE(compositionEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::TextCompositionEvent>(*compositionEvent));
-    EXPECT_EQ(std::get<pond::platform::TextCompositionEvent>(*compositionEvent),
-              (pond::platform::TextCompositionEvent{
-                  .timestamp = pond::platform::Timestamp{std::chrono::nanoseconds{300}},
-                  .windowId = window.GetId(),
-                  .text = "pending",
-                  .selection = pond::platform::TextCompositionRange{1, 2}}));
-    EXPECT_FALSE(runtime.PollEvent().has_value());
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::TextCompositionEvent>(*compositionEvent));
+    EXPECT_EQ(std::get<ponder::platform::TextCompositionEvent>(*compositionEvent),
+              (ponder::platform::TextCompositionEvent{.timestamp = ponder::core::Timestamp{std::chrono::nanoseconds{300}},
+                                                      .windowId = window.GetId(),
+                                                      .text = "pending",
+                                                      .selection = ponder::platform::TextCompositionRange{1, 2}}));
+    EXPECT_FALSE(runtime.EventPoll().has_value());
 
-    ASSERT_TRUE(window.StopTextInput().HasValue());
+    ASSERT_NO_THROW(window.StopTextInput());
     EXPECT_FALSE(window.IsTextInputActive());
     EXPECT_FALSE(SDL_TextInputActive(backendWindow));
-    EXPECT_TRUE(window.StopTextInput().HasValue());
+    EXPECT_NO_THROW(window.StopTextInput());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveMouseStateWithoutRetainingCapture)
+TEST_F(RuntimeIntegrationTests, SupportsLiveMouseStateWithoutRetainingCapture)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
 
-    pond::platform::WindowDesc desc;
+    ponder::platform::WindowDesc desc;
     desc.title = "Live Mouse State Window";
     desc.visible = false;
-    auto windowResult = runtime.CreateWindow(desc);
-    ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
-    pond::platform::Window window = std::move(windowResult).GetValue();
+    ponder::platform::Window window = runtime.WindowCreate(desc);
 
-    auto restoreMouseState = pond::core::MakeScopeExit(
+    auto restoreMouseState = ponder::core::MakeScopeExit(
         [&runtime, &window]() noexcept
         {
-            static_cast<void>(runtime.SetMouseCapture(false));
-            static_cast<void>(window.SetRelativeMouseMode(false));
-            static_cast<void>(window.SetMouseGrab(false));
-            static_cast<void>(runtime.ShowCursor());
+            try
+            {
+                static_cast<void>(runtime.MouseSetCapture(false));
+            }
+            catch (...)
+            {
+            }
+            try
+            {
+                window.SetRelativeMouseMode(false);
+            }
+            catch (...)
+            {
+            }
+            try
+            {
+                window.SetMouseGrab(false);
+            }
+            catch (...)
+            {
+            }
+            try
+            {
+                runtime.MouseShowCursor();
+            }
+            catch (...)
+            {
+            }
         });
 
     EXPECT_FALSE(window.IsMouseGrabbed());
-    ASSERT_TRUE(window.SetMouseGrab(true).HasValue());
-    ASSERT_TRUE(window.SetMouseGrab(false).HasValue());
+    ASSERT_NO_THROW(window.SetMouseGrab(true));
+    ASSERT_NO_THROW(window.SetMouseGrab(false));
     EXPECT_FALSE(window.IsMouseGrabbed());
 
     EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
-    ASSERT_TRUE(window.SetRelativeMouseMode(true).HasValue());
+    ASSERT_NO_THROW(window.SetRelativeMouseMode(true));
     EXPECT_TRUE(window.IsRelativeMouseModeEnabled());
-    ASSERT_TRUE(window.SetRelativeMouseMode(false).HasValue());
+    ASSERT_NO_THROW(window.SetRelativeMouseMode(false));
     EXPECT_FALSE(window.IsRelativeMouseModeEnabled());
 
-    const pond::core::VoidResult captureResult = runtime.SetMouseCapture(true);
+    const ponder::core::VoidResult captureResult = runtime.MouseSetCapture(true);
     ASSERT_FALSE(captureResult.HasValue());
-    EXPECT_EQ(captureResult.GetError().GetCode(),
-              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
-    EXPECT_TRUE(runtime.SetMouseCapture(false).HasValue());
+    EXPECT_EQ(captureResult.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::Unsupported));
+    EXPECT_TRUE(runtime.MouseSetCapture(false).HasValue());
 
-    const auto globalPosition = runtime.GetGlobalMousePosition();
+    const auto globalPosition = runtime.MouseGetGlobalPosition();
     ASSERT_FALSE(globalPosition.HasValue());
-    EXPECT_EQ(globalPosition.GetError().GetCode(),
-              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+    EXPECT_EQ(globalPosition.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::Unsupported));
 
-    ASSERT_TRUE(runtime.HideCursor().HasValue());
-    EXPECT_FALSE(runtime.IsCursorVisible());
-    ASSERT_TRUE(runtime.ShowCursor().HasValue());
-    EXPECT_TRUE(runtime.IsCursorVisible());
+    bool selectedSystemCursor{};
+    try
+    {
+        runtime.MouseSetSystemCursor(ponder::platform::SystemCursorShape::Default);
+        selectedSystemCursor = true;
+    }
+    catch (const ponder::core::Exception& exception)
+    {
+        EXPECT_TRUE(HasPlatformErrorPrefix(exception, ponder::platform::PlatformErrorCode::BackendFailure)) << exception.GetMessage();
+    }
+    catch (...)
+    {
+        FAIL() << "Expected system cursor selection to succeed or throw ponder::core::Exception";
+    }
+    if (selectedSystemCursor)
+    {
+        EXPECT_NO_THROW(runtime.MouseSetSystemCursor(ponder::platform::SystemCursorShape::Default));
+    }
+    ASSERT_NO_THROW(runtime.MouseHideCursor());
+    EXPECT_FALSE(runtime.MouseIsCursorVisible());
+    EXPECT_NO_THROW(runtime.MouseHideCursor());
+    ASSERT_NO_THROW(runtime.MouseShowCursor());
+    EXPECT_TRUE(runtime.MouseIsCursorVisible());
+    EXPECT_NO_THROW(runtime.MouseShowCursor());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, LaunchesHelperProcessWithoutShell)
+TEST_F(RuntimeIntegrationTests, LaunchesHelperProcessWithoutShell)
 {
     const std::filesystem::path argumentsPath = MakeTemporaryPath("process-arguments");
-    auto removeArgumentsFile = pond::core::MakeScopeExit(
+    auto removeArgumentsFile = ponder::core::MakeScopeExit(
         [&argumentsPath]() noexcept
         {
             std::error_code ignored;
@@ -428,75 +513,117 @@ TEST_F(PlatformRuntimeIntegrationTests, LaunchesHelperProcessWithoutShell)
         });
 
     const std::string nonAsciiArgument{"angstrom-\xC3\x85"};
-    auto processResult = pond::platform::LaunchProcess(pond::platform::ProcessDesc{
+    auto processResult = ponder::platform::LaunchProcess(ponder::platform::ProcessDesc{
         .executable = GetProcessHelperPath(),
-        .arguments = {"--write-args", argumentsPath.string(), "--exit-code", "23", "--",
-                      "alpha beta", nonAsciiArgument}});
+        .arguments = {"--write-args", argumentsPath.string(), "--exit-code", "23", "--", "alpha beta", nonAsciiArgument}});
     ASSERT_TRUE(processResult.HasValue()) << processResult.GetError().GetMessage();
-    pond::platform::Process process = std::move(processResult).GetValue();
+    ponder::platform::Process process = std::move(processResult).GetValue();
 
     auto waitResult = process.Wait();
     ASSERT_TRUE(waitResult.HasValue()) << waitResult.GetError().GetMessage();
-    ASSERT_TRUE(std::holds_alternative<pond::platform::ProcessNormalExit>(*waitResult));
-    EXPECT_EQ(std::get<pond::platform::ProcessNormalExit>(*waitResult).exitCode, 23U);
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::ProcessNormalExit>(*waitResult));
+    EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*waitResult).exitCode, 23U);
     EXPECT_EQ(ReadLines(argumentsPath), (std::vector<std::string>{"alpha beta", nonAsciiArgument}));
+
+    auto repeatedWaitResult = process.Wait();
+    ASSERT_TRUE(repeatedWaitResult.HasValue()) << repeatedWaitResult.GetError().GetMessage();
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::ProcessNormalExit>(*repeatedWaitResult));
+    EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*repeatedWaitResult).exitCode, 23U);
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, SupportsLiveClipboardTextAndRestoresPreviousText)
+TEST_F(RuntimeIntegrationTests, ReportsMissingProcessExecutableAsAResult)
 {
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
+    const std::filesystem::path missingExecutable = MakeTemporaryPath("missing-process");
+    std::error_code ignored;
+    static_cast<void>(std::filesystem::remove(missingExecutable, ignored));
 
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
-    auto previousTextResult = runtime.GetClipboardText();
+    auto processResult = ponder::platform::LaunchProcess(ponder::platform::ProcessDesc{.executable = missingExecutable});
+
+    ASSERT_FALSE(processResult.HasValue());
+    EXPECT_EQ(processResult.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::BackendFailure));
+}
+
+TEST_F(RuntimeIntegrationTests, SupportsLiveClipboardTextAndRestoresPreviousText)
+{
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    auto previousTextResult = runtime.ClipboardGetText();
     ASSERT_TRUE(previousTextResult.HasValue()) << previousTextResult.GetError().GetMessage();
     const std::string previousText = previousTextResult.GetValue();
-    auto restoreClipboard = pond::core::MakeScopeExit(
+    auto restoreClipboard = ponder::core::MakeScopeExit(
         [&runtime, &previousText]() noexcept
         {
-            static_cast<void>(runtime.SetClipboardText(previousText));
+            try
+            {
+                static_cast<void>(runtime.ClipboardSetText(previousText));
+            }
+            catch (...)
+            {
+            }
         });
 
+    const std::string invalidUtf8{"\xC3\x28"};
+    const std::string embeddedNull{"ponder\0clipboard", 16};
+    for (const std::string_view invalidText : {std::string_view{invalidUtf8}, std::string_view{embeddedNull}})
+    {
+        const ponder::core::VoidResult invalidResult = runtime.ClipboardSetText(invalidText);
+        ASSERT_FALSE(invalidResult.HasValue());
+        EXPECT_EQ(invalidResult.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::InvalidArgument));
+    }
+
+    const ponder::core::VoidResult clearResult = runtime.ClipboardSetText({});
+    ASSERT_TRUE(clearResult.HasValue()) << clearResult.GetError().GetMessage();
+    auto emptyTextResult = runtime.ClipboardGetText();
+    ASSERT_TRUE(emptyTextResult.HasValue()) << emptyTextResult.GetError().GetMessage();
+    EXPECT_TRUE(emptyTextResult.GetValue().empty());
+
     constexpr std::string_view kClipboardText{"ponder platform clipboard round trip"};
-    const pond::core::VoidResult setResult = runtime.SetClipboardText(kClipboardText);
+    const ponder::core::VoidResult setResult = runtime.ClipboardSetText(kClipboardText);
     ASSERT_TRUE(setResult.HasValue()) << setResult.GetError().GetMessage();
     EXPECT_TRUE(SDL_HasClipboardText());
 
-    auto textResult = runtime.GetClipboardText();
+    auto textResult = runtime.ClipboardGetText();
     ASSERT_TRUE(textResult.HasValue()) << textResult.GetError().GetMessage();
     EXPECT_EQ(textResult.GetValue(), kClipboardText);
 
-    const pond::core::VoidResult restoreResult = runtime.SetClipboardText(previousText);
+    const ponder::core::VoidResult restoreResult = runtime.ClipboardSetText(previousText);
     ASSERT_TRUE(restoreResult.HasValue()) << restoreResult.GetError().GetMessage();
-    auto restoredTextResult = runtime.GetClipboardText();
+    auto restoredTextResult = runtime.ClipboardGetText();
     ASSERT_TRUE(restoredTextResult.HasValue()) << restoredTextResult.GetError().GetMessage();
     ASSERT_EQ(restoredTextResult.GetValue(), previousText);
     restoreClipboard.Dismiss();
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, PollsAndRoutesSyntheticEventsForMultipleLiveWindows)
+TEST_F(RuntimeIntegrationTests, RejectsInvalidExternalUrisWithoutLaunchingHostApplication)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
 
-    pond::platform::WindowDesc firstDesc;
+    const std::string invalidUtf8{"https://ponder.dev/\xC3\x28"};
+    const std::string embeddedNull{"https://ponder.dev/\0hidden", 26};
+    for (const std::string_view invalidUri : {std::string_view{}, std::string_view{invalidUtf8}, std::string_view{embeddedNull}})
+    {
+        const ponder::core::VoidResult result = runtime.UriOpenExternal(invalidUri);
+        ASSERT_FALSE(result.HasValue());
+        EXPECT_EQ(result.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::InvalidArgument));
+    }
+}
+
+TEST_F(RuntimeIntegrationTests, PollsAndRoutesSyntheticEventsForMultipleLiveWindows)
+{
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+
+    ponder::platform::WindowDesc firstDesc;
     firstDesc.title = "Polling Window One";
     firstDesc.visible = false;
-    auto firstResult = runtime.CreateWindow(firstDesc);
-    ASSERT_TRUE(firstResult.HasValue()) << firstResult.GetError().GetMessage();
-    pond::platform::Window first = std::move(firstResult).GetValue();
+    ponder::platform::Window first = runtime.WindowCreate(firstDesc);
 
-    pond::platform::WindowDesc secondDesc;
+    ponder::platform::WindowDesc secondDesc;
     secondDesc.title = "Polling Window Two";
     secondDesc.visible = false;
-    auto secondResult = runtime.CreateWindow(secondDesc);
-    ASSERT_TRUE(secondResult.HasValue()) << secondResult.GetError().GetMessage();
-    pond::platform::Window second = std::move(secondResult).GetValue();
+    ponder::platform::Window second = runtime.WindowCreate(secondDesc);
 
     const std::uint32_t firstBackendId = FindBackendWindowId(firstDesc.title);
     const std::uint32_t secondBackendId = FindBackendWindowId(secondDesc.title);
@@ -509,6 +636,27 @@ TEST_F(PlatformRuntimeIntegrationTests, PollsAndRoutesSyntheticEventsForMultiple
     SDL_Event ignored{};
     ignored.type = SDL_EVENT_USER;
     ASSERT_TRUE(SDL_PushEvent(&ignored));
+
+    constexpr SDL_DisplayID kUnknownBackendDisplayId{0xFFFF'FFFEU};
+    {
+        int displayCount{};
+        SDL_DisplayID* const backendDisplayIds = SDL_GetDisplays(&displayCount);
+        ASSERT_NE(backendDisplayIds, nullptr);
+        auto freeBackendDisplayIds = ponder::core::MakeScopeExit(
+            [backendDisplayIds]() noexcept
+            {
+                SDL_free(backendDisplayIds);
+            });
+        for (int index = 0; index < displayCount; ++index)
+        {
+            ASSERT_NE(backendDisplayIds[index], kUnknownBackendDisplayId);
+        }
+    }
+
+    SDL_Event staleDisplay{};
+    staleDisplay.display.type = SDL_EVENT_DISPLAY_MOVED;
+    staleDisplay.display.displayID = kUnknownBackendDisplayId;
+    ASSERT_TRUE(SDL_PushEvent(&staleDisplay));
 
     SDL_Event firstClose{};
     firstClose.window.type = SDL_EVENT_WINDOW_CLOSE_REQUESTED;
@@ -545,165 +693,152 @@ TEST_F(PlatformRuntimeIntegrationTests, PollsAndRoutesSyntheticEventsForMultiple
     quit.type = SDL_EVENT_QUIT;
     ASSERT_TRUE(SDL_PushEvent(&quit));
 
-    auto firstEvent = runtime.PollEvent();
+    auto firstEvent = runtime.EventPoll();
     ASSERT_TRUE(firstEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::WindowCloseRequestedEvent>(*firstEvent));
-    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*firstEvent).windowId,
-              first.GetId());
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::WindowCloseRequestedEvent>(*firstEvent));
+    EXPECT_EQ(std::get<ponder::platform::WindowCloseRequestedEvent>(*firstEvent).windowId, first.GetId());
 
-    auto secondEvent = runtime.PollEvent();
+    auto secondEvent = runtime.EventPoll();
     ASSERT_TRUE(secondEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::WindowCloseRequestedEvent>(*secondEvent));
-    EXPECT_EQ(std::get<pond::platform::WindowCloseRequestedEvent>(*secondEvent).windowId,
-              second.GetId());
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::WindowCloseRequestedEvent>(*secondEvent));
+    EXPECT_EQ(std::get<ponder::platform::WindowCloseRequestedEvent>(*secondEvent).windowId, second.GetId());
 
-    auto dropFileEvent = runtime.PollEvent();
+    auto dropFileEvent = runtime.EventPoll();
     ASSERT_TRUE(dropFileEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedFileEvent>(*dropFileEvent));
-    const pond::platform::DroppedFileEvent& droppedFilePayload =
-        std::get<pond::platform::DroppedFileEvent>(*dropFileEvent);
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::DroppedFileEvent>(*dropFileEvent));
+    const ponder::platform::DroppedFileEvent& droppedFilePayload = std::get<ponder::platform::DroppedFileEvent>(*dropFileEvent);
     EXPECT_EQ(droppedFilePayload.windowId, first.GetId());
     EXPECT_EQ(droppedFilePayload.path, std::filesystem::path{"C:/tmp/live-drop.sdf"});
-    EXPECT_EQ(droppedFilePayload.position, (pond::platform::LogicalPoint{12.5F, 24.25F}));
+    EXPECT_EQ(droppedFilePayload.position, (ponder::platform::LogicalPoint{12.5F, 24.25F}));
     ASSERT_TRUE(droppedFilePayload.sourceApplication.has_value());
     EXPECT_EQ(*droppedFilePayload.sourceApplication, kDropSource);
 
-    auto dropTextEvent = runtime.PollEvent();
+    auto dropTextEvent = runtime.EventPoll();
     ASSERT_TRUE(dropTextEvent.has_value());
-    ASSERT_TRUE(std::holds_alternative<pond::platform::DroppedTextEvent>(*dropTextEvent));
-    const pond::platform::DroppedTextEvent& droppedTextPayload =
-        std::get<pond::platform::DroppedTextEvent>(*dropTextEvent);
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::DroppedTextEvent>(*dropTextEvent));
+    const ponder::platform::DroppedTextEvent& droppedTextPayload = std::get<ponder::platform::DroppedTextEvent>(*dropTextEvent);
     EXPECT_EQ(droppedTextPayload.windowId, second.GetId());
     EXPECT_EQ(droppedTextPayload.text, droppedText);
-    EXPECT_EQ(droppedTextPayload.position, (pond::platform::LogicalPoint{4.5F, 8.25F}));
+    EXPECT_EQ(droppedTextPayload.position, (ponder::platform::LogicalPoint{4.5F, 8.25F}));
     EXPECT_FALSE(droppedTextPayload.sourceApplication.has_value());
 
-    auto quitEvent = runtime.PollEvent();
+    auto quitEvent = runtime.EventPoll();
     ASSERT_TRUE(quitEvent.has_value());
-    EXPECT_TRUE(std::holds_alternative<pond::platform::QuitRequestedEvent>(*quitEvent));
-    EXPECT_FALSE(runtime.PollEvent().has_value());
+    EXPECT_TRUE(std::holds_alternative<ponder::platform::QuitRequestedEvent>(*quitEvent));
+    EXPECT_FALSE(runtime.EventPoll().has_value());
 
     EXPECT_EQ(first.GetTitle(), firstDesc.title);
     EXPECT_EQ(second.GetTitle(), secondDesc.title);
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, SupportsOrthogonalStateForALiveHiddenWindow)
+TEST_F(RuntimeIntegrationTests, SupportsOrthogonalStateForALiveHiddenWindow)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
 
-    pond::platform::WindowDesc desc;
+    ponder::platform::WindowDesc desc;
     desc.title = "Live Hidden State Window";
     desc.visible = false;
     desc.resizable = true;
-    auto windowResult = runtime.CreateWindow(desc);
-    ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
-    pond::platform::Window window = std::move(windowResult).GetValue();
+    ponder::platform::Window window = runtime.WindowCreate(desc);
 
-    auto presentation = window.GetPresentation();
-    ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
-    EXPECT_EQ(presentation.GetValue(), pond::platform::WindowPresentation::Windowed);
-    auto decoration = window.GetDecoration();
-    ASSERT_TRUE(decoration.HasValue()) << decoration.GetError().GetMessage();
-    EXPECT_EQ(decoration.GetValue(), pond::platform::WindowDecoration::System);
-    auto state = window.GetState();
-    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
-    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
-    auto visible = window.IsVisible();
-    ASSERT_TRUE(visible.HasValue()) << visible.GetError().GetMessage();
-    EXPECT_FALSE(visible.GetValue());
-    auto resizable = window.IsResizable();
-    ASSERT_TRUE(resizable.HasValue()) << resizable.GetError().GetMessage();
-    EXPECT_TRUE(resizable.GetValue());
-    auto focused = window.IsFocused();
-    ASSERT_TRUE(focused.HasValue()) << focused.GetError().GetMessage();
-    EXPECT_FALSE(focused.GetValue());
-    auto alwaysOnTop = window.IsAlwaysOnTop();
-    ASSERT_TRUE(alwaysOnTop.HasValue()) << alwaysOnTop.GetError().GetMessage();
-    EXPECT_FALSE(alwaysOnTop.GetValue());
+    EXPECT_EQ(window.GetPresentation(), ponder::platform::WindowPresentation::Windowed);
+    EXPECT_EQ(window.GetDecoration(), ponder::platform::WindowDecoration::System);
+    EXPECT_EQ(window.GetState(), ponder::platform::WindowState::Normal);
+    EXPECT_FALSE(window.IsVisible());
+    EXPECT_TRUE(window.IsResizable());
+    EXPECT_FALSE(window.IsFocused());
+    EXPECT_FALSE(window.IsAlwaysOnTop());
 
-    ASSERT_TRUE(
-        window.SetPresentation(pond::platform::WindowPresentation::DesktopFullscreen).HasValue());
-    presentation = window.GetPresentation();
-    ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
-    EXPECT_EQ(presentation.GetValue(), pond::platform::WindowPresentation::DesktopFullscreen);
-    ASSERT_TRUE(window.SetPresentation(pond::platform::WindowPresentation::Windowed).HasValue());
-    presentation = window.GetPresentation();
-    ASSERT_TRUE(presentation.HasValue()) << presentation.GetError().GetMessage();
-    EXPECT_EQ(presentation.GetValue(), pond::platform::WindowPresentation::Windowed);
+    window.SetDecoration(ponder::platform::WindowDecoration::System);
+    window.SetDecoration(ponder::platform::WindowDecoration::System);
+    window.SetResizable(true);
+    window.SetResizable(true);
+    window.SetAlwaysOnTop(false);
+    window.SetAlwaysOnTop(false);
 
-    ASSERT_TRUE(window.Show().HasValue());
-    visible = window.IsVisible();
-    ASSERT_TRUE(visible.HasValue()) << visible.GetError().GetMessage();
-    EXPECT_TRUE(visible.GetValue());
-    ASSERT_TRUE(window.Hide().HasValue());
-    visible = window.IsVisible();
-    ASSERT_TRUE(visible.HasValue()) << visible.GetError().GetMessage();
-    EXPECT_FALSE(visible.GetValue());
+    window.SetPresentation(ponder::platform::WindowPresentation::DesktopFullscreen);
+    window.SetPresentation(ponder::platform::WindowPresentation::DesktopFullscreen);
+    EXPECT_EQ(window.GetPresentation(), ponder::platform::WindowPresentation::DesktopFullscreen);
+    window.SetPresentation(ponder::platform::WindowPresentation::Windowed);
+    window.SetPresentation(ponder::platform::WindowPresentation::Windowed);
+    EXPECT_EQ(window.GetPresentation(), ponder::platform::WindowPresentation::Windowed);
 
-    ASSERT_TRUE(window.Restore().HasValue());
-    const auto expectBackendFailure = [](const pond::core::VoidResult& result)
+    window.Show();
+    EXPECT_TRUE(window.IsVisible());
+    window.Hide();
+    EXPECT_FALSE(window.IsVisible());
+
+    window.Restore();
+    window.Restore();
+    const auto expectPlatformError = [](ponder::platform::PlatformErrorCode expectedCode, const auto& operation)
     {
-        ASSERT_FALSE(result.HasValue());
-        EXPECT_EQ(result.GetError().GetCode(),
-                  pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::BackendFailure));
+        try
+        {
+            operation();
+            FAIL() << "Expected ponder::core::Exception";
+        }
+        catch (const ponder::core::Exception& exception)
+        {
+            EXPECT_TRUE(HasPlatformErrorPrefix(exception, expectedCode)) << exception.GetMessage();
+        }
+        catch (...)
+        {
+            FAIL() << "Expected ponder::core::Exception";
+        }
     };
-    const auto expectUnsupported = [](const pond::core::VoidResult& result)
-    {
-        ASSERT_FALSE(result.HasValue());
-        EXPECT_EQ(result.GetError().GetCode(),
-                  pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
-    };
-    expectBackendFailure(window.Minimize());
-    expectBackendFailure(window.Maximize());
-    state = window.GetState();
-    ASSERT_TRUE(state.HasValue()) << state.GetError().GetMessage();
-    EXPECT_EQ(state.GetValue(), pond::platform::WindowState::Normal);
+    expectPlatformError(ponder::platform::PlatformErrorCode::BackendFailure,
+                        [&window]
+                        {
+                            window.Minimize();
+                        });
+    expectPlatformError(ponder::platform::PlatformErrorCode::BackendFailure,
+                        [&window]
+                        {
+                            window.Maximize();
+                        });
+    EXPECT_EQ(window.GetState(), ponder::platform::WindowState::Normal);
 
-    expectUnsupported(window.SetDecoration(pond::platform::WindowDecoration::Borderless));
-    expectUnsupported(window.SetResizable(false));
-    expectUnsupported(window.SetAlwaysOnTop(true));
+    expectPlatformError(ponder::platform::PlatformErrorCode::Unsupported,
+                        [&window]
+                        {
+                            window.SetDecoration(ponder::platform::WindowDecoration::Borderless);
+                        });
+    expectPlatformError(ponder::platform::PlatformErrorCode::Unsupported,
+                        [&window]
+                        {
+                            window.SetResizable(false);
+                        });
+    expectPlatformError(ponder::platform::PlatformErrorCode::Unsupported,
+                        [&window]
+                        {
+                            window.SetAlwaysOnTop(true);
+                        });
 
-    decoration = window.GetDecoration();
-    ASSERT_TRUE(decoration.HasValue()) << decoration.GetError().GetMessage();
-    EXPECT_EQ(decoration.GetValue(), pond::platform::WindowDecoration::System);
-    resizable = window.IsResizable();
-    ASSERT_TRUE(resizable.HasValue()) << resizable.GetError().GetMessage();
-    EXPECT_TRUE(resizable.GetValue());
-    alwaysOnTop = window.IsAlwaysOnTop();
-    ASSERT_TRUE(alwaysOnTop.HasValue()) << alwaysOnTop.GetError().GetMessage();
-    EXPECT_FALSE(alwaysOnTop.GetValue());
+    EXPECT_EQ(window.GetDecoration(), ponder::platform::WindowDecoration::System);
+    EXPECT_TRUE(window.IsResizable());
+    EXPECT_FALSE(window.IsAlwaysOnTop());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, ExposesLiveDisplaySnapshotsAndWindowDensity)
+TEST_F(RuntimeIntegrationTests, ExposesLiveDisplaySnapshotsAndWindowDensity)
 {
-    ASSERT_TRUE(
-        SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy,offscreen", SDL_HINT_OVERRIDE));
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy,offscreen", SDL_HINT_OVERRIDE));
 
-    std::vector<pond::platform::DisplayInfo> ownedSnapshots;
+    std::vector<ponder::platform::DisplayInfo> ownedSnapshots;
     std::string firstDisplayName;
     {
-        auto runtimeResult =
-            pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-        ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-        pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+        ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
 
         const char* const videoDriver = SDL_GetCurrentVideoDriver();
         ASSERT_NE(videoDriver, nullptr);
-        EXPECT_TRUE(std::string_view{videoDriver} == "dummy" ||
-                    std::string_view{videoDriver} == "offscreen");
+        EXPECT_TRUE(std::string_view{videoDriver} == "dummy" || std::string_view{videoDriver} == "offscreen");
 
-        auto displaysResult = runtime.EnumerateDisplays();
-        ASSERT_TRUE(displaysResult.HasValue()) << displaysResult.GetError().GetMessage();
-        ownedSnapshots = std::move(displaysResult).GetValue();
+        ownedSnapshots = runtime.DisplayEnumerate();
         ASSERT_FALSE(ownedSnapshots.empty());
 
-        std::unordered_set<pond::platform::DisplayId> displayIds;
-        for (const pond::platform::DisplayInfo& display : ownedSnapshots)
+        std::unordered_set<ponder::platform::DisplayId> displayIds;
+        for (const ponder::platform::DisplayInfo& display : ownedSnapshots)
         {
             EXPECT_TRUE(display.id.IsValid());
             EXPECT_TRUE(displayIds.insert(display.id).second);
@@ -718,52 +853,44 @@ TEST_F(PlatformRuntimeIntegrationTests, ExposesLiveDisplaySnapshotsAndWindowDens
                 EXPECT_GT(*display.refreshRateHertz, 0.0F);
             }
 
-            auto infoResult = runtime.GetDisplayInfo(display.id);
+            auto infoResult = runtime.DisplayGetInfo(display.id);
             ASSERT_TRUE(infoResult.HasValue()) << infoResult.GetError().GetMessage();
             EXPECT_EQ(infoResult.GetValue(), display);
         }
 
         firstDisplayName = ownedSnapshots.front().name;
 
-        const pond::platform::WindowDesc desc{
-            .title = "Live Display Test Window",
-            .logicalSize = {320, 240},
-            .visible = false,
-            .resizable = true,
-            .highPixelDensity = true,
-            .minimumLogicalSize = std::nullopt,
-            .graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Default};
+        const ponder::platform::WindowDesc desc{.title = "Live Display Test Window",
+                                                .logicalSize = {320, 240},
+                                                .visible = false,
+                                                .resizable = true,
+                                                .highPixelDensity = true,
+                                                .minimumLogicalSize = std::nullopt,
+                                                .graphicsCompatibility = ponder::platform::WindowGraphicsCompatibility::Default};
 
-        auto windowResult = runtime.CreateWindow(desc);
-        ASSERT_TRUE(windowResult.HasValue()) << windowResult.GetError().GetMessage();
-        pond::platform::Window window = std::move(windowResult).GetValue();
+        ponder::platform::Window window = runtime.WindowCreate(desc);
 
-        auto logicalSizeResult = window.GetLogicalSize();
-        ASSERT_TRUE(logicalSizeResult.HasValue()) << logicalSizeResult.GetError().GetMessage();
-        auto pixelSizeResult = window.GetPixelSize();
-        ASSERT_TRUE(pixelSizeResult.HasValue()) << pixelSizeResult.GetError().GetMessage();
-        EXPECT_GT(logicalSizeResult.GetValue().width, 0U);
-        EXPECT_GT(logicalSizeResult.GetValue().height, 0U);
-        EXPECT_GT(pixelSizeResult.GetValue().width, 0U);
-        EXPECT_GT(pixelSizeResult.GetValue().height, 0U);
+        const ponder::platform::LogicalSize logicalSize = window.GetLogicalSize();
+        const ponder::platform::PixelSize pixelSize = window.GetPixelSize();
+        EXPECT_GT(logicalSize.width, 0U);
+        EXPECT_GT(logicalSize.height, 0U);
+        EXPECT_GT(pixelSize.width, 0U);
+        EXPECT_GT(pixelSize.height, 0U);
 
-        auto pixelDensityResult = window.GetPixelDensity();
-        ASSERT_TRUE(pixelDensityResult.HasValue()) << pixelDensityResult.GetError().GetMessage();
-        EXPECT_TRUE(std::isfinite(pixelDensityResult.GetValue()));
-        EXPECT_GT(pixelDensityResult.GetValue(), 0.0F);
+        const float pixelDensity = window.GetPixelDensity();
+        EXPECT_TRUE(std::isfinite(pixelDensity));
+        EXPECT_GT(pixelDensity, 0.0F);
 
-        auto displayScaleResult = window.GetDisplayScale();
-        ASSERT_TRUE(displayScaleResult.HasValue()) << displayScaleResult.GetError().GetMessage();
-        EXPECT_TRUE(std::isfinite(displayScaleResult.GetValue()));
-        EXPECT_GT(displayScaleResult.GetValue(), 0.0F);
+        const float displayScale = window.GetDisplayScale();
+        EXPECT_TRUE(std::isfinite(displayScale));
+        EXPECT_GT(displayScale, 0.0F);
 
         auto windowDisplayResult = window.GetDisplayId();
         ASSERT_TRUE(windowDisplayResult.HasValue()) << windowDisplayResult.GetError().GetMessage();
         EXPECT_TRUE(displayIds.contains(windowDisplayResult.GetValue()));
 
-        auto windowDisplayInfoResult = runtime.GetDisplayInfo(windowDisplayResult.GetValue());
-        ASSERT_TRUE(windowDisplayInfoResult.HasValue())
-            << windowDisplayInfoResult.GetError().GetMessage();
+        auto windowDisplayInfoResult = runtime.DisplayGetInfo(windowDisplayResult.GetValue());
+        ASSERT_TRUE(windowDisplayInfoResult.HasValue()) << windowDisplayInfoResult.GetError().GetMessage();
         EXPECT_EQ(windowDisplayInfoResult.GetValue().id, windowDisplayResult.GetValue());
     }
 
@@ -772,76 +899,82 @@ TEST_F(PlatformRuntimeIntegrationTests, ExposesLiveDisplaySnapshotsAndWindowDens
     EXPECT_TRUE(ownedSnapshots.front().id.IsValid());
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, RejectsUnavailableGraphicsCompatibilityForCurrentHost)
+TEST_F(RuntimeIntegrationTests, RejectsUnavailableGraphicsCompatibilityForCurrentHost)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
 
-    pond::platform::WindowDesc desc;
+    ponder::platform::WindowDesc desc;
     desc.title = "Unsupported Graphics Compatibility Window";
     desc.visible = false;
 #if defined(SDL_PLATFORM_WINDOWS) || defined(SDL_PLATFORM_LINUX)
-    desc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Metal;
+    desc.graphicsCompatibility = ponder::platform::WindowGraphicsCompatibility::Metal;
 #else
-    desc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
+    desc.graphicsCompatibility = ponder::platform::WindowGraphicsCompatibility::Vulkan;
 #endif
 
-    auto result = runtime.CreateWindow(desc);
-    ASSERT_FALSE(result.HasValue());
-    EXPECT_EQ(result.GetError().GetCode(),
-              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+    try
+    {
+        static_cast<void>(runtime.WindowCreate(desc));
+        FAIL() << "Expected unavailable graphics compatibility to throw";
+    }
+    catch (const ponder::core::Exception& exception)
+    {
+        EXPECT_TRUE(HasPlatformErrorPrefix(exception, ponder::platform::PlatformErrorCode::Unsupported)) << exception.GetMessage();
+    }
+    catch (...)
+    {
+        FAIL() << "Expected ponder::core::Exception";
+    }
 }
 
-TEST_F(PlatformRuntimeIntegrationTests, ReportsNativeHandleUnsupportedUnderDummyDriver)
+TEST_F(RuntimeIntegrationTests, ReportsExpectedNativeHandleFailuresUnderDummyDriver)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    auto runtimeResult =
-        pond::platform::PlatformRuntime::Create(pond::platform::PlatformRuntimeDesc{});
-    ASSERT_TRUE(runtimeResult.HasValue()) << runtimeResult.GetError().GetMessage();
-    pond::platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
     ASSERT_STREQ(SDL_GetCurrentVideoDriver(), "dummy");
 
-    pond::platform::WindowDesc defaultDesc;
+    ponder::platform::WindowDesc defaultDesc;
     defaultDesc.title = "Native Handle Default Window";
     defaultDesc.visible = false;
-    auto defaultWindowResult = runtime.CreateWindow(defaultDesc);
-    ASSERT_TRUE(defaultWindowResult.HasValue()) << defaultWindowResult.GetError().GetMessage();
-    pond::platform::Window defaultWindow = std::move(defaultWindowResult).GetValue();
+    ponder::platform::Window defaultWindow = runtime.WindowCreate(defaultDesc);
 
     auto invalidResult = defaultWindow.GetNativeHandle();
     ASSERT_FALSE(invalidResult.HasValue());
-    EXPECT_EQ(invalidResult.GetError().GetCode(),
-              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::InvalidArgument));
+    EXPECT_EQ(invalidResult.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::InvalidArgument));
 
-    pond::platform::WindowDesc rendererDesc;
+    ponder::platform::WindowDesc rendererDesc;
     rendererDesc.visible = false;
 #if defined(SDL_PLATFORM_MACOS)
     rendererDesc.title = "Native Handle Metal Window";
-    rendererDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Metal;
+    rendererDesc.graphicsCompatibility = ponder::platform::WindowGraphicsCompatibility::Metal;
 #else
     rendererDesc.title = "Native Handle Vulkan Window";
-    rendererDesc.graphicsCompatibility = pond::platform::WindowGraphicsCompatibility::Vulkan;
+    rendererDesc.graphicsCompatibility = ponder::platform::WindowGraphicsCompatibility::Vulkan;
 #endif
 
-    auto rendererWindowResult = runtime.CreateWindow(rendererDesc);
-    if (!rendererWindowResult.HasValue())
-    {
-        GTEST_SKIP() << "Dummy SDL driver cannot create the host renderer-compatible window: "
-                     << rendererWindowResult.GetError().GetMessage();
-    }
-    pond::platform::Window rendererWindow = std::move(rendererWindowResult).GetValue();
-
-    auto unsupportedResult = rendererWindow.GetNativeHandle();
-    ASSERT_FALSE(unsupportedResult.HasValue());
-    EXPECT_EQ(unsupportedResult.GetError().GetCode(),
-              pond::platform::ToErrorCode(pond::platform::PlatformErrorCode::Unsupported));
+    const SDL_WindowFlags rendererFlags = SDL_WINDOW_HIDDEN |
 #if defined(SDL_PLATFORM_MACOS)
-    EXPECT_NE(unsupportedResult.GetError().GetMessage().find("Metal"), std::string::npos);
+                                          SDL_WINDOW_METAL;
+#else
+                                          SDL_WINDOW_VULKAN;
+#endif
+    SDL_Window* const rendererProbe = SDL_CreateWindow("Native Handle Capability Probe", 100, 100, rendererFlags);
+    if (rendererProbe == nullptr)
+    {
+        GTEST_SKIP() << "Dummy SDL driver cannot create the host renderer-compatible window: " << SDL_GetError();
+    }
+    SDL_DestroyWindow(rendererProbe);
+
+    ponder::platform::Window rendererWindow = runtime.WindowCreate(rendererDesc);
+    auto nativeResult = rendererWindow.GetNativeHandle();
+    ASSERT_FALSE(nativeResult.HasValue());
+#if defined(SDL_PLATFORM_MACOS)
+    EXPECT_EQ(nativeResult.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::InvalidArgument));
+#else
+    EXPECT_EQ(nativeResult.GetError().GetCode(), ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::Unsupported));
 #endif
 }
 } // namespace

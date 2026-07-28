@@ -36,7 +36,8 @@ git commit -s
 ## Formatting And Static Analysis
 
 C++ formatting is controlled by the root `.clang-format` file. Use the
-repository wrapper in check mode to verify project C++ files:
+repository wrapper in check mode to verify all first-party C++ files, including
+the examples:
 
 ```powershell
 .\scripts\format.ps1 -Check

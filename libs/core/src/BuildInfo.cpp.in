@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace pond::core
+namespace ponder::core
 {
 namespace
 {
@@ -29,4 +29,4 @@ BuildInfo GetBuildInfo() noexcept
                      "@PONDER_BUILD_INFO_CMAKE_VERSION_CPP@"};
     // clang-format on
 }
-} // namespace pond::core
+} // namespace ponder::core

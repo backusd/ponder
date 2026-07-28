@@ -44,29 +44,25 @@ struct PickResult final
 
 [[nodiscard]] core::Result<CameraMatrices> BuildCameraMatrices()
 {
-    auto view = Matrix4x4::LookAt(Vector3{0.0F, 1.5F, 6.0F}, Vector3{0.0F, 0.0F, -2.0F},
-                                  Vector3{0.0F, 1.0F, 0.0F});
+    auto view = Matrix4x4::LookAt(Vector3{0.0F, 1.5F, 6.0F}, Vector3{0.0F, 0.0F, -2.0F}, Vector3{0.0F, 1.0F, 0.0F});
     if (!view.HasValue())
     {
         return core::Result<CameraMatrices>::FromError(view.GetError());
     }
 
-    auto projection = Matrix4x4::Perspective(ToRadians(Degrees{60.0F}), 16.0F / 9.0F, 0.1F, 1000.0F,
-                                             ProjectionDepth::ReverseZ);
+    auto projection = Matrix4x4::Perspective(ToRadians(Degrees{60.0F}), 16.0F / 9.0F, 0.1F, 1000.0F, ProjectionDepth::ReverseZ);
     if (!projection.HasValue())
     {
         return core::Result<CameraMatrices>::FromError(projection.GetError());
     }
 
-    auto infiniteProjection = Matrix4x4::InfinitePerspective(
-        ToRadians(Degrees{60.0F}), 16.0F / 9.0F, 0.1F, ProjectionDepth::ReverseZ);
+    auto infiniteProjection = Matrix4x4::InfinitePerspective(ToRadians(Degrees{60.0F}), 16.0F / 9.0F, 0.1F, ProjectionDepth::ReverseZ);
     if (!infiniteProjection.HasValue())
     {
         return core::Result<CameraMatrices>::FromError(infiniteProjection.GetError());
     }
 
-    return CameraMatrices{view.GetValue(), projection.GetValue(), infiniteProjection.GetValue(),
-                          projection.GetValue() * view.GetValue()};
+    return CameraMatrices{view.GetValue(), projection.GetValue(), infiniteProjection.GetValue(), projection.GetValue() * view.GetValue()};
 }
 
 [[nodiscard]] core::Result<ProjectRoundTrip> ProjectAndUnprojectPoint()
@@ -90,8 +86,7 @@ struct PickResult final
         return core::Result<ProjectRoundTrip>::FromError(screenPoint.GetError());
     }
 
-    auto worldPoint =
-        Unproject(camera->viewProjection, viewport.GetValue(), screenPoint.GetValue());
+    auto worldPoint = Unproject(camera->viewProjection, viewport.GetValue(), screenPoint.GetValue());
     if (!worldPoint.HasValue())
     {
         return core::Result<ProjectRoundTrip>::FromError(worldPoint.GetError());
@@ -126,8 +121,7 @@ struct PickResult final
         return core::Result<CullingResult>::FromError(sphere.GetError());
     }
 
-    return CullingResult{frustum->Classify(bounds.GetValue()),
-                         frustum->Classify(sphere.GetValue())};
+    return CullingResult{frustum->Classify(bounds.GetValue()), frustum->Classify(sphere.GetValue())};
 }
 
 [[nodiscard]] core::Result<std::optional<PickResult>> PickTriangleCenter()
@@ -144,8 +138,7 @@ struct PickResult final
         return core::Result<std::optional<PickResult>>::FromError(viewport.GetError());
     }
 
-    auto triangle = Triangle::Create(Vector3{-0.5F, -0.5F, -2.0F}, Vector3{0.5F, -0.5F, -2.0F},
-                                     Vector3{0.0F, 0.5F, -2.0F});
+    auto triangle = Triangle::Create(Vector3{-0.5F, -0.5F, -2.0F}, Vector3{0.5F, -0.5F, -2.0F}, Vector3{0.0F, 0.5F, -2.0F});
     if (!triangle.HasValue())
     {
         return core::Result<std::optional<PickResult>>::FromError(triangle.GetError());
@@ -170,15 +163,13 @@ struct PickResult final
         return core::Result<std::optional<PickResult>>::FromError(clipToWorld.GetError());
     }
 
-    auto nearPoint = UnprojectFromClipToWorld(clipToWorld.GetValue(), viewport.GetValue(),
-                                              Vector3{screenTarget->x, screenTarget->y, 1.0F});
+    auto nearPoint = UnprojectFromClipToWorld(clipToWorld.GetValue(), viewport.GetValue(), Vector3{screenTarget->x, screenTarget->y, 1.0F});
     if (!nearPoint.HasValue())
     {
         return core::Result<std::optional<PickResult>>::FromError(nearPoint.GetError());
     }
 
-    auto farPoint = UnprojectFromClipToWorld(clipToWorld.GetValue(), viewport.GetValue(),
-                                             Vector3{screenTarget->x, screenTarget->y, 0.0F});
+    auto farPoint = UnprojectFromClipToWorld(clipToWorld.GetValue(), viewport.GetValue(), Vector3{screenTarget->x, screenTarget->y, 0.0F});
     if (!farPoint.HasValue())
     {
         return core::Result<std::optional<PickResult>>::FromError(farPoint.GetError());
@@ -191,8 +182,7 @@ struct PickResult final
     }
 
     const std::optional<RayBoxHit> boundsHit = Intersect(ray.GetValue(), bounds.GetValue());
-    const std::optional<RayTriangleHit> triangleHit =
-        Intersect(ray.GetValue(), triangle.GetValue());
+    const std::optional<RayTriangleHit> triangleHit = Intersect(ray.GetValue(), triangle.GetValue());
     if (!boundsHit.has_value() || !triangleHit.has_value())
     {
         return std::optional<PickResult>{};
@@ -203,7 +193,6 @@ struct PickResult final
                                      triangle->GetVertex2() * triangleHit->GetBarycentric2();
     const Vector3 rayHitPoint = ray->GetOrigin() + ray->GetDirection() * triangleHit->GetDistance();
 
-    return std::optional<PickResult>{
-        PickResult{ray.GetValue(), *boundsHit, *triangleHit, triangleHitPoint, rayHitPoint}};
+    return std::optional<PickResult>{PickResult{ray.GetValue(), *boundsHit, *triangleHit, triangleHitPoint, rayHitPoint}};
 }
 } // namespace pond::math::examples

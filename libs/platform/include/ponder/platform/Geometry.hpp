@@ -8,15 +8,14 @@
 #include <ostream>
 #include <string>
 
-namespace pond::platform
+namespace ponder::platform
 {
 struct ScreenPosition final
 {
     std::int32_t x{};
     std::int32_t y{};
 
-    [[nodiscard]] friend constexpr auto operator<=>(const ScreenPosition& lhs,
-                                                    const ScreenPosition& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const ScreenPosition& lhs, const ScreenPosition& rhs) noexcept = default;
 };
 
 struct ScreenExtent final
@@ -24,8 +23,7 @@ struct ScreenExtent final
     std::uint32_t width{};
     std::uint32_t height{};
 
-    [[nodiscard]] friend constexpr auto operator<=>(const ScreenExtent& lhs,
-                                                    const ScreenExtent& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const ScreenExtent& lhs, const ScreenExtent& rhs) noexcept = default;
 };
 
 struct ScreenRectangle final
@@ -33,8 +31,7 @@ struct ScreenRectangle final
     ScreenPosition position{};
     ScreenExtent extent{};
 
-    [[nodiscard]] friend constexpr auto operator<=>(const ScreenRectangle& lhs,
-                                                    const ScreenRectangle& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const ScreenRectangle& lhs, const ScreenRectangle& rhs) noexcept = default;
 };
 
 struct LogicalPoint final
@@ -42,8 +39,7 @@ struct LogicalPoint final
     float x{};
     float y{};
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalPoint& lhs,
-                                                   const LogicalPoint& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalPoint& lhs, const LogicalPoint& rhs) noexcept = default;
 };
 
 struct LogicalExtent final
@@ -51,8 +47,7 @@ struct LogicalExtent final
     float width{};
     float height{};
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalExtent& lhs,
-                                                   const LogicalExtent& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalExtent& lhs, const LogicalExtent& rhs) noexcept = default;
 };
 
 struct LogicalRectangle final
@@ -60,8 +55,7 @@ struct LogicalRectangle final
     LogicalPoint origin{};
     LogicalExtent extent{};
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalRectangle& lhs,
-                                                   const LogicalRectangle& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalRectangle& lhs, const LogicalRectangle& rhs) noexcept = default;
 };
 
 struct LogicalSize final
@@ -69,8 +63,7 @@ struct LogicalSize final
     std::uint32_t width{};
     std::uint32_t height{};
 
-    [[nodiscard]] friend constexpr auto operator<=>(const LogicalSize& lhs,
-                                                    const LogicalSize& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const LogicalSize& lhs, const LogicalSize& rhs) noexcept = default;
 };
 
 struct PixelSize final
@@ -78,19 +71,17 @@ struct PixelSize final
     std::uint32_t width{};
     std::uint32_t height{};
 
-    [[nodiscard]] friend constexpr auto operator<=>(const PixelSize& lhs,
-                                                    const PixelSize& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const PixelSize& lhs, const PixelSize& rhs) noexcept = default;
 };
 
 [[nodiscard]] constexpr bool IsValid(LogicalPoint point) noexcept
 {
-    return core::IsFinite(point.x) && core::IsFinite(point.y);
+    return ponder::core::IsFinite(point.x) && ponder::core::IsFinite(point.y);
 }
 
 [[nodiscard]] constexpr bool IsValid(LogicalExtent extent) noexcept
 {
-    return core::IsFinite(extent.width) && core::IsFinite(extent.height) && extent.width >= 0.0F &&
-           extent.height >= 0.0F;
+    return ponder::core::IsFinite(extent.width) && ponder::core::IsFinite(extent.height) && extent.width >= 0.0F && extent.height >= 0.0F;
 }
 
 [[nodiscard]] constexpr bool IsValid(LogicalRectangle rectangle) noexcept
@@ -137,91 +128,85 @@ inline std::ostream& operator<<(std::ostream& output, PixelSize size)
 {
     return output << size.width << 'x' << size.height;
 }
-} // namespace pond::platform
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::ScreenPosition> : formatter<string>
+struct formatter<ponder::platform::ScreenPosition> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::ScreenPosition position, FormatContext& context) const
+    auto format(ponder::platform::ScreenPosition position, FormatContext& context) const
     {
         return formatter<string>::format(std::format("({}, {})", position.x, position.y), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::ScreenExtent> : formatter<string>
+struct formatter<ponder::platform::ScreenExtent> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::ScreenExtent extent, FormatContext& context) const
+    auto format(ponder::platform::ScreenExtent extent, FormatContext& context) const
     {
-        return formatter<string>::format(std::format("{}x{}", extent.width, extent.height),
-                                         context);
+        return formatter<string>::format(std::format("{}x{}", extent.width, extent.height), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::ScreenRectangle> : formatter<string>
+struct formatter<ponder::platform::ScreenRectangle> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::ScreenRectangle rectangle, FormatContext& context) const
+    auto format(ponder::platform::ScreenRectangle rectangle, FormatContext& context) const
     {
-        return formatter<string>::format(std::format("{} / {}", rectangle.position,
-                                                     rectangle.extent),
-                                         context);
+        return formatter<string>::format(std::format("{} / {}", rectangle.position, rectangle.extent), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::LogicalPoint> : formatter<string>
+struct formatter<ponder::platform::LogicalPoint> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::LogicalPoint point, FormatContext& context) const
+    auto format(ponder::platform::LogicalPoint point, FormatContext& context) const
     {
         return formatter<string>::format(std::format("({}, {})", point.x, point.y), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::LogicalExtent> : formatter<string>
+struct formatter<ponder::platform::LogicalExtent> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::LogicalExtent extent, FormatContext& context) const
+    auto format(ponder::platform::LogicalExtent extent, FormatContext& context) const
     {
-        return formatter<string>::format(std::format("{}x{}", extent.width, extent.height),
-                                         context);
+        return formatter<string>::format(std::format("{}x{}", extent.width, extent.height), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::LogicalRectangle> : formatter<string>
+struct formatter<ponder::platform::LogicalRectangle> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::LogicalRectangle rectangle, FormatContext& context) const
+    auto format(ponder::platform::LogicalRectangle rectangle, FormatContext& context) const
     {
-        return formatter<string>::format(std::format("{} / {}", rectangle.origin,
-                                                     rectangle.extent),
-                                         context);
+        return formatter<string>::format(std::format("{} / {}", rectangle.origin, rectangle.extent), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::LogicalSize> : formatter<string>
+struct formatter<ponder::platform::LogicalSize> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::LogicalSize size, FormatContext& context) const
+    auto format(ponder::platform::LogicalSize size, FormatContext& context) const
     {
         return formatter<string>::format(std::format("{}x{}", size.width, size.height), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::PixelSize> : formatter<string>
+struct formatter<ponder::platform::PixelSize> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::PixelSize size, FormatContext& context) const
+    auto format(ponder::platform::PixelSize size, FormatContext& context) const
     {
         return formatter<string>::format(std::format("{}x{}", size.width, size.height), context);
     }

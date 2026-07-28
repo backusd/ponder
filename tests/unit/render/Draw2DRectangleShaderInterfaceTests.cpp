@@ -9,36 +9,24 @@ namespace
 namespace draw2d = pond::render::draw2d;
 namespace shaders = pond::render::shaders;
 
-static_assert(shaders::kDraw2DRectangleVertexShaderName ==
-              draw2d::kDraw2DRectangleVertexShaderName);
-static_assert(shaders::kDraw2DRectangleVertexShaderEntryPoint ==
-              draw2d::kDraw2DRectangleVertexEntryPoint);
-static_assert(shaders::kDraw2DRectangleVertexShaderEntryPointCString
-                  [shaders::kDraw2DRectangleVertexShaderEntryPoint.size()] == '\0');
-static_assert(shaders::kDraw2DRectangleVertexShaderProfile ==
-              draw2d::kDraw2DRectangleVertexProfile);
+static_assert(shaders::kDraw2DRectangleVertexShaderName == draw2d::kDraw2DRectangleVertexShaderName);
+static_assert(shaders::kDraw2DRectangleVertexShaderEntryPoint == draw2d::kDraw2DRectangleVertexEntryPoint);
+static_assert(shaders::kDraw2DRectangleVertexShaderEntryPointCString[shaders::kDraw2DRectangleVertexShaderEntryPoint.size()] == '\0');
+static_assert(shaders::kDraw2DRectangleVertexShaderProfile == draw2d::kDraw2DRectangleVertexProfile);
 static_assert(shaders::kDraw2DRectangleVertexShaderStage == draw2d::kDraw2DRectangleVertexStage);
-static_assert(shaders::kDraw2DRectangleVertexShaderSchemaFingerprint ==
-              draw2d::kDraw2DRectangleShaderSchemaFingerprint);
+static_assert(shaders::kDraw2DRectangleVertexShaderSchemaFingerprint == draw2d::kDraw2DRectangleShaderSchemaFingerprint);
 
-static_assert(shaders::kDraw2DRectangleFragmentShaderName ==
-              draw2d::kDraw2DRectangleFragmentShaderName);
-static_assert(shaders::kDraw2DRectangleFragmentShaderEntryPoint ==
-              draw2d::kDraw2DRectangleFragmentEntryPoint);
-static_assert(shaders::kDraw2DRectangleFragmentShaderEntryPointCString
-                  [shaders::kDraw2DRectangleFragmentShaderEntryPoint.size()] == '\0');
-static_assert(shaders::kDraw2DRectangleFragmentShaderProfile ==
-              draw2d::kDraw2DRectangleFragmentProfile);
-static_assert(shaders::kDraw2DRectangleFragmentShaderStage ==
-              draw2d::kDraw2DRectangleFragmentStage);
-static_assert(shaders::kDraw2DRectangleFragmentShaderSchemaFingerprint ==
-              draw2d::kDraw2DRectangleShaderSchemaFingerprint);
+static_assert(shaders::kDraw2DRectangleFragmentShaderName == draw2d::kDraw2DRectangleFragmentShaderName);
+static_assert(shaders::kDraw2DRectangleFragmentShaderEntryPoint == draw2d::kDraw2DRectangleFragmentEntryPoint);
+static_assert(shaders::kDraw2DRectangleFragmentShaderEntryPointCString[shaders::kDraw2DRectangleFragmentShaderEntryPoint.size()] == '\0');
+static_assert(shaders::kDraw2DRectangleFragmentShaderProfile == draw2d::kDraw2DRectangleFragmentProfile);
+static_assert(shaders::kDraw2DRectangleFragmentShaderStage == draw2d::kDraw2DRectangleFragmentStage);
+static_assert(shaders::kDraw2DRectangleFragmentShaderSchemaFingerprint == draw2d::kDraw2DRectangleShaderSchemaFingerprint);
 
 TEST(Draw2DRectangleShaderInterfaceTests, VertexAttributesMatchPacketLayout)
 {
     ASSERT_EQ(draw2d::kDraw2DRectangleVertexAttributes.size(), 2U);
-    EXPECT_EQ(draw2d::kDraw2DRectangleVertexAttributes[0],
-              draw2d::kDraw2DRectanglePositionAttribute);
+    EXPECT_EQ(draw2d::kDraw2DRectangleVertexAttributes[0], draw2d::kDraw2DRectanglePositionAttribute);
     EXPECT_EQ(draw2d::kDraw2DRectangleVertexAttributes[1], draw2d::kDraw2DRectangleColorAttribute);
 }
 

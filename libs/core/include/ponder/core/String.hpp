@@ -12,11 +12,10 @@
 #include <system_error>
 #include <type_traits>
 
-namespace pond::core
+namespace ponder::core
 {
 template <typename Value>
-    requires((std::integral<Value> && !std::same_as<std::remove_cv_t<Value>, bool>) ||
-             std::floating_point<Value>)
+    requires((std::integral<Value> && !std::same_as<std::remove_cv_t<Value>, bool>) || std::floating_point<Value>)
 [[nodiscard]] std::optional<Value> ParseNumber(std::string_view text) noexcept
 {
     if (text.empty())
@@ -33,8 +32,7 @@ template <typename Value>
     return value;
 }
 
-[[nodiscard]] constexpr bool EqualsCaseInsensitive(std::string_view left,
-                                                   std::string_view right) noexcept
+[[nodiscard]] constexpr bool EqualsCaseInsensitive(std::string_view left, std::string_view right) noexcept
 {
     if (left.size() != right.size())
     {
@@ -44,8 +42,7 @@ template <typename Value>
     constexpr char kCaseOffset = 'a' - 'A';
     const auto toLower = [](char character) constexpr noexcept
     {
-        return character >= 'A' && character <= 'Z' ? static_cast<char>(character + kCaseOffset)
-                                                    : character;
+        return character >= 'A' && character <= 'Z' ? static_cast<char>(character + kCaseOffset) : character;
     };
 
     for (std::size_t index = 0; index < left.size(); ++index)
@@ -61,8 +58,7 @@ template <typename Value>
 
 namespace detail
 {
-static_assert(sizeof(wchar_t) == 2 || sizeof(wchar_t) == 4,
-              "String conversion supports 16-bit or 32-bit wchar_t only.");
+static_assert(sizeof(wchar_t) == 2 || sizeof(wchar_t) == 4, "String conversion supports 16-bit or 32-bit wchar_t only.");
 
 constexpr ErrorCode kInvalidUtf8{ErrorCategory::Parse, 3};
 constexpr ErrorCode kInvalidWideString{ErrorCategory::Parse, 4};
@@ -106,8 +102,7 @@ constexpr std::uint32_t kSurrogatePayloadMask{0x3FFU};
     return value >= kHighSurrogateFirst && value <= kLowSurrogateLast;
 }
 
-[[nodiscard]] constexpr bool HasRemaining(std::string_view text, std::size_t index,
-                                          std::size_t count) noexcept
+[[nodiscard]] constexpr bool HasRemaining(std::string_view text, std::size_t index, std::size_t count) noexcept
 {
     return index <= text.size() && text.size() - index >= count;
 }
@@ -119,12 +114,10 @@ constexpr std::uint32_t kSurrogatePayloadMask{0x3FFU};
 
 [[nodiscard]] inline auto MakeInvalidWideStringError()
 {
-    return MakeUnexpected(kInvalidWideString,
-                          "Invalid wide string; expected valid UTF-16 or UTF-32 code units.");
+    return MakeUnexpected(kInvalidWideString, "Invalid wide string; expected valid UTF-16 or UTF-32 code units.");
 }
 
-[[nodiscard]] constexpr bool TryDecodeUtf8CodePoint(std::string_view text, std::size_t& index,
-                                                    std::uint32_t& codePoint) noexcept
+[[nodiscard]] constexpr bool TryDecodeUtf8CodePoint(std::string_view text, std::size_t& index, std::uint32_t& codePoint) noexcept
 {
     const std::uint8_t kByte0 = ToByte(text[index]);
 
@@ -186,8 +179,7 @@ constexpr std::uint32_t kSurrogatePayloadMask{0x3FFU};
         const std::uint8_t kByte1 = ToByte(text[index + 1]);
         const std::uint8_t kByte2 = ToByte(text[index + 2]);
         const std::uint8_t kByte3 = ToByte(text[index + 3]);
-        if (!IsContinuationByte(kByte1) || !IsContinuationByte(kByte2) ||
-            !IsContinuationByte(kByte3))
+        if (!IsContinuationByte(kByte1) || !IsContinuationByte(kByte2) || !IsContinuationByte(kByte3))
         {
             return false;
         }
@@ -196,8 +188,7 @@ constexpr std::uint32_t kSurrogatePayloadMask{0x3FFU};
             return false;
         }
 
-        codePoint = ((kByte0 & 0x07U) << 18U) | ((kByte1 & 0x3FU) << 12U) |
-                    ((kByte2 & 0x3FU) << 6U) | (kByte3 & 0x3FU);
+        codePoint = ((kByte0 & 0x07U) << 18U) | ((kByte1 & 0x3FU) << 12U) | ((kByte2 & 0x3FU) << 6U) | (kByte3 & 0x3FU);
         index += 4;
         return true;
     }
@@ -216,10 +207,8 @@ constexpr void AppendWideCodePoint(std::wstring& output, std::uint32_t codePoint
         }
 
         const std::uint32_t kPayload = codePoint - kSurrogateBase;
-        output.push_back(
-            static_cast<wchar_t>(kHighSurrogateFirst + (kPayload >> kSurrogatePayloadBits)));
-        output.push_back(
-            static_cast<wchar_t>(kLowSurrogateFirst + (kPayload & kSurrogatePayloadMask)));
+        output.push_back(static_cast<wchar_t>(kHighSurrogateFirst + (kPayload >> kSurrogatePayloadBits)));
+        output.push_back(static_cast<wchar_t>(kLowSurrogateFirst + (kPayload & kSurrogatePayloadMask)));
     }
     else
     {
@@ -227,8 +216,7 @@ constexpr void AppendWideCodePoint(std::wstring& output, std::uint32_t codePoint
     }
 }
 
-[[nodiscard]] constexpr bool TryReadWideCodePoint(std::wstring_view text, std::size_t& index,
-                                                  std::uint32_t& codePoint) noexcept
+[[nodiscard]] constexpr bool TryReadWideCodePoint(std::wstring_view text, std::size_t& index, std::uint32_t& codePoint) noexcept
 {
     const std::uint32_t kUnit0 = ToWideUnit(text[index]);
 
@@ -247,8 +235,7 @@ constexpr void AppendWideCodePoint(std::wstring& output, std::uint32_t codePoint
                 return false;
             }
 
-            codePoint = kSurrogateBase + ((kUnit0 - kHighSurrogateFirst) << kSurrogatePayloadBits) +
-                        (kUnit1 - kLowSurrogateFirst);
+            codePoint = kSurrogateBase + ((kUnit0 - kHighSurrogateFirst) << kSurrogatePayloadBits) + (kUnit1 - kLowSurrogateFirst);
             index += 2;
             return true;
         }
@@ -374,4 +361,4 @@ constexpr void AppendUtf8CodePoint(std::string& output, std::uint32_t codePoint)
 
     return output;
 }
-} // namespace pond::core
+} // namespace ponder::core

@@ -13,9 +13,8 @@ namespace pond::ui::paint
 {
 namespace
 {
-[[nodiscard]] core::VoidResult MakePaintFailure(
-    UiErrorCode code, std::string message,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] core::VoidResult MakePaintFailure(UiErrorCode code, std::string message,
+                                                std::source_location location = std::source_location::current())
 {
     return MakeUiFailure(code, std::move(message), location);
 }
@@ -47,20 +46,17 @@ namespace
 }
 
 template <typename Value>
-[[nodiscard]] core::VoidResult ReserveChecked(std::vector<Value>& storage, std::uint64_t required,
-                                              std::uint64_t hardMaximum,
+[[nodiscard]] core::VoidResult ReserveChecked(std::vector<Value>& storage, std::uint64_t required, std::uint64_t hardMaximum,
                                               std::string_view storageName)
 {
     if (required <= static_cast<std::uint64_t>(storage.capacity()))
     {
         return core::VoidResult::Success();
     }
-    if (required > static_cast<std::uint64_t>(storage.max_size()) ||
-        required > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
+    if (required > static_cast<std::uint64_t>(storage.max_size()) || required > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
     {
         return MakePaintFailure(UiErrorCode::LimitExceeded,
-                                "UI paint " + std::string{storageName} +
-                                    " capacity is not representable by the host container.");
+                                "UI paint " + std::string{storageName} + " capacity is not representable by the host container.");
     }
 
     const std::uint64_t currentCapacity = static_cast<std::uint64_t>(storage.capacity());
@@ -78,25 +74,24 @@ template <typename Value>
     }
     catch (const std::bad_alloc&)
     {
-        return MakePaintFailure(UiErrorCode::CompilationFailure,
-                                "UI paint recorder could not reserve " + std::string{storageName} +
-                                    " storage.");
+        return MakePaintFailure(UiErrorCode::CompilationFailure, "UI paint recorder could not reserve " + std::string{storageName} + " storage.");
     }
     catch (const std::length_error&)
     {
         return MakePaintFailure(UiErrorCode::CompilationFailure,
-                                "UI paint " + std::string{storageName} +
-                                    " storage exceeds the host container maximum.");
+                                "UI paint " + std::string{storageName} + " storage exceeds the host container maximum.");
     }
 
     return core::VoidResult::Success();
 }
 } // namespace
 
-SealedPaintList::SealedPaintList(SealedPaintList&& other) noexcept
-    : m_commands{std::move(other.m_commands)}, m_fillRectangles{std::move(other.m_fillRectangles)},
-      m_pushClipRectangles{std::move(other.m_pushClipRectangles)},
-      m_payloadBytes{other.m_payloadBytes}, m_maxClipDepthObserved{other.m_maxClipDepthObserved}
+SealedPaintList::SealedPaintList(SealedPaintList&& other) noexcept :
+    m_commands{std::move(other.m_commands)},
+    m_fillRectangles{std::move(other.m_fillRectangles)},
+    m_pushClipRectangles{std::move(other.m_pushClipRectangles)},
+    m_payloadBytes{other.m_payloadBytes},
+    m_maxClipDepthObserved{other.m_maxClipDepthObserved}
 {
     other.m_commands.clear();
     other.m_fillRectangles.clear();
@@ -164,14 +159,20 @@ bool SealedPaintList::IsEmpty() const noexcept
     return m_commands.empty();
 }
 
-PaintRecorder::PaintRecorder(UiHardLimits limits) : m_limits{limits} {}
+PaintRecorder::PaintRecorder(UiHardLimits limits) :
+    m_limits{limits}
+{
+}
 
-PaintRecorder::PaintRecorder(PaintRecorder&& other) noexcept
-    : m_limits{other.m_limits}, m_state{other.m_state}, m_commands{std::move(other.m_commands)},
-      m_fillRectangles{std::move(other.m_fillRectangles)},
-      m_pushClipRectangles{std::move(other.m_pushClipRectangles)},
-      m_payloadBytes{other.m_payloadBytes}, m_clipDepth{other.m_clipDepth},
-      m_maxClipDepthObserved{other.m_maxClipDepthObserved}
+PaintRecorder::PaintRecorder(PaintRecorder&& other) noexcept :
+    m_limits{other.m_limits},
+    m_state{other.m_state},
+    m_commands{std::move(other.m_commands)},
+    m_fillRectangles{std::move(other.m_fillRectangles)},
+    m_pushClipRectangles{std::move(other.m_pushClipRectangles)},
+    m_payloadBytes{other.m_payloadBytes},
+    m_clipDepth{other.m_clipDepth},
+    m_maxClipDepthObserved{other.m_maxClipDepthObserved}
 {
     other.Reset();
 }
@@ -202,25 +203,21 @@ core::VoidResult PaintRecorder::FillRectangle(LogicalRect rectangle, SrgbStraigh
 
     if (!IsValid(rectangle))
     {
-        return MakePaintFailure(UiErrorCode::InvalidPaintValue,
-                                "UI fill rectangle requires finite non-negative logical bounds.");
+        return MakePaintFailure(UiErrorCode::InvalidPaintValue, "UI fill rectangle requires finite non-negative logical bounds.");
     }
 
     if (!IsValid(color))
     {
-        return MakePaintFailure(UiErrorCode::InvalidPaintValue,
-                                "UI fill rectangle requires a bounded sRGB straight-alpha color.");
+        return MakePaintFailure(UiErrorCode::InvalidPaintValue, "UI fill rectangle requires a bounded sRGB straight-alpha color.");
     }
 
     std::uint64_t nextCommandCount{};
     std::uint64_t nextFillCount{};
     std::uint64_t nextPayloadBytes{};
-    if (!CheckedAdd(ToCount(m_commands.size()), 1U, nextCommandCount) ||
-        !CheckedAdd(ToCount(m_fillRectangles.size()), 1U, nextFillCount) ||
+    if (!CheckedAdd(ToCount(m_commands.size()), 1U, nextCommandCount) || !CheckedAdd(ToCount(m_fillRectangles.size()), 1U, nextFillCount) ||
         !CheckedAdd(m_payloadBytes, PayloadSizeForFillRectangle(), nextPayloadBytes))
     {
-        return MakePaintFailure(UiErrorCode::LimitExceeded,
-                                "UI fill rectangle count or payload arithmetic overflowed.");
+        return MakePaintFailure(UiErrorCode::LimitExceeded, "UI fill rectangle count or payload arithmetic overflowed.");
     }
 
     if (core::VoidResult limit = CheckCommandLimit(nextCommandCount); !limit.HasValue())
@@ -231,9 +228,7 @@ core::VoidResult PaintRecorder::FillRectangle(LogicalRect rectangle, SrgbStraigh
     {
         return limit;
     }
-    if (core::VoidResult reserved =
-            ReserveForAppend(nextCommandCount, nextFillCount, ToCount(m_pushClipRectangles.size()));
-        !reserved.HasValue())
+    if (core::VoidResult reserved = ReserveForAppend(nextCommandCount, nextFillCount, ToCount(m_pushClipRectangles.size())); !reserved.HasValue())
     {
         return reserved;
     }
@@ -245,9 +240,7 @@ core::VoidResult PaintRecorder::FillRectangle(LogicalRect rectangle, SrgbStraigh
                                                     .color = semanticColor,
                                                     .isZeroArea = IsEmpty(rectangle),
                                                     .isTransparent = IsTransparent(semanticColor)});
-    m_commands.push_back(PaintCommandRecord{.index = commandIndex,
-                                            .kind = PaintCommandKind::FillRectangle,
-                                            .payloadIndex = payloadIndex});
+    m_commands.push_back(PaintCommandRecord{.index = commandIndex, .kind = PaintCommandKind::FillRectangle, .payloadIndex = payloadIndex});
     m_payloadBytes = nextPayloadBytes;
     return core::VoidResult::Success();
 }
@@ -261,22 +254,17 @@ core::VoidResult PaintRecorder::PushClipRectangle(LogicalRect rectangle)
 
     if (!IsValid(rectangle))
     {
-        return MakePaintFailure(UiErrorCode::InvalidPaintValue,
-                                "UI clip rectangle requires finite non-negative logical bounds.");
+        return MakePaintFailure(UiErrorCode::InvalidPaintValue, "UI clip rectangle requires finite non-negative logical bounds.");
     }
 
     std::uint64_t nextCommandCount{};
     std::uint64_t nextClipCount{};
     std::uint64_t nextPayloadBytes{};
     std::uint64_t nextClipDepth{};
-    if (!CheckedAdd(ToCount(m_commands.size()), 1U, nextCommandCount) ||
-        !CheckedAdd(ToCount(m_pushClipRectangles.size()), 1U, nextClipCount) ||
-        !CheckedAdd(m_payloadBytes, PayloadSizeForPushClipRectangle(), nextPayloadBytes) ||
-        !CheckedAdd(m_clipDepth, 1U, nextClipDepth))
+    if (!CheckedAdd(ToCount(m_commands.size()), 1U, nextCommandCount) || !CheckedAdd(ToCount(m_pushClipRectangles.size()), 1U, nextClipCount) ||
+        !CheckedAdd(m_payloadBytes, PayloadSizeForPushClipRectangle(), nextPayloadBytes) || !CheckedAdd(m_clipDepth, 1U, nextClipDepth))
     {
-        return MakePaintFailure(
-            UiErrorCode::LimitExceeded,
-            "UI clip rectangle count, payload, or depth arithmetic overflowed.");
+        return MakePaintFailure(UiErrorCode::LimitExceeded, "UI clip rectangle count, payload, or depth arithmetic overflowed.");
     }
 
     if (core::VoidResult limit = CheckCommandLimit(nextCommandCount); !limit.HasValue())
@@ -291,20 +279,15 @@ core::VoidResult PaintRecorder::PushClipRectangle(LogicalRect rectangle)
     {
         return limit;
     }
-    if (core::VoidResult reserved =
-            ReserveForAppend(nextCommandCount, ToCount(m_fillRectangles.size()), nextClipCount);
-        !reserved.HasValue())
+    if (core::VoidResult reserved = ReserveForAppend(nextCommandCount, ToCount(m_fillRectangles.size()), nextClipCount); !reserved.HasValue())
     {
         return reserved;
     }
 
     const PaintCommandIndex commandIndex = ToCount(m_commands.size());
     const std::uint64_t payloadIndex = ToCount(m_pushClipRectangles.size());
-    m_pushClipRectangles.push_back(
-        PushClipRectangleCommand{.rectangle = rectangle, .isZeroArea = IsEmpty(rectangle)});
-    m_commands.push_back(PaintCommandRecord{.index = commandIndex,
-                                            .kind = PaintCommandKind::PushClipRectangle,
-                                            .payloadIndex = payloadIndex});
+    m_pushClipRectangles.push_back(PushClipRectangleCommand{.rectangle = rectangle, .isZeroArea = IsEmpty(rectangle)});
+    m_commands.push_back(PaintCommandRecord{.index = commandIndex, .kind = PaintCommandKind::PushClipRectangle, .payloadIndex = payloadIndex});
     m_payloadBytes = nextPayloadBytes;
     m_clipDepth = nextClipDepth;
     m_maxClipDepthObserved = std::max(m_maxClipDepthObserved, m_clipDepth);
@@ -320,32 +303,26 @@ core::VoidResult PaintRecorder::PopClip()
 
     if (m_clipDepth == 1U)
     {
-        return MakePaintFailure(UiErrorCode::UnbalancedPaintState,
-                                "UI paint recorder cannot pop the unbounded clip sentinel.");
+        return MakePaintFailure(UiErrorCode::UnbalancedPaintState, "UI paint recorder cannot pop the unbounded clip sentinel.");
     }
 
     std::uint64_t nextCommandCount{};
     if (!CheckedAdd(ToCount(m_commands.size()), 1U, nextCommandCount))
     {
-        return MakePaintFailure(UiErrorCode::LimitExceeded,
-                                "UI pop-clip command count arithmetic overflowed.");
+        return MakePaintFailure(UiErrorCode::LimitExceeded, "UI pop-clip command count arithmetic overflowed.");
     }
     if (core::VoidResult limit = CheckCommandLimit(nextCommandCount); !limit.HasValue())
     {
         return limit;
     }
-    if (core::VoidResult reserved =
-            ReserveForAppend(nextCommandCount, ToCount(m_fillRectangles.size()),
-                             ToCount(m_pushClipRectangles.size()));
+    if (core::VoidResult reserved = ReserveForAppend(nextCommandCount, ToCount(m_fillRectangles.size()), ToCount(m_pushClipRectangles.size()));
         !reserved.HasValue())
     {
         return reserved;
     }
 
     const PaintCommandIndex commandIndex = ToCount(m_commands.size());
-    m_commands.push_back(PaintCommandRecord{.index = commandIndex,
-                                            .kind = PaintCommandKind::PopClip,
-                                            .payloadIndex = kNoPaintPayloadIndex});
+    m_commands.push_back(PaintCommandRecord{.index = commandIndex, .kind = PaintCommandKind::PopClip, .payloadIndex = kNoPaintPayloadIndex});
     --m_clipDepth;
     return core::VoidResult::Success();
 }
@@ -369,9 +346,7 @@ core::VoidResult PaintRecorder::SealInto(SealedPaintList& reusableList)
 
     if (m_clipDepth != 1U)
     {
-        return MakePaintFailure(
-            UiErrorCode::UnbalancedPaintState,
-            "UI paint recorder cannot seal while clip rectangles remain unbalanced.");
+        return MakePaintFailure(UiErrorCode::UnbalancedPaintState, "UI paint recorder cannot seal while clip rectangles remain unbalanced.");
     }
 
     try
@@ -385,19 +360,16 @@ core::VoidResult PaintRecorder::SealInto(SealedPaintList& reusableList)
     }
     catch (const std::bad_alloc&)
     {
-        return MakePaintFailure(UiErrorCode::CompilationFailure,
-                                "UI paint recorder could not allocate sealed paint list storage.");
+        return MakePaintFailure(UiErrorCode::CompilationFailure, "UI paint recorder could not allocate sealed paint list storage.");
     }
     catch (const std::length_error&)
     {
-        return MakePaintFailure(UiErrorCode::CompilationFailure,
-                                "UI sealed paint list exceeds the host container maximum.");
+        return MakePaintFailure(UiErrorCode::CompilationFailure, "UI sealed paint list exceeds the host container maximum.");
     }
 
     reusableList.m_commands.assign(m_commands.begin(), m_commands.end());
     reusableList.m_fillRectangles.assign(m_fillRectangles.begin(), m_fillRectangles.end());
-    reusableList.m_pushClipRectangles.assign(m_pushClipRectangles.begin(),
-                                             m_pushClipRectangles.end());
+    reusableList.m_pushClipRectangles.assign(m_pushClipRectangles.begin(), m_pushClipRectangles.end());
     reusableList.m_payloadBytes = m_payloadBytes;
     reusableList.m_maxClipDepthObserved = m_maxClipDepthObserved;
     m_state = PaintRecorderState::Sealed;
@@ -435,8 +407,7 @@ PaintRecorderSnapshot PaintRecorder::GetSnapshot() const noexcept
     return PaintRecorderSnapshot{.stats = MakeStats(),
                                  .commandCapacity = ToCount(m_commands.capacity()),
                                  .fillRectangleCapacity = ToCount(m_fillRectangles.capacity()),
-                                 .pushClipRectangleCapacity =
-                                     ToCount(m_pushClipRectangles.capacity())};
+                                 .pushClipRectangleCapacity = ToCount(m_pushClipRectangles.capacity())};
 }
 
 UiHardLimits PaintRecorder::GetLimits() const noexcept
@@ -448,9 +419,7 @@ core::VoidResult PaintRecorder::EnsureOpen() const
 {
     if (!IsValid(m_limits))
     {
-        return MakePaintFailure(
-            UiErrorCode::InvalidPaintValue,
-            "UI paint recorder limits must all be non-zero and include the clip sentinel.");
+        return MakePaintFailure(UiErrorCode::InvalidPaintValue, "UI paint recorder limits must all be non-zero and include the clip sentinel.");
     }
 
     if (IsOpen())
@@ -458,48 +427,36 @@ core::VoidResult PaintRecorder::EnsureOpen() const
         return core::VoidResult::Success();
     }
 
-    return MakePaintFailure(UiErrorCode::InvalidPaintState,
-                            "UI paint recorder cannot be mutated after sealing; call Reset first.");
+    return MakePaintFailure(UiErrorCode::InvalidPaintState, "UI paint recorder cannot be mutated after sealing; call Reset first.");
 }
 
-core::VoidResult PaintRecorder::CheckCommandLimit(std::uint64_t requested,
-                                                  std::source_location location) const
+core::VoidResult PaintRecorder::CheckCommandLimit(std::uint64_t requested, std::source_location location) const
 {
     return CheckUiHardLimit(UiHardLimitKind::PaintCommandCount, requested, m_limits, location);
 }
 
-core::VoidResult PaintRecorder::CheckPayloadLimit(std::uint64_t requested,
-                                                  std::source_location location) const
+core::VoidResult PaintRecorder::CheckPayloadLimit(std::uint64_t requested, std::source_location location) const
 {
-    return CheckUiHardLimit(UiHardLimitKind::PaintCommandPayloadBytes, requested, m_limits,
-                            location);
+    return CheckUiHardLimit(UiHardLimitKind::PaintCommandPayloadBytes, requested, m_limits, location);
 }
 
-core::VoidResult PaintRecorder::CheckClipDepthLimit(std::uint64_t requested,
-                                                    std::source_location location) const
+core::VoidResult PaintRecorder::CheckClipDepthLimit(std::uint64_t requested, std::source_location location) const
 {
     return CheckUiHardLimit(UiHardLimitKind::ClipDepth, requested, m_limits, location);
 }
 
-core::VoidResult PaintRecorder::ReserveForAppend(std::uint64_t nextCommandCount,
-                                                 std::uint64_t nextFillCount,
-                                                 std::uint64_t nextClipCount)
+core::VoidResult PaintRecorder::ReserveForAppend(std::uint64_t nextCommandCount, std::uint64_t nextFillCount, std::uint64_t nextClipCount)
 {
-    if (core::VoidResult result =
-            ReserveChecked(m_commands, nextCommandCount, m_limits.maxPaintCommandCount, "command");
+    if (core::VoidResult result = ReserveChecked(m_commands, nextCommandCount, m_limits.maxPaintCommandCount, "command"); !result.HasValue())
+    {
+        return result;
+    }
+    if (core::VoidResult result = ReserveChecked(m_fillRectangles, nextFillCount, m_limits.maxPaintCommandCount, "fill-rectangle payload");
         !result.HasValue())
     {
         return result;
     }
-    if (core::VoidResult result =
-            ReserveChecked(m_fillRectangles, nextFillCount, m_limits.maxPaintCommandCount,
-                           "fill-rectangle payload");
-        !result.HasValue())
-    {
-        return result;
-    }
-    return ReserveChecked(m_pushClipRectangles, nextClipCount, m_limits.maxPaintCommandCount,
-                          "clip-rectangle payload");
+    return ReserveChecked(m_pushClipRectangles, nextClipCount, m_limits.maxPaintCommandCount, "clip-rectangle payload");
 }
 
 PaintListStats PaintRecorder::MakeStats() const noexcept

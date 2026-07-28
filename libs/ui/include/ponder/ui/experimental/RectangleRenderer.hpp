@@ -34,16 +34,14 @@ struct RectanglePaint final
     LogicalRect rectangle{};
     SrgbStraightAlphaColor color{};
 
-    [[nodiscard]] friend constexpr bool operator==(const RectanglePaint& lhs,
-                                                   const RectanglePaint& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RectanglePaint& lhs, const RectanglePaint& rhs) noexcept = default;
 };
 
 /// Copies the immutable metrics rendezvous from a live frame token.
 ///
 /// Call this on the frame's render thread while the frame is active. The returned value owns no
 /// frame or target reference and remains a plain UI value after the call.
-[[nodiscard]] core::Result<UiTargetMetrics> MakeUiTargetMetricsForFrame(
-    const render::RenderFrame& frame);
+[[nodiscard]] core::Result<UiTargetMetrics> MakeUiTargetMetricsForFrame(const render::RenderFrame& frame);
 
 /// Temporary render-thread-affine owner for the rectangle milestone path.
 ///
@@ -73,9 +71,7 @@ public:
     /// preflight failures do not consume the frame's 2D stage, so the caller may retry or finish it
     /// clear-only.
     /// Device loss remains terminal according to the render-device contract.
-    [[nodiscard]] core::Result<RectangleRecordOutcome> Record(render::RenderFrame& frame,
-                                                              const UiTargetMetrics& metrics,
-                                                              RectanglePaint rectangle);
+    [[nodiscard]] core::Result<RectangleRecordOutcome> Record(render::RenderFrame& frame, const UiTargetMetrics& metrics, RectanglePaint rectangle);
 
     /// Records an ordered rectangle batch into one active-frame 2D stage.
     ///
@@ -83,9 +79,8 @@ public:
     /// Paint values are validated before recorder state is changed. Recording and hard-limit
     /// failures remain recoverable without consuming the frame's 2D stage, and a successful batch
     /// is submitted as one packet.
-    [[nodiscard]] core::Result<RectangleRecordOutcome> Record(
-        render::RenderFrame& frame, const UiTargetMetrics& metrics,
-        std::span<const RectanglePaint> rectangles);
+    [[nodiscard]] core::Result<RectangleRecordOutcome> Record(render::RenderFrame& frame, const UiTargetMetrics& metrics,
+                                                              std::span<const RectanglePaint> rectangles);
 
 private:
     struct State;

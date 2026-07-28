@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Accepted; amended by
+[ADR 0012: Core Namespace And Failure Policy](0012-core-namespace-and-failure-policy.md).
 
 ## Context
 

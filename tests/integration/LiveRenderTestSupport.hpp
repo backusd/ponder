@@ -86,8 +86,7 @@ enum class MissingLivePrerequisite : std::uint8_t
     DeviceCapability = 6
 };
 
-[[nodiscard]] constexpr std::string_view GetMissingLivePrerequisiteName(
-    MissingLivePrerequisite prerequisite) noexcept
+[[nodiscard]] constexpr std::string_view GetMissingLivePrerequisiteName(MissingLivePrerequisite prerequisite) noexcept
 {
     switch (prerequisite)
     {
@@ -110,18 +109,16 @@ enum class MissingLivePrerequisite : std::uint8_t
     return "unknown live prerequisite";
 }
 
-[[nodiscard]] constexpr bool ContainsLivePrerequisiteText(std::string_view text,
-                                                          std::string_view expected) noexcept
+[[nodiscard]] constexpr bool ContainsLivePrerequisiteText(std::string_view text, std::string_view expected) noexcept
 {
     return text.find(expected) != std::string_view::npos;
 }
 
-[[nodiscard]] constexpr std::optional<MissingLivePrerequisite>
-ClassifyOptionalMissingLivePrerequisite(core::ErrorCode code, LivePrerequisiteOperation operation,
-                                        std::string_view message) noexcept
+[[nodiscard]] constexpr std::optional<MissingLivePrerequisite> ClassifyOptionalMissingLivePrerequisite(core::ErrorCode code,
+                                                                                                       LivePrerequisiteOperation operation,
+                                                                                                       std::string_view message) noexcept
 {
-    if ((operation == LivePrerequisiteOperation::PlatformRuntime ||
-         operation == LivePrerequisiteOperation::PlatformWindow) &&
+    if ((operation == LivePrerequisiteOperation::PlatformRuntime || operation == LivePrerequisiteOperation::PlatformWindow) &&
         (code == platform::ToErrorCode(platform::PlatformErrorCode::NotFound) ||
          code == platform::ToErrorCode(platform::PlatformErrorCode::Unsupported)))
     {
@@ -132,15 +129,13 @@ ClassifyOptionalMissingLivePrerequisite(core::ErrorCode code, LivePrerequisiteOp
     {
         return MissingLivePrerequisite::VulkanLoader;
     }
-    if (code == ToErrorCode(RenderErrorCode::NoCompatibleAdapter) &&
-        operation == LivePrerequisiteOperation::Adapter)
+    if (code == ToErrorCode(RenderErrorCode::NoCompatibleAdapter) && operation == LivePrerequisiteOperation::Adapter)
     {
         return MissingLivePrerequisite::CompatibleAdapter;
     }
 
     if (code == ToErrorCode(RenderErrorCode::UnsupportedSurface) &&
-        (operation == LivePrerequisiteOperation::Surface ||
-         operation == LivePrerequisiteOperation::Target))
+        (operation == LivePrerequisiteOperation::Surface || operation == LivePrerequisiteOperation::Target))
     {
         constexpr std::array<std::string_view, 8U> kMissingPresentationCapabilities{
             "does not expose required instance extension",
@@ -165,8 +160,7 @@ ClassifyOptionalMissingLivePrerequisite(core::ErrorCode code, LivePrerequisiteOp
         return std::nullopt;
     }
 
-    if (operation == LivePrerequisiteOperation::Bootstrap ||
-        operation == LivePrerequisiteOperation::Surface)
+    if (operation == LivePrerequisiteOperation::Bootstrap || operation == LivePrerequisiteOperation::Surface)
     {
         if (ContainsLivePrerequisiteText(message, "installed Vulkan loader reports API ") &&
             ContainsLivePrerequisiteText(message, "requires at least Vulkan "))
@@ -182,8 +176,7 @@ ClassifyOptionalMissingLivePrerequisite(core::ErrorCode code, LivePrerequisiteOp
         }
     }
 
-    if ((operation == LivePrerequisiteOperation::Device ||
-         operation == LivePrerequisiteOperation::Target) &&
+    if ((operation == LivePrerequisiteOperation::Device || operation == LivePrerequisiteOperation::Target) &&
         (ContainsLivePrerequisiteText(message, "symbolicName=VK_ERROR_EXTENSION_NOT_PRESENT") ||
          ContainsLivePrerequisiteText(message, "symbolicName=VK_ERROR_FEATURE_NOT_PRESENT")))
     {
@@ -194,21 +187,16 @@ ClassifyOptionalMissingLivePrerequisite(core::ErrorCode code, LivePrerequisiteOp
     return std::nullopt;
 }
 
-static_assert(ClassifyOptionalMissingLivePrerequisite(
-                  ToErrorCode(RenderErrorCode::UnsupportedCapability),
-                  LivePrerequisiteOperation::Surface,
-                  "Explicit Vulkan validation requires missing instance layer "
-                  "VK_LAYER_KHRONOS_validation.") ==
-              MissingLivePrerequisite::InstanceLayerOrExtension);
-static_assert(!ClassifyOptionalMissingLivePrerequisite(
-    ToErrorCode(RenderErrorCode::UnsupportedCapability), LivePrerequisiteOperation::Surface,
-    "vkCreateWin32SurfaceKHR dispatch is unavailable."));
-static_assert(!ClassifyOptionalMissingLivePrerequisite(
-    ToErrorCode(RenderErrorCode::BackendFailure), LivePrerequisiteOperation::Bootstrap,
-    "A generic backend failure must never become a missing-capability skip."));
+static_assert(ClassifyOptionalMissingLivePrerequisite(ToErrorCode(RenderErrorCode::UnsupportedCapability), LivePrerequisiteOperation::Surface,
+                                                      "Explicit Vulkan validation requires missing instance layer "
+                                                      "VK_LAYER_KHRONOS_validation.") == MissingLivePrerequisite::InstanceLayerOrExtension);
+static_assert(!ClassifyOptionalMissingLivePrerequisite(ToErrorCode(RenderErrorCode::UnsupportedCapability), LivePrerequisiteOperation::Surface,
+                                                       "vkCreateWin32SurfaceKHR dispatch is unavailable."));
+static_assert(!ClassifyOptionalMissingLivePrerequisite(ToErrorCode(RenderErrorCode::BackendFailure), LivePrerequisiteOperation::Bootstrap,
+                                                       "A generic backend failure must never become a missing-capability skip."));
 
-[[nodiscard]] inline std::optional<MissingLivePrerequisite> ClassifyMissingLivePrerequisite(
-    const core::Error& error, LivePrerequisiteOperation operation) noexcept
+[[nodiscard]] inline std::optional<MissingLivePrerequisite> ClassifyMissingLivePrerequisite(const core::Error& error,
+                                                                                            LivePrerequisiteOperation operation) noexcept
 {
 #if PONDER_RENDER_REQUIRE_LIVE_TESTS != 0
     (void)error;
@@ -219,11 +207,10 @@ static_assert(!ClassifyOptionalMissingLivePrerequisite(
 #endif
 }
 
-[[nodiscard]] inline std::optional<std::string> MakeOptionalLiveSkipReason(
-    const core::Error& error, LivePrerequisiteOperation operation, std::string_view context)
+[[nodiscard]] inline std::optional<std::string> MakeOptionalLiveSkipReason(const core::Error& error, LivePrerequisiteOperation operation,
+                                                                           std::string_view context)
 {
-    const std::optional<MissingLivePrerequisite> prerequisite =
-        ClassifyMissingLivePrerequisite(error, operation);
+    const std::optional<MissingLivePrerequisite> prerequisite = ClassifyMissingLivePrerequisite(error, operation);
     if (!prerequisite.has_value())
     {
         return std::nullopt;
@@ -252,8 +239,7 @@ struct CoalescedWindowEvents final
     }
 };
 
-inline void ObserveWindowEvent(CoalescedWindowEvents& events,
-                               const platform::PlatformEvent& event) noexcept
+inline void ObserveWindowEvent(CoalescedWindowEvents& events, const platform::PlatformEvent& event) noexcept
 {
     std::visit(
         [&events](const auto& payload) noexcept
@@ -300,10 +286,8 @@ inline void DrainPlatformEvents(platform::PlatformRuntime& runtime, CoalescedWin
 }
 
 template <typename Predicate>
-[[nodiscard]] bool PumpPlatformEventsUntil(platform::PlatformRuntime& runtime,
-                                           CoalescedWindowEvents& events, Predicate&& predicate,
-                                           std::chrono::milliseconds timeout = std::chrono::seconds{
-                                               3})
+[[nodiscard]] bool PumpPlatformEventsUntil(platform::PlatformRuntime& runtime, CoalescedWindowEvents& events, Predicate&& predicate,
+                                           std::chrono::milliseconds timeout = std::chrono::seconds{3})
 {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     do
@@ -348,16 +332,14 @@ template <typename Predicate>
         return core::Result<RenderTargetSnapshot>::FromError(std::move(state).GetError());
     }
 
-    return core::Result<RenderTargetSnapshot>::FromValue(
-        RenderTargetSnapshot{window.GetId(), pixelSize.GetValue(), logicalSize.GetValue(),
-                             visible.GetValue(), state.GetValue(), presentationRevision, revision});
+    return core::Result<RenderTargetSnapshot>::FromValue(RenderTargetSnapshot{window.GetId(), pixelSize.GetValue(), logicalSize.GetValue(),
+                                                                              visible.GetValue(), state.GetValue(), presentationRevision, revision});
 }
 
 [[nodiscard]] inline std::string FormatValidationReport(const RenderValidationReport& report)
 {
     std::ostringstream output;
-    output << "warnings=" << report.warningCount << " errors=" << report.errorCount
-           << " dropped=" << report.droppedMessageCount << " messageIds=[";
+    output << "warnings=" << report.warningCount << " errors=" << report.errorCount << " dropped=" << report.droppedMessageCount << " messageIds=[";
     for (std::size_t index = 0U; index < report.capturedMessageCount; ++index)
     {
         if (index != 0U)
@@ -365,13 +347,11 @@ template <typename Predicate>
             output << ", ";
         }
         const RenderValidationMessage& message = report.capturedMessages[index];
-        output << message.GetMessageIdName() << '(' << message.messageIdNumber
-               << ") operation=" << message.GetOperationContext()
+        output << message.GetMessageIdName() << '(' << message.messageIdNumber << ") operation=" << message.GetOperationContext()
                << " message=" << message.GetMessageText();
         if (message.operationContextTruncated || message.messageTextTruncated)
         {
-            output << " truncated=[operation=" << message.operationContextTruncated
-                   << ", message=" << message.messageTextTruncated << ']';
+            output << " truncated=[operation=" << message.operationContextTruncated << ", message=" << message.messageTextTruncated << ']';
         }
     }
     output << ']';

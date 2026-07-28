@@ -51,8 +51,7 @@ template <std::size_t Count, typename Matrix>
     return std::bit_cast<std::array<float, Count>>(matrix);
 }
 
-[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
-                                                     float relativeTolerance)
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance, float relativeTolerance)
 {
     auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
@@ -62,8 +61,7 @@ template <std::size_t Count, typename Matrix>
 void ExpectInvalidIndex(auto result)
 {
     ASSERT_FALSE(result.HasValue());
-    EXPECT_EQ(result.GetError().GetCode(),
-              pond::math::ToErrorCode(pond::math::MathErrorCode::InvalidArgument));
+    EXPECT_EQ(result.GetError().GetCode(), pond::math::ToErrorCode(pond::math::MathErrorCode::InvalidArgument));
 }
 
 TEST(Matrix3x3Tests, DefaultsToZeroAndCreatesIdentity)
@@ -72,8 +70,7 @@ TEST(Matrix3x3Tests, DefaultsToZeroAndCreatesIdentity)
 
     EXPECT_EQ(defaultMatrix, pond::math::Matrix3x3{});
     EXPECT_EQ(pond::math::Matrix3x3::Zero(), pond::math::Matrix3x3{});
-    EXPECT_EQ(pond::math::Matrix3x3::Identity(),
-              (pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F}));
+    EXPECT_EQ(pond::math::Matrix3x3::Identity(), (pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F}));
 }
 
 TEST(Matrix3x3Tests, ConstructsFromScalarsAndStoresColumnMajor)
@@ -89,14 +86,12 @@ TEST(Matrix3x3Tests, ConstructsFromScalarsAndStoresColumnMajor)
     EXPECT_EQ(matrix.row2Column0, 7.0F);
     EXPECT_EQ(matrix.row2Column1, 8.0F);
     EXPECT_EQ(matrix.row2Column2, 9.0F);
-    EXPECT_EQ(CopyStorage<9>(matrix),
-              (std::array<float, 9>{1.0F, 4.0F, 7.0F, 2.0F, 5.0F, 8.0F, 3.0F, 6.0F, 9.0F}));
+    EXPECT_EQ(CopyStorage<9>(matrix), (std::array<float, 9>{1.0F, 4.0F, 7.0F, 2.0F, 5.0F, 8.0F, 3.0F, 6.0F, 9.0F}));
 }
 
 TEST(Matrix3x3Tests, ConstructsFromColumnsAndRetrievesRowsAndColumns)
 {
-    const pond::math::Matrix3x3 matrix{pond::math::Vector3{1.0F, 2.0F, 3.0F},
-                                       pond::math::Vector3{4.0F, 5.0F, 6.0F},
+    const pond::math::Matrix3x3 matrix{pond::math::Vector3{1.0F, 2.0F, 3.0F}, pond::math::Vector3{4.0F, 5.0F, 6.0F},
                                        pond::math::Vector3{7.0F, 8.0F, 9.0F}};
 
     auto row1 = matrix.Row(1);
@@ -133,8 +128,7 @@ TEST(Matrix3x3Tests, ComparesExactlyAndWithCallerTolerance)
     const pond::math::Matrix3x3 base{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
     const pond::math::Matrix3x3 close{1.005F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
     const pond::math::Matrix3x3 far{1.02F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
-    const pond::math::Matrix3x3 nonFinite{
-        std::numeric_limits<float>::infinity(), 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
+    const pond::math::Matrix3x3 nonFinite{std::numeric_limits<float>::infinity(), 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F};
     const pond::core::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
 
     EXPECT_EQ(base, base);
@@ -151,14 +145,12 @@ TEST(Matrix4x4Tests, DefaultsToZeroAndCreatesIdentity)
     EXPECT_EQ(defaultMatrix, pond::math::Matrix4x4{});
     EXPECT_EQ(pond::math::Matrix4x4::Zero(), pond::math::Matrix4x4{});
     EXPECT_EQ(pond::math::Matrix4x4::Identity(),
-              (pond::math::Matrix4x4{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F,
-                                     1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}));
+              (pond::math::Matrix4x4{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}));
 }
 
 TEST(Matrix4x4Tests, ConstructsFromScalarsAndStoresColumnMajor)
 {
-    const pond::math::Matrix4x4 matrix{1.0F, 2.0F,  3.0F,  4.0F,  5.0F,  6.0F,  7.0F,  8.0F,
-                                       9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F};
+    const pond::math::Matrix4x4 matrix{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F};
 
     EXPECT_EQ(matrix.row0Column0, 1.0F);
     EXPECT_EQ(matrix.row0Column3, 4.0F);
@@ -166,16 +158,13 @@ TEST(Matrix4x4Tests, ConstructsFromScalarsAndStoresColumnMajor)
     EXPECT_EQ(matrix.row2Column2, 11.0F);
     EXPECT_EQ(matrix.row3Column3, 16.0F);
     EXPECT_EQ(CopyStorage<16>(matrix),
-              (std::array<float, 16>{1.0F, 5.0F, 9.0F, 13.0F, 2.0F, 6.0F, 10.0F, 14.0F, 3.0F, 7.0F,
-                                     11.0F, 15.0F, 4.0F, 8.0F, 12.0F, 16.0F}));
+              (std::array<float, 16>{1.0F, 5.0F, 9.0F, 13.0F, 2.0F, 6.0F, 10.0F, 14.0F, 3.0F, 7.0F, 11.0F, 15.0F, 4.0F, 8.0F, 12.0F, 16.0F}));
 }
 
 TEST(Matrix4x4Tests, ConstructsFromColumnsAndRetrievesRowsAndColumns)
 {
-    const pond::math::Matrix4x4 matrix{pond::math::Vector4{1.0F, 2.0F, 3.0F, 4.0F},
-                                       pond::math::Vector4{5.0F, 6.0F, 7.0F, 8.0F},
-                                       pond::math::Vector4{9.0F, 10.0F, 11.0F, 12.0F},
-                                       pond::math::Vector4{13.0F, 14.0F, 15.0F, 16.0F}};
+    const pond::math::Matrix4x4 matrix{pond::math::Vector4{1.0F, 2.0F, 3.0F, 4.0F}, pond::math::Vector4{5.0F, 6.0F, 7.0F, 8.0F},
+                                       pond::math::Vector4{9.0F, 10.0F, 11.0F, 12.0F}, pond::math::Vector4{13.0F, 14.0F, 15.0F, 16.0F}};
 
     auto row2 = matrix.Row(2);
     auto column3 = matrix.Column(3);
@@ -190,8 +179,7 @@ TEST(Matrix4x4Tests, ConstructsFromColumnsAndRetrievesRowsAndColumns)
 
 TEST(Matrix4x4Tests, ProvidesCheckedMutableAndConstElementAccess)
 {
-    pond::math::Matrix4x4 matrix{1.0F, 2.0F,  3.0F,  4.0F,  5.0F,  6.0F,  7.0F,  8.0F,
-                                 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F};
+    pond::math::Matrix4x4 matrix{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F};
 
     auto element = matrix.At(2, 3);
     ASSERT_TRUE(element.HasValue());
@@ -209,16 +197,11 @@ TEST(Matrix4x4Tests, ProvidesCheckedMutableAndConstElementAccess)
 
 TEST(Matrix4x4Tests, ComparesExactlyAndWithCallerTolerance)
 {
-    const pond::math::Matrix4x4 base{1.0F, 2.0F,  3.0F,  4.0F,  5.0F,  6.0F,  7.0F,  8.0F,
-                                     9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F};
-    const pond::math::Matrix4x4 close{1.0F, 2.0F,  3.0F,  4.0F,    5.0F,  6.0F,  7.0F,  8.0F,
-                                      9.0F, 10.0F, 11.0F, 12.005F, 13.0F, 14.0F, 15.0F, 16.0F};
-    const pond::math::Matrix4x4 far{1.0F, 2.0F,  3.0F,  4.0F,   5.0F,  6.0F,  7.0F,  8.0F,
-                                    9.0F, 10.0F, 11.0F, 12.02F, 13.0F, 14.0F, 15.0F, 16.0F};
-    const pond::math::Matrix4x4 nonFinite{
-        1.0F,  2.0F,  3.0F,  4.0F,  5.0F,  std::numeric_limits<float>::quiet_NaN(),
-        7.0F,  8.0F,  9.0F,  10.0F, 11.0F, 12.0F,
-        13.0F, 14.0F, 15.0F, 16.0F};
+    const pond::math::Matrix4x4 base{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.0F, 13.0F, 14.0F, 15.0F, 16.0F};
+    const pond::math::Matrix4x4 close{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.005F, 13.0F, 14.0F, 15.0F, 16.0F};
+    const pond::math::Matrix4x4 far{1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F, 12.02F, 13.0F, 14.0F, 15.0F, 16.0F};
+    const pond::math::Matrix4x4 nonFinite{1.0F,  2.0F,  3.0F,  4.0F,  5.0F, std::numeric_limits<float>::quiet_NaN(), 7.0F, 8.0F, 9.0F, 10.0F, 11.0F,
+                                          12.0F, 13.0F, 14.0F, 15.0F, 16.0F};
     const pond::core::Tolerance tolerance = RequireTolerance(0.01F, 0.0F);
 
     EXPECT_EQ(base, base);

@@ -2,7 +2,7 @@
 Language: Cpp
 BasedOnStyle: LLVM
 Standard: Latest
-ColumnLimit: 100
+ColumnLimit: 150
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
@@ -35,9 +35,20 @@ SortIncludes: CaseSensitive
 
 ContinuationIndentWidth: 4
 ConstructorInitializerIndentWidth: 4
+AlignAfterOpenBracket: true
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackArguments: true
+BinPackParameters: BinPack
+BreakAfterOpenBracketFunction: false
+BreakBeforeCloseBracketFunction: false
+BreakFunctionDefinitionParameters: false
+BreakConstructorInitializers: AfterColon
+PackConstructorInitializers: Never
 BreakAfterReturnType: None
 BreakTemplateDeclarations: Yes
 PenaltyReturnTypeOnItsOwnLine: 1000000
+ReflowComments: Never
 SpaceAfterCStyleCast: false
 SpaceBeforeCpp11BracedList: false
 SpacesInAngles: Never

@@ -85,10 +85,8 @@ static_assert(!pond::render::IsValid(static_cast<pond::render::PresentationPolic
 static_assert(pond::render::IsValid(pond::render::RequirementStrength::Preferred));
 static_assert(pond::render::IsValid(pond::render::RequirementStrength::Required));
 static_assert(!pond::render::IsValid(static_cast<pond::render::RequirementStrength>(255)));
-static_assert(
-    pond::render::IsValid(pond::render::PresentationPolicyFallbackReason::UnavailableForTarget));
-static_assert(
-    pond::render::IsValid(pond::render::QueuedFrameLatencyFallbackReason::TargetMaximumExceeded));
+static_assert(pond::render::IsValid(pond::render::PresentationPolicyFallbackReason::UnavailableForTarget));
+static_assert(pond::render::IsValid(pond::render::QueuedFrameLatencyFallbackReason::TargetMaximumExceeded));
 static_assert(pond::render::IsValid(pond::render::PresentationOutput::OpaqueSdrSrgb));
 
 static_assert(pond::render::IsValid(pond::render::TargetStatus::Active));
@@ -129,64 +127,48 @@ static_assert(pond::render::IsValid(pond::render::ClearColor{}));
 static_assert(!pond::render::IsValid(pond::render::ClearColor{.red = -0.01F}));
 static_assert(!pond::render::IsValid(pond::render::ClearColor{.alpha = 1.01F}));
 static_assert(pond::render::IsValid(pond::render::TargetRecreationInfo{}));
-static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::None, .currentRevision = 1U}));
-static_assert(pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::SizeChanged,
-    .previousRevision = 1U,
-    .currentRevision = 2U}));
-static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::SizeChanged,
-    .previousRevision = 2U,
-    .currentRevision = 2U}));
-static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::Restored, .currentRevision = 2U}));
-static_assert(pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::SurfaceLost}));
-static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::SurfaceLost,
-    .previousRevision = 1U,
-    .currentRevision = 2U}));
-static_assert(pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::PresentationChanged}));
-static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{
-    .reason = pond::render::TargetRecreationReason::PresentationChanged, .previousRevision = 1U}));
+static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::None,
+                                                                        .currentRevision = 1U}));
+static_assert(pond::render::IsValid(
+    pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::SizeChanged, .previousRevision = 1U, .currentRevision = 2U}));
+static_assert(!pond::render::IsValid(
+    pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::SizeChanged, .previousRevision = 2U, .currentRevision = 2U}));
+static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::Restored,
+                                                                        .currentRevision = 2U}));
+static_assert(pond::render::IsValid(pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::SurfaceLost}));
+static_assert(!pond::render::IsValid(
+    pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::SurfaceLost, .previousRevision = 1U, .currentRevision = 2U}));
+static_assert(pond::render::IsValid(pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::PresentationChanged}));
+static_assert(!pond::render::IsValid(pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::PresentationChanged,
+                                                                        .previousRevision = 1U}));
 static_assert(pond::render::IsValid(pond::render::RenderFrameResult{}));
-static_assert(pond::render::IsValid(pond::render::RenderFrameResult{
-    .status = pond::render::FrameStatus::RecreationPending}));
-static_assert(!pond::render::IsValid(pond::render::RenderFrameResult{
-    .status = pond::render::FrameStatus::Presented, .presented = true}));
-static_assert(!pond::render::IsValid(pond::render::RenderFrameResult{
-    .status = pond::render::FrameStatus::Suboptimal}));
-static_assert(!pond::render::IsValid(pond::render::RenderFrameResult{
-    .status = pond::render::FrameStatus::Recreated}));
-static_assert(pond::render::IsValid(pond::render::RenderFrameMetrics{
-    .windowId = pond::platform::WindowId{42},
-    .logicalSize = pond::platform::LogicalSize{.width = 800, .height = 600},
-    .pixelSize = pond::platform::PixelSize{.width = 1600, .height = 1200},
-    .metricsRevision = pond::render::PresentationEnvironmentRevision{2U},
-    .targetRevision = 3U}));
+static_assert(pond::render::IsValid(pond::render::RenderFrameResult{.status = pond::render::FrameStatus::RecreationPending}));
+static_assert(!pond::render::IsValid(pond::render::RenderFrameResult{.status = pond::render::FrameStatus::Presented, .presented = true}));
+static_assert(!pond::render::IsValid(pond::render::RenderFrameResult{.status = pond::render::FrameStatus::Suboptimal}));
+static_assert(!pond::render::IsValid(pond::render::RenderFrameResult{.status = pond::render::FrameStatus::Recreated}));
+static_assert(pond::render::IsValid(pond::render::RenderFrameMetrics{.windowId = ponder::platform::WindowId{42},
+                                                                     .logicalSize = ponder::platform::LogicalSize{.width = 800, .height = 600},
+                                                                     .pixelSize = ponder::platform::PixelSize{.width = 1600, .height = 1200},
+                                                                     .metricsRevision = pond::render::PresentationEnvironmentRevision{2U},
+                                                                     .targetRevision = 3U}));
 static_assert(!pond::render::IsValid(pond::render::RenderFrameMetrics{}));
-static_assert(!pond::render::IsValid(pond::render::RenderFrameMetrics{
-    .windowId = pond::platform::WindowId{42},
-    .logicalSize = pond::platform::LogicalSize{},
-    .pixelSize = pond::platform::PixelSize{.width = 1600, .height = 1200},
-    .metricsRevision = pond::render::PresentationEnvironmentRevision{2U},
-    .targetRevision = 3U}));
+static_assert(!pond::render::IsValid(pond::render::RenderFrameMetrics{.windowId = ponder::platform::WindowId{42},
+                                                                      .logicalSize = ponder::platform::LogicalSize{},
+                                                                      .pixelSize = ponder::platform::PixelSize{.width = 1600, .height = 1200},
+                                                                      .metricsRevision = pond::render::PresentationEnvironmentRevision{2U},
+                                                                      .targetRevision = 3U}));
 
 [[nodiscard]] constexpr pond::render::RenderTargetSnapshot MakeValidSnapshot(
     std::uint64_t revision = 1,
-    pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision =
-        pond::render::PresentationEnvironmentRevision{1U})
+    pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision = pond::render::PresentationEnvironmentRevision{1U})
 {
-    return pond::render::RenderTargetSnapshot{
-        pond::platform::WindowId{42},
-        pond::platform::PixelSize{.width = 800, .height = 600},
-        pond::platform::LogicalSize{.width = 800U, .height = 600U},
-        true,
-        pond::platform::WindowState::Normal,
-        presentationEnvironmentRevision,
-        revision};
+    return pond::render::RenderTargetSnapshot{ponder::platform::WindowId{42},
+                                              ponder::platform::PixelSize{.width = 800, .height = 600},
+                                              ponder::platform::LogicalSize{.width = 800U, .height = 600U},
+                                              true,
+                                              ponder::platform::WindowState::Normal,
+                                              presentationEnvironmentRevision,
+                                              revision};
 }
 
 static_assert(pond::render::IsValid(pond::render::PresentationEnvironmentRevision{1U}));
@@ -194,31 +176,28 @@ static_assert(!pond::render::IsValid(pond::render::PresentationEnvironmentRevisi
 static_assert(pond::render::IsValid(MakeValidSnapshot()));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{}));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{.width = 800, .height = 600},
-    pond::platform::LogicalSize{.width = 800U, .height = 600U}, true,
-    static_cast<pond::platform::WindowState>(255),
+    ponder::platform::WindowId{42}, ponder::platform::PixelSize{.width = 800, .height = 600},
+    ponder::platform::LogicalSize{.width = 800U, .height = 600U}, true, static_cast<ponder::platform::WindowState>(255),
     pond::render::PresentationEnvironmentRevision{1U}, 1}));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{.width = 800, .height = 600},
-    pond::platform::LogicalSize{.width = 800U, .height = 600U}, true,
-    pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{}, 1}));
+    ponder::platform::WindowId{42}, ponder::platform::PixelSize{.width = 800, .height = 600},
+    ponder::platform::LogicalSize{.width = 800U, .height = 600U}, true, ponder::platform::WindowState::Normal,
+    pond::render::PresentationEnvironmentRevision{}, 1}));
 static_assert(!pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{.width = 800, .height = 600},
-    pond::platform::LogicalSize{}, true, pond::platform::WindowState::Normal,
+    ponder::platform::WindowId{42}, ponder::platform::PixelSize{.width = 800, .height = 600}, ponder::platform::LogicalSize{}, true,
+    ponder::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U}, 1}));
+static_assert(pond::render::IsValid(pond::render::RenderTargetSnapshot{ponder::platform::WindowId{42}, ponder::platform::PixelSize{},
+                                                                       ponder::platform::LogicalSize{}, true, ponder::platform::WindowState::Normal,
+                                                                       pond::render::PresentationEnvironmentRevision{1U}, 1}));
+static_assert(pond::render::IsValid(pond::render::RenderTargetSnapshot{
+    ponder::platform::WindowId{42}, ponder::platform::PixelSize{}, ponder::platform::LogicalSize{}, false, ponder::platform::WindowState::Maximized,
     pond::render::PresentationEnvironmentRevision{1U}, 1}));
-static_assert(pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{}, pond::platform::LogicalSize{}, true,
-    pond::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U}, 1}));
-static_assert(pond::render::IsValid(pond::render::RenderTargetSnapshot{
-    pond::platform::WindowId{42}, pond::platform::PixelSize{}, pond::platform::LogicalSize{}, false,
-    pond::platform::WindowState::Maximized, pond::render::PresentationEnvironmentRevision{1U}, 1}));
 
 TEST(RenderBootstrapValueTests, ValidatesFrameLifecycleResultsWithoutBackendHandles)
 {
     const pond::render::RenderFrameResult presented{.status = pond::render::FrameStatus::Presented,
-                                                    .targetStatus =
-                                                        pond::render::TargetStatus::Active,
-                                                    .windowId = pond::platform::WindowId{42},
+                                                    .targetStatus = pond::render::TargetStatus::Active,
+                                                    .windowId = ponder::platform::WindowId{42},
                                                     .targetRevision = 7U,
                                                     .swapchainGeneration = 3U,
                                                     .presented = true,
@@ -234,9 +213,8 @@ TEST(RenderBootstrapValueTests, ValidatesFrameLifecycleResultsWithoutBackendHand
     recreated.status = pond::render::FrameStatus::Recreated;
     EXPECT_TRUE(pond::render::IsValid(recreated));
 
-    const pond::render::RenderFrameResult recreationPending{
-        .status = pond::render::FrameStatus::RecreationPending,
-        .targetStatus = pond::render::TargetStatus::Active};
+    const pond::render::RenderFrameResult recreationPending{.status = pond::render::FrameStatus::RecreationPending,
+                                                            .targetStatus = pond::render::TargetStatus::Active};
     EXPECT_TRUE(pond::render::IsValid(recreationPending));
 
     pond::render::RenderFrameResult invalidPresented = presented;
@@ -255,15 +233,12 @@ TEST(RenderBootstrapValueTests, ValidatesFrameLifecycleResultsWithoutBackendHand
     invalidNonPresentedRecreated.presented = false;
     EXPECT_FALSE(pond::render::IsValid(invalidNonPresentedRecreated));
 
-    EXPECT_FALSE(pond::render::IsValid(
-        pond::render::RenderFrameResult{.status = pond::render::FrameStatus::Ready}));
-    EXPECT_FALSE(pond::render::IsValid(
-        pond::render::RenderFrameResult{.status = pond::render::FrameStatus::Presented}));
+    EXPECT_FALSE(pond::render::IsValid(pond::render::RenderFrameResult{.status = pond::render::FrameStatus::Ready}));
+    EXPECT_FALSE(pond::render::IsValid(pond::render::RenderFrameResult{.status = pond::render::FrameStatus::Presented}));
 }
 TEST(RenderBootstrapValueTests, ReportsVulkanWindowCompatibilityForThisBuild)
 {
-    EXPECT_EQ(pond::render::GetRequiredWindowGraphicsCompatibility(),
-              pond::platform::WindowGraphicsCompatibility::Vulkan);
+    EXPECT_EQ(pond::render::GetRequiredWindowGraphicsCompatibility(), ponder::platform::WindowGraphicsCompatibility::Vulkan);
 }
 
 TEST(RenderBootstrapValueTests, RecordsExperimentalApiStatus)
@@ -283,20 +258,16 @@ TEST(RenderBootstrapValueTests, ProvidesSafeDescriptorDefaults)
     const pond::render::RenderTargetDesc targetDesc;
     EXPECT_FALSE(pond::render::IsValid(targetDesc));
     EXPECT_EQ(targetDesc.clearColor, pond::render::ClearColor{});
-    EXPECT_EQ(targetDesc.queuedLatency.maximumQueuedFrames.frameCount,
-              pond::render::QueuedFrameLatency::kDefaultFrames);
+    EXPECT_EQ(targetDesc.queuedLatency.maximumQueuedFrames.frameCount, pond::render::QueuedFrameLatency::kDefaultFrames);
 }
 
 TEST(RenderBootstrapValueTests, ValidatesTargetDescriptorTransactionInputs)
 {
     const pond::render::RenderTargetDesc validDesc{
         .targetSnapshot = MakeValidSnapshot(),
-        .presentation = {.policy = pond::render::PresentationPolicy::VSync,
-                         .strength = pond::render::RequirementStrength::Required},
-        .queuedLatency = {.maximumQueuedFrames = pond::render::QueuedFrameLatency{3},
-                          .strength = pond::render::RequirementStrength::Preferred},
-        .clearColor =
-            pond::render::ClearColor{.red = 0.1F, .green = 0.2F, .blue = 0.3F, .alpha = 1.0F}};
+        .presentation = {.policy = pond::render::PresentationPolicy::VSync, .strength = pond::render::RequirementStrength::Required},
+        .queuedLatency = {.maximumQueuedFrames = pond::render::QueuedFrameLatency{3}, .strength = pond::render::RequirementStrength::Preferred},
+        .clearColor = pond::render::ClearColor{.red = 0.1F, .green = 0.2F, .blue = 0.3F, .alpha = 1.0F}};
 
     EXPECT_TRUE(pond::render::IsValid(validDesc));
 
@@ -315,13 +286,12 @@ TEST(RenderBootstrapValueTests, ValidatesTargetDescriptorTransactionInputs)
 
 TEST(RenderBootstrapValueTests, ValidatesSemanticPresentationCapabilities)
 {
-    const pond::render::RenderPresentationCapabilities capabilities{
-        .supportedPolicies = {pond::render::PresentationPolicy::VSync,
-                              pond::render::PresentationPolicy::LowLatencyVSync,
-                              pond::render::PresentationPolicy::Uncapped},
-        .queuedLatency = {},
-        .supportsWindowPresentation = true,
-        .supportsOpaqueSdrSrgbOutput = true};
+    const pond::render::RenderPresentationCapabilities capabilities{.supportedPolicies = {pond::render::PresentationPolicy::VSync,
+                                                                                          pond::render::PresentationPolicy::LowLatencyVSync,
+                                                                                          pond::render::PresentationPolicy::Uncapped},
+                                                                    .queuedLatency = {},
+                                                                    .supportsWindowPresentation = true,
+                                                                    .supportsOpaqueSdrSrgbOutput = true};
     EXPECT_TRUE(pond::render::IsValid(capabilities));
 
     pond::render::RenderPresentationCapabilities duplicatePolicy = capabilities;
@@ -334,47 +304,36 @@ TEST(RenderBootstrapValueTests, ValidatesSemanticPresentationCapabilities)
 }
 TEST(RenderBootstrapValueTests, SnapshotStoresCopiedWindowStateWithoutNativePayload)
 {
-    const pond::platform::WindowId windowId{9};
-    const pond::render::RenderTargetSnapshot minimizedSnapshot{
-        windowId,
-        pond::platform::PixelSize{},
-        pond::platform::LogicalSize{},
-        false,
-        pond::platform::WindowState::Minimized,
-        pond::render::PresentationEnvironmentRevision{2U},
-        5};
-    const pond::render::RenderTargetSnapshot restoredSnapshot{
-        windowId,
-        pond::platform::PixelSize{.width = 640, .height = 480},
-        pond::platform::LogicalSize{.width = 640U, .height = 480U},
-        true,
-        pond::platform::WindowState::Normal,
-        pond::render::PresentationEnvironmentRevision{2U},
-        6};
-    const pond::render::RenderTargetSnapshot maximizedSnapshot{
-        windowId,
-        pond::platform::PixelSize{.width = 640, .height = 480},
-        pond::platform::LogicalSize{.width = 640U, .height = 480U},
-        true,
-        pond::platform::WindowState::Maximized,
-        pond::render::PresentationEnvironmentRevision{2U},
-        7};
+    const ponder::platform::WindowId windowId{9};
+    const pond::render::RenderTargetSnapshot minimizedSnapshot{windowId,
+                                                               ponder::platform::PixelSize{},
+                                                               ponder::platform::LogicalSize{},
+                                                               false,
+                                                               ponder::platform::WindowState::Minimized,
+                                                               pond::render::PresentationEnvironmentRevision{2U},
+                                                               5};
+    const pond::render::RenderTargetSnapshot restoredSnapshot{windowId,
+                                                              ponder::platform::PixelSize{.width = 640, .height = 480},
+                                                              ponder::platform::LogicalSize{.width = 640U, .height = 480U},
+                                                              true,
+                                                              ponder::platform::WindowState::Normal,
+                                                              pond::render::PresentationEnvironmentRevision{2U},
+                                                              6};
+    const pond::render::RenderTargetSnapshot maximizedSnapshot{windowId,
+                                                               ponder::platform::PixelSize{.width = 640, .height = 480},
+                                                               ponder::platform::LogicalSize{.width = 640U, .height = 480U},
+                                                               true,
+                                                               ponder::platform::WindowState::Maximized,
+                                                               pond::render::PresentationEnvironmentRevision{2U},
+                                                               7};
 
     const pond::render::RenderTargetSnapshot hiddenZeroSizedSnapshot{
-        windowId,
-        pond::platform::PixelSize{},
-        pond::platform::LogicalSize{},
-        false,
-        pond::platform::WindowState::Normal,
-        pond::render::PresentationEnvironmentRevision{2U},
+        windowId, ponder::platform::PixelSize{},         ponder::platform::LogicalSize{},
+        false,    ponder::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{2U},
         8};
     const pond::render::RenderTargetSnapshot visibleZeroSizedSnapshot{
-        windowId,
-        pond::platform::PixelSize{},
-        pond::platform::LogicalSize{},
-        true,
-        pond::platform::WindowState::Normal,
-        pond::render::PresentationEnvironmentRevision{2U},
+        windowId, ponder::platform::PixelSize{},         ponder::platform::LogicalSize{},
+        true,     ponder::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{2U},
         9};
 
     EXPECT_TRUE(pond::render::IsValid(minimizedSnapshot));
@@ -382,40 +341,37 @@ TEST(RenderBootstrapValueTests, SnapshotStoresCopiedWindowStateWithoutNativePayl
     EXPECT_TRUE(pond::render::IsValid(maximizedSnapshot));
     EXPECT_TRUE(pond::render::IsValid(hiddenZeroSizedSnapshot));
     EXPECT_TRUE(pond::render::IsValid(visibleZeroSizedSnapshot));
-    const pond::platform::PixelSize expectedPixelSize{.width = 640, .height = 480};
-    const pond::platform::LogicalSize expectedLogicalSize{.width = 640, .height = 480};
+    const ponder::platform::PixelSize expectedPixelSize{.width = 640, .height = 480};
+    const ponder::platform::LogicalSize expectedLogicalSize{.width = 640, .height = 480};
     EXPECT_EQ(restoredSnapshot.GetWindowId(), windowId);
     EXPECT_EQ(restoredSnapshot.GetPixelSize(), expectedPixelSize);
     EXPECT_EQ(restoredSnapshot.GetLogicalSize(), expectedLogicalSize);
     EXPECT_TRUE(restoredSnapshot.IsVisible());
-    EXPECT_EQ(minimizedSnapshot.GetWindowState(), pond::platform::WindowState::Minimized);
-    EXPECT_EQ(restoredSnapshot.GetWindowState(), pond::platform::WindowState::Normal);
-    EXPECT_EQ(maximizedSnapshot.GetWindowState(), pond::platform::WindowState::Maximized);
-    EXPECT_EQ(restoredSnapshot.GetPresentationEnvironmentRevision(),
-              pond::render::PresentationEnvironmentRevision{2U});
+    EXPECT_EQ(minimizedSnapshot.GetWindowState(), ponder::platform::WindowState::Minimized);
+    EXPECT_EQ(restoredSnapshot.GetWindowState(), ponder::platform::WindowState::Normal);
+    EXPECT_EQ(maximizedSnapshot.GetWindowState(), ponder::platform::WindowState::Maximized);
+    EXPECT_EQ(restoredSnapshot.GetPresentationEnvironmentRevision(), pond::render::PresentationEnvironmentRevision{2U});
 }
 
 TEST(RenderBootstrapValueTests, RepresentsPresentationPreferencesAsSelectionState)
 {
     const pond::render::SelectedPresentationConfig selection{
-        .requestedPolicy = {.policy = pond::render::PresentationPolicy::LowLatencyVSync,
-                            .strength = pond::render::RequirementStrength::Preferred},
+        .requestedPolicy = {.policy = pond::render::PresentationPolicy::LowLatencyVSync, .strength = pond::render::RequirementStrength::Preferred},
         .actualPolicy = pond::render::PresentationPolicy::VSync,
         .policyFallback = pond::render::PresentationPolicyFallbackReason::UnavailableForTarget,
         .requestedQueuedLatency = {.maximumQueuedFrames = pond::render::QueuedFrameLatency{3},
                                    .strength = pond::render::RequirementStrength::Preferred},
         .actualQueuedLatency = pond::render::QueuedFrameLatency{2},
-        .queuedLatencyFallback =
-            pond::render::QueuedFrameLatencyFallbackReason::TargetMaximumExceeded,
+        .queuedLatencyFallback = pond::render::QueuedFrameLatencyFallbackReason::TargetMaximumExceeded,
         .output = pond::render::PresentationOutput::OpaqueSdrSrgb,
-        .pixelExtent = pond::platform::PixelSize{.width = 800, .height = 600}};
+        .pixelExtent = ponder::platform::PixelSize{.width = 800, .height = 600}};
 
     EXPECT_TRUE(pond::render::IsValid(selection));
     EXPECT_EQ(selection.actualPolicy, pond::render::PresentationPolicy::VSync);
     EXPECT_EQ(selection.actualQueuedLatency, pond::render::QueuedFrameLatency{2});
 
     pond::render::SelectedPresentationConfig invalidExtent = selection;
-    invalidExtent.pixelExtent = pond::platform::PixelSize{};
+    invalidExtent.pixelExtent = ponder::platform::PixelSize{};
     EXPECT_FALSE(pond::render::IsValid(invalidExtent));
 
     pond::render::SelectedPresentationConfig invalidRequiredFallback = selection;
@@ -425,27 +381,19 @@ TEST(RenderBootstrapValueTests, RepresentsPresentationPreferencesAsSelectionStat
 
 TEST(RenderBootstrapValueTests, SeparatesWindowAndBackendRecreationMetadata)
 {
-    EXPECT_TRUE(pond::render::IsValid(pond::render::TargetRecreationInfo{
-        .reason = pond::render::TargetRecreationReason::SizeChanged,
-        .previousRevision = 4U,
-        .currentRevision = 5U}));
+    EXPECT_TRUE(pond::render::IsValid(pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::SizeChanged,
+                                                                         .previousRevision = 4U,
+                                                                         .currentRevision = 5U}));
     EXPECT_TRUE(pond::render::IsValid(
-        pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::Restored,
-                                           .previousRevision = 5U,
-                                           .currentRevision = 6U}));
+        pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::Restored, .previousRevision = 5U, .currentRevision = 6U}));
     EXPECT_FALSE(pond::render::IsValid(
-        pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::Restored,
-                                           .previousRevision = 6U,
-                                           .currentRevision = 5U}));
+        pond::render::TargetRecreationInfo{.reason = pond::render::TargetRecreationReason::Restored, .previousRevision = 6U, .currentRevision = 5U}));
 
-    const pond::render::TargetRecreationInfo surfaceLost{
-        .reason = pond::render::TargetRecreationReason::SurfaceLost};
-    const pond::render::TargetRecreationInfo presentationChanged{
-        .reason = pond::render::TargetRecreationReason::PresentationChanged};
-    const pond::render::TargetRecreationInfo presentationEnvironmentChanged{
-        .reason = pond::render::TargetRecreationReason::PresentationChanged,
-        .previousRevision = 6U,
-        .currentRevision = 7U};
+    const pond::render::TargetRecreationInfo surfaceLost{.reason = pond::render::TargetRecreationReason::SurfaceLost};
+    const pond::render::TargetRecreationInfo presentationChanged{.reason = pond::render::TargetRecreationReason::PresentationChanged};
+    const pond::render::TargetRecreationInfo presentationEnvironmentChanged{.reason = pond::render::TargetRecreationReason::PresentationChanged,
+                                                                            .previousRevision = 6U,
+                                                                            .currentRevision = 7U};
     EXPECT_TRUE(pond::render::IsValid(surfaceLost));
     EXPECT_TRUE(pond::render::IsValid(presentationChanged));
     EXPECT_TRUE(pond::render::IsValid(presentationEnvironmentChanged));
@@ -459,15 +407,14 @@ TEST(RenderBootstrapValueTests, SeparatesWindowAndBackendRecreationMetadata)
 
 TEST(RenderBootstrapValueTests, OwnsBackendDiagnosticStringsWithoutBackendDeclarations)
 {
-    const pond::render::BackendDiagnostic diagnostic{
-        .backend = pond::render::RenderBackendKind::Vulkan,
-        .renderCode = pond::render::RenderErrorCode::DeviceLost,
-        .nativeCode = -4,
-        .symbolicName = "VK_ERROR_DEVICE_LOST",
-        .operation = "present",
-        .validationContext = "frame end",
-        .windowId = pond::platform::WindowId{42U},
-        .targetLabel = "target/window:42"};
+    const pond::render::BackendDiagnostic diagnostic{.backend = pond::render::RenderBackendKind::Vulkan,
+                                                     .renderCode = pond::render::RenderErrorCode::DeviceLost,
+                                                     .nativeCode = -4,
+                                                     .symbolicName = "VK_ERROR_DEVICE_LOST",
+                                                     .operation = "present",
+                                                     .validationContext = "frame end",
+                                                     .windowId = ponder::platform::WindowId{42U},
+                                                     .targetLabel = "target/window:42"};
 
     const pond::render::OptionalBackendDiagnostic optionalDiagnostic{diagnostic};
 
@@ -477,27 +424,25 @@ TEST(RenderBootstrapValueTests, OwnsBackendDiagnosticStringsWithoutBackendDeclar
     EXPECT_EQ(optionalDiagnostic->nativeCode, -4);
     EXPECT_EQ(optionalDiagnostic->symbolicName, "VK_ERROR_DEVICE_LOST");
     EXPECT_EQ(optionalDiagnostic->operation, "present");
-    EXPECT_EQ(optionalDiagnostic->windowId, pond::platform::WindowId{42U});
+    EXPECT_EQ(optionalDiagnostic->windowId, ponder::platform::WindowId{42U});
     EXPECT_EQ(optionalDiagnostic->targetLabel, "target/window:42");
 }
 
 TEST(RenderBootstrapValueTests, OwnsDiagnosticSnapshotsWithoutBackendHandles)
 {
-    const pond::render::BackendDiagnostic backendFailure{
-        .backend = pond::render::RenderBackendKind::Vulkan,
-        .renderCode = pond::render::RenderErrorCode::BackendFailure,
-        .nativeCode = -3,
-        .symbolicName = "VK_ERROR_INITIALIZATION_FAILED",
-        .operation = "vkCreateInstance",
-        .validationContext = "instance creation failed"};
+    const pond::render::BackendDiagnostic backendFailure{.backend = pond::render::RenderBackendKind::Vulkan,
+                                                         .renderCode = pond::render::RenderErrorCode::BackendFailure,
+                                                         .nativeCode = -3,
+                                                         .symbolicName = "VK_ERROR_INITIALIZATION_FAILED",
+                                                         .operation = "vkCreateInstance",
+                                                         .validationContext = "instance creation failed"};
     const pond::render::RenderBootstrapDiagnostics bootstrapDiagnostics{
         .backend = pond::render::RenderBackendKind::Vulkan,
         .requestedValidationMode = pond::render::RenderValidationMode::Synchronization,
         .enabledValidationMode = pond::render::RenderValidationMode::Standard,
         .negotiatedApiVersion = 4'202'496U,
         .validationEnabled = true,
-        .debugInstrumentation =
-            pond::render::RenderDebugInstrumentation{.objectNames = true, .commandLabels = true},
+        .debugInstrumentation = pond::render::RenderDebugInstrumentation{.objectNames = true, .commandLabels = true},
         .lastFailure = backendFailure};
     const pond::render::RenderDeviceDiagnostics deviceDiagnostics{.targetCreateAttempts = 3U,
                                                                   .targetCreateSuccesses = 2U,
@@ -507,10 +452,8 @@ TEST(RenderBootstrapValueTests, OwnsDiagnosticSnapshotsWithoutBackendHandles)
                                                                   .deviceLost = true,
                                                                   .lastFailure = backendFailure};
 
-    EXPECT_EQ(bootstrapDiagnostics.requestedValidationMode,
-              pond::render::RenderValidationMode::Synchronization);
-    EXPECT_EQ(bootstrapDiagnostics.enabledValidationMode,
-              pond::render::RenderValidationMode::Standard);
+    EXPECT_EQ(bootstrapDiagnostics.requestedValidationMode, pond::render::RenderValidationMode::Synchronization);
+    EXPECT_EQ(bootstrapDiagnostics.enabledValidationMode, pond::render::RenderValidationMode::Standard);
     EXPECT_TRUE(bootstrapDiagnostics.validationEnabled);
     EXPECT_TRUE(bootstrapDiagnostics.debugInstrumentation.objectNames);
     EXPECT_TRUE(bootstrapDiagnostics.debugInstrumentation.commandLabels);
@@ -528,7 +471,7 @@ TEST(RenderBootstrapValueTests, OwnsDiagnosticSnapshotsWithoutBackendHandles)
     EXPECT_EQ(deviceDiagnostics.lastFailure->symbolicName, "VK_ERROR_INITIALIZATION_FAILED");
 
     const pond::render::RenderTargetDiagnostics targetDiagnostics{
-        .windowId = pond::platform::WindowId{7U},
+        .windowId = ponder::platform::WindowId{7U},
         .targetLabel = "target/window:7",
         .status = pond::render::TargetStatus::Active,
         .swapchainGeneration = 9U,
@@ -539,19 +482,17 @@ TEST(RenderBootstrapValueTests, OwnsDiagnosticSnapshotsWithoutBackendHandles)
         .framesPresented = 5U,
         .frameTimeouts = 1U,
         .frameFailures = 4U,
-        .lastFailure = pond::render::BackendDiagnostic{
-            .backend = pond::render::RenderBackendKind::Vulkan,
-            .renderCode = pond::render::RenderErrorCode::SurfaceLost,
-            .windowId = pond::platform::WindowId{7U},
-            .targetLabel = "target/window:7"}};
+        .lastFailure = pond::render::BackendDiagnostic{.backend = pond::render::RenderBackendKind::Vulkan,
+                                                       .renderCode = pond::render::RenderErrorCode::SurfaceLost,
+                                                       .windowId = ponder::platform::WindowId{7U},
+                                                       .targetLabel = "target/window:7"}};
 
-    EXPECT_EQ(targetDiagnostics.windowId, pond::platform::WindowId{7U});
+    EXPECT_EQ(targetDiagnostics.windowId, ponder::platform::WindowId{7U});
     EXPECT_EQ(targetDiagnostics.targetLabel, "target/window:7");
     EXPECT_EQ(targetDiagnostics.frameAcquireAttempts, 8U);
     EXPECT_EQ(targetDiagnostics.framesPresented, 5U);
     ASSERT_TRUE(targetDiagnostics.lastFailure.has_value());
-    EXPECT_EQ(targetDiagnostics.lastFailure->renderCode,
-              pond::render::RenderErrorCode::SurfaceLost);
+    EXPECT_EQ(targetDiagnostics.lastFailure->renderCode, pond::render::RenderErrorCode::SurfaceLost);
 }
 TEST(RenderBootstrapValueTests, ValidatesAdapterSelectionValuesWithoutBackendHandles)
 {
@@ -563,36 +504,28 @@ TEST(RenderBootstrapValueTests, ValidatesAdapterSelectionValuesWithoutBackendHan
         .adapterId = adapterId,
         .backend = pond::render::RenderBackendKind::Vulkan,
         .apiVersion = 1U,
-        .identity =
-            pond::render::RenderAdapterIdentity{.vendorId = 10U,
-                                                .deviceId = 20U,
-                                                .adapterType =
-                                                    pond::render::RenderAdapterType::DiscreteGpu,
-                                                .name = "public adapter snapshot"},
-        .driver = pond::render::RenderAdapterDriverIdentity{.driverVersion = 30U,
-                                                            .driverName = "driver",
-                                                            .driverInfo = "driver info"},
+        .identity = pond::render::RenderAdapterIdentity{.vendorId = 10U,
+                                                        .deviceId = 20U,
+                                                        .adapterType = pond::render::RenderAdapterType::DiscreteGpu,
+                                                        .name = "public adapter snapshot"},
+        .driver = pond::render::RenderAdapterDriverIdentity{.driverVersion = 30U, .driverName = "driver", .driverInfo = "driver info"},
         .limits = pond::render::RenderAdapterLimits{.maxImageDimension2D = 16384U,
                                                     .maxFramebufferWidth = 16384U,
                                                     .maxFramebufferHeight = 16384U,
                                                     .maxColorAttachments = 8U},
-        .memoryHeaps = {pond::render::RenderAdapterMemoryHeap{.sizeBytes = 1024U,
-                                                              .deviceLocal = true}},
-        .presentation = pond::render::RenderPresentationCapabilities{
-            .supportedPolicies = {pond::render::PresentationPolicy::VSync},
-            .queuedLatency = {},
-            .supportsWindowPresentation = true,
-            .supportsOpaqueSdrSrgbOutput = true}};
+        .memoryHeaps = {pond::render::RenderAdapterMemoryHeap{.sizeBytes = 1024U, .deviceLocal = true}},
+        .presentation = pond::render::RenderPresentationCapabilities{.supportedPolicies = {pond::render::PresentationPolicy::VSync},
+                                                                     .queuedLatency = {},
+                                                                     .supportsWindowPresentation = true,
+                                                                     .supportsOpaqueSdrSrgbOutput = true}};
 
     EXPECT_TRUE(pond::render::IsValid(adapterId));
-    EXPECT_TRUE(pond::render::IsValid(pond::render::RenderAdapterSelectionDesc{
-        .adapterPreference = pond::render::RenderAdapterPreference::Software}));
+    EXPECT_TRUE(
+        pond::render::IsValid(pond::render::RenderAdapterSelectionDesc{.adapterPreference = pond::render::RenderAdapterPreference::Software}));
     EXPECT_TRUE(pond::render::IsValid(snapshot));
-    EXPECT_TRUE(pond::render::IsValid(
-        pond::render::RenderAdapterSelection{.request = pond::render::RenderAdapterSelectionDesc{},
-                                             .selectedAdapter = snapshot,
-                                             .compatibleAdapters = {snapshot}}));
-    EXPECT_FALSE(pond::render::IsValid(pond::render::RenderAdapterSelectionDesc{
-        .explicitAdapterId = pond::render::RenderAdapterId{}}));
+    EXPECT_TRUE(pond::render::IsValid(pond::render::RenderAdapterSelection{.request = pond::render::RenderAdapterSelectionDesc{},
+                                                                           .selectedAdapter = snapshot,
+                                                                           .compatibleAdapters = {snapshot}}));
+    EXPECT_FALSE(pond::render::IsValid(pond::render::RenderAdapterSelectionDesc{.explicitAdapterId = pond::render::RenderAdapterId{}}));
 }
 } // namespace

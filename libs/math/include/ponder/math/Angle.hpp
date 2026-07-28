@@ -9,15 +9,17 @@ class Radians final
 public:
     constexpr Radians() noexcept = default;
 
-    explicit constexpr Radians(float value) noexcept : m_value(value) {}
+    explicit constexpr Radians(float value) noexcept :
+        m_value(value)
+    {
+    }
 
     [[nodiscard]] constexpr float GetValue() const noexcept
     {
         return m_value;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Radians& lhs,
-                                                   const Radians& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Radians& lhs, const Radians& rhs) noexcept = default;
 
 private:
     float m_value{0.0F};
@@ -28,15 +30,17 @@ class Degrees final
 public:
     constexpr Degrees() noexcept = default;
 
-    explicit constexpr Degrees(float value) noexcept : m_value(value) {}
+    explicit constexpr Degrees(float value) noexcept :
+        m_value(value)
+    {
+    }
 
     [[nodiscard]] constexpr float GetValue() const noexcept
     {
         return m_value;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Degrees& lhs,
-                                                   const Degrees& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Degrees& lhs, const Degrees& rhs) noexcept = default;
 
 private:
     float m_value{0.0F};

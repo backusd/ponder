@@ -16,15 +16,14 @@ namespace
 
 [[nodiscard]] bool IsKnownBuildType(std::string_view buildType) noexcept
 {
-    constexpr std::array<std::string_view, 6> kKnownBuildTypes{
-        "", "Debug", "Release", "RelWithDebInfo", "MinSizeRel", "multi-config"};
+    constexpr std::array<std::string_view, 6> kKnownBuildTypes{"", "Debug", "Release", "RelWithDebInfo", "MinSizeRel", "multi-config"};
 
     return std::ranges::find(kKnownBuildTypes, buildType) != kKnownBuildTypes.end();
 }
 
 TEST(BuildInfoTests, ExposesStableProjectMetadata)
 {
-    const pond::core::BuildInfo kBuildInfo = pond::core::GetBuildInfo();
+    const ponder::core::BuildInfo kBuildInfo = ponder::core::GetBuildInfo();
 
     EXPECT_EQ(kBuildInfo.GetProjectName(), std::string_view{"ponder"});
     EXPECT_EQ(kBuildInfo.GetProjectVersion(), std::string_view{"0.1.0"});
@@ -32,7 +31,7 @@ TEST(BuildInfoTests, ExposesStableProjectMetadata)
 
 TEST(BuildInfoTests, ExposesOptionalGitCommitWhenAvailable)
 {
-    const pond::core::BuildInfo kBuildInfo = pond::core::GetBuildInfo();
+    const ponder::core::BuildInfo kBuildInfo = ponder::core::GetBuildInfo();
 
     EXPECT_EQ(kBuildInfo.HasGitCommit(), !kBuildInfo.GetGitCommit().empty());
 
@@ -45,7 +44,7 @@ TEST(BuildInfoTests, ExposesOptionalGitCommitWhenAvailable)
 
 TEST(BuildInfoTests, ExposesBuildAndCompilerMetadata)
 {
-    const pond::core::BuildInfo kBuildInfo = pond::core::GetBuildInfo();
+    const ponder::core::BuildInfo kBuildInfo = ponder::core::GetBuildInfo();
 
     EXPECT_TRUE(IsKnownBuildType(kBuildInfo.GetBuildType()));
     EXPECT_FALSE(kBuildInfo.GetCompilerName().empty());
@@ -53,12 +52,11 @@ TEST(BuildInfoTests, ExposesBuildAndCompilerMetadata)
 
 TEST(BuildInfoTests, ExposesPlatformAndGeneratorMetadata)
 {
-    const pond::core::BuildInfo kBuildInfo = pond::core::GetBuildInfo();
+    const ponder::core::BuildInfo kBuildInfo = ponder::core::GetBuildInfo();
 
     EXPECT_FALSE(kBuildInfo.GetTargetSystemName().empty());
     EXPECT_TRUE(kBuildInfo.GetPointerWidthBits() == 0U || kBuildInfo.GetPointerWidthBits() >= 32U);
-    EXPECT_TRUE(kBuildInfo.GetPointerWidthBits() == 0U ||
-                kBuildInfo.GetPointerWidthBits() % std::uint32_t{8} == 0U);
+    EXPECT_TRUE(kBuildInfo.GetPointerWidthBits() == 0U || kBuildInfo.GetPointerWidthBits() % std::uint32_t{8} == 0U);
     EXPECT_FALSE(kBuildInfo.GetCMakeGenerator().empty());
     EXPECT_FALSE(kBuildInfo.GetCMakeVersion().empty());
 }

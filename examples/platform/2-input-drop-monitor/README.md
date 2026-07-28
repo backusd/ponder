@@ -44,10 +44,23 @@ Pass `--auto-close-ms <milliseconds>` to exit automatically after a short run.
 
 ## Lifetime And Error Handling
 
-All platform calls stay on the runtime owner thread. Every `Result` is checked
-and printed with stable error category/code information. `Unsupported` for
-global capture, global mouse position, relative mode, or cursor behavior is a
-capability result, not a bug in the example.
+All platform calls stay on the runtime owner thread. Runtime and window
+creation return their values directly. Hint changes, text-input commands,
+window mouse-grab and relative-mode changes, and system-cursor selection and
+visibility use direct `void` contracts. Failures from those operations reach
+one application boundary, which catches `ponder::core::Exception` and prints
+its message. A platform exception embeds its formatted platform error code in
+that message rather than carrying a typed error-code payload.
+
+Global mouse capture and global mouse position deliberately retain `Result`
+contracts because support depends on the active driver and desktop. Their
+command handlers inspect those results immediately: an unsupported capture
+request disables only capture, and an unsupported global position disables only
+that query without stopping input, text, cursor, or drop monitoring. Other
+recoverable host failures are reported while leaving the command available for
+retry. The monitor performs one global-position query at startup so this
+fallback is visible in short headless runs. Other platform failures are not
+converted into local fallback paths.
 
 Text input is active on at most one example window at a time. On shutdown, the
 example stops text input, clears the IME area, releases mouse grab, disables
@@ -75,18 +88,20 @@ interpreted independently.
 Configure and build a supported preset with examples enabled:
 
 ```powershell
-cmake --preset windows-msvc-debug -DPONDER_BUILD_EXAMPLES=ON
+cmake --preset windows-msvc-debug -DPONDER_BUILD_EXAMPLES=ON `
+  -DPONDER_BUILD_RENDER=OFF `
+  -DPONDER_BUILD_UI_RENDER_INTEGRATION=OFF
 cmake --build --preset windows-msvc-debug --target ponder_platform_2_input_drop_monitor
 ```
 
 Run the example:
 
 ```powershell
-.\build\windows-msvc-debug\bin\ponder-platform-2-input-drop-monitor.exe
+.\build\windows-msvc-debug\bin\Debug\ponder-platform-2-input-drop-monitor.exe
 ```
 
 For a short smoke run:
 
 ```powershell
-.\build\windows-msvc-debug\bin\ponder-platform-2-input-drop-monitor.exe --auto-close-ms 1000
+.\build\windows-msvc-debug\bin\Debug\ponder-platform-2-input-drop-monitor.exe --auto-close-ms 1000
 ```

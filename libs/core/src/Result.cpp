@@ -2,22 +2,23 @@
 
 #include <utility>
 
-namespace pond::core
+namespace ponder::core
 {
-Error::Error(std::string message, std::source_location location)
-    : Error(ErrorCode{}, std::move(message), location)
-{
-}
-
-Error::Error(ErrorCode code, std::string message, std::source_location location)
-    : Error(code, std::move(message), CaptureStackTrace(), location)
+Error::Error(std::string message, std::source_location location) :
+    Error(ErrorCode{}, std::move(message), location)
 {
 }
 
-Error::Error(ErrorCode code, std::string message, StackTrace stackTrace,
-             std::source_location location)
-    : m_code(code), m_message(std::move(message)), m_location(location),
-      m_stackTrace(std::move(stackTrace))
+Error::Error(ErrorCode code, std::string message, std::source_location location) :
+    Error(code, std::move(message), CaptureStackTrace(), location)
+{
+}
+
+Error::Error(ErrorCode code, std::string message, StackTrace stackTrace, std::source_location location) :
+    m_code(code),
+    m_message(std::move(message)),
+    m_location(location),
+    m_stackTrace(std::move(stackTrace))
 {
 }
 
@@ -41,5 +42,4 @@ const StackTrace& Error::GetStackTrace() const noexcept
     return m_stackTrace;
 }
 
-
-} // namespace pond::core
+} // namespace ponder::core

@@ -1,4 +1,5 @@
 #include <ponder/core/Result.hpp>
+#include <ponder/core/Timing.hpp>
 #include <ponder/platform/PlatformRuntime.hpp>
 #include <ponder/render/Bootstrap.hpp>
 #include <ponder/render/RenderError.hpp>
@@ -23,8 +24,8 @@
 
 namespace
 {
-namespace core = pond::core;
-namespace platform = pond::platform;
+namespace core = ponder::core;
+namespace platform = ponder::platform;
 namespace render = pond::render;
 namespace ui = pond::ui;
 namespace experimental = pond::ui::experimental;
@@ -46,7 +47,7 @@ inline constexpr render::ClearColor kClearColor{
 
 struct Options final
 {
-    std::optional<platform::Duration> autoCloseAfter;
+    std::optional<core::Duration> autoCloseAfter;
     render::RenderValidationMode validationMode{render::RenderValidationMode::Default};
     bool exerciseWindowState{};
     bool showHelp{};
@@ -106,8 +107,7 @@ struct FrameStep final
 
 [[nodiscard]] core::Error MakeOptionError(std::string message)
 {
-    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0},
-                       std::move(message)};
+    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0}, std::move(message)};
 }
 
 [[nodiscard]] core::Error MakeWorkbenchError(std::string message)
@@ -120,13 +120,11 @@ void PrintUsage(std::string_view executableName)
     std::println("Usage: {} [--auto-close-ms <milliseconds> | --smoke]", executableName);
     std::println("\nOptions:");
     std::println("  --auto-close-ms <milliseconds>  Exit after a bounded interactive run.");
-    std::println(
-        "  --smoke                         Run a validation-disabled {} ms lifecycle smoke.",
-        kSmokeDuration.count());
+    std::println("  --smoke                         Run a validation-disabled {} ms lifecycle smoke.", kSmokeDuration.count());
     std::println("  --help                          Print this help text.\n");
 }
 
-[[nodiscard]] core::Result<platform::Duration> ParseMilliseconds(std::string_view text)
+[[nodiscard]] core::Result<core::Duration> ParseMilliseconds(std::string_view text)
 {
     std::uint64_t value{};
     const char* const begin = text.data();
@@ -134,19 +132,17 @@ void PrintUsage(std::string_view executableName)
     const auto [next, error] = std::from_chars(begin, end, value);
     if (error != std::errc{} || next != end)
     {
-        return std::unexpected<core::Error>{
-            MakeOptionError("Expected a non-negative integer millisecond value.")};
+        return std::unexpected<core::Error>{MakeOptionError("Expected a non-negative integer millisecond value.")};
     }
 
     using Milliseconds = std::chrono::milliseconds;
-    constexpr auto kMaximumMilliseconds =
-        static_cast<std::uint64_t>(std::numeric_limits<Milliseconds::rep>::max());
+    constexpr auto kMaximumMilliseconds = static_cast<std::uint64_t>(std::numeric_limits<Milliseconds::rep>::max());
     if (value > kMaximumMilliseconds)
     {
         return std::unexpected<core::Error>{MakeOptionError("Auto-close duration is too large.")};
     }
 
-    return platform::Duration{Milliseconds{static_cast<Milliseconds::rep>(value)}};
+    return core::Duration{Milliseconds{static_cast<Milliseconds::rep>(value)}};
 }
 
 [[nodiscard]] core::Result<Options> ParseOptions(int argc, char** argv)
@@ -163,10 +159,9 @@ void PrintUsage(std::string_view executableName)
         {
             if (options.autoCloseAfter.has_value())
             {
-                return std::unexpected<core::Error>{
-                    MakeOptionError("Specify only one bounded-run option.")};
+                return std::unexpected<core::Error>{MakeOptionError("Specify only one bounded-run option.")};
             }
-            options.autoCloseAfter = platform::Duration{kSmokeDuration};
+            options.autoCloseAfter = core::Duration{kSmokeDuration};
             options.validationMode = render::RenderValidationMode::Disabled;
             options.exerciseWindowState = true;
         }
@@ -174,13 +169,11 @@ void PrintUsage(std::string_view executableName)
         {
             if (options.autoCloseAfter.has_value())
             {
-                return std::unexpected<core::Error>{
-                    MakeOptionError("Specify only one bounded-run option.")};
+                return std::unexpected<core::Error>{MakeOptionError("Specify only one bounded-run option.")};
             }
             if (index + 1 >= argc)
             {
-                return std::unexpected<core::Error>{
-                    MakeOptionError("--auto-close-ms requires a value.")};
+                return std::unexpected<core::Error>{MakeOptionError("--auto-close-ms requires a value.")};
             }
 
             ++index;
@@ -190,8 +183,7 @@ void PrintUsage(std::string_view executableName)
         }
         else
         {
-            return std::unexpected<core::Error>{
-                MakeOptionError("Unknown option: " + std::string{argument})};
+            return std::unexpected<core::Error>{MakeOptionError("Unknown option: " + std::string{argument})};
         }
     }
 
@@ -199,8 +191,7 @@ void PrintUsage(std::string_view executableName)
 }
 
 [[nodiscard]] core::Result<render::RenderTargetSnapshot> CaptureWindowSnapshot(
-    const platform::Window& window, std::uint64_t snapshotRevision,
-    render::PresentationEnvironmentRevision presentationEnvironmentRevision)
+    const platform::Window& window, std::uint64_t snapshotRevision, render::PresentationEnvironmentRevision presentationEnvironmentRevision)
 {
     auto pixelSize = window.GetPixelSize();
     RETURN_ERROR_IF_FAILED(pixelSize);
@@ -214,9 +205,8 @@ void PrintUsage(std::string_view executableName)
     auto windowState = window.GetState();
     RETURN_ERROR_IF_FAILED(windowState);
 
-    return render::RenderTargetSnapshot{window.GetId(),         pixelSize.GetValue(),
-                                        logicalSize.GetValue(), visible.GetValue(),
-                                        windowState.GetValue(), presentationEnvironmentRevision,
+    return render::RenderTargetSnapshot{window.GetId(),     pixelSize.GetValue(),   logicalSize.GetValue(),
+                                        visible.GetValue(), windowState.GetValue(), presentationEnvironmentRevision,
                                         snapshotRevision};
 }
 
@@ -278,8 +268,7 @@ struct EventVisitor final
     }
 
 private:
-    void RequestSnapshot(platform::WindowId windowId,
-                         bool presentationEnvironmentChanged) const noexcept
+    void RequestSnapshot(platform::WindowId windowId, bool presentationEnvironmentChanged) const noexcept
     {
         if (windowId != batch.windowId)
         {
@@ -299,22 +288,21 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
     }
 }
 
-[[nodiscard]] core::VoidResult AdvanceSmokeTour(platform::Window& window,
-                                                platform::Duration elapsed, SmokeTourStage& stage)
+[[nodiscard]] core::VoidResult AdvanceSmokeTour(platform::Window& window, core::Duration elapsed, SmokeTourStage& stage)
 {
-    if (stage == SmokeTourStage::Resize && elapsed >= platform::Duration{kSmokeResizeAt})
+    if (stage == SmokeTourStage::Resize && elapsed >= core::Duration{kSmokeResizeAt})
     {
         RETURN_ERROR_IF_FAILED(window.SetLogicalSize({.width = 800, .height = 520}));
         std::println("Smoke tour requested a logical resize to 800x520.");
         stage = SmokeTourStage::Minimize;
     }
-    else if (stage == SmokeTourStage::Minimize && elapsed >= platform::Duration{kSmokeMinimizeAt})
+    else if (stage == SmokeTourStage::Minimize && elapsed >= core::Duration{kSmokeMinimizeAt})
     {
         RETURN_ERROR_IF_FAILED(window.Minimize());
         std::println("Smoke tour requested minimize.");
         stage = SmokeTourStage::Restore;
     }
-    else if (stage == SmokeTourStage::Restore && elapsed >= platform::Duration{kSmokeRestoreAt})
+    else if (stage == SmokeTourStage::Restore && elapsed >= core::Duration{kSmokeRestoreAt})
     {
         RETURN_ERROR_IF_FAILED(window.Restore());
         std::println("Smoke tour requested restore.");
@@ -324,9 +312,7 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
     return {};
 }
 
-[[nodiscard]] core::Result<bool> TryApplyPendingSnapshot(const platform::Window& window,
-                                                         render::RenderTarget& target,
-                                                         WindowEventBatch& batch,
+[[nodiscard]] core::Result<bool> TryApplyPendingSnapshot(const platform::Window& window, render::RenderTarget& target, WindowEventBatch& batch,
                                                          SnapshotSequence& sequence)
 {
     if (!batch.snapshotRequested)
@@ -335,11 +321,9 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
     }
 
     const std::uint64_t nextSnapshotRevision = sequence.snapshotRevision + 1U;
-    const render::PresentationEnvironmentRevision nextPresentationRevision{
-        sequence.presentationEnvironmentRevision.GetValue() +
-        (batch.presentationEnvironmentChanged ? 1U : 0U)};
-    auto snapshotResult =
-        CaptureWindowSnapshot(window, nextSnapshotRevision, nextPresentationRevision);
+    const render::PresentationEnvironmentRevision nextPresentationRevision{sequence.presentationEnvironmentRevision.GetValue() +
+                                                                           (batch.presentationEnvironmentChanged ? 1U : 0U)};
+    auto snapshotResult = CaptureWindowSnapshot(window, nextSnapshotRevision, nextPresentationRevision);
     if (!snapshotResult)
     {
         if (!batch.captureFailureReported)
@@ -358,14 +342,12 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
     batch.snapshotRequested = false;
     batch.presentationEnvironmentChanged = false;
     batch.captureFailureReported = false;
-    std::println("Target snapshot {} applied: logical={} pixels={} state={} visible={}",
-                 snapshot.GetRevision(), snapshot.GetLogicalSize(), snapshot.GetPixelSize(),
-                 snapshot.GetWindowState(), snapshot.IsVisible());
+    std::println("Target snapshot {} applied: logical={} pixels={} state={} visible={}", snapshot.GetRevision(), snapshot.GetLogicalSize(),
+                 snapshot.GetPixelSize(), snapshot.GetWindowState(), snapshot.IsVisible());
     return true;
 }
 
-[[nodiscard]] std::array<experimental::RectanglePaint, 3U> MakeRectangleScene(
-    const ui::UiTargetMetrics& metrics) noexcept
+[[nodiscard]] std::array<experimental::RectanglePaint, 3U> MakeRectangleScene(const ui::UiTargetMetrics& metrics) noexcept
 {
     const ui::LogicalSize extent = metrics.GetLogicalSize();
     return {
@@ -387,8 +369,7 @@ void DrainEvents(platform::PlatformRuntime& runtime, WindowEventBatch& batch)
     };
 }
 
-void PrintMetricsIfChanged(const ui::UiTargetMetrics& metrics,
-                           std::optional<ui::UiTargetMetrics>& previous)
+void PrintMetricsIfChanged(const ui::UiTargetMetrics& metrics, std::optional<ui::UiTargetMetrics>& previous)
 {
     if (previous.has_value() && *previous == metrics)
     {
@@ -398,14 +379,12 @@ void PrintMetricsIfChanged(const ui::UiTargetMetrics& metrics,
     const ui::LogicalSize logical = metrics.GetLogicalSize();
     const ui::FramebufferPixelSize pixels = metrics.GetFramebufferPixelSize();
     const ui::LogicalToFramebufferScale scale = metrics.GetLogicalToFramebufferScale();
-    std::println("UI metrics revision {}: logical={}x{} pixels={}x{} scale=({}, {})",
-                 metrics.GetMetricsRevision().GetValue(), logical.width, logical.height,
-                 pixels.width, pixels.height, scale.x, scale.y);
+    std::println("UI metrics revision {}: logical={}x{} pixels={}x{} scale=({}, {})", metrics.GetMetricsRevision().GetValue(), logical.width,
+                 logical.height, pixels.width, pixels.height, scale.x, scale.y);
     previous = metrics;
 }
 
-[[nodiscard]] core::Result<FrameStep> RenderOneFrame(
-    render::RenderTarget& target, experimental::RectangleRenderer& rectangleRenderer)
+[[nodiscard]] core::Result<FrameStep> RenderOneFrame(render::RenderTarget& target, experimental::RectangleRenderer& rectangleRenderer)
 {
     auto frameResult = target.AcquireFrame();
     if (!frameResult && frameResult.GetError() == render::RenderErrorCode::SurfaceLost)
@@ -444,10 +423,7 @@ void PrintMetricsIfChanged(const ui::UiTargetMetrics& metrics,
     auto presentResult = frame.FinishAndPresent();
     if (!presentResult && presentResult.GetError() == render::RenderErrorCode::SurfaceLost)
     {
-        return FrameStep{.action = FrameAction::RecoverSurface,
-                         .rectangleOutcome = outcome,
-                         .metrics = metrics,
-                         .acquired = true};
+        return FrameStep{.action = FrameAction::RecoverSurface, .rectangleOutcome = outcome, .metrics = metrics, .acquired = true};
     }
     RETURN_ERROR_IF_FAILED(presentResult);
 
@@ -459,16 +435,13 @@ void PrintMetricsIfChanged(const ui::UiTargetMetrics& metrics,
                      .presented = presented};
 }
 
-[[nodiscard]] core::VoidResult RecoverSurface(render::RenderBootstrap& bootstrap,
-                                              platform::Window& window,
-                                              render::RenderTarget& target)
+[[nodiscard]] core::VoidResult RecoverSurface(render::RenderBootstrap& bootstrap, platform::Window& window, render::RenderTarget& target)
 {
     const render::RenderTargetSnapshot snapshot = target.GetTargetSnapshot();
-    auto surfaceResult = bootstrap.PrepareSurface(
-        window, render::SurfacePreparationDesc{
-                    .targetSnapshot = snapshot,
-                    .reason = render::SurfacePreparationReason::SurfaceLossRecovery,
-                });
+    auto surfaceResult = bootstrap.PrepareSurface(window, render::SurfacePreparationDesc{
+                                                              .targetSnapshot = snapshot,
+                                                              .reason = render::SurfacePreparationReason::SurfaceLossRecovery,
+                                                          });
     RETURN_ERROR_IF_FAILED(surfaceResult);
 
     render::PreparedSurface surface = std::move(surfaceResult).GetValue();
@@ -519,23 +492,20 @@ void PrintSummary(const WorkbenchStats& stats)
     std::println("Workbench summary: acquired={} batches={} presented={} ui_presented={} "
                  "post_restore_ui_presented={} "
                  "suspended_skips={} empty_skips={} surface_recoveries={}",
-                 stats.acquiredFrames, stats.recordedBatches, stats.presentedFrames,
-                 stats.uiPresentedFrames, stats.postRestoreUiPresentedFrames, stats.suspendedSkips,
-                 stats.emptySkips, stats.surfaceRecoveries);
+                 stats.acquiredFrames, stats.recordedBatches, stats.presentedFrames, stats.uiPresentedFrames, stats.postRestoreUiPresentedFrames,
+                 stats.suspendedSkips, stats.emptySkips, stats.surfaceRecoveries);
 }
 
-[[nodiscard]] core::Result<WorkbenchStats> RunEventAndRenderLoop(
-    platform::PlatformRuntime& runtime, platform::Window& window,
-    render::RenderBootstrap& bootstrap, render::RenderTarget& target,
-    experimental::RectangleRenderer& rectangleRenderer, const Options& options)
+[[nodiscard]] core::Result<WorkbenchStats> RunEventAndRenderLoop(platform::PlatformRuntime& runtime, platform::Window& window,
+                                                                 render::RenderBootstrap& bootstrap, render::RenderTarget& target,
+                                                                 experimental::RectangleRenderer& rectangleRenderer, const Options& options)
 {
     WindowEventBatch events{.windowId = window.GetId(), .snapshotRequested = true};
     SnapshotSequence sequence;
     WorkbenchStats stats;
     std::optional<ui::UiTargetMetrics> previousMetrics;
-    const platform::Timestamp start = runtime.Now();
-    SmokeTourStage smokeTourStage =
-        options.exerciseWindowState ? SmokeTourStage::Resize : SmokeTourStage::Complete;
+    const core::Timestamp start = core::Timestamp::Now();
+    SmokeTourStage smokeTourStage = options.exerciseWindowState ? SmokeTourStage::Resize : SmokeTourStage::Complete;
     bool suspensionReported{};
 
     while (!events.quitRequested && !events.closeRequested)
@@ -546,13 +516,13 @@ void PrintSummary(const WorkbenchStats& stats)
             break;
         }
 
-        if (options.autoCloseAfter.has_value() && runtime.Now() - start >= *options.autoCloseAfter)
+        if (options.autoCloseAfter.has_value() && core::Timestamp::Now() - start >= *options.autoCloseAfter)
         {
-            std::println("Bounded run duration reached after {}.", runtime.Now() - start);
+            std::println("Bounded run duration reached after {}.", core::Timestamp::Now() - start);
             break;
         }
 
-        RETURN_ERROR_IF_FAILED(AdvanceSmokeTour(window, runtime.Now() - start, smokeTourStage));
+        RETURN_ERROR_IF_FAILED(AdvanceSmokeTour(window, core::Timestamp::Now() - start, smokeTourStage));
 
         auto snapshotApplied = TryApplyPendingSnapshot(window, target, events, sequence);
         RETURN_ERROR_IF_FAILED(snapshotApplied);
@@ -565,8 +535,7 @@ void PrintSummary(const WorkbenchStats& stats)
         auto stepResult = RenderOneFrame(target, rectangleRenderer);
         RETURN_ERROR_IF_FAILED(stepResult);
         const FrameStep step = std::move(stepResult).GetValue();
-        const bool afterSmokeRestore =
-            options.exerciseWindowState && smokeTourStage == SmokeTourStage::Complete;
+        const bool afterSmokeRestore = options.exerciseWindowState && smokeTourStage == SmokeTourStage::Complete;
         AccumulateFrameStep(step, afterSmokeRestore, stats);
         if (step.metrics.has_value())
         {
@@ -587,8 +556,7 @@ void PrintSummary(const WorkbenchStats& stats)
             const bool suspended = target.IsSuspended();
             if (suspended && !suspensionReported)
             {
-                std::println("Target suspended; polling events with a {} ms backoff.",
-                             kSuspendedDelay.count());
+                std::println("Target suspended; polling events with a {} ms backoff.", kSuspendedDelay.count());
                 suspensionReported = true;
             }
             std::this_thread::sleep_for(suspended ? kSuspendedDelay : kNoWorkDelay);
@@ -606,13 +574,11 @@ void PrintSummary(const WorkbenchStats& stats)
 
     if (options.autoCloseAfter.has_value() && stats.uiPresentedFrames == 0U)
     {
-        return std::unexpected<core::Error>{MakeWorkbenchError(
-            "Bounded mode ended before any rectangle batch was recorded and presented.")};
+        return std::unexpected<core::Error>{MakeWorkbenchError("Bounded mode ended before any rectangle batch was recorded and presented.")};
     }
     if (options.exerciseWindowState && stats.postRestoreUiPresentedFrames == 0U)
     {
-        return std::unexpected<core::Error>{MakeWorkbenchError(
-            "Smoke mode ended before rectangle presentation resumed after restore.")};
+        return std::unexpected<core::Error>{MakeWorkbenchError("Smoke mode ended before rectangle presentation resumed after restore.")};
     }
     return stats;
 }
@@ -620,9 +586,8 @@ void PrintSummary(const WorkbenchStats& stats)
 [[nodiscard]] core::VoidResult ValidateCleanShutdown(const render::RenderBootstrap& bootstrap)
 {
     const render::RenderValidationReport report = bootstrap.GetValidationReport();
-    std::println("Validation summary: warnings={} errors={} dropped={} captured={}",
-                 report.warningCount, report.errorCount, report.droppedMessageCount,
-                 report.capturedMessageCount);
+    std::println("Validation summary: warnings={} errors={} dropped={} captured={}", report.warningCount, report.errorCount,
+                 report.droppedMessageCount, report.capturedMessageCount);
     if (report.IsClean() && report.droppedMessageCount == 0U)
     {
         return {};
@@ -634,66 +599,54 @@ void PrintSummary(const WorkbenchStats& stats)
         std::println(stderr,
                      "Validation message: id={} number={} operation={} text={} "
                      "operation_truncated={} text_truncated={}",
-                     message.GetMessageIdName(), message.messageIdNumber,
-                     message.GetOperationContext(), message.GetMessageText(),
+                     message.GetMessageIdName(), message.messageIdNumber, message.GetOperationContext(), message.GetMessageText(),
                      message.operationContextTruncated, message.messageTextTruncated);
     }
 
-    return std::unexpected<core::Error>{core::Error{
-        render::ToErrorCode(render::RenderErrorCode::BackendFailure),
-        "Vulkan validation reported an unexpected warning, error, or dropped message."}};
+    return std::unexpected<core::Error>{core::Error{render::ToErrorCode(render::RenderErrorCode::BackendFailure),
+                                                    "Vulkan validation reported an unexpected warning, error, or dropped message."}};
 }
 
-[[nodiscard]] core::VoidResult RunRenderer(platform::PlatformRuntime& runtime,
-                                           platform::Window& window, const Options& options)
+[[nodiscard]] core::VoidResult RunRenderer(platform::PlatformRuntime& runtime, platform::Window& window, const Options& options)
 {
-    auto initialSnapshotResult =
-        CaptureWindowSnapshot(window, 1U, render::PresentationEnvironmentRevision{1U});
+    auto initialSnapshotResult = CaptureWindowSnapshot(window, 1U, render::PresentationEnvironmentRevision{1U});
     RETURN_ERROR_IF_FAILED(initialSnapshotResult);
-    const render::RenderTargetSnapshot initialSnapshot =
-        std::move(initialSnapshotResult).GetValue();
+    const render::RenderTargetSnapshot initialSnapshot = std::move(initialSnapshotResult).GetValue();
 
-    auto bootstrapResult = render::RenderBootstrap::Create(
-        render::RenderBootstrapDesc{.validationMode = options.validationMode});
+    auto bootstrapResult = render::RenderBootstrap::Create(render::RenderBootstrapDesc{.validationMode = options.validationMode});
     RETURN_ERROR_IF_FAILED(bootstrapResult);
     render::RenderBootstrap bootstrap = std::move(bootstrapResult).GetValue();
 
-    auto surfaceResult =
-        bootstrap.PrepareSurface(window, render::SurfacePreparationDesc{
-                                             .targetSnapshot = initialSnapshot,
-                                             .reason = render::SurfacePreparationReason::Initial,
-                                         });
+    auto surfaceResult = bootstrap.PrepareSurface(window, render::SurfacePreparationDesc{
+                                                              .targetSnapshot = initialSnapshot,
+                                                              .reason = render::SurfacePreparationReason::Initial,
+                                                          });
     RETURN_ERROR_IF_FAILED(surfaceResult);
     render::PreparedSurface deviceSelectionSurface = std::move(surfaceResult).GetValue();
     RETURN_ERROR_IF_FAILED(deviceSelectionSurface.TransferToCurrentThread(initialSnapshot));
 
-    auto selectionResult =
-        bootstrap.SelectAdapter(deviceSelectionSurface, render::RenderAdapterSelectionDesc{});
+    auto selectionResult = bootstrap.SelectAdapter(deviceSelectionSurface, render::RenderAdapterSelectionDesc{});
     RETURN_ERROR_IF_FAILED(selectionResult);
     render::RenderAdapterSelection selection = std::move(selectionResult).GetValue();
 
-    auto deviceResult =
-        bootstrap.CreateDevice(deviceSelectionSurface, selection, render::RenderDeviceDesc{});
+    auto deviceResult = bootstrap.CreateDevice(deviceSelectionSurface, selection, render::RenderDeviceDesc{});
     RETURN_ERROR_IF_FAILED(deviceResult);
     render::RenderDevice device = std::move(deviceResult).GetValue();
     render::PreparedSurface targetSurface = std::move(deviceSelectionSurface);
 
-    auto targetResult =
-        device.CreateRenderTarget(std::move(targetSurface), render::RenderTargetDesc{
-                                                                .targetSnapshot = initialSnapshot,
-                                                                .clearColor = kClearColor,
-                                                            });
+    auto targetResult = device.CreateRenderTarget(std::move(targetSurface), render::RenderTargetDesc{
+                                                                                .targetSnapshot = initialSnapshot,
+                                                                                .clearColor = kClearColor,
+                                                                            });
     // On failure, targetSurface's later declaration guarantees that it is retired before device.
     RETURN_ERROR_IF_FAILED(targetResult);
     render::RenderTarget target = std::move(targetResult).GetValue();
 
     auto rectangleRendererResult = experimental::RectangleRenderer::Create(device);
     RETURN_ERROR_IF_FAILED(rectangleRendererResult);
-    experimental::RectangleRenderer rectangleRenderer =
-        std::move(rectangleRendererResult).GetValue();
+    experimental::RectangleRenderer rectangleRenderer = std::move(rectangleRendererResult).GetValue();
 
-    std::println("Rectangle workbench ready: adapter=\"{}\" window={} validation={}",
-                 selection.selectedAdapter.identity.name, window.GetId(),
+    std::println("Rectangle workbench ready: adapter=\"{}\" window={} validation={}", selection.selectedAdapter.identity.name, window.GetId(),
                  bootstrap.GetDiagnostics().validationEnabled);
     std::println("Experimental API warning: {}", experimental::kRectangleFacadeExperimentalNotice);
     std::println("Resize, minimize, and restore the window; close it to exit.");
@@ -702,8 +655,7 @@ void PrintSummary(const WorkbenchStats& stats)
     const auto runWorkbench = [&]() -> core::VoidResult
     {
         RETURN_ERROR_IF_FAILED(window.Show());
-        auto loopResult =
-            RunEventAndRenderLoop(runtime, window, bootstrap, target, rectangleRenderer, options);
+        auto loopResult = RunEventAndRenderLoop(runtime, window, bootstrap, target, rectangleRenderer, options);
         RETURN_ERROR_IF_FAILED(loopResult);
         stats = std::move(loopResult).GetValue();
         PrintSummary(stats);
@@ -717,9 +669,8 @@ void PrintSummary(const WorkbenchStats& stats)
     target = render::RenderTarget{};
     device = render::RenderDevice{};
 
-    std::println("Renderer children retired: surfaces={} devices={} targets={}",
-                 bootstrap.GetActivePreparedSurfaceCount(), bootstrap.GetActiveDeviceCount(),
-                 bootstrap.GetActiveTargetCount());
+    std::println("Renderer children retired: surfaces={} devices={} targets={}", bootstrap.GetActivePreparedSurfaceCount(),
+                 bootstrap.GetActiveDeviceCount(), bootstrap.GetActiveTargetCount());
     const core::VoidResult validationResult = ValidateCleanShutdown(bootstrap);
     core::VoidResult shutdownResult = bootstrap.Shutdown();
 
@@ -727,13 +678,11 @@ void PrintSummary(const WorkbenchStats& stats)
     {
         if (!validationResult)
         {
-            std::println(stderr, "Secondary validation failure during teardown: {}",
-                         validationResult.GetError());
+            std::println(stderr, "Secondary validation failure during teardown: {}", validationResult.GetError());
         }
         if (!shutdownResult)
         {
-            std::println(stderr, "Secondary bootstrap shutdown failure: {}",
-                         shutdownResult.GetError());
+            std::println(stderr, "Secondary bootstrap shutdown failure: {}", shutdownResult.GetError());
         }
         return std::unexpected<core::Error>{runResult.GetError()};
     }
@@ -741,8 +690,7 @@ void PrintSummary(const WorkbenchStats& stats)
     {
         if (!shutdownResult)
         {
-            std::println(stderr, "Secondary bootstrap shutdown failure: {}",
-                         shutdownResult.GetError());
+            std::println(stderr, "Secondary bootstrap shutdown failure: {}", shutdownResult.GetError());
         }
         return std::unexpected<core::Error>{validationResult.GetError()};
     }
@@ -768,10 +716,8 @@ void PrintSummary(const WorkbenchStats& stats)
     auto runtimeResult = platform::PlatformRuntime::Create(runtimeDesc);
     RETURN_ERROR_IF_FAILED(runtimeResult);
     platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseFocusClickThrough{true}));
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseAutoCapture{false}));
+    RETURN_ERROR_IF_FAILED(runtime.GetHintManager().PushHint(platform::hints::MouseFocusClickThrough{true}));
+    RETURN_ERROR_IF_FAILED(runtime.GetHintManager().PushHint(platform::hints::MouseAutoCapture{false}));
 
     core::VoidResult rendererResult;
     {
@@ -809,8 +755,7 @@ int main(int argc, char** argv)
     }
     catch (const std::exception& exception)
     {
-        std::println(stderr, "ponder-ui-1-rectangle terminated with an exception: {}",
-                     exception.what());
+        std::println(stderr, "ponder-ui-1-rectangle terminated with an exception: {}", exception.what());
         return 1;
     }
     catch (...)

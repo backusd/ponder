@@ -16,7 +16,7 @@
 #include <string_view>
 #include <vector>
 
-namespace pond::platform
+namespace ponder::platform
 {
 class Window;
 }
@@ -34,9 +34,8 @@ class RenderBackendTestAccess;
 class RenderBootstrapTestAccess;
 } // namespace detail
 
-inline constexpr std::string_view kExperimentalApiNotice{
-    "pond::render is experimental during early development and does not promise ABI or source "
-    "compatibility."};
+inline constexpr std::string_view kExperimentalApiNotice{"pond::render is experimental during early development and does not promise ABI or source "
+                                                         "compatibility."};
 
 enum class RenderBackendKind : std::uint8_t
 {
@@ -146,8 +145,7 @@ struct QueuedFrameLatency final
 
     std::uint32_t frameCount{kDefaultFrames};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const QueuedFrameLatency& lhs, const QueuedFrameLatency& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const QueuedFrameLatency& lhs, const QueuedFrameLatency& rhs) noexcept = default;
 };
 
 struct PresentationPolicyRequest final
@@ -155,9 +153,7 @@ struct PresentationPolicyRequest final
     PresentationPolicy policy{PresentationPolicy::VSync};
     RequirementStrength strength{RequirementStrength::Preferred};
 
-    [[nodiscard]] friend constexpr bool operator==(const PresentationPolicyRequest& lhs,
-                                                   const PresentationPolicyRequest& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const PresentationPolicyRequest& lhs, const PresentationPolicyRequest& rhs) noexcept = default;
 };
 
 struct QueuedFrameLatencyRequest final
@@ -165,9 +161,7 @@ struct QueuedFrameLatencyRequest final
     QueuedFrameLatency maximumQueuedFrames{};
     RequirementStrength strength{RequirementStrength::Preferred};
 
-    [[nodiscard]] friend constexpr bool operator==(const QueuedFrameLatencyRequest& lhs,
-                                                   const QueuedFrameLatencyRequest& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const QueuedFrameLatencyRequest& lhs, const QueuedFrameLatencyRequest& rhs) noexcept = default;
 };
 
 struct QueuedFrameLatencyRange final
@@ -175,8 +169,7 @@ struct QueuedFrameLatencyRange final
     QueuedFrameLatency minimum{QueuedFrameLatency::kMinimumFrames};
     QueuedFrameLatency maximum{QueuedFrameLatency::kMaximumFrames};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const QueuedFrameLatencyRange& lhs, const QueuedFrameLatencyRange& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const QueuedFrameLatencyRange& lhs, const QueuedFrameLatencyRange& rhs) noexcept = default;
 };
 
 struct RenderPresentationCapabilities final
@@ -186,8 +179,7 @@ struct RenderPresentationCapabilities final
     bool supportsWindowPresentation{};
     bool supportsOpaqueSdrSrgbOutput{};
 
-    [[nodiscard]] friend bool operator==(const RenderPresentationCapabilities& lhs,
-                                         const RenderPresentationCapabilities& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderPresentationCapabilities& lhs, const RenderPresentationCapabilities& rhs) = default;
 };
 
 struct RenderAdapterIdentity final
@@ -197,8 +189,7 @@ struct RenderAdapterIdentity final
     RenderAdapterType adapterType{RenderAdapterType::Unknown};
     std::string name{};
 
-    [[nodiscard]] friend bool operator==(const RenderAdapterIdentity& lhs,
-                                         const RenderAdapterIdentity& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderAdapterIdentity& lhs, const RenderAdapterIdentity& rhs) = default;
 };
 
 struct RenderAdapterId final
@@ -211,8 +202,7 @@ struct RenderAdapterId final
     std::uint32_t deviceNodeMask{};
     bool deviceLuidValid{};
 
-    [[nodiscard]] friend constexpr bool operator==(const RenderAdapterId& lhs,
-                                                   const RenderAdapterId& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderAdapterId& lhs, const RenderAdapterId& rhs) noexcept = default;
 };
 
 struct RenderAdapterDriverIdentity final
@@ -221,8 +211,7 @@ struct RenderAdapterDriverIdentity final
     std::string driverName{};
     std::string driverInfo{};
 
-    [[nodiscard]] friend bool operator==(const RenderAdapterDriverIdentity& lhs,
-                                         const RenderAdapterDriverIdentity& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderAdapterDriverIdentity& lhs, const RenderAdapterDriverIdentity& rhs) = default;
 };
 
 struct RenderAdapterMemoryHeap final
@@ -230,8 +219,7 @@ struct RenderAdapterMemoryHeap final
     std::uint64_t sizeBytes{};
     bool deviceLocal{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const RenderAdapterMemoryHeap& lhs, const RenderAdapterMemoryHeap& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderAdapterMemoryHeap& lhs, const RenderAdapterMemoryHeap& rhs) noexcept = default;
 };
 
 struct RenderAdapterLimits final
@@ -241,8 +229,7 @@ struct RenderAdapterLimits final
     std::uint32_t maxFramebufferHeight{};
     std::uint32_t maxColorAttachments{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const RenderAdapterLimits& lhs, const RenderAdapterLimits& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderAdapterLimits& lhs, const RenderAdapterLimits& rhs) noexcept = default;
 };
 
 struct RenderAdapterSnapshot final
@@ -256,8 +243,7 @@ struct RenderAdapterSnapshot final
     std::vector<RenderAdapterMemoryHeap> memoryHeaps{};
     RenderPresentationCapabilities presentation{};
 
-    [[nodiscard]] friend bool operator==(const RenderAdapterSnapshot& lhs,
-                                         const RenderAdapterSnapshot& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderAdapterSnapshot& lhs, const RenderAdapterSnapshot& rhs) = default;
 };
 
 struct RenderAdapterRejection final
@@ -266,8 +252,7 @@ struct RenderAdapterRejection final
     RenderAdapterIdentity identity{};
     std::vector<std::string> reasons{};
 
-    [[nodiscard]] friend bool operator==(const RenderAdapterRejection& lhs,
-                                         const RenderAdapterRejection& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderAdapterRejection& lhs, const RenderAdapterRejection& rhs) = default;
 };
 
 struct RenderAdapterSelectionDesc final
@@ -275,8 +260,7 @@ struct RenderAdapterSelectionDesc final
     RenderAdapterPreference adapterPreference{RenderAdapterPreference::Default};
     std::optional<RenderAdapterId> explicitAdapterId{};
 
-    [[nodiscard]] friend bool operator==(const RenderAdapterSelectionDesc& lhs,
-                                         const RenderAdapterSelectionDesc& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderAdapterSelectionDesc& lhs, const RenderAdapterSelectionDesc& rhs) = default;
 };
 
 struct RenderAdapterSelection final
@@ -287,8 +271,7 @@ struct RenderAdapterSelection final
     std::vector<RenderAdapterRejection> rejectedAdapters{};
     bool selectedByPreferenceFallback{};
 
-    [[nodiscard]] friend bool operator==(const RenderAdapterSelection& lhs,
-                                         const RenderAdapterSelection& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderAdapterSelection& lhs, const RenderAdapterSelection& rhs) = default;
 };
 
 struct ClearColor final
@@ -300,16 +283,15 @@ struct ClearColor final
     float blue{};
     float alpha{1.0F};
 
-    [[nodiscard]] friend constexpr bool operator==(const ClearColor& lhs,
-                                                   const ClearColor& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const ClearColor& lhs, const ClearColor& rhs) noexcept = default;
 };
 
 class PresentationEnvironmentRevision final
 {
 public:
     constexpr PresentationEnvironmentRevision() noexcept = default;
-    explicit constexpr PresentationEnvironmentRevision(std::uint64_t value) noexcept
-        : m_value{value}
+    explicit constexpr PresentationEnvironmentRevision(std::uint64_t value) noexcept :
+        m_value{value}
     {
     }
 
@@ -318,9 +300,8 @@ public:
         return m_value;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const PresentationEnvironmentRevision& lhs,
-        const PresentationEnvironmentRevision& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const PresentationEnvironmentRevision& lhs,
+                                                   const PresentationEnvironmentRevision& rhs) noexcept = default;
 
 private:
     std::uint64_t m_value{};
@@ -330,28 +311,30 @@ class RenderTargetSnapshot final
 {
 public:
     constexpr RenderTargetSnapshot() noexcept = default;
-    constexpr RenderTargetSnapshot(platform::WindowId windowId, platform::PixelSize pixelSize,
-                                   platform::LogicalSize logicalSize, bool visible,
-                                   platform::WindowState windowState,
-                                   PresentationEnvironmentRevision presentationEnvironmentRevision,
-                                   std::uint64_t revision) noexcept
-        : m_windowId{windowId}, m_pixelSize{pixelSize}, m_logicalSize{logicalSize},
-          m_visible{visible}, m_windowState{windowState},
-          m_presentationEnvironmentRevision{presentationEnvironmentRevision}, m_revision{revision}
+    constexpr RenderTargetSnapshot(ponder::platform::WindowId windowId, ponder::platform::PixelSize pixelSize,
+                                   ponder::platform::LogicalSize logicalSize, bool visible, ponder::platform::WindowState windowState,
+                                   PresentationEnvironmentRevision presentationEnvironmentRevision, std::uint64_t revision) noexcept :
+        m_windowId{windowId},
+        m_pixelSize{pixelSize},
+        m_logicalSize{logicalSize},
+        m_visible{visible},
+        m_windowState{windowState},
+        m_presentationEnvironmentRevision{presentationEnvironmentRevision},
+        m_revision{revision}
     {
     }
 
-    [[nodiscard]] constexpr platform::WindowId GetWindowId() const noexcept
+    [[nodiscard]] constexpr ponder::platform::WindowId GetWindowId() const noexcept
     {
         return m_windowId;
     }
 
-    [[nodiscard]] constexpr platform::PixelSize GetPixelSize() const noexcept
+    [[nodiscard]] constexpr ponder::platform::PixelSize GetPixelSize() const noexcept
     {
         return m_pixelSize;
     }
 
-    [[nodiscard]] constexpr platform::LogicalSize GetLogicalSize() const noexcept
+    [[nodiscard]] constexpr ponder::platform::LogicalSize GetLogicalSize() const noexcept
     {
         return m_logicalSize;
     }
@@ -361,13 +344,12 @@ public:
         return m_visible;
     }
 
-    [[nodiscard]] constexpr platform::WindowState GetWindowState() const noexcept
+    [[nodiscard]] constexpr ponder::platform::WindowState GetWindowState() const noexcept
     {
         return m_windowState;
     }
 
-    [[nodiscard]] constexpr PresentationEnvironmentRevision GetPresentationEnvironmentRevision()
-        const noexcept
+    [[nodiscard]] constexpr PresentationEnvironmentRevision GetPresentationEnvironmentRevision() const noexcept
     {
         return m_presentationEnvironmentRevision;
     }
@@ -377,29 +359,27 @@ public:
         return m_revision;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const RenderTargetSnapshot& lhs, const RenderTargetSnapshot& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderTargetSnapshot& lhs, const RenderTargetSnapshot& rhs) noexcept = default;
 
 private:
-    platform::WindowId m_windowId{};
-    platform::PixelSize m_pixelSize{};
-    platform::LogicalSize m_logicalSize{};
+    ponder::platform::WindowId m_windowId{};
+    ponder::platform::PixelSize m_pixelSize{};
+    ponder::platform::LogicalSize m_logicalSize{};
     bool m_visible{};
-    platform::WindowState m_windowState{platform::WindowState::Normal};
+    ponder::platform::WindowState m_windowState{ponder::platform::WindowState::Normal};
     PresentationEnvironmentRevision m_presentationEnvironmentRevision{};
     std::uint64_t m_revision{};
 };
 
 struct RenderFrameMetrics final
 {
-    platform::WindowId windowId{};
-    platform::LogicalSize logicalSize{};
-    platform::PixelSize pixelSize{};
+    ponder::platform::WindowId windowId{};
+    ponder::platform::LogicalSize logicalSize{};
+    ponder::platform::PixelSize pixelSize{};
     PresentationEnvironmentRevision metricsRevision{};
     std::uint64_t targetRevision{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const RenderFrameMetrics& lhs, const RenderFrameMetrics& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderFrameMetrics& lhs, const RenderFrameMetrics& rhs) noexcept = default;
 };
 
 struct SelectedPresentationConfig final
@@ -411,10 +391,9 @@ struct SelectedPresentationConfig final
     QueuedFrameLatency actualQueuedLatency{};
     QueuedFrameLatencyFallbackReason queuedLatencyFallback{QueuedFrameLatencyFallbackReason::None};
     PresentationOutput output{PresentationOutput::OpaqueSdrSrgb};
-    platform::PixelSize pixelExtent{};
+    ponder::platform::PixelSize pixelExtent{};
 
-    [[nodiscard]] friend bool operator==(const SelectedPresentationConfig& lhs,
-                                         const SelectedPresentationConfig& rhs) = default;
+    [[nodiscard]] friend bool operator==(const SelectedPresentationConfig& lhs, const SelectedPresentationConfig& rhs) = default;
 };
 
 struct TargetRecreationInfo final
@@ -423,8 +402,7 @@ struct TargetRecreationInfo final
     std::optional<std::uint64_t> previousRevision{};
     std::optional<std::uint64_t> currentRevision{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const TargetRecreationInfo& lhs, const TargetRecreationInfo& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const TargetRecreationInfo& lhs, const TargetRecreationInfo& rhs) noexcept = default;
 };
 
 struct PresentationRetirementStats final
@@ -437,9 +415,7 @@ struct PresentationRetirementStats final
     bool surfaceLost{};
     bool deviceLost{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const PresentationRetirementStats& lhs,
-        const PresentationRetirementStats& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const PresentationRetirementStats& lhs, const PresentationRetirementStats& rhs) noexcept = default;
 };
 
 struct BackendDiagnostic final
@@ -450,11 +426,10 @@ struct BackendDiagnostic final
     std::string symbolicName{};
     std::string operation{};
     std::string validationContext{};
-    platform::WindowId windowId{};
+    ponder::platform::WindowId windowId{};
     std::string targetLabel{};
 
-    [[nodiscard]] friend bool operator==(const BackendDiagnostic& lhs,
-                                         const BackendDiagnostic& rhs) = default;
+    [[nodiscard]] friend bool operator==(const BackendDiagnostic& lhs, const BackendDiagnostic& rhs) = default;
 };
 
 using OptionalBackendDiagnostic = std::optional<BackendDiagnostic>;
@@ -466,9 +441,7 @@ struct RenderDebugInstrumentation final
     bool timingMarkers{};
     bool captureRegions{};
 
-    [[nodiscard]] friend constexpr bool operator==(const RenderDebugInstrumentation& lhs,
-                                                   const RenderDebugInstrumentation& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderDebugInstrumentation& lhs, const RenderDebugInstrumentation& rhs) noexcept = default;
 };
 
 enum class RenderValidationMessageSeverity : std::uint8_t
@@ -521,8 +494,7 @@ struct RenderValidationMessage final
         return {messageText.data(), length};
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const RenderValidationMessage& lhs, const RenderValidationMessage& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderValidationMessage& lhs, const RenderValidationMessage& rhs) noexcept = default;
 };
 
 struct RenderValidationReport final
@@ -540,8 +512,7 @@ struct RenderValidationReport final
         return warningCount == 0U && errorCount == 0U;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const RenderValidationReport& lhs, const RenderValidationReport& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderValidationReport& lhs, const RenderValidationReport& rhs) noexcept = default;
 };
 
 struct RenderBootstrapDiagnostics final
@@ -554,8 +525,7 @@ struct RenderBootstrapDiagnostics final
     RenderDebugInstrumentation debugInstrumentation{};
     OptionalBackendDiagnostic lastFailure{};
 
-    [[nodiscard]] friend bool operator==(const RenderBootstrapDiagnostics& lhs,
-                                         const RenderBootstrapDiagnostics& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderBootstrapDiagnostics& lhs, const RenderBootstrapDiagnostics& rhs) = default;
 };
 
 struct RenderDeviceDiagnostics final
@@ -569,13 +539,12 @@ struct RenderDeviceDiagnostics final
     bool deviceLost{};
     OptionalBackendDiagnostic lastFailure{};
 
-    [[nodiscard]] friend bool operator==(const RenderDeviceDiagnostics& lhs,
-                                         const RenderDeviceDiagnostics& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderDeviceDiagnostics& lhs, const RenderDeviceDiagnostics& rhs) = default;
 };
 
 struct RenderTargetDiagnostics final
 {
-    platform::WindowId windowId{};
+    ponder::platform::WindowId windowId{};
     std::string targetLabel{};
     RenderTargetSnapshot targetSnapshot{};
     TargetStatus status{TargetStatus::Suspended};
@@ -592,23 +561,20 @@ struct RenderTargetDiagnostics final
     std::optional<SelectedPresentationConfig> selectedPresentation{};
     OptionalBackendDiagnostic lastFailure{};
 
-    [[nodiscard]] friend bool operator==(const RenderTargetDiagnostics& lhs,
-                                         const RenderTargetDiagnostics& rhs) = default;
+    [[nodiscard]] friend bool operator==(const RenderTargetDiagnostics& lhs, const RenderTargetDiagnostics& rhs) = default;
 };
 
 struct RenderBootstrapDesc final
 {
     RenderValidationMode validationMode{RenderValidationMode::Default};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const RenderBootstrapDesc& lhs, const RenderBootstrapDesc& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderBootstrapDesc& lhs, const RenderBootstrapDesc& rhs) noexcept = default;
 };
 
 struct RenderDeviceDesc final
 {
     // Reserved for logical-device policy that is independent of adapter selection.
-    [[nodiscard]] friend constexpr bool operator==(const RenderDeviceDesc& lhs,
-                                                   const RenderDeviceDesc& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderDeviceDesc& lhs, const RenderDeviceDesc& rhs) noexcept = default;
 };
 
 struct SurfacePreparationDesc final
@@ -616,8 +582,7 @@ struct SurfacePreparationDesc final
     RenderTargetSnapshot targetSnapshot{};
     SurfacePreparationReason reason{SurfacePreparationReason::Initial};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const SurfacePreparationDesc& lhs, const SurfacePreparationDesc& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const SurfacePreparationDesc& lhs, const SurfacePreparationDesc& rhs) noexcept = default;
 };
 
 struct RenderTargetDesc final
@@ -627,22 +592,20 @@ struct RenderTargetDesc final
     QueuedFrameLatencyRequest queuedLatency{};
     ClearColor clearColor{};
 
-    [[nodiscard]] friend constexpr bool operator==(const RenderTargetDesc& lhs,
-                                                   const RenderTargetDesc& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderTargetDesc& lhs, const RenderTargetDesc& rhs) noexcept = default;
 };
 
 struct RenderFrameResult final
 {
     FrameStatus status{FrameStatus::SkippedSuspended};
     TargetStatus targetStatus{TargetStatus::Suspended};
-    platform::WindowId windowId{};
+    ponder::platform::WindowId windowId{};
     std::uint64_t targetRevision{};
     std::uint64_t swapchainGeneration{};
     bool presented{};
     bool suboptimal{};
 
-    [[nodiscard]] friend constexpr bool operator==(const RenderFrameResult& lhs,
-                                                   const RenderFrameResult& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RenderFrameResult& lhs, const RenderFrameResult& rhs) noexcept = default;
 };
 
 [[nodiscard]] constexpr bool IsValid(RenderBackendKind value) noexcept
@@ -824,8 +787,7 @@ struct RenderFrameResult final
 
 [[nodiscard]] constexpr bool IsValid(QueuedFrameLatency value) noexcept
 {
-    return value.frameCount >= QueuedFrameLatency::kMinimumFrames &&
-           value.frameCount <= QueuedFrameLatency::kMaximumFrames;
+    return value.frameCount >= QueuedFrameLatency::kMinimumFrames && value.frameCount <= QueuedFrameLatency::kMaximumFrames;
 }
 
 [[nodiscard]] constexpr bool IsValid(PresentationPolicyRequest value) noexcept
@@ -840,14 +802,12 @@ struct RenderFrameResult final
 
 [[nodiscard]] constexpr bool IsValid(QueuedFrameLatencyRange value) noexcept
 {
-    return IsValid(value.minimum) && IsValid(value.maximum) &&
-           value.minimum.frameCount <= value.maximum.frameCount;
+    return IsValid(value.minimum) && IsValid(value.maximum) && value.minimum.frameCount <= value.maximum.frameCount;
 }
 
 [[nodiscard]] inline bool IsValid(const RenderPresentationCapabilities& value) noexcept
 {
-    if (!value.supportsWindowPresentation || !value.supportsOpaqueSdrSrgbOutput ||
-        !IsValid(value.queuedLatency) || value.supportedPolicies.empty())
+    if (!value.supportsWindowPresentation || !value.supportsOpaqueSdrSrgbOutput || !IsValid(value.queuedLatency) || value.supportedPolicies.empty())
     {
         return false;
     }
@@ -861,8 +821,7 @@ struct RenderFrameResult final
         }
         hasVSync = hasVSync || value.supportedPolicies[index] == PresentationPolicy::VSync;
 
-        for (std::size_t laterIndex = index + 1U; laterIndex < value.supportedPolicies.size();
-             ++laterIndex)
+        for (std::size_t laterIndex = index + 1U; laterIndex < value.supportedPolicies.size(); ++laterIndex)
         {
             if (value.supportedPolicies[index] == value.supportedPolicies[laterIndex])
             {
@@ -908,15 +867,13 @@ struct RenderFrameResult final
 
 [[nodiscard]] constexpr bool IsValid(RenderAdapterLimits value) noexcept
 {
-    return value.maxImageDimension2D > 0U && value.maxFramebufferWidth > 0U &&
-           value.maxFramebufferHeight > 0U && value.maxColorAttachments > 0U;
+    return value.maxImageDimension2D > 0U && value.maxFramebufferWidth > 0U && value.maxFramebufferHeight > 0U && value.maxColorAttachments > 0U;
 }
 
 [[nodiscard]] inline bool IsValid(const RenderAdapterSnapshot& value) noexcept
 {
-    return IsValid(value.adapterId) && IsValid(value.backend) && value.apiVersion != 0U &&
-           IsValid(value.identity) && IsValid(value.driver) && IsValid(value.limits) &&
-           IsValid(value.presentation);
+    return IsValid(value.adapterId) && IsValid(value.backend) && value.apiVersion != 0U && IsValid(value.identity) && IsValid(value.driver) &&
+           IsValid(value.limits) && IsValid(value.presentation);
 }
 
 [[nodiscard]] inline bool IsValid(const RenderAdapterRejection& value) noexcept
@@ -926,14 +883,12 @@ struct RenderFrameResult final
 
 [[nodiscard]] inline bool IsValid(const RenderAdapterSelectionDesc& value) noexcept
 {
-    return IsValid(value.adapterPreference) &&
-           (!value.explicitAdapterId.has_value() || IsValid(*value.explicitAdapterId));
+    return IsValid(value.adapterPreference) && (!value.explicitAdapterId.has_value() || IsValid(*value.explicitAdapterId));
 }
 
 [[nodiscard]] inline bool IsValid(const RenderAdapterSelection& value) noexcept
 {
-    return IsValid(value.request) && IsValid(value.selectedAdapter) &&
-           !value.compatibleAdapters.empty();
+    return IsValid(value.request) && IsValid(value.selectedAdapter) && !value.compatibleAdapters.empty();
 }
 
 [[nodiscard]] constexpr bool IsValid(ClearColor value) noexcept
@@ -943,8 +898,7 @@ struct RenderFrameResult final
         return core::IsFinite(component) && component >= 0.0F && component <= 1.0F;
     };
 
-    return isUnitInterval(value.red) && isUnitInterval(value.green) && isUnitInterval(value.blue) &&
-           isUnitInterval(value.alpha);
+    return isUnitInterval(value.red) && isUnitInterval(value.green) && isUnitInterval(value.blue) && isUnitInterval(value.alpha);
 }
 
 [[nodiscard]] constexpr bool IsValid(PresentationEnvironmentRevision value) noexcept
@@ -954,25 +908,23 @@ struct RenderFrameResult final
 
 [[nodiscard]] constexpr bool IsValid(RenderTargetSnapshot value) noexcept
 {
-    if (!value.GetWindowId().IsValid() || value.GetRevision() == 0U ||
-        !IsValid(value.GetPresentationEnvironmentRevision()))
+    if (!value.GetWindowId().IsValid() || value.GetRevision() == 0U || !IsValid(value.GetPresentationEnvironmentRevision()))
     {
         return false;
     }
 
-    const platform::PixelSize pixelSize = value.GetPixelSize();
-    const platform::LogicalSize logicalSize = value.GetLogicalSize();
-    if ((pixelSize.width > 0U && logicalSize.width == 0U) ||
-        (pixelSize.height > 0U && logicalSize.height == 0U))
+    const ponder::platform::PixelSize pixelSize = value.GetPixelSize();
+    const ponder::platform::LogicalSize logicalSize = value.GetLogicalSize();
+    if ((pixelSize.width > 0U && logicalSize.width == 0U) || (pixelSize.height > 0U && logicalSize.height == 0U))
     {
         return false;
     }
 
     switch (value.GetWindowState())
     {
-    case platform::WindowState::Normal:
-    case platform::WindowState::Minimized:
-    case platform::WindowState::Maximized:
+    case ponder::platform::WindowState::Normal:
+    case ponder::platform::WindowState::Minimized:
+    case ponder::platform::WindowState::Maximized:
         return true;
     }
 
@@ -981,18 +933,16 @@ struct RenderFrameResult final
 
 [[nodiscard]] constexpr bool IsValid(RenderFrameMetrics value) noexcept
 {
-    const bool extentsMatch = (value.pixelSize.width == 0U || value.logicalSize.width > 0U) &&
-                              (value.pixelSize.height == 0U || value.logicalSize.height > 0U);
-    return value.windowId.IsValid() && IsValid(value.metricsRevision) &&
-           value.targetRevision > 0U && extentsMatch;
+    const bool extentsMatch =
+        (value.pixelSize.width == 0U || value.logicalSize.width > 0U) && (value.pixelSize.height == 0U || value.logicalSize.height > 0U);
+    return value.windowId.IsValid() && IsValid(value.metricsRevision) && value.targetRevision > 0U && extentsMatch;
 }
 
 [[nodiscard]] constexpr bool IsValid(const SelectedPresentationConfig& value) noexcept
 {
-    if (!IsValid(value.requestedPolicy) || !IsValid(value.actualPolicy) ||
-        !IsValid(value.policyFallback) || !IsValid(value.requestedQueuedLatency) ||
-        !IsValid(value.actualQueuedLatency) || !IsValid(value.queuedLatencyFallback) ||
-        !IsValid(value.output) || value.pixelExtent.width == 0U || value.pixelExtent.height == 0U)
+    if (!IsValid(value.requestedPolicy) || !IsValid(value.actualPolicy) || !IsValid(value.policyFallback) || !IsValid(value.requestedQueuedLatency) ||
+        !IsValid(value.actualQueuedLatency) || !IsValid(value.queuedLatencyFallback) || !IsValid(value.output) || value.pixelExtent.width == 0U ||
+        value.pixelExtent.height == 0U)
     {
         return false;
     }
@@ -1002,26 +952,22 @@ struct RenderFrameResult final
     {
         return false;
     }
-    if (policyChanged !=
-        (value.policyFallback == PresentationPolicyFallbackReason::UnavailableForTarget))
+    if (policyChanged != (value.policyFallback == PresentationPolicyFallbackReason::UnavailableForTarget))
     {
         return false;
     }
 
-    const bool latencyChanged =
-        value.requestedQueuedLatency.maximumQueuedFrames != value.actualQueuedLatency;
+    const bool latencyChanged = value.requestedQueuedLatency.maximumQueuedFrames != value.actualQueuedLatency;
     if (value.requestedQueuedLatency.strength == RequirementStrength::Required && latencyChanged)
     {
         return false;
     }
-    if (latencyChanged !=
-        (value.queuedLatencyFallback == QueuedFrameLatencyFallbackReason::TargetMaximumExceeded))
+    if (latencyChanged != (value.queuedLatencyFallback == QueuedFrameLatencyFallbackReason::TargetMaximumExceeded))
     {
         return false;
     }
 
-    return !latencyChanged || value.actualQueuedLatency.frameCount <
-                                  value.requestedQueuedLatency.maximumQueuedFrames.frameCount;
+    return !latencyChanged || value.actualQueuedLatency.frameCount < value.requestedQueuedLatency.maximumQueuedFrames.frameCount;
 }
 
 [[nodiscard]] constexpr bool IsValid(TargetRecreationInfo value) noexcept
@@ -1041,14 +987,12 @@ struct RenderFrameResult final
         return !value.previousRevision.has_value() && !value.currentRevision.has_value();
     }
 
-    if (value.reason == TargetRecreationReason::PresentationChanged &&
-        !value.previousRevision.has_value() && !value.currentRevision.has_value())
+    if (value.reason == TargetRecreationReason::PresentationChanged && !value.previousRevision.has_value() && !value.currentRevision.has_value())
     {
         return true;
     }
 
-    return value.previousRevision.has_value() && value.currentRevision.has_value() &&
-           *value.currentRevision > *value.previousRevision;
+    return value.previousRevision.has_value() && value.currentRevision.has_value() && *value.currentRevision > *value.previousRevision;
 }
 
 [[nodiscard]] inline bool IsValid(const BackendDiagnostic& value) noexcept
@@ -1073,8 +1017,7 @@ struct RenderFrameResult final
 
 [[nodiscard]] constexpr bool IsValid(RenderTargetDesc value) noexcept
 {
-    return IsValid(value.targetSnapshot) && IsValid(value.presentation) &&
-           IsValid(value.queuedLatency) && IsValid(value.clearColor);
+    return IsValid(value.targetSnapshot) && IsValid(value.presentation) && IsValid(value.queuedLatency) && IsValid(value.clearColor);
 }
 
 [[nodiscard]] constexpr bool IsValid(RenderFrameResult value) noexcept
@@ -1086,21 +1029,16 @@ struct RenderFrameResult final
 
     if (value.presented)
     {
-        return value.windowId.IsValid() && value.targetRevision > 0U &&
-               value.swapchainGeneration > 0U &&
-               (value.status == FrameStatus::Presented || value.status == FrameStatus::Suboptimal ||
-                value.status == FrameStatus::Recreated);
+        return value.windowId.IsValid() && value.targetRevision > 0U && value.swapchainGeneration > 0U &&
+               (value.status == FrameStatus::Presented || value.status == FrameStatus::Suboptimal || value.status == FrameStatus::Recreated);
     }
 
-    return value.status == FrameStatus::SkippedSuspended || value.status == FrameStatus::TimedOut ||
-           value.status == FrameStatus::RecreationPending;
+    return value.status == FrameStatus::SkippedSuspended || value.status == FrameStatus::TimedOut || value.status == FrameStatus::RecreationPending;
 }
 
-[[nodiscard]] core::VoidResult ValidateSurfacePreparationRequest(
-    platform::WindowGraphicsCompatibility compatibility, platform::WindowId actualWindowId,
-    const SurfacePreparationDesc& desc);
-[[nodiscard]] core::VoidResult ValidateTargetSnapshotUpdate(RenderTargetSnapshot current,
-                                                            RenderTargetSnapshot next);
+[[nodiscard]] core::VoidResult ValidateSurfacePreparationRequest(ponder::platform::WindowGraphicsCompatibility compatibility,
+                                                                 ponder::platform::WindowId actualWindowId, const SurfacePreparationDesc& desc);
+[[nodiscard]] core::VoidResult ValidateTargetSnapshotUpdate(RenderTargetSnapshot current, RenderTargetSnapshot next);
 
 class PreparedSurface;
 class RenderDevice;
@@ -1131,13 +1069,10 @@ public:
 
     [[nodiscard]] core::VoidResult Shutdown();
 
-    [[nodiscard]] core::Result<PreparedSurface> PrepareSurface(platform::Window& window,
-                                                               const SurfacePreparationDesc& desc);
-    [[nodiscard]] core::Result<RenderAdapterSelection> SelectAdapter(
-        const PreparedSurface& firstSurface, const RenderAdapterSelectionDesc& desc);
-    [[nodiscard]] core::Result<RenderDevice> CreateDevice(
-        const PreparedSurface& firstSurface, const RenderAdapterSelection& adapterSelection,
-        const RenderDeviceDesc& desc);
+    [[nodiscard]] core::Result<PreparedSurface> PrepareSurface(ponder::platform::Window& window, const SurfacePreparationDesc& desc);
+    [[nodiscard]] core::Result<RenderAdapterSelection> SelectAdapter(const PreparedSurface& firstSurface, const RenderAdapterSelectionDesc& desc);
+    [[nodiscard]] core::Result<RenderDevice> CreateDevice(const PreparedSurface& firstSurface, const RenderAdapterSelection& adapterSelection,
+                                                          const RenderDeviceDesc& desc);
 
 private:
     friend class detail::RenderBackendTestAccess;
@@ -1167,8 +1102,7 @@ public:
     [[nodiscard]] const RenderAdapterSnapshot& GetSelectedAdapter() const noexcept;
     [[nodiscard]] RenderDeviceDiagnostics GetDiagnostics() const;
     [[nodiscard]] std::uint32_t GetActiveTargetCount() const noexcept;
-    [[nodiscard]] core::Result<RenderTarget> CreateRenderTarget(PreparedSurface&& preparedSurface,
-                                                                const RenderTargetDesc& desc);
+    [[nodiscard]] core::Result<RenderTarget> CreateRenderTarget(PreparedSurface&& preparedSurface, const RenderTargetDesc& desc);
 
 private:
     friend class RenderBootstrap;
@@ -1197,7 +1131,7 @@ public:
     [[nodiscard]] bool IsValid() const noexcept;
     [[nodiscard]] bool IsBoundToRenderThread() const noexcept;
     [[nodiscard]] RenderTargetSnapshot GetTargetSnapshot() const noexcept;
-    [[nodiscard]] platform::WindowId GetWindowId() const noexcept;
+    [[nodiscard]] ponder::platform::WindowId GetWindowId() const noexcept;
     [[nodiscard]] core::VoidResult TransferToCurrentThread(RenderTargetSnapshot latestSnapshot);
     [[nodiscard]] core::VoidResult VerifyRenderThread() const;
 
@@ -1229,7 +1163,7 @@ public:
     [[nodiscard]] bool IsValid() const noexcept;
     [[nodiscard]] bool IsDeviceLost() const noexcept;
     [[nodiscard]] core::VoidResult VerifyRenderThread() const;
-    [[nodiscard]] platform::WindowId GetWindowId() const noexcept;
+    [[nodiscard]] ponder::platform::WindowId GetWindowId() const noexcept;
     [[nodiscard]] RenderTargetSnapshot GetTargetSnapshot() const noexcept;
     [[nodiscard]] TargetStatus GetStatus() const noexcept;
     [[nodiscard]] bool IsSuspended() const noexcept;
@@ -1239,8 +1173,7 @@ public:
     [[nodiscard]] bool HasPendingRecreation() const noexcept;
     [[nodiscard]] std::optional<TargetRecreationInfo> GetPendingRecreationInfo() const noexcept;
     [[nodiscard]] PresentationRetirementStats GetPresentationRetirementStats() const noexcept;
-    [[nodiscard]] std::optional<SelectedPresentationConfig> GetSelectedPresentationConfig()
-        const noexcept;
+    [[nodiscard]] std::optional<SelectedPresentationConfig> GetSelectedPresentationConfig() const noexcept;
     [[nodiscard]] RenderTargetDiagnostics GetDiagnostics() const;
     [[nodiscard]] core::Result<RenderFrame> AcquireFrame();
     [[nodiscard]] core::VoidResult UpdateTargetSnapshot(RenderTargetSnapshot latestSnapshot);
@@ -1291,6 +1224,5 @@ private:
     std::unique_ptr<State> m_state;
 };
 
-[[nodiscard]] platform::WindowGraphicsCompatibility
-GetRequiredWindowGraphicsCompatibility() noexcept;
+[[nodiscard]] ponder::platform::WindowGraphicsCompatibility GetRequiredWindowGraphicsCompatibility() noexcept;
 } // namespace pond::render

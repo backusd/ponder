@@ -4,7 +4,7 @@
 
 #include <format>
 
-namespace pond::platform::detail
+namespace ponder::platform::detail
 {
 SDL_Window* ToSdlWindow(BackendWindowHandle window) noexcept
 {
@@ -21,4 +21,4 @@ std::string GetBackendWindowContext(BackendWindowHandle window)
 {
     return std::format("backend window {}", window);
 }
-} // namespace pond::platform::detail
+} // namespace ponder::platform::detail

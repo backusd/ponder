@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace pond::platform
+namespace ponder::platform
 {
 enum class PhysicalKey : std::uint16_t
 {
@@ -272,12 +272,13 @@ public:
         return m_namedKey;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalKey& lhs,
-                                                   const LogicalKey& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalKey& lhs, const LogicalKey& rhs) noexcept = default;
 
 private:
-    constexpr LogicalKey(Kind kind, char32_t character, NamedKey namedKey) noexcept
-        : m_kind(kind), m_character(character), m_namedKey(namedKey)
+    constexpr LogicalKey(Kind kind, char32_t character, NamedKey namedKey) noexcept :
+        m_kind(kind),
+        m_character(character),
+        m_namedKey(namedKey)
     {
     }
 
@@ -310,14 +311,12 @@ enum class KeyModifiers : std::uint16_t
 
 [[nodiscard]] constexpr KeyModifiers operator|(KeyModifiers lhs, KeyModifiers rhs) noexcept
 {
-    return static_cast<KeyModifiers>(static_cast<std::uint16_t>(lhs) |
-                                     static_cast<std::uint16_t>(rhs));
+    return static_cast<KeyModifiers>(static_cast<std::uint16_t>(lhs) | static_cast<std::uint16_t>(rhs));
 }
 
 [[nodiscard]] constexpr KeyModifiers operator&(KeyModifiers lhs, KeyModifiers rhs) noexcept
 {
-    return static_cast<KeyModifiers>(static_cast<std::uint16_t>(lhs) &
-                                     static_cast<std::uint16_t>(rhs));
+    return static_cast<KeyModifiers>(static_cast<std::uint16_t>(lhs) & static_cast<std::uint16_t>(rhs));
 }
 
 constexpr KeyModifiers& operator|=(KeyModifiers& lhs, KeyModifiers rhs) noexcept
@@ -341,39 +340,37 @@ constexpr KeyModifiers& operator&=(KeyModifiers& lhs, KeyModifiers rhs) noexcept
 {
     return (modifiers & mask) == mask;
 }
-} // namespace pond::platform
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::PhysicalKey> : formatter<string>
+struct formatter<ponder::platform::PhysicalKey> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::PhysicalKey key, FormatContext& context) const
+    auto format(ponder::platform::PhysicalKey key, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("physical_key({})", static_cast<std::uint16_t>(key)), context);
+        return formatter<string>::format(std::format("physical_key({})", static_cast<std::uint16_t>(key)), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::NamedKey> : formatter<string>
+struct formatter<ponder::platform::NamedKey> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::NamedKey key, FormatContext& context) const
+    auto format(ponder::platform::NamedKey key, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("named_key({})", static_cast<std::uint16_t>(key)), context);
+        return formatter<string>::format(std::format("named_key({})", static_cast<std::uint16_t>(key)), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::LogicalKey::Kind> : formatter<string_view>
+struct formatter<ponder::platform::LogicalKey::Kind> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::LogicalKey::Kind kind, FormatContext& context) const
+    auto format(ponder::platform::LogicalKey::Kind kind, FormatContext& context) const
     {
-        using Kind = pond::platform::LogicalKey::Kind;
+        using Kind = ponder::platform::LogicalKey::Kind;
 
         string_view name{"unknown"};
         switch (kind)
@@ -393,12 +390,12 @@ struct formatter<pond::platform::LogicalKey::Kind> : formatter<string_view>
 };
 
 template <>
-struct formatter<pond::platform::LogicalKey> : formatter<string>
+struct formatter<ponder::platform::LogicalKey> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::platform::LogicalKey& key, FormatContext& context) const
+    auto format(const ponder::platform::LogicalKey& key, FormatContext& context) const
     {
-        using Kind = pond::platform::LogicalKey::Kind;
+        using Kind = ponder::platform::LogicalKey::Kind;
 
         string text{"unknown"};
         switch (key.GetKind())
@@ -406,8 +403,7 @@ struct formatter<pond::platform::LogicalKey> : formatter<string>
         case Kind::Unknown:
             break;
         case Kind::Character:
-            text = std::format("U+{:04X}",
-                               static_cast<std::uint32_t>(*key.GetCharacter()));
+            text = std::format("U+{:04X}", static_cast<std::uint32_t>(*key.GetCharacter()));
             break;
         case Kind::Named:
             text = std::format("{}", *key.GetNamedKey());
@@ -419,18 +415,17 @@ struct formatter<pond::platform::LogicalKey> : formatter<string>
 };
 
 template <>
-struct formatter<pond::platform::KeyModifiers> : formatter<string>
+struct formatter<ponder::platform::KeyModifiers> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::KeyModifiers modifiers, FormatContext& context) const
+    auto format(ponder::platform::KeyModifiers modifiers, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("0x{:04X}", static_cast<std::uint16_t>(modifiers)), context);
+        return formatter<string>::format(std::format("0x{:04X}", static_cast<std::uint16_t>(modifiers)), context);
     }
 };
 } // namespace std
 
-namespace pond::platform
+namespace ponder::platform
 {
 inline std::ostream& operator<<(std::ostream& output, PhysicalKey key)
 {
@@ -456,4 +451,4 @@ inline std::ostream& operator<<(std::ostream& output, KeyModifiers modifiers)
 {
     return output << std::format("{}", modifiers);
 }
-} // namespace pond::platform
+} // namespace ponder::platform

@@ -41,7 +41,7 @@ TestHandler gHandler = IncrementHandler;
 
 void RunEarlyReturnStyleCleanup(int& value)
 {
-    auto cleanup = pond::core::MakeScopeExit(
+    auto cleanup = ponder::core::MakeScopeExit(
         [&value]() noexcept
         {
             value = 7;
@@ -58,7 +58,7 @@ void RunEarlyReturnStyleCleanup(int& value)
 void RunWithTemporaryHandler(TestHandler handler, int& value)
 {
     TestHandler previousHandler = std::exchange(gHandler, handler);
-    auto restoreHandler = pond::core::MakeScopeExit(
+    auto restoreHandler = ponder::core::MakeScopeExit(
         [previousHandler]() noexcept
         {
             gHandler = previousHandler;
@@ -72,7 +72,7 @@ TEST(ScopeExitTests, InvokesCleanupOnScopeExit)
     bool called = false;
 
     {
-        auto cleanup = pond::core::MakeScopeExit(
+        auto cleanup = ponder::core::MakeScopeExit(
             [&called]() noexcept
             {
                 called = true;
@@ -98,7 +98,7 @@ TEST(ScopeExitTests, DismissPreventsCleanup)
     bool called = false;
 
     {
-        auto cleanup = pond::core::MakeScopeExit(
+        auto cleanup = ponder::core::MakeScopeExit(
             [&called]() noexcept
             {
                 called = true;
@@ -115,7 +115,7 @@ TEST(ScopeExitTests, MoveTransfersCleanupOwnership)
     int calls = 0;
 
     {
-        auto cleanup = pond::core::MakeScopeExit(
+        auto cleanup = ponder::core::MakeScopeExit(
             [&calls]() noexcept
             {
                 ++calls;
@@ -144,17 +144,17 @@ TEST(ScopeExitTests, RestoresStateForHandlerStyleOverrides)
 
 TEST(ScopeExitTests, HasNoThrowCleanupContract)
 {
-    static_assert(pond::core::ScopeExitCallback<NoThrowCallback>);
-    static_assert(!pond::core::ScopeExitCallback<ThrowingCallback>);
-    static_assert(!pond::core::ScopeExitCallback<ThrowingMoveCallback>);
+    static_assert(ponder::core::ScopeExitCallback<NoThrowCallback>);
+    static_assert(!ponder::core::ScopeExitCallback<ThrowingCallback>);
+    static_assert(!ponder::core::ScopeExitCallback<ThrowingMoveCallback>);
 
-    auto cleanup = pond::core::MakeScopeExit(NoThrowCallback{});
+    auto cleanup = ponder::core::MakeScopeExit(NoThrowCallback{});
 
     static_assert(std::is_nothrow_destructible_v<decltype(cleanup)>);
     static_assert(std::is_move_constructible_v<decltype(cleanup)>);
     static_assert(!std::is_copy_constructible_v<decltype(cleanup)>);
     static_assert(!std::is_move_assignable_v<decltype(cleanup)>);
-    static_assert(noexcept(pond::core::MakeScopeExit(NoThrowCallback{})));
+    static_assert(noexcept(ponder::core::MakeScopeExit(NoThrowCallback{})));
 
     EXPECT_TRUE(cleanup.IsActive());
 }

@@ -19,8 +19,7 @@ namespace
 {
 [[nodiscard]] bool ShouldSkipFrame(render::FrameStatus status) noexcept
 {
-    return status == render::FrameStatus::SkippedSuspended ||
-           status == render::FrameStatus::TimedOut ||
+    return status == render::FrameStatus::SkippedSuspended || status == render::FrameStatus::TimedOut ||
            status == render::FrameStatus::RecreationPending;
 }
 
@@ -30,8 +29,7 @@ namespace
 }
 
 template <typename Value>
-[[nodiscard]] core::Result<Value> MakeRenderFailure(render::RenderErrorCode code,
-                                                    std::string message)
+[[nodiscard]] core::Result<Value> MakeRenderFailure(render::RenderErrorCode code, std::string message)
 {
     return core::Result<Value>::FromError(MakeRenderError(code, std::move(message)));
 }
@@ -45,8 +43,10 @@ template <typename Value>
 
 struct RectangleRenderer::State final
 {
-    explicit State(render::draw2d::Draw2DLayer layer, UiHardLimits limits)
-        : drawLayer{std::move(layer)}, recorder{limits}, compiler{limits}
+    explicit State(render::draw2d::Draw2DLayer layer, UiHardLimits limits) :
+        drawLayer{std::move(layer)},
+        recorder{limits},
+        compiler{limits}
     {
     }
 
@@ -69,8 +69,8 @@ core::Result<UiTargetMetrics> MakeUiTargetMetricsForFrame(const render::RenderFr
 
 RectangleRenderer::RectangleRenderer() noexcept = default;
 
-RectangleRenderer::RectangleRenderer(std::unique_ptr<State> state) noexcept
-    : m_state{std::move(state)}
+RectangleRenderer::RectangleRenderer(std::unique_ptr<State> state) noexcept :
+    m_state{std::move(state)}
 {
 }
 
@@ -90,15 +90,13 @@ core::Result<RectangleRenderer> RectangleRenderer::Create(render::RenderDevice& 
 
     try
     {
-        auto state =
-            std::make_unique<State>(std::move(layerResult).GetValue(), kDefaultUiHardLimits);
+        auto state = std::make_unique<State>(std::move(layerResult).GetValue(), kDefaultUiHardLimits);
         return core::Result<RectangleRenderer>::FromValue(RectangleRenderer{std::move(state)});
     }
     catch (const std::bad_alloc&)
     {
-        return MakeRenderFailure<RectangleRenderer>(
-            render::RenderErrorCode::OutOfMemory,
-            "Experimental rectangle renderer could not allocate its private state.");
+        return MakeRenderFailure<RectangleRenderer>(render::RenderErrorCode::OutOfMemory,
+                                                    "Experimental rectangle renderer could not allocate its private state.");
     }
 }
 
@@ -107,22 +105,18 @@ bool RectangleRenderer::IsValid() const noexcept
     return m_state != nullptr && m_state->drawLayer.IsValid();
 }
 
-core::Result<RectangleRecordOutcome> RectangleRenderer::Record(render::RenderFrame& frame,
-                                                               const UiTargetMetrics& metrics,
-                                                               RectanglePaint rectangle)
+core::Result<RectangleRecordOutcome> RectangleRenderer::Record(render::RenderFrame& frame, const UiTargetMetrics& metrics, RectanglePaint rectangle)
 {
     return Record(frame, metrics, std::span<const RectanglePaint>{&rectangle, 1U});
 }
 
-core::Result<RectangleRecordOutcome> RectangleRenderer::Record(
-    render::RenderFrame& frame, const UiTargetMetrics& metrics,
-    std::span<const RectanglePaint> rectangles)
+core::Result<RectangleRecordOutcome> RectangleRenderer::Record(render::RenderFrame& frame, const UiTargetMetrics& metrics,
+                                                               std::span<const RectanglePaint> rectangles)
 {
     if (m_state == nullptr)
     {
-        return MakeRenderFailure<RectangleRecordOutcome>(
-            render::RenderErrorCode::InvalidState,
-            "Experimental rectangle renderer is moved-from or empty.");
+        return MakeRenderFailure<RectangleRecordOutcome>(render::RenderErrorCode::InvalidState,
+                                                         "Experimental rectangle renderer is moved-from or empty.");
     }
 
     if (core::VoidResult access = m_state->drawLayer.ValidateFrameAccess(frame); !access)
@@ -134,23 +128,19 @@ core::Result<RectangleRecordOutcome> RectangleRenderer::Record(
     {
         if (!pond::ui::IsValid(rectangle.rectangle) || !pond::ui::IsValid(rectangle.color))
         {
-            return MakeUiFailure<RectangleRecordOutcome>(
-                UiErrorCode::InvalidPaintValue,
-                "Experimental rectangle renderer received an invalid rectangle paint value.");
+            return MakeUiFailure<RectangleRecordOutcome>(UiErrorCode::InvalidPaintValue,
+                                                         "Experimental rectangle renderer received an invalid rectangle paint value.");
         }
     }
 
-    if (core::VoidResult validatedMetrics =
-            detail::ValidateUiTargetMetricsForFrame(metrics, frame.GetMetrics());
-        !validatedMetrics)
+    if (core::VoidResult validatedMetrics = detail::ValidateUiTargetMetricsForFrame(metrics, frame.GetMetrics()); !validatedMetrics)
     {
         return PropagateError<RectangleRecordOutcome>(std::move(validatedMetrics).GetError());
     }
 
     if (ShouldSkipFrame(frame.GetStatus()) || !IsDrawable(metrics))
     {
-        return core::Result<RectangleRecordOutcome>::FromValue(
-            RectangleRecordOutcome::SkippedSuspended);
+        return core::Result<RectangleRecordOutcome>::FromValue(RectangleRecordOutcome::SkippedSuspended);
     }
 
     m_state->recorder.Reset();
@@ -166,9 +156,7 @@ core::Result<RectangleRecordOutcome> RectangleRenderer::Record(
 
     for (const RectanglePaint& rectangle : rectangles)
     {
-        if (core::VoidResult fill =
-                m_state->recorder.FillRectangle(rectangle.rectangle, rectangle.color);
-            !fill)
+        if (core::VoidResult fill = m_state->recorder.FillRectangle(rectangle.rectangle, rectangle.color); !fill)
         {
             m_state->recorder.Reset();
             return PropagateError<RectangleRecordOutcome>(std::move(fill).GetError());
@@ -194,8 +182,7 @@ core::Result<RectangleRecordOutcome> RectangleRenderer::Record(
     if (packet.IsEmpty())
     {
         m_state->recorder.Reset();
-        return core::Result<RectangleRecordOutcome>::FromValue(
-            RectangleRecordOutcome::SkippedEmpty);
+        return core::Result<RectangleRecordOutcome>::FromValue(RectangleRecordOutcome::SkippedEmpty);
     }
 
     if (core::VoidResult recorded = m_state->drawLayer.Record(frame, packet); !recorded)

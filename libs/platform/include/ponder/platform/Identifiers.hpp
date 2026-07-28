@@ -6,7 +6,7 @@
 #include <ostream>
 #include <string>
 
-namespace pond::platform
+namespace ponder::platform
 {
 namespace detail
 {
@@ -21,18 +21,18 @@ struct DialogRequestIdTag final
 };
 } // namespace detail
 
-using WindowId = core::Identifier<detail::WindowIdTag>;
-using DisplayId = core::Identifier<detail::DisplayIdTag>;
-using DialogRequestId = core::Identifier<detail::DialogRequestIdTag>;
-} // namespace pond::platform
+using WindowId = ponder::core::Identifier<detail::WindowIdTag>;
+using DisplayId = ponder::core::Identifier<detail::DisplayIdTag>;
+using DialogRequestId = ponder::core::Identifier<detail::DialogRequestIdTag>;
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::WindowId> : formatter<string>
+struct formatter<ponder::platform::WindowId> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::WindowId id, FormatContext& context) const
+    auto format(ponder::platform::WindowId id, FormatContext& context) const
     {
         const string text = id.IsValid() ? std::format("{}", id.GetValue()) : "invalid";
         return formatter<string>::format(text, context);
@@ -40,10 +40,10 @@ struct formatter<pond::platform::WindowId> : formatter<string>
 };
 
 template <>
-struct formatter<pond::platform::DisplayId> : formatter<string>
+struct formatter<ponder::platform::DisplayId> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::DisplayId id, FormatContext& context) const
+    auto format(ponder::platform::DisplayId id, FormatContext& context) const
     {
         const string text = id.IsValid() ? std::format("{}", id.GetValue()) : "invalid";
         return formatter<string>::format(text, context);
@@ -51,10 +51,10 @@ struct formatter<pond::platform::DisplayId> : formatter<string>
 };
 
 template <>
-struct formatter<pond::platform::DialogRequestId> : formatter<string>
+struct formatter<ponder::platform::DialogRequestId> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::DialogRequestId id, FormatContext& context) const
+    auto format(ponder::platform::DialogRequestId id, FormatContext& context) const
     {
         const string text = id.IsValid() ? std::format("{}", id.GetValue()) : "invalid";
         return formatter<string>::format(text, context);
@@ -62,7 +62,7 @@ struct formatter<pond::platform::DialogRequestId> : formatter<string>
 };
 } // namespace std
 
-namespace pond::platform::detail
+namespace ponder::platform::detail
 {
 inline std::ostream& operator<<(std::ostream& output, WindowId id)
 {
@@ -78,4 +78,4 @@ inline std::ostream& operator<<(std::ostream& output, DialogRequestId id)
 {
     return output << std::format("{}", id);
 }
-} // namespace pond::platform::detail
+} // namespace ponder::platform::detail

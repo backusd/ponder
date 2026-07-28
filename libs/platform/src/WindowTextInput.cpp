@@ -1,40 +1,35 @@
 #include <ponder/core/Assert.hpp>
+#include <ponder/core/Exception.hpp>
 #include <ponder/core/Numbers.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Window.hpp>
 
 #include <optional>
-#include <string_view>
-#include <utility>
 
 #include "WindowImpl.hpp"
 
-namespace pond::platform
+namespace ponder::platform
 {
 namespace
 {
-constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
-
-[[nodiscard]] core::Result<detail::BackendTextInputArea> ToBackendTextInputArea(TextInputArea area)
+[[nodiscard]] detail::BackendTextInputArea ToBackendTextInputArea(TextInputArea area)
 {
-    if (!IsValid(area.rectangle))
+    if (!IsValid(area))
     {
-        return core::Result<detail::BackendTextInputArea>::FromError(core::Error{
-            kInvalidArgumentCode, "Text input area must have finite coordinates and finite, "
-                                  "nonnegative extents."});
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument,
+                                 "Text input area must have finite coordinates, finite nonnegative extents, and a "
+                                 "finite cursor offset.");
     }
 
-    const std::optional<int> x = core::RoundToInteger<int>(area.rectangle.origin.x);
-    const std::optional<int> y = core::RoundToInteger<int>(area.rectangle.origin.y);
-    const std::optional<int> width = core::RoundToInteger<int>(area.rectangle.extent.width);
-    const std::optional<int> height = core::RoundToInteger<int>(area.rectangle.extent.height);
-    const std::optional<int> cursorOffset = core::RoundToInteger<int>(area.cursorOffset);
-    if (!x.has_value() || !y.has_value() || !width.has_value() || !height.has_value() ||
-        !cursorOffset.has_value())
+    const std::optional<int> x = ponder::core::RoundToInteger<int>(area.rectangle.origin.x);
+    const std::optional<int> y = ponder::core::RoundToInteger<int>(area.rectangle.origin.y);
+    const std::optional<int> width = ponder::core::RoundToInteger<int>(area.rectangle.extent.width);
+    const std::optional<int> height = ponder::core::RoundToInteger<int>(area.rectangle.extent.height);
+    const std::optional<int> cursorOffset = ponder::core::RoundToInteger<int>(area.cursorOffset);
+    if (!x.has_value() || !y.has_value() || !width.has_value() || !height.has_value() || !cursorOffset.has_value())
     {
-        return core::Result<detail::BackendTextInputArea>::FromError(core::Error{
-            kInvalidArgumentCode, "Text input area and cursor offset must round to values "
-                                  "representable by the backend."});
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument,
+                                 "Text input area and cursor offset must round to values representable by the backend.");
     }
 
     return detail::BackendTextInputArea{*x, *y, *width, *height, *cursorOffset};
@@ -43,26 +38,26 @@ constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::
 
 namespace detail
 {
-core::VoidResult WindowImpl::StartTextInput()
+void WindowImpl::StartTextInput()
 {
     VerifyUsable("text input start");
     if (m_backend.IsTextInputActive(m_backendWindow))
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    return m_backend.StartTextInput(m_backendWindow);
+    m_backend.StartTextInput(m_backendWindow);
 }
 
-core::VoidResult WindowImpl::StopTextInput()
+void WindowImpl::StopTextInput()
 {
     VerifyUsable("text input stop");
     if (!m_backend.IsTextInputActive(m_backendWindow))
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    return m_backend.StopTextInput(m_backendWindow);
+    m_backend.StopTextInput(m_backendWindow);
 }
 
 bool WindowImpl::IsTextInputActive() const
@@ -71,38 +66,34 @@ bool WindowImpl::IsTextInputActive() const
     return m_backend.IsTextInputActive(m_backendWindow);
 }
 
-core::VoidResult WindowImpl::ClearTextComposition()
+void WindowImpl::ClearTextComposition()
 {
     VerifyUsable("text composition clear");
-    return m_backend.ClearTextComposition(m_backendWindow);
+    m_backend.ClearTextComposition(m_backendWindow);
 }
 
-core::VoidResult WindowImpl::SetTextInputArea(TextInputArea area)
+void WindowImpl::SetTextInputArea(TextInputArea area)
 {
     VerifyUsable("text input area update");
-    auto backendAreaResult = ToBackendTextInputArea(area);
-    RETURN_ERROR_IF_FAILED(backendAreaResult);
-
-    return m_backend.SetTextInputArea(m_backendWindow,
-                                      std::move(backendAreaResult).GetValue());
+    m_backend.SetTextInputArea(m_backendWindow, ToBackendTextInputArea(area));
 }
 
-core::VoidResult WindowImpl::ClearTextInputArea()
+void WindowImpl::ClearTextInputArea()
 {
     VerifyUsable("text input area clear");
-    return m_backend.SetTextInputArea(m_backendWindow, std::nullopt);
+    m_backend.SetTextInputArea(m_backendWindow, std::nullopt);
 }
 } // namespace detail
-core::VoidResult Window::StartTextInput()
+void Window::StartTextInput()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->StartTextInput();
+    m_state->StartTextInput();
 }
 
-core::VoidResult Window::StopTextInput()
+void Window::StopTextInput()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->StopTextInput();
+    m_state->StopTextInput();
 }
 
 bool Window::IsTextInputActive() const
@@ -111,21 +102,21 @@ bool Window::IsTextInputActive() const
     return m_state->IsTextInputActive();
 }
 
-core::VoidResult Window::ClearTextComposition()
+void Window::ClearTextComposition()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->ClearTextComposition();
+    m_state->ClearTextComposition();
 }
 
-core::VoidResult Window::SetTextInputArea(TextInputArea area)
+void Window::SetTextInputArea(TextInputArea area)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->SetTextInputArea(area);
+    m_state->SetTextInputArea(area);
 }
 
-core::VoidResult Window::ClearTextInputArea()
+void Window::ClearTextInputArea()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->ClearTextInputArea();
+    m_state->ClearTextInputArea();
 }
-} // namespace pond::platform
+} // namespace ponder::platform

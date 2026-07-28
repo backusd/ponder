@@ -1,3 +1,4 @@
+#include <ponder/core/Exception.hpp>
 #include <ponder/core/Result.hpp>
 #include <ponder/core/StackTrace.hpp>
 
@@ -13,48 +14,53 @@
 
 namespace
 {
+void ThrowingUnreachableHandler(const ponder::core::AssertionFailure&)
+{
+    throw PONDER_EXCEPTION("unreachable captured");
+}
+
 TEST(ErrorCodeTests, DefaultsToGeneralZero)
 {
-    constexpr pond::core::ErrorCode kCode;
+    constexpr ponder::core::ErrorCode kCode;
 
-    static_assert(kCode.GetCategory() == pond::core::ErrorCategory::General);
+    static_assert(kCode.GetCategory() == ponder::core::ErrorCategory::General);
     static_assert(kCode.GetValue() == 0);
 }
 
 TEST(ErrorCodeTests, StoresCategoryAndValue)
 {
-    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::InvalidArgument, 42};
+    constexpr ponder::core::ErrorCode kCode{ponder::core::ErrorCategory::InvalidArgument, 42};
 
-    static_assert(kCode.GetCategory() == pond::core::ErrorCategory::InvalidArgument);
+    static_assert(kCode.GetCategory() == ponder::core::ErrorCategory::InvalidArgument);
     static_assert(kCode.GetValue() == 42);
 }
 
-TEST(ErrorCategoryTests, UsesCompactUnderlyingTypeAndUnknownFallback)
+TEST(ErrorCategoryTests, UsesCompactUnderlyingTypeAndRejectsUnknownValues)
 {
-    static_assert(std::is_same_v<std::underlying_type_t<pond::core::ErrorCategory>, std::uint8_t>);
-    static_assert(pond::core::GetErrorCategoryName(pond::core::ErrorCategory::Parse) ==
-                  std::string_view{"parse"});
-    static_assert(pond::core::GetErrorCategoryName(pond::core::ErrorCategory::Unsupported) ==
-                  std::string_view{"unsupported"});
+    static_assert(std::is_same_v<std::underlying_type_t<ponder::core::ErrorCategory>, std::uint8_t>);
+    static_assert(ponder::core::GetErrorCategoryName(ponder::core::ErrorCategory::Parse) == std::string_view{"parse"});
+    static_assert(ponder::core::GetErrorCategoryName(ponder::core::ErrorCategory::Unsupported) == std::string_view{"unsupported"});
+    static_assert(!noexcept(ponder::core::GetErrorCategoryName(ponder::core::ErrorCategory::General)));
 
     // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
-    const auto unknownCategory = static_cast<pond::core::ErrorCategory>(255);
+    const auto unknownCategory = static_cast<ponder::core::ErrorCategory>(255);
+    const ponder::core::ScopedAssertionFailureHandler handler{ThrowingUnreachableHandler};
 
-    EXPECT_EQ(pond::core::GetErrorCategoryName(unknownCategory), std::string_view{"unknown"});
+    EXPECT_THROW((void)ponder::core::GetErrorCategoryName(unknownCategory), ponder::core::Exception);
 }
 
 TEST(ErrorTests, ConstructsWithDefaultCodeMessageLocationAndStackTraceFallback)
 {
     const auto location = std::source_location::current();
-    const pond::core::Error error{"failed", location};
+    const ponder::core::Error error{"failed", location};
 
-    EXPECT_TRUE(error.GetCode() == pond::core::ErrorCode{});
+    EXPECT_TRUE(error.GetCode() == ponder::core::ErrorCode{});
     EXPECT_EQ(error.GetMessage(), std::string_view{"failed"});
     EXPECT_STREQ(error.GetLocation().file_name(), location.file_name());
     EXPECT_EQ(error.GetLocation().line(), location.line());
     EXPECT_EQ(error.GetStackTrace().IsEmpty(), error.GetStackTrace().GetFrames().empty());
 
-    if (!pond::core::IsStackTraceCaptureSupported())
+    if (!ponder::core::IsStackTraceCaptureSupported())
     {
         EXPECT_TRUE(error.GetStackTrace().IsEmpty());
     }
@@ -62,8 +68,8 @@ TEST(ErrorTests, ConstructsWithDefaultCodeMessageLocationAndStackTraceFallback)
 
 TEST(ErrorTests, ConstructsWithExplicitCode)
 {
-    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::NotFound, 7};
-    const pond::core::Error error{kCode, "missing"};
+    constexpr ponder::core::ErrorCode kCode{ponder::core::ErrorCategory::NotFound, 7};
+    const ponder::core::Error error{kCode, "missing"};
 
     EXPECT_TRUE(error.GetCode() == kCode);
     EXPECT_EQ(error.GetMessage(), std::string_view{"missing"});
@@ -71,11 +77,11 @@ TEST(ErrorTests, ConstructsWithExplicitCode)
 
 TEST(ErrorTests, ComparesDirectlyWithErrorCode)
 {
-    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::NotFound, 7};
-    constexpr pond::core::ErrorCode kOtherCode{pond::core::ErrorCategory::Unsupported, 8};
-    const pond::core::Error error{kCode, "missing"};
+    constexpr ponder::core::ErrorCode kCode{ponder::core::ErrorCategory::NotFound, 7};
+    constexpr ponder::core::ErrorCode kOtherCode{ponder::core::ErrorCategory::Unsupported, 8};
+    const ponder::core::Error error{kCode, "missing"};
 
-    static_assert(pond::core::ConvertToErrorCode<pond::core::ErrorCode>);
+    static_assert(ponder::core::ConvertToErrorCode<ponder::core::ErrorCode>);
 
     EXPECT_TRUE(error == kCode);
     EXPECT_TRUE(kCode == error);
@@ -85,9 +91,8 @@ TEST(ErrorTests, ComparesDirectlyWithErrorCode)
 
 TEST(ErrorTests, AcceptsExplicitStackTrace)
 {
-    pond::core::StackTrace stackTrace{{"frame A", "frame B"}};
-    const pond::core::Error error{pond::core::ErrorCode{pond::core::ErrorCategory::Internal, 99},
-                                  "broken", std::move(stackTrace)};
+    ponder::core::StackTrace stackTrace{{"frame A", "frame B"}};
+    const ponder::core::Error error{ponder::core::ErrorCode{ponder::core::ErrorCategory::Internal, 99}, "broken", std::move(stackTrace)};
 
     ASSERT_EQ(error.GetStackTrace().GetFrames().size(), 2U);
     EXPECT_EQ(error.GetStackTrace().GetFrames()[0], "frame A");
@@ -96,7 +101,7 @@ TEST(ErrorTests, AcceptsExplicitStackTrace)
 
 TEST(StackTraceTests, FormatsFrames)
 {
-    const pond::core::StackTrace stackTrace{{"first", "second"}};
+    const ponder::core::StackTrace stackTrace{{"first", "second"}};
     std::ostringstream stream;
     stream << stackTrace;
 
@@ -107,11 +112,11 @@ TEST(StackTraceTests, FormatsFrames)
 
 TEST(StackTraceTests, EmptyFallbackIsWellFormed)
 {
-    const pond::core::StackTrace stackTrace = pond::core::CaptureStackTrace();
+    const ponder::core::StackTrace stackTrace = ponder::core::CaptureStackTrace();
 
     EXPECT_EQ(stackTrace.IsEmpty(), stackTrace.GetFrames().empty());
 
-    if (!pond::core::IsStackTraceCaptureSupported())
+    if (!ponder::core::IsStackTraceCaptureSupported())
     {
         EXPECT_TRUE(stackTrace.IsEmpty());
     }
@@ -119,8 +124,7 @@ TEST(StackTraceTests, EmptyFallbackIsWellFormed)
 
 TEST(StackTraceTests, CaptureOptionsCanDisableCapture)
 {
-    const pond::core::StackTrace stackTrace =
-        pond::core::CaptureStackTrace(pond::core::StackTraceCaptureOptions{0, 0});
+    const ponder::core::StackTrace stackTrace = ponder::core::CaptureStackTrace(ponder::core::StackTraceCaptureOptions{0, 0});
 
     EXPECT_TRUE(stackTrace.IsEmpty());
     EXPECT_TRUE(stackTrace.GetFrames().empty());
@@ -129,12 +133,11 @@ TEST(StackTraceTests, CaptureOptionsCanDisableCapture)
 TEST(StackTraceTests, CaptureOptionsLimitCapturedFramesWhenSupported)
 {
     constexpr std::size_t kMaxFrames{4};
-    const pond::core::StackTrace stackTrace =
-        pond::core::CaptureStackTrace(pond::core::StackTraceCaptureOptions{0, kMaxFrames});
+    const ponder::core::StackTrace stackTrace = ponder::core::CaptureStackTrace(ponder::core::StackTraceCaptureOptions{0, kMaxFrames});
 
     EXPECT_LE(stackTrace.GetFrames().size(), kMaxFrames);
 
-    if (!pond::core::IsStackTraceCaptureSupported())
+    if (!ponder::core::IsStackTraceCaptureSupported())
     {
         EXPECT_TRUE(stackTrace.IsEmpty());
     }
@@ -144,50 +147,48 @@ TEST(SourceLocationTests, FormatsFileLineAndColumn)
 {
     const auto location = std::source_location::current();
 
-    EXPECT_EQ(pond::core::FormatSourceLocation(location),
-              std::format("{}:{}:{}", location.file_name(), location.line(), location.column()));
+    EXPECT_EQ(ponder::core::FormatSourceLocation(location), std::format("{}:{}:{}", location.file_name(), location.line(), location.column()));
 }
 
 TEST(SourceLocationTests, FormatsFunctionWhenRequested)
 {
     const auto location = std::source_location::current();
-    const std::string formatted = pond::core::FormatSourceLocationWithFunction(location);
+    const std::string formatted = ponder::core::FormatSourceLocationWithFunction(location);
 
-    EXPECT_NE(formatted.find(pond::core::FormatSourceLocation(location)), std::string::npos);
+    EXPECT_NE(formatted.find(ponder::core::FormatSourceLocation(location)), std::string::npos);
     EXPECT_NE(formatted.find(location.function_name()), std::string::npos);
 }
 
 TEST(ErrorFormattingTests, FormatsCategoriesAndErrors)
 {
-    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Parse, 12};
+    constexpr ponder::core::ErrorCode kCode{ponder::core::ErrorCategory::Parse, 12};
     const auto location = std::source_location::current();
-    const pond::core::Error error{kCode, "bad input", pond::core::StackTrace{}, location};
+    const ponder::core::Error error{kCode, "bad input", ponder::core::StackTrace{}, location};
     std::ostringstream categoryStream;
     std::ostringstream codeStream;
     std::ostringstream errorStream;
 
-    categoryStream << pond::core::ErrorCategory::Parse;
+    categoryStream << ponder::core::ErrorCategory::Parse;
     codeStream << kCode;
     errorStream << error;
 
-    EXPECT_EQ(pond::core::GetErrorCategoryName(pond::core::ErrorCategory::Parse),
-              std::string_view{"parse"});
-    EXPECT_EQ(std::format("{}", pond::core::ErrorCategory::Parse), "parse");
+    EXPECT_EQ(ponder::core::GetErrorCategoryName(ponder::core::ErrorCategory::Parse), std::string_view{"parse"});
+    EXPECT_EQ(std::format("{}", ponder::core::ErrorCategory::Parse), "parse");
     EXPECT_EQ(categoryStream.str(), "parse");
     EXPECT_EQ(std::format("{}", kCode), "parse:12");
     EXPECT_EQ(codeStream.str(), "parse:12");
 
     const std::string formatted = std::format("{}", error);
     EXPECT_NE(formatted.find("[parse:12] bad input"), std::string::npos);
-    EXPECT_NE(formatted.find(pond::core::FormatSourceLocation(location)), std::string::npos);
+    EXPECT_NE(formatted.find(ponder::core::FormatSourceLocation(location)), std::string::npos);
     EXPECT_EQ(errorStream.str(), formatted);
 }
 
 TEST(ErrorPropagationTests, MakeUnexpectedBuildsExplicitError)
 {
-    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Unsupported, 3};
+    constexpr ponder::core::ErrorCode kCode{ponder::core::ErrorCategory::Unsupported, 3};
 
-    pond::core::Result<int> result = pond::core::MakeUnexpected(kCode, "unsupported");
+    ponder::core::Result<int> result = ponder::core::MakeUnexpected(kCode, "unsupported");
 
     ASSERT_FALSE(result.HasValue());
     EXPECT_TRUE(result.GetError().GetCode() == kCode);

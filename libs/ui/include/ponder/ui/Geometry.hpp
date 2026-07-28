@@ -13,8 +13,7 @@ struct LogicalPoint final
     float x{};
     float y{};
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalPoint& lhs,
-                                                   const LogicalPoint& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalPoint& lhs, const LogicalPoint& rhs) noexcept = default;
 };
 
 struct LogicalSize final
@@ -22,8 +21,7 @@ struct LogicalSize final
     float width{};
     float height{};
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalSize& lhs,
-                                                   const LogicalSize& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalSize& lhs, const LogicalSize& rhs) noexcept = default;
 };
 
 struct LogicalRect final
@@ -31,8 +29,7 @@ struct LogicalRect final
     LogicalPoint origin{};
     LogicalSize size{};
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalRect& lhs,
-                                                   const LogicalRect& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalRect& lhs, const LogicalRect& rhs) noexcept = default;
 };
 
 struct FramebufferPixelSize final
@@ -40,8 +37,7 @@ struct FramebufferPixelSize final
     std::uint32_t width{};
     std::uint32_t height{};
 
-    [[nodiscard]] friend constexpr auto operator<=>(
-        const FramebufferPixelSize& lhs, const FramebufferPixelSize& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const FramebufferPixelSize& lhs, const FramebufferPixelSize& rhs) noexcept = default;
 };
 
 [[nodiscard]] constexpr bool IsValid(LogicalPoint point) noexcept
@@ -51,8 +47,7 @@ struct FramebufferPixelSize final
 
 [[nodiscard]] constexpr bool IsValid(LogicalSize size) noexcept
 {
-    return core::IsFinite(size.width) && core::IsFinite(size.height) && size.width >= 0.0F &&
-           size.height >= 0.0F;
+    return core::IsFinite(size.width) && core::IsFinite(size.height) && size.width >= 0.0F && size.height >= 0.0F;
 }
 
 [[nodiscard]] constexpr float GetLeft(LogicalRect rectangle) noexcept
@@ -84,8 +79,7 @@ struct FramebufferPixelSize final
 
     const float right = GetRight(rectangle);
     const float bottom = GetBottom(rectangle);
-    return core::IsFinite(right) && core::IsFinite(bottom) &&
-           (rectangle.size.width == 0.0F || right > rectangle.origin.x) &&
+    return core::IsFinite(right) && core::IsFinite(bottom) && (rectangle.size.width == 0.0F || right > rectangle.origin.x) &&
            (rectangle.size.height == 0.0F || bottom > rectangle.origin.y);
 }
 
@@ -114,30 +108,24 @@ struct FramebufferPixelSize final
     return size.width > 0U && size.height > 0U;
 }
 
-[[nodiscard]] inline core::Result<LogicalRect> MakeLogicalRectFromEdges(float left, float top,
-                                                                        float right, float bottom)
+[[nodiscard]] inline core::Result<LogicalRect> MakeLogicalRectFromEdges(float left, float top, float right, float bottom)
 {
-    if (!core::IsFinite(left) || !core::IsFinite(top) || !core::IsFinite(right) ||
-        !core::IsFinite(bottom))
+    if (!core::IsFinite(left) || !core::IsFinite(top) || !core::IsFinite(right) || !core::IsFinite(bottom))
     {
-        return MakeUiFailure<LogicalRect>(UiErrorCode::InvalidPaintValue,
-                                          "UI logical rectangle edges must be finite.");
+        return MakeUiFailure<LogicalRect>(UiErrorCode::InvalidPaintValue, "UI logical rectangle edges must be finite.");
     }
 
     if (right < left || bottom < top)
     {
-        return MakeUiFailure<LogicalRect>(
-            UiErrorCode::InvalidPaintValue,
-            "UI logical rectangle edges must describe non-reversed half-open bounds.");
+        return MakeUiFailure<LogicalRect>(UiErrorCode::InvalidPaintValue, "UI logical rectangle edges must describe non-reversed half-open bounds.");
     }
 
     const float width = right - left;
     const float height = bottom - top;
     if (!core::IsFinite(width) || !core::IsFinite(height))
     {
-        return MakeUiFailure<LogicalRect>(
-            UiErrorCode::InvalidPaintValue,
-            "UI logical rectangle extents must remain finite after subtracting their edges.");
+        return MakeUiFailure<LogicalRect>(UiErrorCode::InvalidPaintValue,
+                                          "UI logical rectangle extents must remain finite after subtracting their edges.");
     }
 
     return LogicalRect{LogicalPoint{left, top}, LogicalSize{width, height}};

@@ -23,8 +23,7 @@ struct UiDrawCounters final
     std::uint64_t packetBytes{};
     std::uint64_t uploadBytes{};
 
-    [[nodiscard]] friend constexpr bool operator==(const UiDrawCounters& lhs,
-                                                   const UiDrawCounters& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const UiDrawCounters& lhs, const UiDrawCounters& rhs) noexcept = default;
 };
 
 struct UiHighWaterMarks final
@@ -39,7 +38,6 @@ struct UiHighWaterMarks final
     std::uint64_t packetBytes{};
     std::uint64_t uploadBytes{};
 
-    [[nodiscard]] friend constexpr bool operator==(const UiHighWaterMarks& lhs,
-                                                   const UiHighWaterMarks& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const UiHighWaterMarks& lhs, const UiHighWaterMarks& rhs) noexcept = default;
 };
 } // namespace pond::ui

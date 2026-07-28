@@ -1,16 +1,15 @@
-#include <ponder/platform/Dialog.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
+#include <ponder/platform/Hints.hpp>
 #include <ponder/platform/Identifiers.hpp>
 #include <ponder/platform/Keyboard.hpp>
 #include <ponder/platform/Mouse.hpp>
 #include <ponder/platform/NativeWindow.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformEvent.hpp>
-#include <ponder/platform/PlatformRuntime.hpp>
 #include <ponder/platform/Process.hpp>
+#include <ponder/platform/Runtime.hpp>
 #include <ponder/platform/TextInput.hpp>
-#include <ponder/platform/Timing.hpp>
 #include <ponder/platform/Window.hpp>
 #include <ponder/platform/WindowGraphics.hpp>
 #include <ponder/platform/WindowState.hpp>
@@ -26,21 +25,22 @@
 namespace
 {
 template <typename Type>
-concept FormattableAndStreamable =
-    std::formattable<Type, char> && requires(std::ostream& output, const Type& value) {
-        { output << value } -> std::same_as<std::ostream&>;
-    };
+concept FormattableAndStreamable = std::formattable<Type, char> && requires(std::ostream& output, const Type& value) {
+    { output << value } -> std::same_as<std::ostream&>;
+};
 
-
-using namespace pond::platform;
+using namespace ponder::platform;
 
 static_assert(FormattableAndStreamable<DialogFileFilter>);
+static_assert(FormattableAndStreamable<DialogKind>);
+static_assert(FormattableAndStreamable<DialogRequestInfo>);
 static_assert(FormattableAndStreamable<OpenFileDialogDesc>);
 static_assert(FormattableAndStreamable<SaveFileDialogDesc>);
 static_assert(FormattableAndStreamable<OpenFolderDialogDesc>);
 static_assert(FormattableAndStreamable<DialogSelection>);
 static_assert(FormattableAndStreamable<DialogCancellation>);
 static_assert(FormattableAndStreamable<DialogFailure>);
+static_assert(FormattableAndStreamable<DialogOutcome>);
 static_assert(FormattableAndStreamable<DisplayOrientation>);
 static_assert(FormattableAndStreamable<DisplayInfo>);
 static_assert(FormattableAndStreamable<ScreenPosition>);
@@ -66,7 +66,14 @@ static_assert(FormattableAndStreamable<NativeWin32Window>);
 static_assert(FormattableAndStreamable<NativeX11Window>);
 static_assert(FormattableAndStreamable<NativeWaylandWindow>);
 static_assert(FormattableAndStreamable<PlatformErrorCode>);
-static_assert(FormattableAndStreamable<PlatformRuntimeDesc>);
+static_assert(FormattableAndStreamable<Runtime>);
+static_assert(FormattableAndStreamable<RuntimeDesc>);
+static_assert(FormattableAndStreamable<hints::EventLoggingLevel>);
+static_assert(FormattableAndStreamable<hints::ImeUiCapabilities>);
+static_assert(FormattableAndStreamable<hints::FullscreenFocusLossBehavior>);
+static_assert(FormattableAndStreamable<hints::EventLogging>);
+static_assert(FormattableAndStreamable<hints::VideoDriver>);
+static_assert(FormattableAndStreamable<hints::MouseDefaultSystemCursor>);
 static_assert(FormattableAndStreamable<ProcessDesc>);
 static_assert(FormattableAndStreamable<ProcessNormalExit>);
 static_assert(FormattableAndStreamable<ProcessSignalTermination>);
@@ -74,8 +81,6 @@ static_assert(FormattableAndStreamable<ProcessUnknownTermination>);
 static_assert(FormattableAndStreamable<ProcessTerminationMode>);
 static_assert(FormattableAndStreamable<TextCompositionRange>);
 static_assert(FormattableAndStreamable<TextInputArea>);
-static_assert(FormattableAndStreamable<Duration>);
-static_assert(FormattableAndStreamable<Timestamp>);
 static_assert(FormattableAndStreamable<WindowDesc>);
 static_assert(FormattableAndStreamable<WindowGraphicsCompatibility>);
 static_assert(FormattableAndStreamable<WindowPresentation>);
@@ -131,25 +136,51 @@ TEST(PlatformFormattingTests, StreamsRepresentativeValuesUsingTheirFormatters)
     ExpectStreamMatchesFormat(WindowDesc{});
     ExpectStreamMatchesFormat(QuitRequestedEvent{});
     ExpectStreamMatchesFormat(DialogCancellation{});
+    ExpectStreamMatchesFormat(DialogOutcome{DialogCancellation{}});
+    ExpectStreamMatchesFormat(DialogKind::OpenFolder);
+    ExpectStreamMatchesFormat(DialogRequestInfo{.id = DialogRequestId{9},
+                                                .kind = DialogKind::SaveFile,
+                                                .requestedAt = ponder::core::Timestamp{},
+                                                .parentWindowId = WindowId{4},
+                                                .filterCount = 2,
+                                                .allowMultipleSelection = false});
 }
 
 TEST(PlatformFormattingTests, DescriptorSummariesDoNotDumpProcessArguments)
 {
-    const ProcessDesc process{
-        .executable = std::filesystem::path{"ponder-tool"},
-        .arguments = {"--token", "do-not-print"}};
+    const ProcessDesc process{.executable = std::filesystem::path{"ponder-tool"}, .arguments = {"--token", "do-not-print"}};
     const std::string processText = std::format("{}", process);
 
     EXPECT_EQ(processText, "process(executable='ponder-tool', argumentCount=2)");
     EXPECT_EQ(processText.find("do-not-print"), std::string::npos);
 
-    const OpenFileDialogDesc dialog{
-        .parentWindowId = WindowId{7},
-        .defaultLocation = std::filesystem::path{"workspace"},
-        .filters = {{.name = "Molecules", .pattern = "mol;cif"}},
-        .allowMultipleSelection = true};
-    EXPECT_EQ(std::format("{}", dialog),
-              "open_file_dialog(parent=7, defaultLocation='workspace', filterCount=1, "
-              "allowMultipleSelection=true)");
+    const OpenFileDialogDesc dialog{.parentWindowId = WindowId{7},
+                                    .defaultLocation = std::filesystem::path{"workspace"},
+                                    .filters = {{.name = "Molecules", .pattern = "mol;cif"}},
+                                    .allowMultipleSelection = true};
+    EXPECT_EQ(std::format("{}", dialog), "open_file_dialog(parent=7, defaultLocation='workspace', filterCount=1, "
+                                         "allowMultipleSelection=true)");
+
+    EXPECT_EQ(std::format("{}", DialogKind::SaveFile), "save-file");
+    const DialogRequestInfo request{.id = DialogRequestId{9},
+                                    .kind = DialogKind::OpenFile,
+                                    .requestedAt = ponder::core::Timestamp{},
+                                    .parentWindowId = WindowId{7},
+                                    .filterCount = 3,
+                                    .allowMultipleSelection = true};
+    EXPECT_EQ(std::format("{}", request), "dialog_request(id=9, kind=open-file, requestedAt=0 ns, parent=7, filterCount=3, "
+                                          "allowMultipleSelection=true)");
+
+    EXPECT_EQ(std::format("{}", DialogOutcome{DialogCancellation{}}), "cancelled");
+    const DialogOutcome selectionOutcome{DialogSelection{.paths = {std::filesystem::path{"molecule.sdf"}}, .selectedFilterIndex = 1U}};
+    EXPECT_EQ(std::format("{}", selectionOutcome), "selection(pathCount=1, selectedFilter=1)");
+
+    const DialogFailure failure{ponder::core::Error{ToErrorCode(PlatformErrorCode::BackendFailure), "asynchronous dialog failure"}};
+    const std::string failureText = std::format("{}", failure);
+    EXPECT_NE(failureText.find("failure("), std::string::npos);
+    EXPECT_NE(failureText.find("asynchronous dialog failure"), std::string::npos);
+    EXPECT_EQ(std::format("{}", DialogOutcome{failure}), failureText);
+    ExpectStreamMatchesFormat(failure);
+    ExpectStreamMatchesFormat(DialogOutcome{failure});
 }
 } // namespace

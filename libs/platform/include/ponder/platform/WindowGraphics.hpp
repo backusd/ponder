@@ -5,7 +5,7 @@
 #include <ostream>
 #include <string_view>
 
-namespace pond::platform
+namespace ponder::platform
 {
 enum class WindowGraphicsCompatibility : std::uint8_t
 {
@@ -14,8 +14,7 @@ enum class WindowGraphicsCompatibility : std::uint8_t
     Metal = 2
 };
 
-[[nodiscard]] constexpr std::string_view GetWindowGraphicsCompatibilityName(
-    WindowGraphicsCompatibility compatibility) noexcept
+[[nodiscard]] constexpr std::string_view GetWindowGraphicsCompatibilityName(WindowGraphicsCompatibility compatibility) noexcept
 {
     switch (compatibility)
     {
@@ -34,19 +33,17 @@ inline std::ostream& operator<<(std::ostream& output, WindowGraphicsCompatibilit
 {
     return output << GetWindowGraphicsCompatibilityName(compatibility);
 }
-} // namespace pond::platform
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::WindowGraphicsCompatibility> : formatter<string_view>
+struct formatter<ponder::platform::WindowGraphicsCompatibility> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::WindowGraphicsCompatibility compatibility,
-                FormatContext& context) const
+    auto format(ponder::platform::WindowGraphicsCompatibility compatibility, FormatContext& context) const
     {
-        return formatter<string_view>::format(
-            pond::platform::GetWindowGraphicsCompatibilityName(compatibility), context);
+        return formatter<string_view>::format(ponder::platform::GetWindowGraphicsCompatibilityName(compatibility), context);
     }
 };
 } // namespace std

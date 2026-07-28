@@ -33,8 +33,7 @@ struct UiHardLimits final
     std::uint64_t maxDrawPacketBytes{256U * 1024U * 1024U};
     std::uint64_t maxUploadBytes{256U * 1024U * 1024U};
 
-    [[nodiscard]] friend constexpr bool operator==(const UiHardLimits& lhs,
-                                                   const UiHardLimits& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const UiHardLimits& lhs, const UiHardLimits& rhs) noexcept = default;
 };
 
 struct UiLimitExceeded final
@@ -43,23 +42,19 @@ struct UiLimitExceeded final
     std::uint64_t requested{};
     std::uint64_t allowed{};
 
-    [[nodiscard]] friend constexpr bool operator==(const UiLimitExceeded& lhs,
-                                                   const UiLimitExceeded& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const UiLimitExceeded& lhs, const UiLimitExceeded& rhs) noexcept = default;
 };
 
 inline constexpr UiHardLimits kDefaultUiHardLimits{};
 
 [[nodiscard]] constexpr bool IsValid(UiHardLimits limits) noexcept
 {
-    return limits.maxPaintCommandCount > 0U && limits.maxPaintCommandPayloadBytes > 0U &&
-           limits.maxClipDepth > 0U && limits.maxCompilerScratchBytes > 0U &&
-           limits.maxCompiledVertexCount > 0U && limits.maxCompiledIndexCount > 0U &&
-           limits.maxDrawRecordCount > 0U && limits.maxDrawPacketBytes > 0U &&
-           limits.maxUploadBytes > 0U;
+    return limits.maxPaintCommandCount > 0U && limits.maxPaintCommandPayloadBytes > 0U && limits.maxClipDepth > 0U &&
+           limits.maxCompilerScratchBytes > 0U && limits.maxCompiledVertexCount > 0U && limits.maxCompiledIndexCount > 0U &&
+           limits.maxDrawRecordCount > 0U && limits.maxDrawPacketBytes > 0U && limits.maxUploadBytes > 0U;
 }
 
-[[nodiscard]] constexpr std::uint64_t GetLimitValue(UiHardLimits limits,
-                                                    UiHardLimitKind kind) noexcept
+[[nodiscard]] constexpr std::uint64_t GetLimitValue(UiHardLimits limits, UiHardLimitKind kind) noexcept
 {
     switch (kind)
     {
@@ -91,16 +86,13 @@ inline constexpr UiHardLimits kDefaultUiHardLimits{};
     return requested <= allowed;
 }
 
-[[nodiscard]] constexpr UiLimitExceeded MakeUiLimitExceeded(UiHardLimitKind kind,
-                                                            std::uint64_t requested,
-                                                            std::uint64_t allowed) noexcept
+[[nodiscard]] constexpr UiLimitExceeded MakeUiLimitExceeded(UiHardLimitKind kind, std::uint64_t requested, std::uint64_t allowed) noexcept
 {
     return UiLimitExceeded{kind, requested, allowed};
 }
 
-[[nodiscard]] inline core::VoidResult CheckUiHardLimit(
-    UiHardLimitKind kind, std::uint64_t requested, UiHardLimits limits = kDefaultUiHardLimits,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] inline core::VoidResult CheckUiHardLimit(UiHardLimitKind kind, std::uint64_t requested, UiHardLimits limits = kDefaultUiHardLimits,
+                                                       std::source_location location = std::source_location::current())
 {
     const std::uint64_t allowed = GetLimitValue(limits, kind);
     if (IsWithinLimit(requested, allowed))
@@ -109,8 +101,6 @@ inline constexpr UiHardLimits kDefaultUiHardLimits{};
     }
 
     return MakeUiFailure(UiErrorCode::LimitExceeded,
-                         "UI hard limit exceeded: requested " + std::to_string(requested) +
-                             ", allowed " + std::to_string(allowed) + ".",
-                         location);
+                         "UI hard limit exceeded: requested " + std::to_string(requested) + ", allowed " + std::to_string(allowed) + ".", location);
 }
 } // namespace pond::ui

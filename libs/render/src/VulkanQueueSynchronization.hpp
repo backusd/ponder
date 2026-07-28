@@ -18,8 +18,9 @@ public:
     class QueueOperationLock final
     {
     public:
-        QueueOperationLock(std::shared_mutex& deviceGate, std::mutex& queueMutex)
-            : m_deviceLock{deviceGate}, m_queueLock{queueMutex}
+        QueueOperationLock(std::shared_mutex& deviceGate, std::mutex& queueMutex) :
+            m_deviceLock{deviceGate},
+            m_queueLock{queueMutex}
         {
         }
 
@@ -40,8 +41,7 @@ public:
         m_queues.reserve(queues.size());
         for (const VkQueue queue : queues)
         {
-            PONDER_VERIFY(queue != VK_NULL_HANDLE,
-                          "Vulkan queue synchronization requires live queues");
+            PONDER_VERIFY(queue != VK_NULL_HANDLE, "Vulkan queue synchronization requires live queues");
 
             bool alreadyRegistered = false;
             for (const QueueEntry& entry : m_queues)
@@ -55,13 +55,11 @@ public:
 
             if (!alreadyRegistered)
             {
-                m_queues.push_back(
-                    QueueEntry{.queue = queue, .mutex = std::make_unique<std::mutex>()});
+                m_queues.push_back(QueueEntry{.queue = queue, .mutex = std::make_unique<std::mutex>()});
             }
         }
 
-        PONDER_VERIFY(!m_queues.empty(),
-                      "Vulkan queue synchronization requires at least one queue");
+        PONDER_VERIFY(!m_queues.empty(), "Vulkan queue synchronization requires at least one queue");
     }
 
     VulkanQueueSynchronization(const VulkanQueueSynchronization&) = delete;

@@ -49,8 +49,7 @@ struct VulkanDebugUtilityHooks final
         return objectNames || commandLabels || timingMarkers || captureRegions;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDebugUtilityHooks& lhs, const VulkanDebugUtilityHooks& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDebugUtilityHooks& lhs, const VulkanDebugUtilityHooks& rhs) noexcept = default;
 };
 
 struct VulkanInstanceInfo final
@@ -68,16 +67,14 @@ struct VulkanInstanceInfo final
     bool extSurfaceMaintenance1Enabled{};
     VulkanDebugUtilityHooks debugUtilityHooks{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanInstanceInfo& lhs, const VulkanInstanceInfo& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanInstanceInfo& lhs, const VulkanInstanceInfo& rhs) noexcept = default;
 };
 
 struct VulkanSurfaceInfo final
 {
     VulkanWsiKind wsiKind{VulkanWsiKind::Win32};
 
-    [[nodiscard]] friend constexpr bool operator==(const VulkanSurfaceInfo& lhs,
-                                                   const VulkanSurfaceInfo& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanSurfaceInfo& lhs, const VulkanSurfaceInfo& rhs) noexcept = default;
 };
 
 struct VulkanQueueFamilySnapshot final
@@ -87,9 +84,7 @@ struct VulkanQueueFamilySnapshot final
     bool supportsGraphics{};
     bool supportsPresentation{};
 
-    [[nodiscard]] friend constexpr bool operator==(const VulkanQueueFamilySnapshot& lhs,
-                                                   const VulkanQueueFamilySnapshot& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanQueueFamilySnapshot& lhs, const VulkanQueueFamilySnapshot& rhs) noexcept = default;
 };
 
 struct VulkanDeviceQueuePlan final
@@ -99,8 +94,7 @@ struct VulkanDeviceQueuePlan final
     std::vector<std::uint32_t> provisionedQueueFamilyIndices{};
     bool usesDistinctPresentationQueue{};
 
-    [[nodiscard]] friend bool operator==(const VulkanDeviceQueuePlan& lhs,
-                                         const VulkanDeviceQueuePlan& rhs) = default;
+    [[nodiscard]] friend bool operator==(const VulkanDeviceQueuePlan& lhs, const VulkanDeviceQueuePlan& rhs) = default;
 };
 
 struct VulkanDeviceOptionalCapabilities final
@@ -110,19 +104,16 @@ struct VulkanDeviceOptionalCapabilities final
     bool presentWait{};
     bool vmaAllocator{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDeviceOptionalCapabilities& lhs,
-        const VulkanDeviceOptionalCapabilities& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDeviceOptionalCapabilities& lhs,
+                                                   const VulkanDeviceOptionalCapabilities& rhs) noexcept = default;
 };
 
-[[nodiscard]] constexpr bool IsValidVulkanQueueFamilySnapshot(
-    VulkanQueueFamilySnapshot value) noexcept
+[[nodiscard]] constexpr bool IsValidVulkanQueueFamilySnapshot(VulkanQueueFamilySnapshot value) noexcept
 {
     return value.queueCount > 0U;
 }
 
-[[nodiscard]] constexpr bool IsValidVulkanDeviceOptionalCapabilities(
-    VulkanDeviceOptionalCapabilities) noexcept
+[[nodiscard]] constexpr bool IsValidVulkanDeviceOptionalCapabilities(VulkanDeviceOptionalCapabilities) noexcept
 {
     return true;
 }
@@ -140,11 +131,9 @@ struct VulkanDeviceOptionalCapabilities final
     {
         const std::uint32_t familyIndex = value.provisionedQueueFamilyIndices[index];
         hasGraphicsQueue = hasGraphicsQueue || familyIndex == value.graphicsQueueFamilyIndex;
-        hasPresentationQueue =
-            hasPresentationQueue || familyIndex == value.presentationQueueFamilyIndex;
+        hasPresentationQueue = hasPresentationQueue || familyIndex == value.presentationQueueFamilyIndex;
 
-        for (std::size_t laterIndex = index + 1U;
-             laterIndex < value.provisionedQueueFamilyIndices.size(); ++laterIndex)
+        for (std::size_t laterIndex = index + 1U; laterIndex < value.provisionedQueueFamilyIndices.size(); ++laterIndex)
         {
             if (familyIndex == value.provisionedQueueFamilyIndices[laterIndex])
             {
@@ -154,8 +143,7 @@ struct VulkanDeviceOptionalCapabilities final
     }
 
     return hasGraphicsQueue && hasPresentationQueue &&
-           value.usesDistinctPresentationQueue ==
-               (value.graphicsQueueFamilyIndex != value.presentationQueueFamilyIndex);
+           value.usesDistinctPresentationQueue == (value.graphicsQueueFamilyIndex != value.presentationQueueFamilyIndex);
 }
 
 struct VulkanDeviceInfo final
@@ -166,15 +154,13 @@ struct VulkanDeviceInfo final
     VkDeviceSize nonCoherentAtomSize{1U};
     std::array<std::uint32_t, 2U> maximumViewportDimensions{};
 
-    [[nodiscard]] friend bool operator==(const VulkanDeviceInfo& lhs,
-                                         const VulkanDeviceInfo& rhs) = default;
+    [[nodiscard]] friend bool operator==(const VulkanDeviceInfo& lhs, const VulkanDeviceInfo& rhs) = default;
 };
 
 struct VulkanHostBufferAllocationRequest final
 {
     VkMemoryPropertyFlags requiredMemoryProperties{VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT};
-    VkMemoryPropertyFlags preferredMemoryProperties{VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                                                    VK_MEMORY_PROPERTY_HOST_CACHED_BIT};
+    VkMemoryPropertyFlags preferredMemoryProperties{VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT};
 };
 
 struct VulkanHostBufferAllocationResult final
@@ -207,132 +193,93 @@ struct VulkanDebugMessengerContext final
     std::atomic_uint64_t errorCount{};
     std::atomic_uint64_t droppedMessageCount{};
     std::atomic_size_t reservedMessageCount{};
-    std::array<CapturedMessage, RenderValidationReport::kMaximumCapturedMessages>
-        capturedMessages{};
+    std::array<CapturedMessage, RenderValidationReport::kMaximumCapturedMessages> capturedMessages{};
 };
 
 struct VulkanGlobalDispatch final
 {
     using InitializeFn = VkResult (*)();
     using EnumerateInstanceVersionFn = VkResult (*)(std::uint32_t*);
-    using EnumerateInstanceExtensionPropertiesFn = VkResult (*)(const char*, std::uint32_t*,
-                                                                VkExtensionProperties*);
+    using EnumerateInstanceExtensionPropertiesFn = VkResult (*)(const char*, std::uint32_t*, VkExtensionProperties*);
     using EnumerateInstanceLayerPropertiesFn = VkResult (*)(std::uint32_t*, VkLayerProperties*);
-    using CreateInstanceFn = VkResult (*)(const VkInstanceCreateInfo*, const VkAllocationCallbacks*,
-                                          VkInstance*);
+    using CreateInstanceFn = VkResult (*)(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
     using DestroyInstanceFn = void (*)(VkInstance, const VkAllocationCallbacks*);
     using LoadInstanceOnlyFn = void (*)(VkInstance);
     using LoadInstanceTableFn = void (*)(VolkInstanceTable*, VkInstance);
-    using CreateDebugUtilsMessengerFn = VkResult (*)(VkInstance,
-                                                     const VkDebugUtilsMessengerCreateInfoEXT*,
-                                                     const VkAllocationCallbacks*,
+    using CreateDebugUtilsMessengerFn = VkResult (*)(VkInstance, const VkDebugUtilsMessengerCreateInfoEXT*, const VkAllocationCallbacks*,
                                                      VkDebugUtilsMessengerEXT*);
-    using DestroyDebugUtilsMessengerFn = void (*)(VkInstance, VkDebugUtilsMessengerEXT,
-                                                  const VkAllocationCallbacks*);
-    using CreateSurfaceFn = VkResult (*)(VkInstance, const void*, const VkAllocationCallbacks*,
-                                         VkSurfaceKHR*);
+    using DestroyDebugUtilsMessengerFn = void (*)(VkInstance, VkDebugUtilsMessengerEXT, const VkAllocationCallbacks*);
+    using CreateSurfaceFn = VkResult (*)(VkInstance, const void*, const VkAllocationCallbacks*, VkSurfaceKHR*);
     using DestroySurfaceFn = void (*)(VkInstance, VkSurfaceKHR, const VkAllocationCallbacks*);
     using EnumeratePhysicalDevicesFn = VkResult (*)(VkInstance, std::uint32_t*, VkPhysicalDevice*);
     using GetPhysicalDeviceProperties2Fn = void (*)(VkPhysicalDevice, VkPhysicalDeviceProperties2*);
     using GetPhysicalDeviceFeatures2Fn = void (*)(VkPhysicalDevice, VkPhysicalDeviceFeatures2*);
-    using GetPhysicalDeviceMemoryPropertiesFn = void (*)(VkPhysicalDevice,
-                                                         VkPhysicalDeviceMemoryProperties*);
-    using GetPhysicalDeviceQueueFamilyPropertiesFn = void (*)(VkPhysicalDevice, std::uint32_t*,
-                                                              VkQueueFamilyProperties*);
-    using GetPhysicalDeviceSurfaceSupportFn = VkResult (*)(VkPhysicalDevice, std::uint32_t,
-                                                           VkSurfaceKHR, VkBool32*);
-    using GetPhysicalDeviceSurfaceFormatsFn = VkResult (*)(VkPhysicalDevice, VkSurfaceKHR,
-                                                           std::uint32_t*, VkSurfaceFormatKHR*);
-    using GetPhysicalDeviceSurfacePresentModesFn = VkResult (*)(VkPhysicalDevice, VkSurfaceKHR,
-                                                                std::uint32_t*, VkPresentModeKHR*);
-    using GetPhysicalDeviceSurfaceCapabilitiesFn = VkResult (*)(VkPhysicalDevice, VkSurfaceKHR,
-                                                                VkSurfaceCapabilitiesKHR*);
-    using EnumerateDeviceExtensionPropertiesFn = VkResult (*)(VkPhysicalDevice, const char*,
-                                                              std::uint32_t*,
-                                                              VkExtensionProperties*);
-    using CreateDeviceFn = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo*,
-                                        const VkAllocationCallbacks*, VkDevice*);
+    using GetPhysicalDeviceMemoryPropertiesFn = void (*)(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties*);
+    using GetPhysicalDeviceQueueFamilyPropertiesFn = void (*)(VkPhysicalDevice, std::uint32_t*, VkQueueFamilyProperties*);
+    using GetPhysicalDeviceSurfaceSupportFn = VkResult (*)(VkPhysicalDevice, std::uint32_t, VkSurfaceKHR, VkBool32*);
+    using GetPhysicalDeviceSurfaceFormatsFn = VkResult (*)(VkPhysicalDevice, VkSurfaceKHR, std::uint32_t*, VkSurfaceFormatKHR*);
+    using GetPhysicalDeviceSurfacePresentModesFn = VkResult (*)(VkPhysicalDevice, VkSurfaceKHR, std::uint32_t*, VkPresentModeKHR*);
+    using GetPhysicalDeviceSurfaceCapabilitiesFn = VkResult (*)(VkPhysicalDevice, VkSurfaceKHR, VkSurfaceCapabilitiesKHR*);
+    using EnumerateDeviceExtensionPropertiesFn = VkResult (*)(VkPhysicalDevice, const char*, std::uint32_t*, VkExtensionProperties*);
+    using CreateDeviceFn = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo*, const VkAllocationCallbacks*, VkDevice*);
     using DestroyDeviceFn = void (*)(VkDevice, const VkAllocationCallbacks*);
     using LoadDeviceFn = void (*)(VkDevice);
     using LoadDeviceTableFn = void (*)(VolkDeviceTable*, PFN_vkGetDeviceProcAddr, VkDevice);
     using GetDeviceQueueFn = void (*)(VkDevice, std::uint32_t, std::uint32_t, VkQueue*);
     using DeviceWaitIdleFn = VkResult (*)(VkDevice);
     using QueueWaitIdleFn = VkResult (*)(VkQueue);
-    using CreateSwapchainFn = VkResult (*)(VkDevice, const VkSwapchainCreateInfoKHR*,
-                                           const VkAllocationCallbacks*, VkSwapchainKHR*);
+    using CreateSwapchainFn = VkResult (*)(VkDevice, const VkSwapchainCreateInfoKHR*, const VkAllocationCallbacks*, VkSwapchainKHR*);
     using DestroySwapchainFn = void (*)(VkDevice, VkSwapchainKHR, const VkAllocationCallbacks*);
     using GetSwapchainImagesFn = VkResult (*)(VkDevice, VkSwapchainKHR, std::uint32_t*, VkImage*);
-    using CreateImageViewFn = VkResult (*)(VkDevice, const VkImageViewCreateInfo*,
-                                           const VkAllocationCallbacks*, VkImageView*);
+    using CreateImageViewFn = VkResult (*)(VkDevice, const VkImageViewCreateInfo*, const VkAllocationCallbacks*, VkImageView*);
     using DestroyImageViewFn = void (*)(VkDevice, VkImageView, const VkAllocationCallbacks*);
-    using CreateRenderPassFn = VkResult (*)(VkDevice, const VkRenderPassCreateInfo*,
-                                            const VkAllocationCallbacks*, VkRenderPass*);
+    using CreateRenderPassFn = VkResult (*)(VkDevice, const VkRenderPassCreateInfo*, const VkAllocationCallbacks*, VkRenderPass*);
     using DestroyRenderPassFn = void (*)(VkDevice, VkRenderPass, const VkAllocationCallbacks*);
-    using CreateFramebufferFn = VkResult (*)(VkDevice, const VkFramebufferCreateInfo*,
-                                             const VkAllocationCallbacks*, VkFramebuffer*);
+    using CreateFramebufferFn = VkResult (*)(VkDevice, const VkFramebufferCreateInfo*, const VkAllocationCallbacks*, VkFramebuffer*);
     using DestroyFramebufferFn = void (*)(VkDevice, VkFramebuffer, const VkAllocationCallbacks*);
-    using CreateShaderModuleFn = VkResult (*)(VkDevice, const VkShaderModuleCreateInfo*,
-                                              const VkAllocationCallbacks*, VkShaderModule*);
+    using CreateShaderModuleFn = VkResult (*)(VkDevice, const VkShaderModuleCreateInfo*, const VkAllocationCallbacks*, VkShaderModule*);
     using DestroyShaderModuleFn = void (*)(VkDevice, VkShaderModule, const VkAllocationCallbacks*);
-    using CreatePipelineLayoutFn = VkResult (*)(VkDevice, const VkPipelineLayoutCreateInfo*,
-                                                const VkAllocationCallbacks*, VkPipelineLayout*);
-    using DestroyPipelineLayoutFn = void (*)(VkDevice, VkPipelineLayout,
-                                             const VkAllocationCallbacks*);
-    using CreateGraphicsPipelinesFn = VkResult (*)(VkDevice, VkPipelineCache, std::uint32_t,
-                                                   const VkGraphicsPipelineCreateInfo*,
+    using CreatePipelineLayoutFn = VkResult (*)(VkDevice, const VkPipelineLayoutCreateInfo*, const VkAllocationCallbacks*, VkPipelineLayout*);
+    using DestroyPipelineLayoutFn = void (*)(VkDevice, VkPipelineLayout, const VkAllocationCallbacks*);
+    using CreateGraphicsPipelinesFn = VkResult (*)(VkDevice, VkPipelineCache, std::uint32_t, const VkGraphicsPipelineCreateInfo*,
                                                    const VkAllocationCallbacks*, VkPipeline*);
     using DestroyPipelineFn = void (*)(VkDevice, VkPipeline, const VkAllocationCallbacks*);
-    using CreateBufferFn = VkResult (*)(void*, const VkBufferCreateInfo*,
-                                        const VulkanHostBufferAllocationRequest*, VkBuffer*, void**,
+    using CreateBufferFn = VkResult (*)(void*, const VkBufferCreateInfo*, const VulkanHostBufferAllocationRequest*, VkBuffer*, void**,
                                         VulkanHostBufferAllocationResult*);
     using DestroyBufferFn = void (*)(void*, VkBuffer, void*);
     using MapMemoryFn = VkResult (*)(void*, void*, void**);
     using UnmapMemoryFn = void (*)(void*, void*);
     using FlushAllocationFn = VkResult (*)(void*, void*, VkDeviceSize, VkDeviceSize);
     using CmdBindPipelineFn = void (*)(VkCommandBuffer, VkPipelineBindPoint, VkPipeline);
-    using CmdSetViewportFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t,
-                                      const VkViewport*);
-    using CmdSetScissorFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t,
-                                     const VkRect2D*);
-    using CmdBindVertexBuffersFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t,
-                                            const VkBuffer*, const VkDeviceSize*);
+    using CmdSetViewportFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, const VkViewport*);
+    using CmdSetScissorFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, const VkRect2D*);
+    using CmdBindVertexBuffersFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, const VkBuffer*, const VkDeviceSize*);
     using CmdBindIndexBufferFn = void (*)(VkCommandBuffer, VkBuffer, VkDeviceSize, VkIndexType);
-    using CmdPushConstantsFn = void (*)(VkCommandBuffer, VkPipelineLayout, VkShaderStageFlags,
-                                        std::uint32_t, std::uint32_t, const void*);
-    using CmdDrawIndexedFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, std::uint32_t,
-                                      std::int32_t, std::uint32_t);
-    using CreateCommandPoolFn = VkResult (*)(VkDevice, const VkCommandPoolCreateInfo*,
-                                             const VkAllocationCallbacks*, VkCommandPool*);
+    using CmdPushConstantsFn = void (*)(VkCommandBuffer, VkPipelineLayout, VkShaderStageFlags, std::uint32_t, std::uint32_t, const void*);
+    using CmdDrawIndexedFn = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, std::uint32_t, std::int32_t, std::uint32_t);
+    using CreateCommandPoolFn = VkResult (*)(VkDevice, const VkCommandPoolCreateInfo*, const VkAllocationCallbacks*, VkCommandPool*);
     using DestroyCommandPoolFn = void (*)(VkDevice, VkCommandPool, const VkAllocationCallbacks*);
-    using AllocateCommandBuffersFn = VkResult (*)(VkDevice, const VkCommandBufferAllocateInfo*,
-                                                  VkCommandBuffer*);
+    using AllocateCommandBuffersFn = VkResult (*)(VkDevice, const VkCommandBufferAllocateInfo*, VkCommandBuffer*);
     using ResetCommandBufferFn = VkResult (*)(VkCommandBuffer, VkCommandBufferResetFlags);
     using BeginCommandBufferFn = VkResult (*)(VkCommandBuffer, const VkCommandBufferBeginInfo*);
     using EndCommandBufferFn = VkResult (*)(VkCommandBuffer);
-    using CmdBeginRenderPassFn = void (*)(VkCommandBuffer, const VkRenderPassBeginInfo*,
-                                          VkSubpassContents);
+    using CmdBeginRenderPassFn = void (*)(VkCommandBuffer, const VkRenderPassBeginInfo*, VkSubpassContents);
     using CmdEndRenderPassFn = void (*)(VkCommandBuffer);
-    using CreateSemaphoreFn = VkResult (*)(VkDevice, const VkSemaphoreCreateInfo*,
-                                           const VkAllocationCallbacks*, VkSemaphore*);
+    using CreateSemaphoreFn = VkResult (*)(VkDevice, const VkSemaphoreCreateInfo*, const VkAllocationCallbacks*, VkSemaphore*);
     using DestroySemaphoreFn = void (*)(VkDevice, VkSemaphore, const VkAllocationCallbacks*);
-    using CreateFenceFn = VkResult (*)(VkDevice, const VkFenceCreateInfo*,
-                                       const VkAllocationCallbacks*, VkFence*);
+    using CreateFenceFn = VkResult (*)(VkDevice, const VkFenceCreateInfo*, const VkAllocationCallbacks*, VkFence*);
     using DestroyFenceFn = void (*)(VkDevice, VkFence, const VkAllocationCallbacks*);
-    using WaitForFencesFn = VkResult (*)(VkDevice, std::uint32_t, const VkFence*, VkBool32,
-                                         std::uint64_t);
+    using WaitForFencesFn = VkResult (*)(VkDevice, std::uint32_t, const VkFence*, VkBool32, std::uint64_t);
     using ResetFencesFn = VkResult (*)(VkDevice, std::uint32_t, const VkFence*);
-    using AcquireNextImageFn = VkResult (*)(VkDevice, VkSwapchainKHR, std::uint64_t, VkSemaphore,
-                                            VkFence, std::uint32_t*);
+    using AcquireNextImageFn = VkResult (*)(VkDevice, VkSwapchainKHR, std::uint64_t, VkSemaphore, VkFence, std::uint32_t*);
     using QueueSubmitFn = VkResult (*)(VkQueue, std::uint32_t, const VkSubmitInfo*, VkFence);
     using QueuePresentFn = VkResult (*)(VkQueue, const VkPresentInfoKHR*);
     using WaitForPresentFn = VkResult (*)(VkDevice, VkSwapchainKHR, std::uint64_t, std::uint64_t);
     using SetDebugUtilsObjectNameFn = VkResult (*)(VkDevice, const VkDebugUtilsObjectNameInfoEXT*);
     using CmdBeginDebugUtilsLabelFn = void (*)(VkCommandBuffer, const VkDebugUtilsLabelEXT*);
     using CmdEndDebugUtilsLabelFn = void (*)(VkCommandBuffer);
-    using CreateAllocatorFn = VkResult (*)(VkInstance, VkPhysicalDevice, VkDevice, std::uint32_t,
-                                           void**);
-    using CreateOwnerLocalAllocatorFn = VkResult (*)(VkInstance, VkPhysicalDevice, VkDevice,
-                                                     std::uint32_t, PFN_vkGetInstanceProcAddr,
+    using CreateAllocatorFn = VkResult (*)(VkInstance, VkPhysicalDevice, VkDevice, std::uint32_t, void**);
+    using CreateOwnerLocalAllocatorFn = VkResult (*)(VkInstance, VkPhysicalDevice, VkDevice, std::uint32_t, PFN_vkGetInstanceProcAddr,
                                                      PFN_vkGetDeviceProcAddr, void**);
     using DestroyAllocatorFn = void (*)(void*);
 
@@ -441,15 +388,12 @@ public:
     void Reset() noexcept;
 
 private:
-    friend core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(
-        const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
-        RenderValidationMode validationMode);
+    friend core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
+                                                                        RenderValidationMode validationMode);
 
-    VulkanInstanceOwner(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-                        VulkanGlobalDispatch::DestroyInstanceFn destroyInstance,
-                        VulkanGlobalDispatch::DestroyDebugUtilsMessengerFn destroyDebugMessenger,
-                        VulkanGlobalDispatch dispatch, std::optional<VolkInstanceTable> volkTable,
-                        VulkanInstanceInfo info,
+    VulkanInstanceOwner(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, VulkanGlobalDispatch::DestroyInstanceFn destroyInstance,
+                        VulkanGlobalDispatch::DestroyDebugUtilsMessengerFn destroyDebugMessenger, VulkanGlobalDispatch dispatch,
+                        std::optional<VolkInstanceTable> volkTable, VulkanInstanceInfo info,
                         std::unique_ptr<VulkanDebugMessengerContext> debugContext) noexcept;
 
     VkInstance m_instance{VK_NULL_HANDLE};
@@ -480,12 +424,11 @@ public:
     void Reset() noexcept;
 
 private:
-    friend core::Result<VulkanSurfaceOwner> CreateVulkanSurfaceForNativeWindow(
-        const VulkanGlobalDispatch& dispatch, std::shared_ptr<VulkanInstanceOwner> instance,
-        const platform::NativeWindowHandle& nativeWindowHandle);
+    friend core::Result<VulkanSurfaceOwner> CreateVulkanSurfaceForNativeWindow(const VulkanGlobalDispatch& dispatch,
+                                                                               std::shared_ptr<VulkanInstanceOwner> instance,
+                                                                               const ponder::platform::NativeWindowHandle& nativeWindowHandle);
 
-    VulkanSurfaceOwner(std::shared_ptr<VulkanInstanceOwner> instance, VkSurfaceKHR surface,
-                       VulkanGlobalDispatch::DestroySurfaceFn destroySurface,
+    VulkanSurfaceOwner(std::shared_ptr<VulkanInstanceOwner> instance, VkSurfaceKHR surface, VulkanGlobalDispatch::DestroySurfaceFn destroySurface,
                        VulkanSurfaceInfo info) noexcept;
 
     std::shared_ptr<VulkanInstanceOwner> m_instance;
@@ -515,34 +458,27 @@ public:
     [[nodiscard]] VkPhysicalDevice GetPhysicalDevice() const noexcept;
     [[nodiscard]] void* GetAllocator() const noexcept;
     [[nodiscard]] VkDeviceSize GetNonCoherentAtomSize() const noexcept;
-    [[nodiscard]] const std::shared_ptr<VulkanDeviceChildLifetime>& GetChildLifetime()
-        const noexcept;
+    [[nodiscard]] const std::shared_ptr<VulkanDeviceChildLifetime>& GetChildLifetime() const noexcept;
     [[nodiscard]] const VulkanDeviceInfo& GetInfo() const noexcept;
     [[nodiscard]] const VulkanGlobalDispatch& GetDispatch() const noexcept;
     [[nodiscard]] VkQueue GetQueue(std::uint32_t queueFamilyIndex) const noexcept;
-    [[nodiscard]] VulkanQueueSynchronization::QueueOperationLock LockQueueOperation(
-        VkQueue queue) const;
+    [[nodiscard]] VulkanQueueSynchronization::QueueOperationLock LockQueueOperation(VkQueue queue) const;
     [[nodiscard]] core::VoidResult WaitIdle() const;
     [[nodiscard]] core::VoidResult WaitQueueIdle(std::uint32_t queueFamilyIndex) const;
 
     void Reset() noexcept;
 
 private:
-    friend core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
-        const VulkanGlobalDispatch& dispatch, std::shared_ptr<VulkanInstanceOwner> instance,
-        VkSurfaceKHR surface, const RenderAdapterSelection& selection,
-        const RenderDeviceDesc& desc);
+    friend core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(const VulkanGlobalDispatch& dispatch,
+                                                                                 std::shared_ptr<VulkanInstanceOwner> instance, VkSurfaceKHR surface,
+                                                                                 const RenderAdapterSelection& selection,
+                                                                                 const RenderDeviceDesc& desc);
 
-    VulkanDeviceOwner(std::shared_ptr<VulkanInstanceOwner> instance,
-                      VkPhysicalDevice physicalDevice, VkDevice device, void* allocator,
-                      std::vector<VkQueue> queues,
-                      std::unique_ptr<VulkanQueueSynchronization> queueSynchronization,
-                      VulkanGlobalDispatch::DestroyDeviceFn destroyDevice,
-                      VulkanGlobalDispatch::DeviceWaitIdleFn deviceWaitIdle,
-                      VulkanGlobalDispatch::QueueWaitIdleFn queueWaitIdle,
-                      VulkanGlobalDispatch::DestroyAllocatorFn destroyAllocator,
-                      VulkanGlobalDispatch dispatch, std::optional<VolkDeviceTable> volkTable,
-                      VulkanDeviceInfo info,
+    VulkanDeviceOwner(std::shared_ptr<VulkanInstanceOwner> instance, VkPhysicalDevice physicalDevice, VkDevice device, void* allocator,
+                      std::vector<VkQueue> queues, std::unique_ptr<VulkanQueueSynchronization> queueSynchronization,
+                      VulkanGlobalDispatch::DestroyDeviceFn destroyDevice, VulkanGlobalDispatch::DeviceWaitIdleFn deviceWaitIdle,
+                      VulkanGlobalDispatch::QueueWaitIdleFn queueWaitIdle, VulkanGlobalDispatch::DestroyAllocatorFn destroyAllocator,
+                      VulkanGlobalDispatch dispatch, std::optional<VolkDeviceTable> volkTable, VulkanDeviceInfo info,
                       std::shared_ptr<VulkanDeviceChildLifetime> childLifetime) noexcept;
 
     std::shared_ptr<VulkanInstanceOwner> m_instance;
@@ -564,7 +500,7 @@ private:
 struct VulkanSwapchainConfig final
 {
     SelectedPresentationConfig presentation{};
-    platform::WindowId windowId{};
+    ponder::platform::WindowId windowId{};
     VkFormat format{VK_FORMAT_UNDEFINED};
     VkColorSpaceKHR colorSpace{VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
     VkExtent2D extent{};
@@ -576,16 +512,12 @@ struct VulkanSwapchainConfig final
     std::vector<std::uint32_t> sharingQueueFamilyIndices{};
     bool usesSurfaceCurrentExtent{};
 
-    [[nodiscard]] friend bool operator==(const VulkanSwapchainConfig& lhs,
-                                         const VulkanSwapchainConfig& rhs) noexcept
+    [[nodiscard]] friend bool operator==(const VulkanSwapchainConfig& lhs, const VulkanSwapchainConfig& rhs) noexcept
     {
-        return lhs.presentation == rhs.presentation && lhs.windowId == rhs.windowId &&
-               lhs.format == rhs.format && lhs.colorSpace == rhs.colorSpace &&
-               lhs.extent.width == rhs.extent.width && lhs.extent.height == rhs.extent.height &&
-               lhs.compositeAlpha == rhs.compositeAlpha && lhs.preTransform == rhs.preTransform &&
-               lhs.presentMode == rhs.presentMode && lhs.imageCount == rhs.imageCount &&
-               lhs.sharingMode == rhs.sharingMode &&
-               lhs.sharingQueueFamilyIndices == rhs.sharingQueueFamilyIndices &&
+        return lhs.presentation == rhs.presentation && lhs.windowId == rhs.windowId && lhs.format == rhs.format && lhs.colorSpace == rhs.colorSpace &&
+               lhs.extent.width == rhs.extent.width && lhs.extent.height == rhs.extent.height && lhs.compositeAlpha == rhs.compositeAlpha &&
+               lhs.preTransform == rhs.preTransform && lhs.presentMode == rhs.presentMode && lhs.imageCount == rhs.imageCount &&
+               lhs.sharingMode == rhs.sharingMode && lhs.sharingQueueFamilyIndices == rhs.sharingQueueFamilyIndices &&
                lhs.usesSurfaceCurrentExtent == rhs.usesSurfaceCurrentExtent;
     }
 };
@@ -624,22 +556,18 @@ public:
     void Reset() noexcept;
 
 private:
-    friend core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForTarget(
-        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-        const VulkanDeviceQueuePlan& queuePlan, const RenderTargetDesc& desc);
-    friend core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
-        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-        const VulkanSwapchainConfig& config, VkSwapchainKHR oldSwapchain,
-        VulkanSwapchainCreationState& creationState);
+    friend core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForTarget(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                             VkSurfaceKHR surface, const VulkanDeviceQueuePlan& queuePlan,
+                                                                             const RenderTargetDesc& desc);
+    friend core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(const VulkanGlobalDispatch& dispatch,
+                                                                                     const VulkanDeviceOwner& device, VkSurfaceKHR surface,
+                                                                                     const VulkanSwapchainConfig& config, VkSwapchainKHR oldSwapchain,
+                                                                                     VulkanSwapchainCreationState& creationState);
 
-    VulkanSwapchainOwner(VkDevice device, VkSwapchainKHR swapchain, std::vector<VkImage> images,
-                         std::vector<VkImageView> imageViews, VkRenderPass renderPass,
-                         std::vector<VkFramebuffer> framebuffers,
-                         VulkanGlobalDispatch::DestroySwapchainFn destroySwapchain,
-                         VulkanGlobalDispatch::DestroyImageViewFn destroyImageView,
-                         VulkanGlobalDispatch::DestroyRenderPassFn destroyRenderPass,
-                         VulkanGlobalDispatch::DestroyFramebufferFn destroyFramebuffer,
-                         VulkanSwapchainConfig config) noexcept;
+    VulkanSwapchainOwner(VkDevice device, VkSwapchainKHR swapchain, std::vector<VkImage> images, std::vector<VkImageView> imageViews,
+                         VkRenderPass renderPass, std::vector<VkFramebuffer> framebuffers, VulkanGlobalDispatch::DestroySwapchainFn destroySwapchain,
+                         VulkanGlobalDispatch::DestroyImageViewFn destroyImageView, VulkanGlobalDispatch::DestroyRenderPassFn destroyRenderPass,
+                         VulkanGlobalDispatch::DestroyFramebufferFn destroyFramebuffer, VulkanSwapchainConfig config) noexcept;
 
     VkDevice m_device{VK_NULL_HANDLE};
     VkSwapchainKHR m_swapchain{VK_NULL_HANDLE};
@@ -662,17 +590,15 @@ enum class VulkanDraw2DColorContract : std::uint8_t
 struct VulkanDraw2DPipelineCompatibilityKey final
 {
     VkFormat colorAttachmentFormat{VK_FORMAT_UNDEFINED};
-    VulkanDraw2DColorContract colorContract{
-        VulkanDraw2DColorContract::LinearPremultipliedIntoOpaqueSdrSrgb};
+    VulkanDraw2DColorContract colorContract{VulkanDraw2DColorContract::LinearPremultipliedIntoOpaqueSdrSrgb};
     VkSampleCountFlagBits sampleCount{VK_SAMPLE_COUNT_1_BIT};
     std::uint64_t renderPassCompatibilitySignature{};
     std::uint32_t subpass{};
     std::uint64_t shaderSchemaFingerprint{};
     std::uint64_t fixedStateSignature{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDraw2DPipelineCompatibilityKey& lhs,
-        const VulkanDraw2DPipelineCompatibilityKey& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DPipelineCompatibilityKey& lhs,
+                                                   const VulkanDraw2DPipelineCompatibilityKey& rhs) noexcept = default;
 };
 
 struct VulkanDraw2DCommandDraw final
@@ -682,15 +608,11 @@ struct VulkanDraw2DCommandDraw final
     std::uint32_t indexCount{};
     std::int32_t baseVertex{};
 
-    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DCommandDraw& lhs,
-                                                   const VulkanDraw2DCommandDraw& rhs) noexcept
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DCommandDraw& lhs, const VulkanDraw2DCommandDraw& rhs) noexcept
     {
-        return lhs.scissor.offset.x == rhs.scissor.offset.x &&
-               lhs.scissor.offset.y == rhs.scissor.offset.y &&
-               lhs.scissor.extent.width == rhs.scissor.extent.width &&
-               lhs.scissor.extent.height == rhs.scissor.extent.height &&
-               lhs.firstIndex == rhs.firstIndex && lhs.indexCount == rhs.indexCount &&
-               lhs.baseVertex == rhs.baseVertex;
+        return lhs.scissor.offset.x == rhs.scissor.offset.x && lhs.scissor.offset.y == rhs.scissor.offset.y &&
+               lhs.scissor.extent.width == rhs.scissor.extent.width && lhs.scissor.extent.height == rhs.scissor.extent.height &&
+               lhs.firstIndex == rhs.firstIndex && lhs.indexCount == rhs.indexCount && lhs.baseVertex == rhs.baseVertex;
     }
 };
 
@@ -701,9 +623,8 @@ struct VulkanDraw2DPipelineCacheUpdate final
     VkPipeline pipeline{VK_NULL_HANDLE};
     VkPipelineLayout layout{VK_NULL_HANDLE};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDraw2DPipelineCacheUpdate& lhs,
-        const VulkanDraw2DPipelineCacheUpdate& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DPipelineCacheUpdate& lhs,
+                                                   const VulkanDraw2DPipelineCacheUpdate& rhs) noexcept = default;
 };
 
 struct VulkanDraw2DPipelineCacheStats final
@@ -712,9 +633,8 @@ struct VulkanDraw2DPipelineCacheStats final
     std::uint64_t reuseCount{};
     std::uint64_t replacementCount{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDraw2DPipelineCacheStats& lhs,
-        const VulkanDraw2DPipelineCacheStats& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DPipelineCacheStats& lhs,
+                                                   const VulkanDraw2DPipelineCacheStats& rhs) noexcept = default;
 };
 
 class VulkanDraw2DPipelineOwner final
@@ -737,17 +657,14 @@ public:
     void Reset() noexcept;
 
 private:
-    friend core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(
-        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-        const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key);
+    friend core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                              const VulkanSwapchainOwner& swapchain,
+                                                                              const VulkanDraw2DPipelineCompatibilityKey& key);
 
-    VulkanDraw2DPipelineOwner(VkDevice device, VkShaderModule vertexShader,
-                              VkShaderModule fragmentShader, VkPipelineLayout layout,
-                              VkPipeline pipeline,
-                              VulkanGlobalDispatch::DestroyShaderModuleFn destroyShaderModule,
+    VulkanDraw2DPipelineOwner(VkDevice device, VkShaderModule vertexShader, VkShaderModule fragmentShader, VkPipelineLayout layout,
+                              VkPipeline pipeline, VulkanGlobalDispatch::DestroyShaderModuleFn destroyShaderModule,
                               VulkanGlobalDispatch::DestroyPipelineLayoutFn destroyPipelineLayout,
-                              VulkanGlobalDispatch::DestroyPipelineFn destroyPipeline,
-                              VulkanDraw2DPipelineCompatibilityKey key,
+                              VulkanGlobalDispatch::DestroyPipelineFn destroyPipeline, VulkanDraw2DPipelineCompatibilityKey key,
                               std::shared_ptr<VulkanDeviceChildLifetime> childLifetime) noexcept;
 
     VkDevice m_device{VK_NULL_HANDLE};
@@ -775,12 +692,11 @@ public:
 
     [[nodiscard]] bool IsValid() const noexcept;
     [[nodiscard]] const VulkanDraw2DPipelineOwner& GetCurrentPipeline() const noexcept;
-    [[nodiscard]] std::shared_ptr<const VulkanDraw2DPipelineOwner> AcquireCurrentPipeline()
-        const noexcept;
+    [[nodiscard]] std::shared_ptr<const VulkanDraw2DPipelineOwner> AcquireCurrentPipeline() const noexcept;
     [[nodiscard]] VulkanDraw2DPipelineCacheStats GetStats() const noexcept;
-    [[nodiscard]] core::Result<VulkanDraw2DPipelineCacheUpdate> GetOrCreate(
-        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-        const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key);
+    [[nodiscard]] core::Result<VulkanDraw2DPipelineCacheUpdate> GetOrCreate(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                            const VulkanSwapchainOwner& swapchain,
+                                                                            const VulkanDraw2DPipelineCompatibilityKey& key);
 
     void Reset() noexcept;
 
@@ -821,13 +737,11 @@ struct VulkanDraw2DUploadLayout final
     VkDeviceSize indexBytes{};
     VkDeviceSize uploadBytes{};
 
-    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DUploadLayout& lhs,
-                                                   const VulkanDraw2DUploadLayout& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DUploadLayout& lhs, const VulkanDraw2DUploadLayout& rhs) noexcept = default;
 };
 
-[[nodiscard]] core::Result<VulkanDraw2DUploadLayout> ComputeVulkanDraw2DUploadLayout(
-    VkDeviceSize vertexBytes, VkDeviceSize indexBytes, VkDeviceSize maximumUploadBytes);
+[[nodiscard]] core::Result<VulkanDraw2DUploadLayout> ComputeVulkanDraw2DUploadLayout(VkDeviceSize vertexBytes, VkDeviceSize indexBytes,
+                                                                                     VkDeviceSize maximumUploadBytes);
 
 struct VulkanDraw2DUploadSlotSnapshot final
 {
@@ -837,9 +751,8 @@ struct VulkanDraw2DUploadSlotSnapshot final
     VkDeviceSize reservedBytes{};
     bool coherent{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDraw2DUploadSlotSnapshot& lhs,
-        const VulkanDraw2DUploadSlotSnapshot& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DUploadSlotSnapshot& lhs,
+                                                   const VulkanDraw2DUploadSlotSnapshot& rhs) noexcept = default;
 };
 
 struct VulkanDraw2DUploadStats final
@@ -854,8 +767,7 @@ struct VulkanDraw2DUploadStats final
     std::uint64_t flushCount{};
     std::uint64_t retirementCount{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const VulkanDraw2DUploadStats& lhs, const VulkanDraw2DUploadStats& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const VulkanDraw2DUploadStats& lhs, const VulkanDraw2DUploadStats& rhs) noexcept = default;
 };
 
 class VulkanDraw2DUploadBufferOwner final
@@ -880,12 +792,9 @@ public:
 private:
     friend class VulkanDraw2DUploadArena;
 
-    VulkanDraw2DUploadBufferOwner(void* allocator, VkBuffer buffer, void* allocation,
-                                  std::byte* mappedData, VkDeviceSize capacity,
-                                  VkDeviceSize allocationSize, bool coherent,
-                                  std::uint64_t generation,
-                                  VulkanGlobalDispatch::DestroyBufferFn destroyBuffer,
-                                  VulkanGlobalDispatch::UnmapMemoryFn unmapMemory) noexcept;
+    VulkanDraw2DUploadBufferOwner(void* allocator, VkBuffer buffer, void* allocation, std::byte* mappedData, VkDeviceSize capacity,
+                                  VkDeviceSize allocationSize, bool coherent, std::uint64_t generation,
+                                  VulkanGlobalDispatch::DestroyBufferFn destroyBuffer, VulkanGlobalDispatch::UnmapMemoryFn unmapMemory) noexcept;
 
     void* m_allocator{};
     VkBuffer m_buffer{VK_NULL_HANDLE};
@@ -910,18 +819,15 @@ public:
     VulkanDraw2DUploadArena& operator=(VulkanDraw2DUploadArena&& other) noexcept;
     ~VulkanDraw2DUploadArena();
 
-    [[nodiscard]] static core::Result<VulkanDraw2DUploadArena> Create(
-        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-        std::uint32_t slotCount, VkDeviceSize maximumUploadBytes);
+    [[nodiscard]] static core::Result<VulkanDraw2DUploadArena> Create(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                      std::uint32_t slotCount, VkDeviceSize maximumUploadBytes);
 
     [[nodiscard]] bool IsValid() const noexcept;
     [[nodiscard]] std::uint32_t GetSlotCount() const noexcept;
-    [[nodiscard]] VulkanDraw2DUploadSlotSnapshot GetSlotSnapshot(
-        std::uint32_t slotIndex) const noexcept;
+    [[nodiscard]] VulkanDraw2DUploadSlotSnapshot GetSlotSnapshot(std::uint32_t slotIndex) const noexcept;
     [[nodiscard]] VulkanDraw2DUploadStats GetStats() const noexcept;
-    [[nodiscard]] core::Result<VulkanDraw2DUploadReservation> ReserveAndUpload(
-        std::uint32_t slotIndex, std::span<const std::byte> vertices,
-        std::span<const std::byte> indices);
+    [[nodiscard]] core::Result<VulkanDraw2DUploadReservation> ReserveAndUpload(std::uint32_t slotIndex, std::span<const std::byte> vertices,
+                                                                               std::span<const std::byte> indices);
     void MarkSubmitted(std::uint32_t slotIndex) noexcept;
     void Abandon(std::uint32_t slotIndex) noexcept;
     void Complete(std::uint32_t slotIndex) noexcept;
@@ -935,17 +841,12 @@ private:
         VkDeviceSize reservedBytes{};
     };
 
-    VulkanDraw2DUploadArena(VulkanGlobalDispatch dispatch, void* allocator,
-                            VkDeviceSize nonCoherentAtomSize, VkDeviceSize maximumUploadBytes,
+    VulkanDraw2DUploadArena(VulkanGlobalDispatch dispatch, void* allocator, VkDeviceSize nonCoherentAtomSize, VkDeviceSize maximumUploadBytes,
                             std::vector<Slot> slots) noexcept;
 
-    [[nodiscard]] core::Result<VulkanDraw2DUploadBufferOwner> CreateBuffer(
-        VkDeviceSize capacity, std::uint64_t generation);
-    [[nodiscard]] core::VoidResult CopyAndFlush(VulkanDraw2DUploadBufferOwner& buffer,
-                                                VkDeviceSize vertexOffset,
-                                                std::span<const std::byte> vertices,
-                                                VkDeviceSize indexOffset,
-                                                std::span<const std::byte> indices);
+    [[nodiscard]] core::Result<VulkanDraw2DUploadBufferOwner> CreateBuffer(VkDeviceSize capacity, std::uint64_t generation);
+    [[nodiscard]] core::VoidResult CopyAndFlush(VulkanDraw2DUploadBufferOwner& buffer, VkDeviceSize vertexOffset, std::span<const std::byte> vertices,
+                                                VkDeviceSize indexOffset, std::span<const std::byte> indices);
 
     VulkanGlobalDispatch m_dispatch{};
     void* m_allocator{};
@@ -968,8 +869,8 @@ struct VulkanFrameSlotResources final
 
     [[nodiscard]] constexpr bool IsValid() const noexcept
     {
-        return commandBuffer != VK_NULL_HANDLE && imageAvailableSemaphore != VK_NULL_HANDLE &&
-               imageAcquiredFence != VK_NULL_HANDLE && inFlightFence != VK_NULL_HANDLE;
+        return commandBuffer != VK_NULL_HANDLE && imageAvailableSemaphore != VK_NULL_HANDLE && imageAcquiredFence != VK_NULL_HANDLE &&
+               inFlightFence != VK_NULL_HANDLE;
     }
 };
 
@@ -1006,37 +907,30 @@ public:
     [[nodiscard]] std::uint32_t GetSlotCount() const noexcept;
     [[nodiscard]] VulkanFrameSlotResources GetSlot(std::uint32_t slotIndex) const noexcept;
     [[nodiscard]] VkSemaphore GetRenderFinishedSemaphore(std::uint32_t imageIndex) const noexcept;
-    [[nodiscard]] core::Result<bool> PrepareFrameSlot(const VulkanGlobalDispatch& dispatch,
-                                                      std::uint32_t slotIndex,
+    [[nodiscard]] core::Result<bool> PrepareFrameSlot(const VulkanGlobalDispatch& dispatch, std::uint32_t slotIndex,
                                                       std::uint64_t timeoutNanoseconds);
     void RecordImageAcquired(std::uint32_t slotIndex) noexcept;
     void RecordSubmissionQueued(std::uint32_t slotIndex) noexcept;
     [[nodiscard]] VulkanDraw2DUploadArena& GetDraw2DUploadArena() noexcept;
     [[nodiscard]] const VulkanDraw2DUploadArena& GetDraw2DUploadArena() const noexcept;
-    [[nodiscard]] core::VoidResult AttachDraw2DPipeline(
-        std::uint32_t slotIndex, std::shared_ptr<const VulkanDraw2DPipelineOwner> pipeline);
+    [[nodiscard]] core::VoidResult AttachDraw2DPipeline(std::uint32_t slotIndex, std::shared_ptr<const VulkanDraw2DPipelineOwner> pipeline);
     void AbandonDraw2D(std::uint32_t slotIndex) noexcept;
     void MarkPoisoned() noexcept;
     [[nodiscard]] VulkanCompletedSubmissionSlots ConsumeCompletedSubmissionSlots() noexcept;
-    [[nodiscard]] core::Result<bool> AreAllFencesSignaled(const VulkanGlobalDispatch& dispatch,
-                                                          std::uint64_t timeoutNanoseconds = 0U);
+    [[nodiscard]] core::Result<bool> AreAllFencesSignaled(const VulkanGlobalDispatch& dispatch, std::uint64_t timeoutNanoseconds = 0U);
 
     void Reset() noexcept;
 
 private:
     friend core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
-        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-        platform::WindowId windowId, const VulkanDeviceQueuePlan& queuePlan,
-        QueuedFrameLatency queuedLatency, std::uint32_t swapchainImageCount);
+        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, ponder::platform::WindowId windowId,
+        const VulkanDeviceQueuePlan& queuePlan, QueuedFrameLatency queuedLatency, std::uint32_t swapchainImageCount);
 
-    VulkanFrameResourcesOwner(
-        VkDevice device, VkCommandPool commandPool, std::vector<VulkanFrameSlotResources> slots,
-        std::vector<VkSemaphore> renderFinishedSemaphores,
-        VulkanDraw2DUploadArena&& draw2DUploadArena,
-        std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines,
-        VulkanGlobalDispatch::DestroyCommandPoolFn destroyCommandPool,
-        VulkanGlobalDispatch::DestroySemaphoreFn destroySemaphore,
-        VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept;
+    VulkanFrameResourcesOwner(VkDevice device, VkCommandPool commandPool, std::vector<VulkanFrameSlotResources> slots,
+                              std::vector<VkSemaphore> renderFinishedSemaphores, VulkanDraw2DUploadArena&& draw2DUploadArena,
+                              std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines,
+                              VulkanGlobalDispatch::DestroyCommandPoolFn destroyCommandPool,
+                              VulkanGlobalDispatch::DestroySemaphoreFn destroySemaphore, VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept;
 
     VkDevice m_device{VK_NULL_HANDLE};
     VkCommandPool m_commandPool{VK_NULL_HANDLE};
@@ -1092,8 +986,7 @@ public:
     [[nodiscard]] bool UsesPresentFences() const noexcept;
     [[nodiscard]] bool UsesPresentIds() const noexcept;
     [[nodiscard]] bool HasQueuedPresentation() const noexcept;
-    [[nodiscard]] core::Result<bool> PrepareFrameSlot(const VulkanGlobalDispatch& dispatch,
-                                                      std::uint32_t frameSlotIndex,
+    [[nodiscard]] core::Result<bool> PrepareFrameSlot(const VulkanGlobalDispatch& dispatch, std::uint32_t frameSlotIndex,
                                                       std::uint64_t timeoutNanoseconds);
     [[nodiscard]] VkFence GetPresentFence(std::uint32_t frameSlotIndex) const noexcept;
     [[nodiscard]] std::uint64_t ReservePresentId() noexcept;
@@ -1101,34 +994,29 @@ public:
     void RecordImageAcquired(std::uint32_t frameSlotIndex, std::uint32_t imageIndex) noexcept;
     void RecordAcquireSubmission(std::uint32_t frameSlotIndex) noexcept;
     void AbandonAcquiredFrame(std::uint32_t frameSlotIndex) noexcept;
-    void RecordPresentResult(std::uint32_t frameSlotIndex, std::uint32_t imageIndex,
-                             std::uint64_t presentId, VkResult result) noexcept;
+    void RecordPresentResult(std::uint32_t frameSlotIndex, std::uint32_t imageIndex, std::uint64_t presentId, VkResult result) noexcept;
     [[nodiscard]] bool ConsumeCorePresentationCompletion() noexcept;
-    [[nodiscard]] core::Result<VulkanPresentationCompletionResult> PollCompletion(
-        const VulkanGlobalDispatch& dispatch, VkSwapchainKHR swapchain,
-        std::uint64_t timeoutNanoseconds);
+    [[nodiscard]] core::Result<VulkanPresentationCompletionResult> PollCompletion(const VulkanGlobalDispatch& dispatch, VkSwapchainKHR swapchain,
+                                                                                  std::uint64_t timeoutNanoseconds);
     void MarkAwaitingSuccessorPresentation() noexcept;
     void MarkSuccessorPresentationComplete() noexcept;
 
     void Reset() noexcept;
 
 private:
-    friend core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForTarget(
-        const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-        platform::WindowId windowId, std::uint32_t frameSlotCount,
-        std::uint32_t swapchainImageCount);
+    friend core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForTarget(const VulkanGlobalDispatch& dispatch,
+                                                                                                 const VulkanDeviceOwner& device,
+                                                                                                 ponder::platform::WindowId windowId,
+                                                                                                 std::uint32_t frameSlotCount,
+                                                                                                 std::uint32_t swapchainImageCount);
 
-    VulkanPresentationTrackerOwner(VkDevice device, VulkanPresentationCompletionPath completionPath,
-                                   bool usesPresentIds,
-                                   std::vector<std::uint64_t> imagePresentationSerials,
-                                   std::vector<std::uint64_t> pendingAcquireSerials,
-                                   std::vector<bool> acquireProofPending,
-                                   std::vector<VulkanPresentFenceSlot> presentFenceSlots,
+    VulkanPresentationTrackerOwner(VkDevice device, VulkanPresentationCompletionPath completionPath, bool usesPresentIds,
+                                   std::vector<std::uint64_t> imagePresentationSerials, std::vector<std::uint64_t> pendingAcquireSerials,
+                                   std::vector<bool> acquireProofPending, std::vector<VulkanPresentFenceSlot> presentFenceSlots,
                                    VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept;
 
     VkDevice m_device{VK_NULL_HANDLE};
-    VulkanPresentationCompletionPath m_completionPath{
-        VulkanPresentationCompletionPath::CoreAcquireHistory};
+    VulkanPresentationCompletionPath m_completionPath{VulkanPresentationCompletionPath::CoreAcquireHistory};
     bool m_usesPresentIds{};
     bool m_hadQueuedPresentation{};
     bool m_completionSatisfied{};
@@ -1166,35 +1054,33 @@ struct RenderPublicLifecycleTestOwners final
 class RenderBackendTestAccess final
 {
 public:
-    [[nodiscard]] static core::Result<RenderLifetimeContractOwners> CreateLifetimeContractOwners(
-        const RenderTargetDesc& desc);
-    [[nodiscard]] static core::Result<RenderDeviceSurfaceTestOwners> CreateDeviceAndPreparedSurface(
-        VulkanGlobalDispatch dispatch, VulkanDeviceOwner&& device, VulkanSurfaceOwner&& surface,
-        const SurfacePreparationDesc& desc);
+    [[nodiscard]] static core::Result<RenderLifetimeContractOwners> CreateLifetimeContractOwners(const RenderTargetDesc& desc);
+    [[nodiscard]] static core::Result<RenderDeviceSurfaceTestOwners> CreateDeviceAndPreparedSurface(VulkanGlobalDispatch dispatch,
+                                                                                                    VulkanDeviceOwner&& device,
+                                                                                                    VulkanSurfaceOwner&& surface,
+                                                                                                    const SurfacePreparationDesc& desc);
     [[nodiscard]] static core::Result<RenderPublicLifecycleTestOwners> CreatePublicLifecycleOwners(
-        VulkanDeviceOwner&& device, VulkanSurfaceOwner&& surface, VulkanSwapchainOwner&& swapchain,
-        VulkanFrameResourcesOwner&& frameResources,
+        VulkanDeviceOwner&& device, VulkanSurfaceOwner&& surface, VulkanSwapchainOwner&& swapchain, VulkanFrameResourcesOwner&& frameResources,
         VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc);
-    [[nodiscard]] static core::Result<RenderTarget> CreateAdditionalTarget(
-        RenderDevice& device, VulkanSurfaceOwner&& surface, VulkanSwapchainOwner&& swapchain,
-        VulkanFrameResourcesOwner&& frameResources,
-        VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc);
+    [[nodiscard]] static core::Result<RenderTarget> CreateAdditionalTarget(RenderDevice& device, VulkanSurfaceOwner&& surface,
+                                                                           VulkanSwapchainOwner&& swapchain,
+                                                                           VulkanFrameResourcesOwner&& frameResources,
+                                                                           VulkanPresentationTrackerOwner&& presentationTracker,
+                                                                           const RenderTargetDesc& desc);
     static void FailNextTargetStateAllocation() noexcept;
     static void FailNextFrameStateAllocation() noexcept;
     static void FailNextRetirementAllocation() noexcept;
     [[nodiscard]] static std::uint32_t GetBootstrapTargetCount(const RenderDevice& device) noexcept;
-    [[nodiscard]] static Draw2DDeviceLiveStats GetDraw2DDeviceStats(
-        const RenderDevice& device) noexcept;
-    [[nodiscard]] static Draw2DTargetLiveStats GetDraw2DTargetStats(
-        const RenderTarget& target) noexcept;
+    [[nodiscard]] static Draw2DDeviceLiveStats GetDraw2DDeviceStats(const RenderDevice& device) noexcept;
+    [[nodiscard]] static Draw2DTargetLiveStats GetDraw2DTargetStats(const RenderTarget& target) noexcept;
     [[nodiscard]] static core::VoidResult DrainOrphanedPresentationResources(RenderDevice& device);
     [[nodiscard]] static core::VoidResult WaitPresentationQueueIdle(RenderDevice& device);
-    [[nodiscard]] static core::Result<RenderTarget> CreateTarget(
-        VulkanGlobalDispatch dispatch, VulkanDeviceOwner&& device, VulkanSurfaceOwner&& surface,
-        VulkanSwapchainOwner&& swapchain, VulkanFrameResourcesOwner&& frameResources,
-        VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc);
-    [[nodiscard]] static core::Result<PreparedSurface> CreateRecoverySurface(
-        RenderTarget& target, VulkanSurfaceOwner&& surface, RenderTargetSnapshot snapshot);
+    [[nodiscard]] static core::Result<RenderTarget> CreateTarget(VulkanGlobalDispatch dispatch, VulkanDeviceOwner&& device,
+                                                                 VulkanSurfaceOwner&& surface, VulkanSwapchainOwner&& swapchain,
+                                                                 VulkanFrameResourcesOwner&& frameResources,
+                                                                 VulkanPresentationTrackerOwner&& presentationTracker, const RenderTargetDesc& desc);
+    [[nodiscard]] static core::Result<PreparedSurface> CreateRecoverySurface(RenderTarget& target, VulkanSurfaceOwner&& surface,
+                                                                             RenderTargetSnapshot snapshot);
 };
 
 enum class VulkanFrameRecordingPhase : std::uint8_t
@@ -1216,8 +1102,7 @@ struct VulkanFrameRecordingState final
 
     [[nodiscard]] constexpr bool IsActive() const noexcept
     {
-        return phase == VulkanFrameRecordingPhase::Recording ||
-               phase == VulkanFrameRecordingPhase::ClearRecorded ||
+        return phase == VulkanFrameRecordingPhase::Recording || phase == VulkanFrameRecordingPhase::ClearRecorded ||
                phase == VulkanFrameRecordingPhase::Draw2DRecorded;
     }
 };
@@ -1239,9 +1124,8 @@ struct VulkanFramePresentationResult final
 class VulkanInstanceBootstrap final
 {
 public:
-    [[nodiscard]] core::Result<VulkanInstanceInfo> EnsureInitialized(
-        const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
-        RenderValidationMode validationMode);
+    [[nodiscard]] core::Result<VulkanInstanceInfo> EnsureInitialized(const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
+                                                                     RenderValidationMode validationMode);
 
     [[nodiscard]] bool IsInitialized() const noexcept;
     [[nodiscard]] std::optional<VulkanInstanceInfo> GetInfo() const noexcept;
@@ -1255,86 +1139,81 @@ private:
 };
 
 [[nodiscard]] VulkanGlobalDispatch CreateVolkGlobalDispatch() noexcept;
-[[nodiscard]] core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(
-    const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
-    RenderValidationMode validationMode);
-[[nodiscard]] core::Result<VulkanSurfaceOwner> CreateVulkanSurfaceForNativeWindow(
-    const VulkanGlobalDispatch& dispatch, std::shared_ptr<VulkanInstanceOwner> instance,
-    const platform::NativeWindowHandle& nativeWindowHandle);
-[[nodiscard]] core::Result<RenderAdapterSelection> SelectVulkanAdapterForSurface(
-    const VulkanGlobalDispatch& dispatch, std::shared_ptr<VulkanInstanceOwner> instance,
-    VkSurfaceKHR surface, const RenderAdapterSelectionDesc& desc);
-[[nodiscard]] core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
-    const VulkanGlobalDispatch& dispatch, std::shared_ptr<VulkanInstanceOwner> instance,
-    VkSurfaceKHR surface, const RenderAdapterSelection& selection, const RenderDeviceDesc& desc);
-[[nodiscard]] core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface);
-[[nodiscard]] core::VoidResult ValidateVulkanSurfaceOutputCompatibility(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface);
-[[nodiscard]] core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-    const VulkanDeviceQueuePlan& queuePlan, const RenderTargetDesc& desc);
-[[nodiscard]] core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForTarget(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-    const VulkanDeviceQueuePlan& queuePlan, const RenderTargetDesc& desc);
-[[nodiscard]] core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-    const VulkanSwapchainConfig& config, VkSwapchainKHR oldSwapchain,
-    VulkanSwapchainCreationState& creationState);
+[[nodiscard]] core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
+                                                                           RenderValidationMode validationMode);
+[[nodiscard]] core::Result<VulkanSurfaceOwner> CreateVulkanSurfaceForNativeWindow(const VulkanGlobalDispatch& dispatch,
+                                                                                  std::shared_ptr<VulkanInstanceOwner> instance,
+                                                                                  const ponder::platform::NativeWindowHandle& nativeWindowHandle);
+[[nodiscard]] core::Result<RenderAdapterSelection> SelectVulkanAdapterForSurface(const VulkanGlobalDispatch& dispatch,
+                                                                                 std::shared_ptr<VulkanInstanceOwner> instance, VkSurfaceKHR surface,
+                                                                                 const RenderAdapterSelectionDesc& desc);
+[[nodiscard]] core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(const VulkanGlobalDispatch& dispatch,
+                                                                                    std::shared_ptr<VulkanInstanceOwner> instance,
+                                                                                    VkSurfaceKHR surface, const RenderAdapterSelection& selection,
+                                                                                    const RenderDeviceDesc& desc);
+[[nodiscard]] core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(const VulkanGlobalDispatch& dispatch,
+                                                                                           const VulkanDeviceOwner& device, VkSurfaceKHR surface);
+[[nodiscard]] core::VoidResult ValidateVulkanSurfaceOutputCompatibility(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                        VkSurfaceKHR surface);
+[[nodiscard]] core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                              VkSurfaceKHR surface, const VulkanDeviceQueuePlan& queuePlan,
+                                                                              const RenderTargetDesc& desc);
+[[nodiscard]] core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForTarget(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                                VkSurfaceKHR surface, const VulkanDeviceQueuePlan& queuePlan,
+                                                                                const RenderTargetDesc& desc);
+[[nodiscard]] core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(const VulkanGlobalDispatch& dispatch,
+                                                                                        const VulkanDeviceOwner& device, VkSurfaceKHR surface,
+                                                                                        const VulkanSwapchainConfig& config,
+                                                                                        VkSwapchainKHR oldSwapchain,
+                                                                                        VulkanSwapchainCreationState& creationState);
 [[nodiscard]] core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    platform::WindowId windowId, const VulkanDeviceQueuePlan& queuePlan,
-    QueuedFrameLatency queuedLatency, std::uint32_t swapchainImageCount);
-[[nodiscard]] core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForTarget(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    platform::WindowId windowId, std::uint32_t frameSlotCount, std::uint32_t swapchainImageCount);
-[[nodiscard]] core::Result<VulkanFrameBeginResult> BeginVulkanFrame(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
-    VulkanPresentationTrackerOwner& presentationTracker, const VulkanDeviceQueuePlan& queuePlan,
-    std::uint32_t frameSlotIndex);
-[[nodiscard]] core::VoidResult RecordVulkanFrameClear(
-    const VulkanGlobalDispatch& dispatch, const VulkanSwapchainOwner& swapchain,
-    const VulkanFrameResourcesOwner& frameResources, VulkanFrameRecordingState& recording,
-    ClearColor clearColor);
-[[nodiscard]] core::VoidResult RecordVulkanDraw2DStage(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
-    VulkanDraw2DPipelineCache& pipelineCache, VulkanFrameRecordingState& recording,
-    const ::pond::render::draw2d::Draw2DPacket& packet);
+    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, ponder::platform::WindowId windowId,
+    const VulkanDeviceQueuePlan& queuePlan, QueuedFrameLatency queuedLatency, std::uint32_t swapchainImageCount);
+[[nodiscard]] core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForTarget(const VulkanGlobalDispatch& dispatch,
+                                                                                                    const VulkanDeviceOwner& device,
+                                                                                                    ponder::platform::WindowId windowId,
+                                                                                                    std::uint32_t frameSlotCount,
+                                                                                                    std::uint32_t swapchainImageCount);
+[[nodiscard]] core::Result<VulkanFrameBeginResult> BeginVulkanFrame(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                    const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
+                                                                    VulkanPresentationTrackerOwner& presentationTracker,
+                                                                    const VulkanDeviceQueuePlan& queuePlan, std::uint32_t frameSlotIndex);
+[[nodiscard]] core::VoidResult RecordVulkanFrameClear(const VulkanGlobalDispatch& dispatch, const VulkanSwapchainOwner& swapchain,
+                                                      const VulkanFrameResourcesOwner& frameResources, VulkanFrameRecordingState& recording,
+                                                      ClearColor clearColor);
+[[nodiscard]] core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                       const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
+                                                       VulkanDraw2DPipelineCache& pipelineCache, VulkanFrameRecordingState& recording,
+                                                       const ::pond::render::draw2d::Draw2DPacket& packet);
 [[nodiscard]] std::uint64_t GetVulkanDraw2DFixedStateSignature() noexcept;
-[[nodiscard]] std::uint64_t ComputeVulkanDraw2DRenderPassCompatibilitySignature(
-    VkFormat colorAttachmentFormat, VkSampleCountFlagBits sampleCount,
-    VulkanDraw2DColorContract colorContract, std::uint32_t subpass) noexcept;
-[[nodiscard]] VulkanDraw2DPipelineCompatibilityKey MakeVulkanDraw2DPipelineCompatibilityKey(
-    const VulkanSwapchainConfig& config, std::uint32_t subpass = 0U) noexcept;
-[[nodiscard]] core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    const VulkanSwapchainOwner& swapchain, const VulkanDraw2DPipelineCompatibilityKey& key);
-[[nodiscard]] core::VoidResult RecordVulkanDraw2DPipelineCommands(
-    const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBuffer,
-    const VulkanDraw2DPipelineOwner& pipeline, VkBuffer vertexBuffer, VkDeviceSize vertexOffset,
-    VkBuffer indexBuffer, VkDeviceSize indexOffset, VkExtent2D extent,
-    VkExtent2D maximumViewportExtent,
-    std::span<const ::pond::render::draw2d::Draw2DDrawRecord> draws);
+[[nodiscard]] std::uint64_t ComputeVulkanDraw2DRenderPassCompatibilitySignature(VkFormat colorAttachmentFormat, VkSampleCountFlagBits sampleCount,
+                                                                                VulkanDraw2DColorContract colorContract,
+                                                                                std::uint32_t subpass) noexcept;
+[[nodiscard]] VulkanDraw2DPipelineCompatibilityKey MakeVulkanDraw2DPipelineCompatibilityKey(const VulkanSwapchainConfig& config,
+                                                                                            std::uint32_t subpass = 0U) noexcept;
+[[nodiscard]] core::Result<VulkanDraw2DPipelineOwner> CreateVulkanDraw2DPipeline(const VulkanGlobalDispatch& dispatch,
+                                                                                 const VulkanDeviceOwner& device,
+                                                                                 const VulkanSwapchainOwner& swapchain,
+                                                                                 const VulkanDraw2DPipelineCompatibilityKey& key);
+[[nodiscard]] core::VoidResult RecordVulkanDraw2DPipelineCommands(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBuffer,
+                                                                  const VulkanDraw2DPipelineOwner& pipeline, VkBuffer vertexBuffer,
+                                                                  VkDeviceSize vertexOffset, VkBuffer indexBuffer, VkDeviceSize indexOffset,
+                                                                  VkExtent2D extent, VkExtent2D maximumViewportExtent,
+                                                                  std::span<const ::pond::render::draw2d::Draw2DDrawRecord> draws);
 [[nodiscard]] core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
-    VulkanPresentationTrackerOwner& presentationTracker, const VulkanDeviceQueuePlan& queuePlan,
+    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, const VulkanSwapchainOwner& swapchain,
+    VulkanFrameResourcesOwner& frameResources, VulkanPresentationTrackerOwner& presentationTracker, const VulkanDeviceQueuePlan& queuePlan,
     VulkanFrameRecordingState& recording);
-void AbandonVulkanFrame(VulkanFrameResourcesOwner& frameResources,
-                        VulkanPresentationTrackerOwner& presentationTracker,
+void AbandonVulkanFrame(VulkanFrameResourcesOwner& frameResources, VulkanPresentationTrackerOwner& presentationTracker,
                         VulkanFrameRecordingState& recording) noexcept;
 [[nodiscard]] const char* GetVulkanWsiExtensionName(VulkanWsiKind wsiKind) noexcept;
 [[nodiscard]] std::string_view GetVulkanWsiKindName(VulkanWsiKind wsiKind) noexcept;
-[[nodiscard]] VulkanWsiKind GetVulkanWsiKind(
-    const platform::NativeWindowHandle& nativeWindowHandle) noexcept;
+[[nodiscard]] VulkanWsiKind GetVulkanWsiKind(const ponder::platform::NativeWindowHandle& nativeWindowHandle) noexcept;
 [[nodiscard]] std::uint32_t GetMinimumVulkanInstanceVersion() noexcept;
 [[nodiscard]] std::uint32_t GetMaximumHeaderVulkanInstanceVersion() noexcept;
 [[nodiscard]] bool IsDefaultValidationEnabledForDeveloperBuild() noexcept;
 
-VKAPI_ATTR VkBool32 VKAPI_CALL HandleVulkanDebugUtilsMessage(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-    const VkDebugUtilsMessengerCallbackDataEXT* callbackData, void* userData) noexcept;
+VKAPI_ATTR VkBool32 VKAPI_CALL HandleVulkanDebugUtilsMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                                             VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+                                                             const VkDebugUtilsMessengerCallbackDataEXT* callbackData, void* userData) noexcept;
 } // namespace pond::render::detail

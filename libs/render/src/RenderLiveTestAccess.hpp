@@ -18,8 +18,7 @@ struct Draw2DDeviceLiveStats final
     std::uint32_t activeLayerCount{};
     bool hasPipeline{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DDeviceLiveStats& lhs, const Draw2DDeviceLiveStats& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DDeviceLiveStats& lhs, const Draw2DDeviceLiveStats& rhs) noexcept = default;
 };
 
 /// Backend-neutral target-scoped Draw2D upload counters for live integration tests.
@@ -40,16 +39,13 @@ struct Draw2DTargetLiveStats final
     std::uint32_t submittedSlotCount{};
     bool hasUploadArena{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const Draw2DTargetLiveStats& lhs, const Draw2DTargetLiveStats& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Draw2DTargetLiveStats& lhs, const Draw2DTargetLiveStats& rhs) noexcept = default;
 };
 
 class RenderLiveTestAccess final
 {
 public:
-    [[nodiscard]] static Draw2DDeviceLiveStats GetDraw2DDeviceStats(
-        const RenderDevice& device) noexcept;
-    [[nodiscard]] static Draw2DTargetLiveStats GetDraw2DTargetStats(
-        const RenderTarget& target) noexcept;
+    [[nodiscard]] static Draw2DDeviceLiveStats GetDraw2DDeviceStats(const RenderDevice& device) noexcept;
+    [[nodiscard]] static Draw2DTargetLiveStats GetDraw2DTargetStats(const RenderTarget& target) noexcept;
 };
 } // namespace pond::render::detail

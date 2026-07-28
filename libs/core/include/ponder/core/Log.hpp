@@ -9,7 +9,7 @@
 #include <string_view>
 #include <utility>
 
-namespace pond::core
+namespace ponder::core
 {
 enum class LogLevel : std::uint8_t
 {
@@ -25,8 +25,8 @@ class LogEntry final
 {
 public:
     LogEntry() = default;
-    LogEntry(LogLevel level, std::string category, std::string message,
-             std::chrono::system_clock::time_point timestamp, std::source_location location);
+    LogEntry(LogLevel level, std::string category, std::string message, std::chrono::system_clock::time_point timestamp,
+             std::source_location location);
     LogEntry(const LogEntry&) = default;
     LogEntry(LogEntry&&) noexcept = default;
     LogEntry& operator=(const LogEntry&) = default;
@@ -48,8 +48,7 @@ private:
 };
 
 using LogSinkHandler = void (*)(const LogEntry& entry);
-using LogFatalHandler = void (*)(std::string_view category, std::string_view message,
-                                 std::source_location location);
+using LogFatalHandler = void (*)(std::string_view category, std::string_view message, std::source_location location);
 
 [[nodiscard]] std::string_view GetLogLevelName(LogLevel level) noexcept;
 [[nodiscard]] constexpr bool IsLogLevelEnabled(LogLevel level, LogLevel minimumLevel) noexcept
@@ -57,8 +56,7 @@ using LogFatalHandler = void (*)(std::string_view category, std::string_view mes
     return static_cast<std::uint8_t>(level) >= static_cast<std::uint8_t>(minimumLevel);
 }
 
-void LogMessage(LogLevel level, std::string_view message,
-                std::source_location location = std::source_location::current()) noexcept;
+void LogMessage(LogLevel level, std::string_view message, std::source_location location = std::source_location::current()) noexcept;
 
 void LogMessage(LogLevel level, std::string_view category, std::string_view message,
                 std::source_location location = std::source_location::current()) noexcept;
@@ -116,13 +114,11 @@ private:
     LogLevel m_previousLevel{LogLevel::Trace};
 };
 
-void LogFormattingFailure(LogLevel level, std::string_view category, std::string_view reason,
-                          std::source_location location) noexcept;
+void LogFormattingFailure(LogLevel level, std::string_view category, std::string_view reason, std::source_location location) noexcept;
 
 template <typename... Args>
-void LogFormattedWithCategory(LogLevel level, std::string_view category,
-                              std::source_location location,
-                              std::format_string<Args...> messageFormat, Args&&... args) noexcept
+void LogFormattedWithCategory(LogLevel level, std::string_view category, std::source_location location, std::format_string<Args...> messageFormat,
+                              Args&&... args) noexcept
 {
     if (!IsLogLevelEnabled(level, GetMinimumLogLevel()))
     {
@@ -131,8 +127,7 @@ void LogFormattedWithCategory(LogLevel level, std::string_view category,
 
     try
     {
-        LogMessage(level, category, std::format(messageFormat, std::forward<Args>(args)...),
-                   location);
+        LogMessage(level, category, std::format(messageFormat, std::forward<Args>(args)...), location);
     }
     catch (const std::exception& exception)
     {
@@ -145,58 +140,38 @@ void LogFormattedWithCategory(LogLevel level, std::string_view category,
 }
 
 template <typename... Args>
-void LogFormatted(LogLevel level, std::source_location location,
-                  std::format_string<Args...> messageFormat, Args&&... args) noexcept
+void LogFormatted(LogLevel level, std::source_location location, std::format_string<Args...> messageFormat, Args&&... args) noexcept
 {
-    LogFormattedWithCategory(level, std::string_view{}, location, messageFormat,
-                             std::forward<Args>(args)...);
+    LogFormattedWithCategory(level, std::string_view{}, location, messageFormat, std::forward<Args>(args)...);
 }
-} // namespace pond::core
+} // namespace ponder::core
 
-#define LOG_TRACE(...)                                                                             \
-    ::pond::core::LogFormatted(::pond::core::LogLevel::Trace, std::source_location::current(),     \
-                               __VA_ARGS__)
+#define LOG_TRACE(...) ::ponder::core::LogFormatted(::ponder::core::LogLevel::Trace, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_TRACE_CATEGORY(category, ...)                                                          \
-    ::pond::core::LogFormattedWithCategory(::pond::core::LogLevel::Trace, category,                \
-                                           std::source_location::current(), __VA_ARGS__)
+#define LOG_TRACE_CATEGORY(category, ...)                                                                                                            \
+    ::ponder::core::LogFormattedWithCategory(::ponder::core::LogLevel::Trace, category, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_DEBUG(...)                                                                             \
-    ::pond::core::LogFormatted(::pond::core::LogLevel::Debug, std::source_location::current(),     \
-                               __VA_ARGS__)
+#define LOG_DEBUG(...) ::ponder::core::LogFormatted(::ponder::core::LogLevel::Debug, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_DEBUG_CATEGORY(category, ...)                                                          \
-    ::pond::core::LogFormattedWithCategory(::pond::core::LogLevel::Debug, category,                \
-                                           std::source_location::current(), __VA_ARGS__)
+#define LOG_DEBUG_CATEGORY(category, ...)                                                                                                            \
+    ::ponder::core::LogFormattedWithCategory(::ponder::core::LogLevel::Debug, category, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_INFO(...)                                                                              \
-    ::pond::core::LogFormatted(::pond::core::LogLevel::Info, std::source_location::current(),      \
-                               __VA_ARGS__)
+#define LOG_INFO(...) ::ponder::core::LogFormatted(::ponder::core::LogLevel::Info, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_INFO_CATEGORY(category, ...)                                                           \
-    ::pond::core::LogFormattedWithCategory(::pond::core::LogLevel::Info, category,                 \
-                                           std::source_location::current(), __VA_ARGS__)
+#define LOG_INFO_CATEGORY(category, ...)                                                                                                             \
+    ::ponder::core::LogFormattedWithCategory(::ponder::core::LogLevel::Info, category, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_WARNING(...)                                                                           \
-    ::pond::core::LogFormatted(::pond::core::LogLevel::Warning, std::source_location::current(),   \
-                               __VA_ARGS__)
+#define LOG_WARNING(...) ::ponder::core::LogFormatted(::ponder::core::LogLevel::Warning, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_WARNING_CATEGORY(category, ...)                                                        \
-    ::pond::core::LogFormattedWithCategory(::pond::core::LogLevel::Warning, category,              \
-                                           std::source_location::current(), __VA_ARGS__)
+#define LOG_WARNING_CATEGORY(category, ...)                                                                                                          \
+    ::ponder::core::LogFormattedWithCategory(::ponder::core::LogLevel::Warning, category, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_ERROR(...)                                                                             \
-    ::pond::core::LogFormatted(::pond::core::LogLevel::Error, std::source_location::current(),     \
-                               __VA_ARGS__)
+#define LOG_ERROR(...) ::ponder::core::LogFormatted(::ponder::core::LogLevel::Error, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_ERROR_CATEGORY(category, ...)                                                          \
-    ::pond::core::LogFormattedWithCategory(::pond::core::LogLevel::Error, category,                \
-                                           std::source_location::current(), __VA_ARGS__)
+#define LOG_ERROR_CATEGORY(category, ...)                                                                                                            \
+    ::ponder::core::LogFormattedWithCategory(::ponder::core::LogLevel::Error, category, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_FATAL(...)                                                                             \
-    ::pond::core::LogFormatted(::pond::core::LogLevel::Fatal, std::source_location::current(),     \
-                               __VA_ARGS__)
+#define LOG_FATAL(...) ::ponder::core::LogFormatted(::ponder::core::LogLevel::Fatal, std::source_location::current(), __VA_ARGS__)
 
-#define LOG_FATAL_CATEGORY(category, ...)                                                          \
-    ::pond::core::LogFormattedWithCategory(::pond::core::LogLevel::Fatal, category,                \
-                                           std::source_location::current(), __VA_ARGS__)
+#define LOG_FATAL_CATEGORY(category, ...)                                                                                                            \
+    ::ponder::core::LogFormattedWithCategory(::ponder::core::LogLevel::Fatal, category, std::source_location::current(), __VA_ARGS__)

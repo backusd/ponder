@@ -1,6 +1,8 @@
+#include <ponder/core/Exception.hpp>
 #include <ponder/core/Result.hpp>
-#include <ponder/platform/PlatformError.hpp>
-#include <ponder/platform/PlatformRuntime.hpp>
+#include <ponder/core/Timing.hpp>
+#include <ponder/platform/Hints.hpp>
+#include <ponder/platform/Runtime.hpp>
 
 #include <algorithm>
 #include <charconv>
@@ -24,7 +26,7 @@ namespace
 {
 struct OptionalDisplayId final
 {
-    const std::optional<pond::platform::DisplayId>& value;
+    const std::optional<ponder::platform::DisplayId>& value;
 };
 
 struct OptionalRefreshRate final
@@ -68,12 +70,12 @@ struct formatter<OptionalRefreshRate> : formatter<string>
 
 namespace
 {
-namespace core = pond::core;
-namespace platform = pond::platform;
+namespace core = ponder::core;
+namespace platform = ponder::platform;
 
 struct Options final
 {
-    std::optional<platform::Duration> autoCloseAfter;
+    std::optional<core::Duration> autoCloseAfter;
     bool exerciseState{};
     bool showHelp{};
 };
@@ -82,14 +84,13 @@ struct WindowSlot final
 {
     platform::Window window;
     std::string label;
-    bool titleUpdateFailureReported{};
 };
 
 struct AppState final
 {
-    platform::PlatformRuntime& runtime;
+    platform::Runtime& runtime;
     std::vector<WindowSlot>& windows;
-    platform::Timestamp startTimestamp;
+    core::Timestamp startTimestamp;
     std::uint64_t eventCount{};
     bool quitRequested{};
     bool snapshotRequested{};
@@ -97,8 +98,7 @@ struct AppState final
 
 [[nodiscard]] core::Error MakeOptionError(std::string message)
 {
-    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0},
-                       std::move(message)};
+    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0}, std::move(message)};
 }
 
 void PrintUsage(std::string_view executableName)
@@ -110,10 +110,9 @@ void PrintUsage(std::string_view executableName)
     std::println("  --help                          Print this help text.\n");
 }
 
-[[nodiscard]] core::Result<platform::Duration> ParseMilliseconds(
-    std::string_view text)
+[[nodiscard]] core::Result<core::Duration> ParseMilliseconds(std::string_view text)
 {
-    using ResultType = core::Result<platform::Duration>;
+    using ResultType = core::Result<core::Duration>;
 
     std::uint64_t value{};
     const char* const begin = text.data();
@@ -121,21 +120,17 @@ void PrintUsage(std::string_view executableName)
     const auto [next, error] = std::from_chars(begin, end, value);
     if (error != std::errc{} || next != end)
     {
-        return ResultType::FromError(
-            MakeOptionError("Expected a non-negative integer millisecond value."));
+        return ResultType::FromError(MakeOptionError("Expected a non-negative integer millisecond value."));
     }
 
     using Milliseconds = std::chrono::milliseconds;
-    constexpr auto kMaxMilliseconds = static_cast<std::uint64_t>(
-        std::numeric_limits<Milliseconds::rep>::max());
+    constexpr auto kMaxMilliseconds = static_cast<std::uint64_t>(std::numeric_limits<Milliseconds::rep>::max());
     if (value > kMaxMilliseconds)
     {
-        return ResultType::FromError(
-            MakeOptionError("Auto-close duration is too large."));
+        return ResultType::FromError(MakeOptionError("Auto-close duration is too large."));
     }
 
-    return platform::Duration{
-        Milliseconds{static_cast<Milliseconds::rep>(value)}};
+    return core::Duration{Milliseconds{static_cast<Milliseconds::rep>(value)}};
 }
 
 [[nodiscard]] core::Result<Options> ParseOptions(int argc, char** argv)
@@ -158,53 +153,29 @@ void PrintUsage(std::string_view executableName)
         {
             if (index + 1 >= argc)
             {
-                return ResultType::FromError(
-                    MakeOptionError("--auto-close-ms requires a value."));
+                return ResultType::FromError(MakeOptionError("--auto-close-ms requires a value."));
             }
 
             ++index;
             auto duration = ParseMilliseconds(argv[index]);
-            RETURN_ERROR_IF_FAILED(duration);
+            if (!duration)
+            {
+                return ResultType::FromError(std::move(duration).GetError());
+            }
             options.autoCloseAfter = std::move(duration).GetValue();
         }
         else
         {
-            return ResultType::FromError(
-                MakeOptionError("Unknown option: " + std::string{argument}));
+            return ResultType::FromError(MakeOptionError("Unknown option: " + std::string{argument}));
         }
     }
 
     return options;
 }
 
-
 void PrintError(std::string_view operation, const core::Error& error)
 {
     std::println("{} failed: {}", operation, error);
-}
-
-void PrintOperationResult(std::string_view operation, const core::VoidResult& result)
-{
-    if (result)
-    {
-        std::println("{} succeeded.", operation);
-        return;
-    }
-
-    PrintError(operation, result.GetError());
-}
-
-template <typename Value, typename Formatter>
-void PrintQueryResult(std::string_view label, const core::Result<Value>& result,
-                      Formatter formatter)
-{
-    if (result)
-    {
-        std::println("  {}: {}", label, formatter(result.GetValue()));
-        return;
-    }
-
-    std::println("  {}: error: {}", label, result.GetError());
 }
 
 void PrintDisplayInfo(const platform::DisplayInfo& display)
@@ -218,32 +189,30 @@ void PrintDisplayInfo(const platform::DisplayInfo& display)
     std::println("  content scale: {}", display.contentScale);
 }
 
-void PrintDisplays(platform::PlatformRuntime& runtime)
+void PrintDisplays(platform::Runtime& runtime)
 {
     std::println("\nDisplay snapshot");
-    auto displays = runtime.EnumerateDisplays();
-    RETURN_VOID_IF_FAILED_FN(displays,
-                             [](const pond::core::Error& e)
-                             {
-                                 PrintError("PlatformRuntime::EnumerateDisplays", e);
-                             });
+    const std::vector<platform::DisplayInfo> displays = runtime.DisplayEnumerate();
 
-    if (displays.GetValue().empty())
+    if (displays.empty())
     {
         std::println("  No connected displays were reported.");
         return;
     }
 
-    for (const platform::DisplayInfo& display : displays.GetValue())
+    for (const platform::DisplayInfo& display : displays)
     {
         PrintDisplayInfo(display);
 
-        auto lookup = runtime.GetDisplayInfo(display.id);
-        RETURN_VOID_IF_FAILED_FN(lookup,
-                                 [](const pond::core::Error& e)
-                                 {
-                                     PrintError("PlatformRuntime::GetDisplayInfo", e);
-                                 });
+        auto lookup = runtime.DisplayGetInfo(display.id);
+        if (!lookup)
+        {
+            PrintError("Runtime::DisplayGetInfo", lookup.GetError());
+            std::println("  Display {} left the topology before it could be refreshed; "
+                         "continuing with the remaining snapshot.",
+                         display.id);
+            continue;
+        }
     }
 }
 
@@ -259,7 +228,17 @@ void PrintWindowSnapshot(const WindowSlot& slot)
     std::println("  position: {}", window.GetPosition());
     std::println("  logical size: {}", window.GetLogicalSize());
     std::println("  pixel size: {}", window.GetPixelSize());
-    std::println("  display id: {}", window.GetDisplayId());
+
+    auto displayId = window.GetDisplayId();
+    if (displayId)
+    {
+        std::println("  display id: {}", displayId.GetValue());
+    }
+    else
+    {
+        std::println("  display id: unavailable after a topology change: {}", displayId.GetError());
+    }
+
     std::println("  pixel density: {}", window.GetPixelDensity());
     std::println("  display scale: {}", window.GetDisplayScale());
     std::println("  presentation: {}", window.GetPresentation());
@@ -279,18 +258,12 @@ void PrintAllWindowSnapshots(const std::vector<WindowSlot>& windows)
     }
 }
 
-[[nodiscard]] core::Result<WindowSlot> CreateWindowSlot(platform::PlatformRuntime& runtime,
-                                                        const platform::WindowDesc& desc,
-                                                        std::string label)
+[[nodiscard]] WindowSlot CreateWindowSlot(platform::Runtime& runtime, const platform::WindowDesc& desc, std::string label)
 {
-    auto window = runtime.CreateWindow(desc);
-    RETURN_ERROR_IF_FAILED(window);
-
-    return WindowSlot{std::move(window).GetValue(), std::move(label)};
+    return WindowSlot{runtime.WindowCreate(desc), std::move(label)};
 }
 
-[[nodiscard]] pond::core::Result<platform::WindowId> CreateAndReleaseProbeWindow(
-    platform::PlatformRuntime& runtime)
+[[nodiscard]] platform::WindowId CreateAndReleaseProbeWindow(platform::Runtime& runtime)
 {
     const platform::WindowDesc desc{
         .title = "Ponder Platform Lab - released probe",
@@ -302,34 +275,23 @@ void PrintAllWindowSnapshots(const std::vector<WindowSlot>& windows)
         .graphicsCompatibility = platform::WindowGraphicsCompatibility::Default,
     };
 
-    auto probe = runtime.CreateWindow(desc);
-    RETURN_ERROR_IF_FAILED_FN(probe,
-                              [](const pond::core::Error& e)
-                              {
-                                  PrintError("probe CreateWindow", e);
-                              });
-
-    const platform::WindowId id = probe->GetId();
+    platform::Window probe = runtime.WindowCreate(desc);
+    const platform::WindowId id = probe.GetId();
     std::println("Created probe window id {} and releasing it immediately.", id);
     return id;
 }
 
-void DemonstrateRuntimeAlreadyActive(const platform::PlatformRuntimeDesc& desc)
+void DemonstrateRuntimeAlreadyActive(const platform::RuntimeDesc& desc)
 {
-    auto duplicateRuntime = platform::PlatformRuntime::Create(desc);
-    RETURN_VOID_IF_FAILED_FN(duplicateRuntime,
-        [](const pond::core::Error& e)
-        {
-            if (e == platform::PlatformErrorCode::RuntimeAlreadyActive)
-            {
-                std::println("Observed expected RuntimeAlreadyActive error: {}", e);
-                return;
-            }
-
-            PrintError("duplicate PlatformRuntime::Create", e);
-        });
-
-    std::println("Unexpectedly created a second runtime; releasing it immediately.");
+    try
+    {
+        [[maybe_unused]] auto duplicateRuntime = platform::Runtime::Create(desc);
+        std::println("Unexpectedly created a second runtime; releasing it immediately.");
+    }
+    catch (const core::Exception& exception)
+    {
+        std::println("Observed expected second-runtime exception: {}", exception.GetMessage());
+    }
 }
 
 void ApplyBasicWindowTour(std::vector<WindowSlot>& windows, bool exerciseState)
@@ -341,23 +303,30 @@ void ApplyBasicWindowTour(std::vector<WindowSlot>& windows, bool exerciseState)
 
     platform::Window& primary = windows.front().window;
 
-    std::println("primary.SetTitle: {}", primary.SetTitle("Ponder Platform Lab - primary"));
-    std::println("primary.SetLogicalSize: {}", primary.SetLogicalSize({960, 640}));
-    std::println("primary.SetPosition: {}", primary.SetPosition({80, 80}));
-    std::println("primary.SetPresentation(Windowed): {}",
-                 primary.SetPresentation(platform::WindowPresentation::Windowed));
-    std::println("primary.SetDecoration(System): {}",
-                 primary.SetDecoration(platform::WindowDecoration::System));
-    std::println("primary.Restore: {}", primary.Restore());
+    primary.SetTitle("Ponder Platform Lab - primary");
+    std::println("primary.SetTitle succeeded.");
+    primary.SetLogicalSize({960, 640});
+    std::println("primary.SetLogicalSize succeeded.");
+    primary.SetPosition({80, 80});
+    std::println("primary.SetPosition succeeded.");
+    primary.SetPresentation(platform::WindowPresentation::Windowed);
+    std::println("primary.SetPresentation(Windowed) succeeded.");
+    primary.SetDecoration(platform::WindowDecoration::System);
+    std::println("primary.SetDecoration(System) succeeded.");
+    primary.Restore();
+    std::println("primary.Restore succeeded.");
 
     if (windows.size() > 1U)
     {
         platform::Window& secondary = windows[1].window;
-        std::println("secondary.SetTitle: {}", secondary.SetTitle("Ponder Platform Lab - secondary"));
-        std::println("secondary.SetResizable(false): {}", secondary.SetResizable(false));
-        std::println("secondary.SetResizable(true): {}", secondary.SetResizable(true));
-        std::println("secondary.Hide: {}", secondary.Hide());
-        std::println("secondary.Show: {}", secondary.Show());
+        secondary.SetTitle("Ponder Platform Lab - secondary");
+        std::println("secondary.SetTitle succeeded.");
+        secondary.SetResizable(true);
+        std::println("secondary.SetResizable(true) succeeded.");
+        secondary.Hide();
+        std::println("secondary.Hide succeeded.");
+        secondary.Show();
+        std::println("secondary.Show succeeded.");
     }
 
     if (!exerciseState)
@@ -366,23 +335,44 @@ void ApplyBasicWindowTour(std::vector<WindowSlot>& windows, bool exerciseState)
         return;
     }
 
-    std::println("primary.SetAlwaysOnTop(true): {}", primary.SetAlwaysOnTop(true));
-    std::println("primary.SetAlwaysOnTop(false): {}", primary.SetAlwaysOnTop(false));
-    std::println("primary.SetDecoration(Borderless): {}", primary.SetDecoration(platform::WindowDecoration::Borderless));
-    std::println("primary.SetDecoration(System): {}", primary.SetDecoration(platform::WindowDecoration::System));
-    std::println("primary.Maximize: {}", primary.Maximize());
-    std::println("primary.Restore: {}", primary.Restore());
-    std::println("primary.Minimize: {}", primary.Minimize());
-    std::println("primary.Restore: {}", primary.Restore());
-    std::println("primary.SetPresentation(DesktopFullscreen): {}", primary.SetPresentation(platform::WindowPresentation::DesktopFullscreen));
-    std::println("primary.SetPresentation(Windowed): {}", primary.SetPresentation(platform::WindowPresentation::Windowed));
+    if (windows.size() > 1U)
+    {
+        platform::Window& secondary = windows[1].window;
+        secondary.SetResizable(false);
+        std::println("secondary.SetResizable(false) succeeded.");
+        secondary.SetResizable(true);
+        std::println("secondary.SetResizable(true) succeeded.");
+    }
+
+    primary.SetAlwaysOnTop(true);
+    std::println("primary.SetAlwaysOnTop(true) succeeded.");
+    primary.SetAlwaysOnTop(false);
+    std::println("primary.SetAlwaysOnTop(false) succeeded.");
+    primary.SetDecoration(platform::WindowDecoration::Borderless);
+    std::println("primary.SetDecoration(Borderless) succeeded.");
+    primary.SetDecoration(platform::WindowDecoration::System);
+    std::println("primary.SetDecoration(System) succeeded.");
+    primary.Maximize();
+    std::println("primary.Maximize succeeded.");
+    primary.Restore();
+    std::println("primary.Restore succeeded.");
+    primary.Minimize();
+    std::println("primary.Minimize succeeded.");
+    primary.Restore();
+    std::println("primary.Restore succeeded.");
+    primary.SetPresentation(platform::WindowPresentation::DesktopFullscreen);
+    std::println("primary.SetPresentation(DesktopFullscreen) succeeded.");
+    primary.SetPresentation(platform::WindowPresentation::Windowed);
+    std::println("primary.SetPresentation(Windowed) succeeded.");
 }
 
 [[nodiscard]] WindowSlot* FindWindow(std::vector<WindowSlot>& windows, platform::WindowId id)
 {
-    const auto found = std::ranges::find_if(windows, [id](const WindowSlot& slot) {
-        return slot.window.GetId() == id;
-    });
+    const auto found = std::ranges::find_if(windows,
+                                            [id](const WindowSlot& slot)
+                                            {
+                                                return slot.window.GetId() == id;
+                                            });
     if (found == windows.end())
     {
         return nullptr;
@@ -393,7 +383,11 @@ void ApplyBasicWindowTour(std::vector<WindowSlot>& windows, bool exerciseState)
 void ReleaseWindow(std::vector<WindowSlot>& windows, platform::WindowId id)
 {
     const auto originalSize = windows.size();
-    std::erase_if(windows, [id](const WindowSlot& slot) { return slot.window.GetId() == id; });
+    std::erase_if(windows,
+                  [id](const WindowSlot& slot)
+                  {
+                      return slot.window.GetId() == id;
+                  });
     if (windows.size() != originalSize)
     {
         std::println("Released application-owned window id {}", id);
@@ -402,25 +396,17 @@ void ReleaseWindow(std::vector<WindowSlot>& windows, platform::WindowId id)
 
 void UpdateWindowTitles(AppState& state)
 {
-    const auto elapsed = state.runtime.Now() - state.startTimestamp;
+    const auto elapsed = state.runtime.TimeNow() - state.startTimestamp;
     for (WindowSlot& slot : state.windows)
     {
-        const std::string title = std::format("{} | events {} | {}", slot.label, state.eventCount,
-            elapsed);
-        auto result = slot.window.SetTitle(title);
-        if (!result && !slot.titleUpdateFailureReported)
-        {
-            std::println("SetTitle during title update failed: {}", result.GetError());
-            slot.titleUpdateFailureReported = true;
-        }
+        const std::string title = std::format("{} | events {} | {}", slot.label, state.eventCount, elapsed);
+        slot.window.SetTitle(title);
     }
 }
 
-void PrintEventHeader(std::string_view name, platform::Timestamp timestamp,
-                      const AppState& state)
+void PrintEventHeader(std::string_view name, core::Timestamp timestamp, const AppState& state)
 {
-    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp,
-               timestamp - state.startTimestamp);
+    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp, timestamp - state.startTimestamp);
 }
 
 struct EventVisitor final
@@ -498,8 +484,7 @@ struct EventVisitor final
     void operator()(const platform::WindowDisplayChangedEvent& event) const
     {
         PrintEventHeader("WindowDisplayChanged", event.timestamp, state);
-        std::println(" window={} display={}", event.windowId,
-            OptionalDisplayId{event.displayId});
+        std::println(" window={} display={}", event.windowId, OptionalDisplayId{event.displayId});
         state.snapshotRequested = true;
     }
 
@@ -602,7 +587,7 @@ struct EventVisitor final
 
 void DrainEvents(AppState& state)
 {
-    while (std::optional<platform::PlatformEvent> event = state.runtime.PollEvent())
+    while (std::optional<platform::PlatformEvent> event = state.runtime.EventPoll())
     {
         ++state.eventCount;
         std::visit(EventVisitor{state}, *event);
@@ -616,33 +601,36 @@ void DrainEvents(AppState& state)
     }
 }
 
-[[nodiscard]] core::VoidResult RunWindowDisplayLab(int argc, char** argv)
+[[nodiscard]] int RunWindowDisplayLab(int argc, char** argv)
 {
     auto optionsResult = ParseOptions(argc, argv);
-    RETURN_ERROR_IF_FAILED(optionsResult);
+    if (!optionsResult)
+    {
+        std::println(stderr, "ponder-platform-1-window-display-lab failed: {}", optionsResult.GetError());
+        return 1;
+    }
 
     const Options options = std::move(optionsResult).GetValue();
     if (options.showHelp)
     {
         PrintUsage(argc > 0 ? argv[0] : "ponder-platform-1-window-display-lab");
-        return {};
+        return 0;
     }
 
-    const platform::PlatformRuntimeDesc runtimeDesc{
+    const platform::RuntimeDesc runtimeDesc{
         .applicationName = "Ponder Platform Window Display Lab",
         .applicationVersion = std::string{"0.1.0"},
         .applicationIdentifier = std::string{"org.ponder.examples.platform.window-display-lab"},
+        .configureHintsBeforeInitialization =
+            [](platform::Runtime& runtime)
+        {
+            runtime.HintPush<platform::hints::MouseFocusClickThrough>(platform::hints::MouseFocusClickThrough{true});
+            runtime.HintPush<platform::hints::MouseAutoCapture>(platform::hints::MouseAutoCapture{false});
+        },
     };
 
-    auto runtimeResult = platform::PlatformRuntime::Create(runtimeDesc);
-    RETURN_ERROR_IF_FAILED(runtimeResult);
-
-    platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseFocusClickThrough{true}));
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseAutoCapture{false}));
-    const platform::Timestamp start = runtime.Now();
+    platform::Runtime runtime = platform::Runtime::Create(runtimeDesc);
+    const core::Timestamp start = runtime.TimeNow();
     std::println("Platform runtime created at {}", start);
     DemonstrateRuntimeAlreadyActive(runtimeDesc);
     PrintDisplays(runtime);
@@ -659,9 +647,7 @@ void DrainEvents(AppState& state)
         .minimumLogicalSize = platform::LogicalSize{320, 240},
         .graphicsCompatibility = platform::WindowGraphicsCompatibility::Default,
     };
-    auto primary = CreateWindowSlot(runtime, primaryDesc, "primary");
-    RETURN_ERROR_IF_FAILED(primary);
-    windows.push_back(std::move(primary).GetValue());
+    windows.push_back(CreateWindowSlot(runtime, primaryDesc, "primary"));
 
     const auto releasedProbeId = CreateAndReleaseProbeWindow(runtime);
 
@@ -669,20 +655,14 @@ void DrainEvents(AppState& state)
         .title = "Ponder Platform Lab - secondary",
         .logicalSize = {520, 360},
         .visible = true,
-        .resizable = false,
+        .resizable = true,
         .highPixelDensity = true,
         .minimumLogicalSize = platform::LogicalSize{240, 180},
         .graphicsCompatibility = platform::WindowGraphicsCompatibility::Default,
     };
-    auto secondary = CreateWindowSlot(runtime, secondaryDesc, "secondary");
-    RETURN_ERROR_IF_FAILED(secondary);
-    windows.push_back(std::move(secondary).GetValue());
+    windows.push_back(CreateWindowSlot(runtime, secondaryDesc, "secondary"));
 
-    if (releasedProbeId)
-    {
-        std::println("Released probe id {}; next live secondary id is {}.",
-                     *releasedProbeId, windows.back().window.GetId());
-    }
+    std::println("Released probe id {}; next live secondary id is {}.", releasedProbeId, windows.back().window.GetId());
 
     ApplyBasicWindowTour(windows, options.exerciseState);
     PrintAllWindowSnapshots(windows);
@@ -695,7 +675,7 @@ void DrainEvents(AppState& state)
     {
         DrainEvents(state);
 
-        const platform::Timestamp now = runtime.Now();
+        const core::Timestamp now = runtime.TimeNow();
         if (now - nextTitleUpdate >= std::chrono::milliseconds{500})
         {
             UpdateWindowTitles(state);
@@ -713,7 +693,7 @@ void DrainEvents(AppState& state)
 
     std::println("Shutting down with {} live window owner(s).", state.windows.size());
     state.windows.clear();
-    return {};
+    return 0;
 }
 } // namespace
 
@@ -721,21 +701,16 @@ int main(int argc, char** argv)
 {
     try
     {
-        const auto result = RunWindowDisplayLab(argc, argv);
-        if (!result)
-        {
-            std::println(stderr, "ponder-platform-1-window-display-lab failed: {}",
-                         result.GetError());
-            return 1;
-        }
+        return RunWindowDisplayLab(argc, argv);
+    }
+    catch (const core::Exception& exception)
+    {
+        std::println(stderr, "ponder-platform-1-window-display-lab terminated with a ponder exception: {}", exception.GetMessage());
+        return 1;
     }
     catch (const std::exception& exception)
     {
-        std::println(stderr,
-                     "ponder-platform-1-window-display-lab terminated with an exception: {}",
-                     exception.what());
+        std::println(stderr, "ponder-platform-1-window-display-lab terminated with an exception: {}", exception.what());
         return 1;
     }
-
-    return 0;
 }

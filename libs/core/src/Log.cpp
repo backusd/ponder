@@ -17,7 +17,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
-namespace pond::core
+namespace ponder::core
 {
 namespace
 {
@@ -70,7 +70,11 @@ std::shared_ptr<spdlog::logger> CreateLogger()
 class LoggingBackend final
 {
 public:
-    LoggingBackend() : m_logger(CreateLogger()), m_workerThread(&LoggingBackend::Run, this) {}
+    LoggingBackend() :
+        m_logger(CreateLogger()),
+        m_workerThread(&LoggingBackend::Run, this)
+    {
+    }
 
     ~LoggingBackend()
     {
@@ -104,9 +108,8 @@ public:
         {
             m_pendingEntries.fetch_sub(1, std::memory_order_acq_rel);
             m_waitCondition.notify_all();
-            WriteEntry(LogEntry{LogLevel::Error, "logging",
-                                "Failed to enqueue log record; writing synchronously.",
-                                std::chrono::system_clock::now(), std::source_location::current()});
+            WriteEntry(LogEntry{LogLevel::Error, "logging", "Failed to enqueue log record; writing synchronously.", std::chrono::system_clock::now(),
+                                std::source_location::current()});
             WriteEntry(synchronousEntry);
             FlushLogger();
             InvokeFatalHandlerIfNeeded(isFatal, fatalCategory, fatalMessage, fatalLocation);
@@ -151,14 +154,12 @@ public:
 
     void Shutdown() noexcept
     {
-        const bool wasAccepting =
-            m_acceptingQueuedMessages.exchange(false, std::memory_order_acq_rel);
+        const bool wasAccepting = m_acceptingQueuedMessages.exchange(false, std::memory_order_acq_rel);
         const bool wasStopped = m_stopRequested.exchange(true, std::memory_order_acq_rel);
 
         m_waitCondition.notify_all();
 
-        if (!wasStopped && m_workerThread.joinable() &&
-            std::this_thread::get_id() != m_workerThread.get_id())
+        if (!wasStopped && m_workerThread.joinable() && std::this_thread::get_id() != m_workerThread.get_id())
         {
             m_workerThread.join();
         }
@@ -171,14 +172,12 @@ public:
 
     LogSinkHandler SetSinkHandler(LogSinkHandler handler) noexcept
     {
-        return m_sinkHandler.exchange(handler ? handler : DefaultLogSinkHandler,
-                                      std::memory_order_acq_rel);
+        return m_sinkHandler.exchange(handler ? handler : DefaultLogSinkHandler, std::memory_order_acq_rel);
     }
 
     LogFatalHandler SetFatalHandler(LogFatalHandler handler) noexcept
     {
-        return m_fatalHandler.exchange(handler ? handler : DefaultFatalHandler,
-                                       std::memory_order_acq_rel);
+        return m_fatalHandler.exchange(handler ? handler : DefaultFatalHandler, std::memory_order_acq_rel);
     }
 
 private:
@@ -188,8 +187,7 @@ private:
         {
             DrainQueue();
 
-            if (m_stopRequested.load(std::memory_order_acquire) &&
-                m_pendingEntries.load(std::memory_order_acquire) == 0)
+            if (m_stopRequested.load(std::memory_order_acquire) && m_pendingEntries.load(std::memory_order_acquire) == 0)
             {
                 break;
             }
@@ -198,8 +196,7 @@ private:
             m_waitCondition.wait(lock,
                                  [this]()
                                  {
-                                     return m_stopRequested.load(std::memory_order_acquire) ||
-                                            m_pendingEntries.load(std::memory_order_acquire) > 0;
+                                     return m_stopRequested.load(std::memory_order_acquire) || m_pendingEntries.load(std::memory_order_acquire) > 0;
                                  });
         }
 
@@ -226,8 +223,7 @@ private:
 
         try
         {
-            m_logger->log(spdlog::source_loc{entry.GetLocation().file_name(),
-                                             static_cast<int>(entry.GetLocation().line()),
+            m_logger->log(spdlog::source_loc{entry.GetLocation().file_name(), static_cast<int>(entry.GetLocation().line()),
                                              entry.GetLocation().function_name()},
                           ToSpdlogLevel(entry.GetLevel()), "{}", FormatPayload(entry));
         }
@@ -277,9 +273,7 @@ private:
         }
     }
 
-    void InvokeFatalHandlerIfNeeded(bool isFatal, std::string_view category,
-                                    std::string_view message,
-                                    std::source_location location) noexcept
+    void InvokeFatalHandlerIfNeeded(bool isFatal, std::string_view category, std::string_view message, std::source_location location) noexcept
     {
         if (!isFatal)
         {
@@ -316,10 +310,13 @@ LoggingBackend& GetLoggingBackend()
 }
 } // namespace
 
-LogEntry::LogEntry(LogLevel level, std::string category, std::string message,
-                   std::chrono::system_clock::time_point timestamp, std::source_location location)
-    : m_level(level), m_category(std::move(category)), m_message(std::move(message)),
-      m_timestamp(timestamp), m_location(location)
+LogEntry::LogEntry(LogLevel level, std::string category, std::string message, std::chrono::system_clock::time_point timestamp,
+                   std::source_location location) :
+    m_level(level),
+    m_category(std::move(category)),
+    m_message(std::move(message)),
+    m_timestamp(timestamp),
+    m_location(location)
 {
 }
 
@@ -374,13 +371,11 @@ void LogMessage(LogLevel level, std::string_view message, std::source_location l
     LogMessage(level, std::string_view{}, message, location);
 }
 
-void LogMessage(LogLevel level, std::string_view category, std::string_view message,
-                std::source_location location) noexcept
+void LogMessage(LogLevel level, std::string_view category, std::string_view message, std::source_location location) noexcept
 {
     try
     {
-        GetLoggingBackend().Log(LogEntry{level, std::string{category}, std::string{message},
-                                         std::chrono::system_clock::now(), location});
+        GetLoggingBackend().Log(LogEntry{level, std::string{category}, std::string{message}, std::chrono::system_clock::now(), location});
     }
     catch (...)
     {
@@ -430,8 +425,8 @@ ScopedLogSinkHandler::~ScopedLogSinkHandler()
     (void)SetLogSinkHandler(m_previousHandler);
 }
 
-ScopedLogFatalHandler::ScopedLogFatalHandler(LogFatalHandler handler) noexcept
-    : m_previousHandler(SetLogFatalHandler(handler))
+ScopedLogFatalHandler::ScopedLogFatalHandler(LogFatalHandler handler) noexcept :
+    m_previousHandler(SetLogFatalHandler(handler))
 {
 }
 
@@ -440,8 +435,8 @@ ScopedLogFatalHandler::~ScopedLogFatalHandler()
     (void)SetLogFatalHandler(m_previousHandler);
 }
 
-ScopedMinimumLogLevel::ScopedMinimumLogLevel(LogLevel level) noexcept
-    : m_previousLevel(GetMinimumLogLevel())
+ScopedMinimumLogLevel::ScopedMinimumLogLevel(LogLevel level) noexcept :
+    m_previousLevel(GetMinimumLogLevel())
 {
     SetMinimumLogLevel(level);
 }
@@ -451,8 +446,7 @@ ScopedMinimumLogLevel::~ScopedMinimumLogLevel()
     SetMinimumLogLevel(m_previousLevel);
 }
 
-void LogFormattingFailure(LogLevel level, std::string_view category, std::string_view reason,
-                          std::source_location location) noexcept
+void LogFormattingFailure(LogLevel level, std::string_view category, std::string_view reason, std::source_location location) noexcept
 {
     try
     {
@@ -473,13 +467,11 @@ void LogFormattingFailure(LogLevel level, std::string_view category, std::string
             message.append(reason);
         }
 
-        LogMessage(level == LogLevel::Fatal ? LogLevel::Fatal : LogLevel::Error, "logging", message,
-                   location);
+        LogMessage(level == LogLevel::Fatal ? LogLevel::Fatal : LogLevel::Error, "logging", message, location);
     }
     catch (...)
     {
-        LogMessage(level == LogLevel::Fatal ? LogLevel::Fatal : LogLevel::Error, "logging",
-                   "Failed to format log message.", location);
+        LogMessage(level == LogLevel::Fatal ? LogLevel::Fatal : LogLevel::Error, "logging", "Failed to format log message.", location);
     }
 }
-} // namespace pond::core
+} // namespace ponder::core

@@ -1,22 +1,26 @@
+#include <ponder/core/Exception.hpp>
 #include <ponder/core/Result.hpp>
+#include <ponder/core/Timing.hpp>
 #include <ponder/io/Path.hpp>
-#include <ponder/platform/PlatformError.hpp>
-#include <ponder/platform/PlatformRuntime.hpp>
+#include <ponder/platform/Hints.hpp>
 #include <ponder/platform/Process.hpp>
+#include <ponder/platform/Runtime.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <charconv>
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <exception>
-#include <format>
 #include <filesystem>
-#include <print>
+#include <format>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <print>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -29,7 +33,7 @@ namespace
 {
 struct ExitStatus final
 {
-    const pond::platform::ProcessExitStatus& value;
+    const ponder::platform::ProcessExitStatus& value;
 };
 } // namespace
 
@@ -43,17 +47,17 @@ struct formatter<ExitStatus> : formatter<string>
     {
         struct Visitor final
         {
-            [[nodiscard]] std::string operator()(pond::platform::ProcessNormalExit exit) const
+            [[nodiscard]] std::string operator()(ponder::platform::ProcessNormalExit exit) const
             {
                 return "normal exit code " + std::to_string(exit.exitCode);
             }
 
-            [[nodiscard]] std::string operator()(pond::platform::ProcessSignalTermination exit) const
+            [[nodiscard]] std::string operator()(ponder::platform::ProcessSignalTermination exit) const
             {
                 return "signal termination " + std::to_string(exit.signal);
             }
 
-            [[nodiscard]] std::string operator()(pond::platform::ProcessUnknownTermination) const
+            [[nodiscard]] std::string operator()(ponder::platform::ProcessUnknownTermination) const
             {
                 return "unknown termination";
             }
@@ -66,9 +70,9 @@ struct formatter<ExitStatus> : formatter<string>
 
 namespace
 {
-namespace core = pond::core;
+namespace core = ponder::core;
 namespace io = pond::io;
-namespace platform = pond::platform;
+namespace platform = ponder::platform;
 
 using namespace std::chrono_literals;
 
@@ -81,17 +85,19 @@ enum class FlowKind : std::uint8_t
 
 enum class WorkerCommand : std::uint8_t
 {
+    None,
     GracefulTerminate,
     ForceTerminate
 };
 
 struct Options final
 {
-    std::optional<platform::Duration> autoCloseAfter;
+    std::optional<core::Duration> autoCloseAfter;
     std::uint32_t childSleepMilliseconds{250};
     int childExitCode{23};
     bool childMode{};
     bool headlessParent{};
+    bool injectWorkerException{};
     bool showHelp{};
     std::vector<std::string> childPayload;
 };
@@ -104,10 +110,10 @@ struct WorkerMessage final
 struct WorkerSharedState final
 {
     std::mutex mutex;
-    std::condition_variable commandReady;
     std::vector<WorkerMessage> messages;
-    std::optional<WorkerCommand> command;
-    bool finished{};
+    std::atomic<WorkerCommand> command{WorkerCommand::None};
+    std::atomic_bool finished{};
+    std::exception_ptr failure;
 };
 
 struct WorkerController final
@@ -116,58 +122,67 @@ struct WorkerController final
     std::shared_ptr<WorkerSharedState> shared;
     FlowKind flow{FlowKind::Finite};
     std::string label;
+
+    ~WorkerController() noexcept
+    {
+        if (!thread || !shared || flow != FlowKind::Termination)
+        {
+            return;
+        }
+
+        WorkerCommand expected = WorkerCommand::None;
+        static_cast<void>(
+            shared->command.compare_exchange_strong(expected, WorkerCommand::ForceTerminate, std::memory_order_release, std::memory_order_relaxed));
+        shared->command.notify_all();
+    }
 };
 
 struct WindowSlot final
 {
     platform::Window window;
-    bool titleUpdateFailureReported{};
 };
 
 struct AppState final
 {
-    platform::PlatformRuntime& runtime;
+    platform::Runtime& runtime;
     const Options& options;
     const std::filesystem::path& selfExecutable;
     std::vector<WindowSlot>& windows;
     WorkerController worker;
-    platform::Timestamp startTimestamp;
+    core::Timestamp startTimestamp;
+    core::Timestamp lastTimestamp;
     std::uint64_t eventCount{};
     bool shutdownRequested{};
-    bool startupDemoRequested{true};
     std::string lastAction{"ready"};
 };
 
 [[nodiscard]] core::Error MakeOptionError(std::string message)
 {
-    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0},
-                       std::move(message)};
+    return core::Error{core::ErrorCode{core::ErrorCategory::InvalidArgument, 0}, std::move(message)};
 }
 
 void PrintUsage(std::string_view executableName)
 {
-    std::print(
-        "Usage: {} [options]\n\n"
-        "Options:\n"
-        "  --auto-close-ms <milliseconds>  Exit the windowed parent after a run.\n"
-        "  --headless-parent                Launch/wait for a child without runtime.\n"
-        "  --child                          Internal deterministic child mode.\n"
-        "  --sleep-ms <milliseconds>        Child sleep duration.\n"
-        "  --exit-code <0-255>              Child normal exit code.\n"
-        "  --help                           Print this help text.\n\n"
-        "Controls:\n"
-        "  F1            Print this help text.\n"
-        "  N             Start a bounded normal-exit child on a worker.\n"
-        "  T             Start a long-running termination flow.\n"
-        "  G / F         Request graceful-preferred or forced termination.\n"
-        "  A             Start an abandonment flow.\n"
-        "  Q / Escape    Request shutdown.\n",
-        executableName);
+    std::print("Usage: {} [options]\n\n"
+               "Options:\n"
+               "  --auto-close-ms <milliseconds>  Exit the windowed parent after a run.\n"
+               "  --headless-parent                Launch/wait for a child without runtime.\n"
+               "  --inject-worker-exception        Verify worker exception marshalling.\n"
+               "  --child                          Internal deterministic child mode.\n"
+               "  --sleep-ms <milliseconds>        Child sleep duration.\n"
+               "  --exit-code <0-255>              Child normal exit code.\n"
+               "  --help                           Print this help text.\n\n"
+               "Controls:\n"
+               "  F1            Print this help text.\n"
+               "  N             Start a bounded normal-exit child on a worker.\n"
+               "  T             Start a long-running termination flow.\n"
+               "  G / F         Request graceful-preferred or forced termination.\n"
+               "  A             Start an abandonment flow.\n"
+               "  Q / Escape    Request shutdown.\n",
+               executableName);
 }
 
-[[nodiscard]] core::Result<std::uint32_t> ParseUnsigned(std::string_view text,
-                                                        std::uint32_t maximum,
-                                                        std::string_view label)
+[[nodiscard]] core::Result<std::uint32_t> ParseUnsigned(std::string_view text, std::uint32_t maximum, std::string_view label)
 {
     std::uint32_t value{};
     const char* const begin = text.data();
@@ -175,20 +190,21 @@ void PrintUsage(std::string_view executableName)
     const auto [next, error] = std::from_chars(begin, end, value);
     if (error != std::errc{} || next != end || value > maximum)
     {
-        return core::Result<std::uint32_t>::FromError(
-            MakeOptionError(std::string{label} + " is out of range or not an integer."));
+        return core::Result<std::uint32_t>::FromError(MakeOptionError(std::string{label} + " is out of range or not an integer."));
     }
 
     return value;
 }
 
-[[nodiscard]] core::Result<platform::Duration> ParseMilliseconds(
-    std::string_view text)
+[[nodiscard]] core::Result<core::Duration> ParseMilliseconds(std::string_view text)
 {
     auto value = ParseUnsigned(text, 60'000U, "millisecond value");
-    RETURN_ERROR_IF_FAILED(value);
+    if (!value)
+    {
+        return core::Result<core::Duration>::FromError(std::move(value).GetError());
+    }
 
-    return platform::Duration{std::chrono::milliseconds{*value}};
+    return core::Duration{std::chrono::milliseconds{*value}};
 }
 
 [[nodiscard]] core::Result<Options> ParseOptions(int argc, char** argv)
@@ -217,50 +233,66 @@ void PrintUsage(std::string_view executableName)
         {
             options.headlessParent = true;
         }
+        else if (argument == "--inject-worker-exception")
+        {
+            options.injectWorkerException = true;
+        }
         else if (argument == "--auto-close-ms")
         {
             if (index + 1 >= argc)
             {
-                return core::Result<Options>::FromError(
-                    MakeOptionError("--auto-close-ms requires a value."));
+                return core::Result<Options>::FromError(MakeOptionError("--auto-close-ms requires a value."));
             }
             auto duration = ParseMilliseconds(argv[++index]);
-            RETURN_ERROR_IF_FAILED(duration);
+            if (!duration)
+            {
+                return core::Result<Options>::FromError(std::move(duration).GetError());
+            }
             options.autoCloseAfter = std::move(duration).GetValue();
         }
         else if (argument == "--sleep-ms")
         {
             if (index + 1 >= argc)
             {
-                return core::Result<Options>::FromError(
-                    MakeOptionError("--sleep-ms requires a value."));
+                return core::Result<Options>::FromError(MakeOptionError("--sleep-ms requires a value."));
             }
             auto milliseconds = ParseUnsigned(argv[++index], 60'000U, "--sleep-ms");
-            RETURN_ERROR_IF_FAILED(milliseconds);
+            if (!milliseconds)
+            {
+                return core::Result<Options>::FromError(std::move(milliseconds).GetError());
+            }
             options.childSleepMilliseconds = *milliseconds;
         }
         else if (argument == "--exit-code")
         {
             if (index + 1 >= argc)
             {
-                return core::Result<Options>::FromError(
-                    MakeOptionError("--exit-code requires a value."));
+                return core::Result<Options>::FromError(MakeOptionError("--exit-code requires a value."));
             }
             auto exitCode = ParseUnsigned(argv[++index], 255U, "--exit-code");
-            RETURN_ERROR_IF_FAILED(exitCode);
+            if (!exitCode)
+            {
+                return core::Result<Options>::FromError(std::move(exitCode).GetError());
+            }
             options.childExitCode = static_cast<int>(*exitCode);
         }
         else
         {
-            return core::Result<Options>::FromError(
-                MakeOptionError("Unknown option: " + std::string{argument}));
+            return core::Result<Options>::FromError(MakeOptionError("Unknown option: " + std::string{argument}));
         }
     }
 
     if (options.childMode && options.headlessParent)
     {
-        return core::Result<Options>::FromError(
-            MakeOptionError("--child and --headless-parent are mutually exclusive."));
+        return core::Result<Options>::FromError(MakeOptionError("--child and --headless-parent are mutually exclusive."));
+    }
+    if (options.childMode && options.injectWorkerException)
+    {
+        return core::Result<Options>::FromError(MakeOptionError("--inject-worker-exception is a parent-mode option."));
+    }
+    if (options.headlessParent && options.injectWorkerException)
+    {
+        return core::Result<Options>::FromError(MakeOptionError("--inject-worker-exception requires the interactive parent."));
     }
 
     return options;
@@ -270,8 +302,7 @@ void PrintUsage(std::string_view executableName)
 {
     if (argc <= 0 || argv == nullptr || argv[0] == nullptr || std::string_view{argv[0]}.empty())
     {
-        return core::Result<std::filesystem::path>::FromError(
-            MakeOptionError("Cannot determine this executable path from argv[0]."));
+        return core::Result<std::filesystem::path>::FromError(MakeOptionError("Cannot determine this executable path from argv[0]."));
     }
 
     std::filesystem::path path = io::PathFromUtf8(argv[0]);
@@ -284,7 +315,6 @@ void PrintUsage(std::string_view executableName)
 
     return absolute;
 }
-
 
 [[nodiscard]] std::string QuoteText(std::string_view text)
 {
@@ -367,7 +397,6 @@ void PrintUsage(std::string_view executableName)
     }
 }
 
-
 void PrintError(std::string_view operation, const core::Error& error)
 {
     std::println("{} failed: {}", operation, error);
@@ -379,47 +408,76 @@ void PushWorkerMessage(const std::shared_ptr<WorkerSharedState>& shared, std::st
         std::lock_guard lock{shared->mutex};
         shared->messages.push_back(WorkerMessage{std::move(text)});
     }
-    shared->commandReady.notify_all();
 }
 
-void PushWorkerError(const std::shared_ptr<WorkerSharedState>& shared,
-                     std::string_view operation, const core::Error& error)
+void PushWorkerError(const std::shared_ptr<WorkerSharedState>& shared, std::string_view operation, const core::Error& error)
 {
     PushWorkerMessage(shared, std::string{operation} + " failed: " + std::format("{}", error));
 }
 
-void FinishWorker(const std::shared_ptr<WorkerSharedState>& shared)
+void FinishWorker(const std::shared_ptr<WorkerSharedState>& shared, std::exception_ptr failure = {}) noexcept
 {
-    {
-        std::lock_guard lock{shared->mutex};
-        shared->finished = true;
-    }
-    shared->commandReady.notify_all();
+    shared->failure = std::move(failure);
+    shared->finished.store(true, std::memory_order_release);
 }
 
-[[nodiscard]] WorkerCommand WaitForWorkerCommand(
-    const std::shared_ptr<WorkerSharedState>& shared)
+[[nodiscard]] WorkerCommand WaitForWorkerCommand(const std::shared_ptr<WorkerSharedState>& shared)
 {
-    std::unique_lock lock{shared->mutex};
-    shared->commandReady.wait(lock, [&shared]() { return shared->command.has_value(); });
-    return *shared->command;
+    shared->command.wait(WorkerCommand::None, std::memory_order_acquire);
+    return shared->command.load(std::memory_order_acquire);
 }
 
-[[nodiscard]] platform::ProcessDesc MakeChildProcessDesc(
-    const std::filesystem::path& executable, std::uint32_t sleepMilliseconds, int exitCode,
-    std::vector<std::string> payload)
+[[nodiscard]] platform::ProcessDesc MakeChildProcessDesc(const std::filesystem::path& executable, std::uint32_t sleepMilliseconds, int exitCode,
+                                                         std::vector<std::string> payload)
 {
     std::vector<std::string> arguments{
-        "--child",
-        "--sleep-ms",
-        std::to_string(sleepMilliseconds),
-        "--exit-code",
-        std::to_string(exitCode),
-        "--",
+        "--child", "--sleep-ms", std::to_string(sleepMilliseconds), "--exit-code", std::to_string(exitCode), "--",
     };
-    arguments.insert(arguments.end(), std::make_move_iterator(payload.begin()),
-                     std::make_move_iterator(payload.end()));
+    arguments.insert(arguments.end(), std::make_move_iterator(payload.begin()), std::make_move_iterator(payload.end()));
     return platform::ProcessDesc{.executable = executable, .arguments = std::move(arguments)};
+}
+
+[[nodiscard]] core::Result<platform::ProcessExitStatus> WaitWithOneRetry(const std::shared_ptr<WorkerSharedState>& shared, platform::Process& process)
+{
+    auto waitResult = process.Wait();
+    if (waitResult)
+    {
+        return waitResult;
+    }
+
+    PushWorkerError(shared, "Process::Wait", waitResult.GetError());
+    PushWorkerMessage(shared, "Retrying Process::Wait once on the same process owner.");
+
+    auto retryResult = process.Wait();
+    if (!retryResult)
+    {
+        PushWorkerError(shared, "Process::Wait retry", retryResult.GetError());
+    }
+    return retryResult;
+}
+
+[[nodiscard]] core::VoidResult TerminateWithEscalation(const std::shared_ptr<WorkerSharedState>& shared, platform::Process& process,
+                                                       platform::ProcessTerminationMode mode)
+{
+    auto termination = process.Terminate(mode);
+    if (termination)
+    {
+        return termination;
+    }
+
+    PushWorkerError(shared, "Process::Terminate", termination.GetError());
+    if (mode == platform::ProcessTerminationMode::Force)
+    {
+        return termination;
+    }
+
+    PushWorkerMessage(shared, "Graceful-preferred termination failed; escalating once to Process::Terminate(force).");
+    auto forceTermination = process.Terminate(platform::ProcessTerminationMode::Force);
+    if (!forceTermination)
+    {
+        PushWorkerError(shared, "Process::Terminate(force escalation)", forceTermination.GetError());
+    }
+    return forceTermination;
 }
 
 void RunFiniteWorker(std::shared_ptr<WorkerSharedState> shared, platform::ProcessDesc desc)
@@ -429,21 +487,21 @@ void RunFiniteWorker(std::shared_ptr<WorkerSharedState> shared, platform::Proces
     if (!processResult)
     {
         PushWorkerError(shared, "LaunchProcess", processResult.GetError());
-        FinishWorker(shared);
+        PushWorkerMessage(shared, "Launch was not retried automatically; use N to retry after "
+                                  "correcting the executable or host condition.");
         return;
     }
 
     platform::Process process = std::move(processResult).GetValue();
-    auto waitResult = process.Wait();
+    auto waitResult = WaitWithOneRetry(shared, process);
     if (!waitResult)
     {
-        PushWorkerError(shared, "Process::Wait", waitResult.GetError());
-        FinishWorker(shared);
+        PushWorkerMessage(shared, "Both waits failed; abandoning the live Process owner so the "
+                                  "private reaper can finish cleanup.");
         return;
     }
 
     PushWorkerMessage(shared, "Process::Wait returned " + std::format("{}", ExitStatus{*waitResult}) + ".");
-    FinishWorker(shared);
 }
 
 void RunTerminationWorker(std::shared_ptr<WorkerSharedState> shared, platform::ProcessDesc desc)
@@ -453,7 +511,8 @@ void RunTerminationWorker(std::shared_ptr<WorkerSharedState> shared, platform::P
     if (!processResult)
     {
         PushWorkerError(shared, "LaunchProcess", processResult.GetError());
-        FinishWorker(shared);
+        PushWorkerMessage(shared, "Launch was not retried automatically; use T to retry after "
+                                  "correcting the executable or host condition.");
         return;
     }
 
@@ -461,31 +520,28 @@ void RunTerminationWorker(std::shared_ptr<WorkerSharedState> shared, platform::P
     PushWorkerMessage(shared, "Child is running; worker is waiting for G or F, not Wait().");
 
     const WorkerCommand command = WaitForWorkerCommand(shared);
-    const platform::ProcessTerminationMode mode = command == WorkerCommand::ForceTerminate ?
-        platform::ProcessTerminationMode::Force :
-        platform::ProcessTerminationMode::GracefulPreferred;
+    const platform::ProcessTerminationMode mode =
+        command == WorkerCommand::ForceTerminate ? platform::ProcessTerminationMode::Force : platform::ProcessTerminationMode::GracefulPreferred;
     const std::string modeName = command == WorkerCommand::ForceTerminate ? "force" : "graceful";
     PushWorkerMessage(shared, "Calling Process::Terminate(" + modeName + ").");
-    auto termination = process.Terminate(mode);
+    auto termination = TerminateWithEscalation(shared, process, mode);
     if (!termination)
     {
-        PushWorkerError(shared, "Process::Terminate", termination.GetError());
-        PushWorkerMessage(shared, "Leaving process scope without Wait because termination failed.");
-        FinishWorker(shared);
+        PushWorkerMessage(shared, "Termination could not be confirmed; leaving Process scope "
+                                  "without Wait so private cleanup can reap it.");
         return;
     }
 
     PushWorkerMessage(shared, "Terminate succeeded; now calling blocking Wait() on worker.");
-    auto waitResult = process.Wait();
+    auto waitResult = WaitWithOneRetry(shared, process);
     if (!waitResult)
     {
-        PushWorkerError(shared, "Process::Wait", waitResult.GetError());
-        FinishWorker(shared);
+        PushWorkerMessage(shared, "Both post-termination waits failed; private cleanup retains "
+                                  "the process until exit can be confirmed.");
         return;
     }
 
     PushWorkerMessage(shared, "Terminated child reported " + std::format("{}", ExitStatus{*waitResult}) + ".");
-    FinishWorker(shared);
 }
 
 void RunAbandonmentWorker(std::shared_ptr<WorkerSharedState> shared, platform::ProcessDesc desc)
@@ -495,7 +551,8 @@ void RunAbandonmentWorker(std::shared_ptr<WorkerSharedState> shared, platform::P
     if (!processResult)
     {
         PushWorkerError(shared, "LaunchProcess", processResult.GetError());
-        FinishWorker(shared);
+        PushWorkerMessage(shared, "Launch was not retried automatically; use A to retry after "
+                                  "correcting the executable or host condition.");
         return;
     }
 
@@ -506,7 +563,37 @@ void RunAbandonmentWorker(std::shared_ptr<WorkerSharedState> shared, platform::P
     }
 
     PushWorkerMessage(shared, "Process owner ended; private platform reaper tracks the child.");
-    FinishWorker(shared);
+}
+
+void RunWorkerEntry(std::shared_ptr<WorkerSharedState> shared, FlowKind flow, platform::ProcessDesc desc, bool injectWorkerException) noexcept
+{
+    std::exception_ptr failure;
+    try
+    {
+        if (injectWorkerException)
+        {
+            throw std::runtime_error{"Injected worker exception for verification."};
+        }
+
+        switch (flow)
+        {
+        case FlowKind::Finite:
+            RunFiniteWorker(shared, std::move(desc));
+            break;
+        case FlowKind::Termination:
+            RunTerminationWorker(shared, std::move(desc));
+            break;
+        case FlowKind::Abandonment:
+            RunAbandonmentWorker(shared, std::move(desc));
+            break;
+        }
+    }
+    catch (...)
+    {
+        failure = std::current_exception();
+    }
+
+    FinishWorker(shared, std::move(failure));
 }
 
 [[nodiscard]] bool WorkerIsActive(const WorkerController& worker) noexcept
@@ -514,37 +601,37 @@ void RunAbandonmentWorker(std::shared_ptr<WorkerSharedState> shared, platform::P
     return worker.thread.has_value();
 }
 
-void DrainWorkerMessages(AppState& state)
+void DrainWorkerMessages(AppState& state, core::Timestamp observedAt)
 {
     if (!state.worker.shared)
     {
         return;
     }
 
+    const std::shared_ptr<WorkerSharedState> shared = state.worker.shared;
+    const bool finished = shared->finished.load(std::memory_order_acquire);
     std::vector<WorkerMessage> messages;
-    bool finished{};
     {
-        std::lock_guard lock{state.worker.shared->mutex};
-        messages.swap(state.worker.shared->messages);
-        finished = state.worker.shared->finished;
+        std::lock_guard lock{shared->mutex};
+        messages.swap(shared->messages);
     }
 
     for (const WorkerMessage& message : messages)
     {
-        const platform::Timestamp now = state.runtime.Now();
-        std::println("[worker {} at {} (+{})] {}", state.worker.label, now,
-                     now - state.startTimestamp, message.text);
+        std::println("[worker {} observed at {} (+{})] {}", state.worker.label, observedAt, observedAt - state.startTimestamp, message.text);
         state.lastAction = Shorten(message.text, 72);
     }
 
     if (finished)
     {
-        if (state.worker.thread)
-        {
-            state.worker.thread.reset();
-        }
+        state.worker.thread.reset();
+        const std::exception_ptr failure = shared->failure;
         state.worker.shared.reset();
         state.worker.label.clear();
+        if (failure != nullptr)
+        {
+            std::rethrow_exception(failure);
+        }
     }
 }
 
@@ -558,26 +645,27 @@ void SendWorkerCommand(AppState& state, WorkerCommand command)
 
     if (state.worker.flow != FlowKind::Termination)
     {
-        std::println("The active {} worker does not accept termination commands.",
-                     ToString(state.worker.flow));
+        std::println("The active {} worker does not accept termination commands.", ToString(state.worker.flow));
         return;
     }
 
+    WorkerCommand expected = WorkerCommand::None;
+    if (!state.worker.shared->command.compare_exchange_strong(expected, command, std::memory_order_release, std::memory_order_relaxed))
     {
-        std::lock_guard lock{state.worker.shared->mutex};
-        if (state.worker.shared->command)
-        {
-            std::println("A termination command has already been sent.");
-            return;
-        }
-        state.worker.shared->command = command;
+        std::println("A termination command has already been sent.");
+        return;
     }
-    state.worker.shared->commandReady.notify_all();
+    state.worker.shared->command.notify_all();
 }
 
 void StartWorker(AppState& state, FlowKind flow)
 {
-    DrainWorkerMessages(state);
+    DrainWorkerMessages(state, state.lastTimestamp);
+    if (state.shutdownRequested)
+    {
+        std::println("Cannot start a process worker after shutdown has been requested.");
+        return;
+    }
     if (WorkerIsActive(state.worker))
     {
         std::println("Worker {} is already active.", state.worker.label);
@@ -608,25 +696,13 @@ void StartWorker(AppState& state, FlowKind flow)
     }
 
     auto shared = std::make_shared<WorkerSharedState>();
-    const platform::ProcessDesc desc = MakeChildProcessDesc(
-        state.selfExecutable, sleepMilliseconds, exitCode, std::move(payload));
+    platform::ProcessDesc desc = MakeChildProcessDesc(state.selfExecutable, sleepMilliseconds, exitCode, std::move(payload));
 
     state.worker.flow = flow;
     state.worker.label = label;
     state.worker.shared = shared;
 
-    switch (flow)
-    {
-    case FlowKind::Finite:
-        state.worker.thread.emplace(RunFiniteWorker, shared, desc);
-        break;
-    case FlowKind::Termination:
-        state.worker.thread.emplace(RunTerminationWorker, shared, desc);
-        break;
-    case FlowKind::Abandonment:
-        state.worker.thread.emplace(RunAbandonmentWorker, shared, desc);
-        break;
-    }
+    state.worker.thread.emplace(RunWorkerEntry, shared, flow, std::move(desc), state.options.injectWorkerException);
 }
 
 void ReleaseParentWindow(AppState& state)
@@ -659,8 +735,7 @@ void RequestShutdown(AppState& state, std::string_view reason)
     }
     else
     {
-        std::println("Waiting for bounded {} worker before releasing the parent.",
-                     ToString(state.worker.flow));
+        std::println("Waiting for bounded {} worker before releasing the parent.", ToString(state.worker.flow));
     }
 }
 
@@ -695,11 +770,9 @@ void HandleCommand(AppState& state, platform::PhysicalKey key)
     }
 }
 
-void PrintEventHeader(std::string_view name, platform::Timestamp timestamp,
-                      const AppState& state)
+void PrintEventHeader(std::string_view name, core::Timestamp timestamp, const AppState& state)
 {
-    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp,
-               timestamp - state.startTimestamp);
+    std::print("[event {}] {} at {} (+{})", state.eventCount, name, timestamp, timestamp - state.startTimestamp);
 }
 
 struct EventVisitor final
@@ -723,8 +796,7 @@ struct EventVisitor final
     void operator()(const platform::KeyboardKeyEvent& event) const
     {
         PrintEventHeader("KeyboardKey", event.timestamp, state);
-        std::println(" key={} pressed={} repeat={}", ToString(event.physicalKey),
-                     event.pressed, event.repeat);
+        std::println(" key={} pressed={} repeat={}", ToString(event.physicalKey), event.pressed, event.repeat);
         if (event.pressed && !event.repeat)
         {
             HandleCommand(state, event.physicalKey);
@@ -741,7 +813,7 @@ struct EventVisitor final
 
 void DrainEvents(AppState& state)
 {
-    while (std::optional<platform::PlatformEvent> event = state.runtime.PollEvent())
+    while (std::optional<platform::PlatformEvent> event = state.runtime.EventPoll())
     {
         ++state.eventCount;
         std::visit(EventVisitor{state}, *event);
@@ -756,17 +828,11 @@ void UpdateWindowTitle(AppState& state)
     }
 
     const std::string workerText = WorkerIsActive(state.worker) ? state.worker.label : "idle";
-    const std::string title = "Process Runner | worker " + workerText + " | " +
-                              state.lastAction;
-    auto result = state.windows.front().window.SetTitle(title);
-    if (!result && !state.windows.front().titleUpdateFailureReported)
-    {
-        PrintError("SetTitle during title update", result.GetError());
-        state.windows.front().titleUpdateFailureReported = true;
-    }
+    const std::string title = "Process Runner | worker " + workerText + " | " + state.lastAction;
+    state.windows.front().window.SetTitle(title);
 }
 
-[[nodiscard]] core::Result<WindowSlot> CreateParentWindow(platform::PlatformRuntime& runtime)
+[[nodiscard]] WindowSlot CreateParentWindow(platform::Runtime& runtime)
 {
     const platform::WindowDesc desc{
         .title = "Ponder Responsive Process Runner",
@@ -778,97 +844,127 @@ void UpdateWindowTitle(AppState& state)
         .graphicsCompatibility = platform::WindowGraphicsCompatibility::Default,
     };
 
-    auto window = runtime.CreateWindow(desc);
-    RETURN_ERROR_IF_FAILED(window);
-
-    return WindowSlot{.window = std::move(window).GetValue()};
+    return WindowSlot{.window = runtime.WindowCreate(desc)};
 }
 
-[[nodiscard]] core::VoidResult RunInteractiveParent(const Options& options,
-                                                    const std::filesystem::path& selfExecutable,
-                                                    int argc, char** argv)
+[[nodiscard]] int RunInteractiveParent(const Options& options, const std::filesystem::path& selfExecutable, int argc, char** argv)
 {
-    const platform::PlatformRuntimeDesc runtimeDesc{
+    const platform::RuntimeDesc runtimeDesc{
         .applicationName = "Ponder Platform Responsive Process Runner",
         .applicationVersion = std::string{"0.1.0"},
-        .applicationIdentifier = std::string{
-            "org.ponder.examples.platform.responsive-process-runner"},
+        .applicationIdentifier = std::string{"org.ponder.examples.platform.responsive-process-runner"},
+        .configureHintsBeforeInitialization =
+            [](platform::Runtime& runtime)
+        {
+            runtime.HintPush<platform::hints::MouseFocusClickThrough>(platform::hints::MouseFocusClickThrough{true});
+            runtime.HintPush<platform::hints::MouseAutoCapture>(platform::hints::MouseAutoCapture{false});
+        },
     };
 
-    auto runtimeResult = platform::PlatformRuntime::Create(runtimeDesc);
-    RETURN_ERROR_IF_FAILED(runtimeResult);
-
-    platform::PlatformRuntime runtime = std::move(runtimeResult).GetValue();
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseFocusClickThrough{true}));
-    RETURN_ERROR_IF_FAILED(
-        runtime.GetHintManager().PushHint(platform::hints::MouseAutoCapture{false}));
-    const platform::Timestamp startTimestamp = runtime.Now();
+    platform::Runtime runtime = platform::Runtime::Create(runtimeDesc);
+    const core::Timestamp startTimestamp = runtime.TimeNow();
     std::vector<WindowSlot> windows;
     windows.reserve(1);
-    auto parent = CreateParentWindow(runtime);
-    RETURN_ERROR_IF_FAILED(parent);
-    windows.push_back(std::move(parent).GetValue());
+    windows.push_back(CreateParentWindow(runtime));
 
     AppState state{.runtime = runtime,
                    .options = options,
                    .selfExecutable = selfExecutable,
                    .windows = windows,
-                   .startTimestamp = startTimestamp};
+                   .startTimestamp = startTimestamp,
+                   .lastTimestamp = startTimestamp};
 
     PrintUsage(argc > 0 ? argv[0] : "ponder-platform-4-responsive-process-runner");
     std::println("Self executable: {}", QuoteText(io::PathToUtf8(selfExecutable)));
     StartWorker(state, FlowKind::Finite);
 
     auto nextTitleUpdate = state.startTimestamp;
+    std::exception_ptr deferredFailure;
     while (!state.windows.empty() || WorkerIsActive(state.worker))
     {
-        DrainEvents(state);
-        DrainWorkerMessages(state);
-
-        if (state.shutdownRequested && !WorkerIsActive(state.worker))
+        try
         {
-            ReleaseParentWindow(state);
+            core::Timestamp now = state.lastTimestamp;
+            if (deferredFailure == nullptr)
+            {
+                DrainEvents(state);
+                now = state.runtime.TimeNow();
+                state.lastTimestamp = now;
+            }
+            DrainWorkerMessages(state, now);
+
+            if (state.shutdownRequested && !WorkerIsActive(state.worker))
+            {
+                ReleaseParentWindow(state);
+            }
+
+            if (deferredFailure == nullptr && now - nextTitleUpdate >= 250ms)
+            {
+                UpdateWindowTitle(state);
+                nextTitleUpdate = now;
+            }
+
+            if (options.autoCloseAfter && !state.shutdownRequested && now - state.startTimestamp >= *options.autoCloseAfter)
+            {
+                std::println("Auto-close duration reached after {}.", now - state.startTimestamp);
+                RequestShutdown(state, "auto close");
+            }
         }
-
-        const platform::Timestamp now = runtime.Now();
-        if (now - nextTitleUpdate >= 250ms)
+        catch (...)
         {
-            UpdateWindowTitle(state);
-            nextTitleUpdate = now;
-        }
+            if (deferredFailure != nullptr)
+            {
+                throw;
+            }
 
-        if (options.autoCloseAfter && !state.shutdownRequested &&
-            now - state.startTimestamp >= *options.autoCloseAfter)
-        {
-            std::println("Auto-close duration reached after {}.", now - state.startTimestamp);
-            RequestShutdown(state, "auto close");
+            deferredFailure = std::current_exception();
+            std::println(stderr, "A synchronous failure occurred; completing the active process flow "
+                                 "before rethrowing on the owner thread.");
+            RequestShutdown(state, "failure cleanup");
         }
 
         std::this_thread::sleep_for(8ms);
     }
 
-    return {};
+    if (deferredFailure != nullptr)
+    {
+        std::rethrow_exception(deferredFailure);
+    }
+    return 0;
 }
 
-[[nodiscard]] core::VoidResult RunHeadlessParent(const Options& options,
-                                                 const std::filesystem::path& selfExecutable)
+[[nodiscard]] int RunHeadlessParent(const Options& options, const std::filesystem::path& selfExecutable)
 {
-    std::println("Running headless parent without PlatformRuntime.");
-    platform::ProcessDesc desc = MakeChildProcessDesc(
-        selfExecutable, options.childSleepMilliseconds, options.childExitCode,
-        {"headless parent", "alpha beta", "angstrom-\xC3\x85"});
+    std::println("Running headless parent without Runtime.");
+    platform::ProcessDesc desc = MakeChildProcessDesc(selfExecutable, options.childSleepMilliseconds, options.childExitCode,
+                                                      {"headless parent", "alpha beta", "angstrom-\xC3\x85"});
 
     auto processResult = platform::LaunchProcess(desc);
-    RETURN_ERROR_IF_FAILED(processResult);
+    if (!processResult)
+    {
+        PrintError("LaunchProcess", processResult.GetError());
+        std::println("Correct the executable path or host condition, then retry the command.");
+        return 1;
+    }
 
     platform::Process process = std::move(processResult).GetValue();
     std::println("Headless parent launched child; blocking Wait() is acceptable here.");
     auto waitResult = process.Wait();
-    RETURN_ERROR_IF_FAILED(waitResult);
+    if (!waitResult)
+    {
+        PrintError("Process::Wait", waitResult.GetError());
+        std::println("Retrying Process::Wait once on the same process owner.");
+        waitResult = process.Wait();
+        if (!waitResult)
+        {
+            PrintError("Process::Wait retry", waitResult.GetError());
+            std::println("The Process owner will be abandoned for private asynchronous cleanup.");
+            return 1;
+        }
+    }
 
     std::println("Headless child completed with {}.", ExitStatus{*waitResult});
-    return {};
+    return 0;
 }
 
 int RunChildMode(const Options& options, int argc, char** argv)
@@ -884,8 +980,7 @@ int RunChildMode(const Options& options, int argc, char** argv)
         std::println("[child] payload arguments after -- delimiter:");
         for (std::size_t index = 0; index < options.childPayload.size(); ++index)
         {
-            std::println("[child] payload[{}]={}", index,
-                         QuoteText(options.childPayload[index]));
+            std::println("[child] payload[{}]={}", index, QuoteText(options.childPayload[index]));
         }
     }
 
@@ -903,8 +998,7 @@ int main(int argc, char** argv)
         auto optionsResult = ParseOptions(argc, argv);
         if (!optionsResult)
         {
-            std::println(stderr, "ponder-platform-4-responsive-process-runner failed: {}",
-                         optionsResult.GetError());
+            std::println(stderr, "ponder-platform-4-responsive-process-runner failed: {}", optionsResult.GetError());
             return 1;
         }
 
@@ -923,28 +1017,26 @@ int main(int argc, char** argv)
         auto selfExecutable = GetSelfExecutablePath(argc, argv);
         if (!selfExecutable)
         {
-            std::println(stderr, "ponder-platform-4-responsive-process-runner failed: {}",
-                         selfExecutable.GetError());
+            std::println(stderr, "ponder-platform-4-responsive-process-runner failed: {}", selfExecutable.GetError());
             return 1;
         }
 
-        const auto result = options.headlessParent ?
-                                RunHeadlessParent(options, *selfExecutable) :
-                                RunInteractiveParent(options, *selfExecutable, argc, argv);
-        if (!result)
-        {
-            std::println(stderr, "ponder-platform-4-responsive-process-runner failed: {}",
-                         result.GetError());
-            return 1;
-        }
+        return options.headlessParent ? RunHeadlessParent(options, *selfExecutable) : RunInteractiveParent(options, *selfExecutable, argc, argv);
+    }
+    catch (const core::Exception& exception)
+    {
+        std::println(stderr, "ponder-platform-4-responsive-process-runner terminated with a ponder exception: {}", exception.GetMessage());
+        return 1;
     }
     catch (const std::exception& exception)
     {
-        std::println(stderr,
-                     "ponder-platform-4-responsive-process-runner terminated with an exception: {}",
-                     exception.what());
+        std::println(stderr, "ponder-platform-4-responsive-process-runner terminated with an exception: {}", exception.what());
         return 1;
     }
-
-    return 0;
+    catch (...)
+    {
+        std::println(stderr, "ponder-platform-4-responsive-process-runner terminated with an unknown "
+                             "exception.");
+        return 1;
+    }
 }

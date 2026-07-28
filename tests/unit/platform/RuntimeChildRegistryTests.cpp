@@ -1,4 +1,4 @@
-#include <ponder/core/PonderException.hpp>
+#include <ponder/core/Exception.hpp>
 
 #include <gtest/gtest.h>
 
@@ -6,22 +6,18 @@
 
 namespace
 {
-TEST(RuntimeChildRegistryTests, TracksChildrenAndRequestsIndependently)
+TEST(RuntimeChildRegistryTests, TracksChildren)
 {
-    pond::platform::detail::RuntimeChildRegistry registry;
+    ponder::platform::detail::RuntimeChildRegistry registry;
     const int child = 1;
-    const int request = 2;
 
     EXPECT_TRUE(registry.IsEmpty());
 
     registry.RegisterChild(&child);
-    registry.RegisterRequest(&request);
 
     EXPECT_FALSE(registry.IsEmpty());
     EXPECT_EQ(registry.GetChildCount(), 1U);
-    EXPECT_EQ(registry.GetRequestCount(), 1U);
 
-    registry.UnregisterRequest(&request);
     registry.UnregisterChild(&child);
 
     EXPECT_TRUE(registry.IsEmpty());
@@ -29,23 +25,17 @@ TEST(RuntimeChildRegistryTests, TracksChildrenAndRequestsIndependently)
 
 TEST(RuntimeChildRegistryTests, RejectsNullDuplicateAndUnknownEntries)
 {
-    pond::platform::detail::RuntimeChildRegistry registry;
+    ponder::platform::detail::RuntimeChildRegistry registry;
     const int child = 1;
-    const int request = 2;
-    const int unknown = 3;
+    const int unknown = 2;
 
-    EXPECT_THROW(registry.RegisterChild(nullptr), pond::core::PonderException);
-    EXPECT_THROW(registry.RegisterRequest(nullptr), pond::core::PonderException);
+    EXPECT_THROW(registry.RegisterChild(nullptr), ponder::core::Exception);
 
     registry.RegisterChild(&child);
-    registry.RegisterRequest(&request);
 
-    EXPECT_THROW(registry.RegisterChild(&child), pond::core::PonderException);
-    EXPECT_THROW(registry.RegisterRequest(&request), pond::core::PonderException);
-    EXPECT_THROW(registry.UnregisterChild(&unknown), pond::core::PonderException);
-    EXPECT_THROW(registry.UnregisterRequest(&unknown), pond::core::PonderException);
+    EXPECT_THROW(registry.RegisterChild(&child), ponder::core::Exception);
+    EXPECT_THROW(registry.UnregisterChild(&unknown), ponder::core::Exception);
 
     registry.UnregisterChild(&child);
-    registry.UnregisterRequest(&request);
 }
 } // namespace

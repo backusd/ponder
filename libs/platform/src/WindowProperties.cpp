@@ -1,31 +1,21 @@
 #include <ponder/core/Assert.hpp>
+#include <ponder/core/Exception.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Window.hpp>
 #include <ponder/platform/WindowState.hpp>
 
-#include <string>
+#include <optional>
 #include <string_view>
-#include <utility>
 
-#include "PlatformRuntimeBackend.hpp"
+#include "SdlRuntimeTypes.hpp"
 #include "WindowImpl.hpp"
 
-namespace pond::platform
+namespace ponder::platform
 {
 namespace
 {
-constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
-constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
-
-[[nodiscard]] core::Error MakeUnsupportedError(std::string message)
-{
-    return core::Error{kUnsupportedCode, std::move(message)};
-}
-
-[[nodiscard]] core::Result<WindowState> DecodeWindowState(
-    const detail::BackendWindowProperties& properties, std::string_view context,
-    const std::optional<WindowState>& hiddenStateRequest)
+[[nodiscard]] WindowState DecodeWindowState(const detail::BackendWindowProperties& properties, std::string_view context,
+                                            const std::optional<WindowState>& hiddenStateRequest)
 {
     if (properties.hidden && hiddenStateRequest.has_value())
     {
@@ -33,11 +23,8 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
     }
     if (properties.minimized && properties.maximized)
     {
-        return core::Result<WindowState>::FromError(
-            core::Error{kBackendFailureCode,
-                        "SDL_GetWindowFlags returned contradictory minimized and maximized "
-                        "state for " +
-                            std::string{context} + "."});
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::BackendFailure, "SDL_GetWindowFlags returned contradictory minimized and maximized state for {}.",
+                                 context);
     }
     if (properties.minimized)
     {
@@ -54,21 +41,19 @@ constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsu
 
 namespace detail
 {
-core::Result<BackendWindowProperties> WindowImpl::GetProperties(std::string_view operation) const
+BackendWindowProperties WindowImpl::GetProperties(std::string_view operation) const
 {
     VerifyUsable(operation);
     return m_backend.GetProperties(m_backendWindow);
 }
 
-core::Result<WindowPresentation> WindowImpl::GetPresentation() const
+WindowPresentation WindowImpl::GetPresentation() const
 {
-    auto properties = GetProperties("presentation query");
-    RETURN_ERROR_IF_FAILED(properties);
-    return properties.GetValue().desktopFullscreen ? WindowPresentation::DesktopFullscreen
-                                                   : WindowPresentation::Windowed;
+    const BackendWindowProperties properties = GetProperties("presentation query");
+    return properties.desktopFullscreen ? WindowPresentation::DesktopFullscreen : WindowPresentation::Windowed;
 }
 
-core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
+void WindowImpl::SetPresentation(WindowPresentation presentation)
 {
     VerifyUsable("presentation update");
     bool fullscreen{};
@@ -81,48 +66,37 @@ core::VoidResult WindowImpl::SetPresentation(WindowPresentation presentation)
         fullscreen = true;
         break;
     default:
-        return core::VoidResult::FromError(
-            core::Error{kInvalidArgumentCode, "Window presentation is invalid."});
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Window presentation is invalid.");
     }
 
-    auto properties = GetProperties("presentation update");
-    RETURN_ERROR_IF_FAILED(properties);
-    const WindowPresentation observedPresentation = properties.GetValue().desktopFullscreen
-                                                        ? WindowPresentation::DesktopFullscreen
-                                                        : WindowPresentation::Windowed;
+    const BackendWindowProperties properties = GetProperties("presentation update");
+    const WindowPresentation observedPresentation =
+        properties.desktopFullscreen ? WindowPresentation::DesktopFullscreen : WindowPresentation::Windowed;
     if (m_pendingPresentationRequest == observedPresentation)
     {
         m_pendingPresentationRequest.reset();
     }
-    if (m_pendingPresentationRequest.has_value() ? *m_pendingPresentationRequest == presentation
-                                                 : observedPresentation == presentation)
+    if (m_pendingPresentationRequest.has_value() ? *m_pendingPresentationRequest == presentation : observedPresentation == presentation)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
     if (fullscreen)
     {
-        RETURN_ERROR_IF_FAILED(m_backend.SetFullscreenModeToDesktop(m_backendWindow));
+        m_backend.SetFullscreenModeToDesktop(m_backendWindow);
     }
 
-    core::VoidResult presentationResult =
-        m_backend.SetFullscreen(m_backendWindow, fullscreen);
-    if (presentationResult.HasValue())
-    {
-        m_pendingPresentationRequest = presentation;
-    }
-    return presentationResult;
+    m_backend.SetFullscreen(m_backendWindow, fullscreen);
+    m_pendingPresentationRequest = presentation;
 }
 
-core::Result<WindowDecoration> WindowImpl::GetDecoration() const
+WindowDecoration WindowImpl::GetDecoration() const
 {
-    auto properties = GetProperties("decoration query");
-    RETURN_ERROR_IF_FAILED(properties);
-    return properties.GetValue().borderless ? WindowDecoration::Borderless
-                                            : WindowDecoration::System;
+    const BackendWindowProperties properties = GetProperties("decoration query");
+    return properties.borderless ? WindowDecoration::Borderless : WindowDecoration::System;
 }
 
-core::VoidResult WindowImpl::SetDecoration(WindowDecoration decoration)
+void WindowImpl::SetDecoration(WindowDecoration decoration)
 {
     VerifyUsable("decoration update");
     bool borderless{};
@@ -135,272 +109,228 @@ core::VoidResult WindowImpl::SetDecoration(WindowDecoration decoration)
         borderless = true;
         break;
     default:
-        return core::VoidResult::FromError(
-            core::Error{kInvalidArgumentCode, "Window decoration is invalid."});
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Window decoration is invalid.");
     }
 
-    auto properties = GetProperties("decoration update");
-    RETURN_ERROR_IF_FAILED(properties);
-    if (properties.GetValue().borderless == borderless)
+    const BackendWindowProperties properties = GetProperties("decoration update");
+    if (properties.borderless == borderless)
     {
-        return core::VoidResult::Success();
+        return;
     }
-    if (properties.GetValue().desktopFullscreen)
+    if (properties.desktopFullscreen)
     {
-        return core::VoidResult::FromError(
-            MakeUnsupportedError("Window decoration cannot change while window " +
-                                 std::to_string(m_id.GetValue()) + " is fullscreen."));
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::Unsupported, "Window decoration cannot change while window {} is fullscreen.", m_id);
     }
 
-    return m_backend.SetBordered(m_backendWindow, !borderless);
+    m_backend.SetBordered(m_backendWindow, !borderless);
 }
 
-core::Result<::pond::platform::WindowState> WindowImpl::GetState() const
+::ponder::platform::WindowState WindowImpl::GetState() const
 {
-    auto properties = GetProperties("state query");
-    RETURN_ERROR_IF_FAILED(properties);
-    return DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
+    const BackendWindowProperties properties = GetProperties("state query");
+    return DecodeWindowState(properties, GetErrorContext(), m_hiddenStateRequest);
 }
 
-core::VoidResult WindowImpl::Minimize()
+void WindowImpl::Minimize()
 {
-    auto properties = GetProperties("minimize");
-    RETURN_ERROR_IF_FAILED(properties);
-    SynchronizeStateRequestVisibility(properties.GetValue().hidden);
-    auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
-    RETURN_ERROR_IF_FAILED(state);
-    if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
+    const BackendWindowProperties properties = GetProperties("minimize");
+    SynchronizeStateRequestVisibility(properties.hidden);
+    const ::ponder::platform::WindowState state = DecodeWindowState(properties, GetErrorContext(), m_hiddenStateRequest);
+    if (!properties.hidden && m_pendingVisibleStateRequest == state)
     {
         m_pendingVisibleStateRequest.reset();
     }
-    const std::optional<::pond::platform::WindowState>& pendingState =
-        properties.GetValue().hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
-    if (pendingState.has_value() ? *pendingState == ::pond::platform::WindowState::Minimized
-                                 : state.GetValue() == ::pond::platform::WindowState::Minimized)
+    const std::optional<::ponder::platform::WindowState>& pendingState = properties.hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
+    if (pendingState.has_value() ? *pendingState == ::ponder::platform::WindowState::Minimized : state == ::ponder::platform::WindowState::Minimized)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    if (properties.GetValue().hidden &&
-        state.GetValue() == ::pond::platform::WindowState::Maximized)
+    if (properties.hidden && state == ::ponder::platform::WindowState::Maximized)
     {
-        RETURN_ERROR_IF_FAILED(m_backend.Restore(m_backendWindow));
-        RecordStateRequest(::pond::platform::WindowState::Normal, true);
+        m_backend.Restore(m_backendWindow);
+        RecordStateRequest(::ponder::platform::WindowState::Normal, true);
     }
 
-    core::VoidResult minimizeResult = m_backend.Minimize(m_backendWindow);
-    if (minimizeResult.HasValue())
-    {
-        RecordStateRequest(::pond::platform::WindowState::Minimized, properties.GetValue().hidden);
-    }
-    return minimizeResult;
+    m_backend.Minimize(m_backendWindow);
+    RecordStateRequest(::ponder::platform::WindowState::Minimized, properties.hidden);
 }
 
-core::VoidResult WindowImpl::Maximize()
+void WindowImpl::Maximize()
 {
-    auto properties = GetProperties("maximize");
-    RETURN_ERROR_IF_FAILED(properties);
-    SynchronizeStateRequestVisibility(properties.GetValue().hidden);
-    auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
-    RETURN_ERROR_IF_FAILED(state);
-    if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
+    const BackendWindowProperties properties = GetProperties("maximize");
+    SynchronizeStateRequestVisibility(properties.hidden);
+    const ::ponder::platform::WindowState state = DecodeWindowState(properties, GetErrorContext(), m_hiddenStateRequest);
+    if (!properties.hidden && m_pendingVisibleStateRequest == state)
     {
         m_pendingVisibleStateRequest.reset();
     }
-    const std::optional<::pond::platform::WindowState>& pendingState =
-        properties.GetValue().hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
-    if (pendingState.has_value() ? *pendingState == ::pond::platform::WindowState::Maximized
-                                 : state.GetValue() == ::pond::platform::WindowState::Maximized)
+    const std::optional<::ponder::platform::WindowState>& pendingState = properties.hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
+    if (pendingState.has_value() ? *pendingState == ::ponder::platform::WindowState::Maximized : state == ::ponder::platform::WindowState::Maximized)
     {
-        return core::VoidResult::Success();
+        return;
     }
-    if (!properties.GetValue().resizable)
+    if (!properties.resizable)
     {
-        return core::VoidResult::FromError(
-            MakeUnsupportedError("A non-resizable window cannot be maximized."));
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::Unsupported, "A non-resizable window cannot be maximized.");
     }
 
-    if (properties.GetValue().hidden &&
-        state.GetValue() == ::pond::platform::WindowState::Minimized)
+    if (properties.hidden && state == ::ponder::platform::WindowState::Minimized)
     {
-        RETURN_ERROR_IF_FAILED(m_backend.Restore(m_backendWindow));
-        RecordStateRequest(::pond::platform::WindowState::Normal, true);
+        m_backend.Restore(m_backendWindow);
+        RecordStateRequest(::ponder::platform::WindowState::Normal, true);
     }
 
-    core::VoidResult maximizeResult = m_backend.Maximize(m_backendWindow);
-    if (maximizeResult.HasValue())
-    {
-        RecordStateRequest(::pond::platform::WindowState::Maximized, properties.GetValue().hidden);
-    }
-    return maximizeResult;
+    m_backend.Maximize(m_backendWindow);
+    RecordStateRequest(::ponder::platform::WindowState::Maximized, properties.hidden);
 }
 
-core::VoidResult WindowImpl::Restore()
+void WindowImpl::Restore()
 {
-    auto properties = GetProperties("restore");
-    RETURN_ERROR_IF_FAILED(properties);
-    SynchronizeStateRequestVisibility(properties.GetValue().hidden);
-    auto state = DecodeWindowState(properties.GetValue(), GetErrorContext(), m_hiddenStateRequest);
-    RETURN_ERROR_IF_FAILED(state);
-    if (!properties.GetValue().hidden && m_pendingVisibleStateRequest == state.GetValue())
+    const BackendWindowProperties properties = GetProperties("restore");
+    SynchronizeStateRequestVisibility(properties.hidden);
+    const ::ponder::platform::WindowState state = DecodeWindowState(properties, GetErrorContext(), m_hiddenStateRequest);
+    if (!properties.hidden && m_pendingVisibleStateRequest == state)
     {
         m_pendingVisibleStateRequest.reset();
     }
-    const std::optional<::pond::platform::WindowState>& pendingState =
-        properties.GetValue().hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
-    if (pendingState.has_value() ? *pendingState == ::pond::platform::WindowState::Normal
-                                 : state.GetValue() == ::pond::platform::WindowState::Normal)
+    const std::optional<::ponder::platform::WindowState>& pendingState = properties.hidden ? m_hiddenStateRequest : m_pendingVisibleStateRequest;
+    if (pendingState.has_value() ? *pendingState == ::ponder::platform::WindowState::Normal : state == ::ponder::platform::WindowState::Normal)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    core::VoidResult restoreResult = m_backend.Restore(m_backendWindow);
-    if (restoreResult.HasValue())
+    m_backend.Restore(m_backendWindow);
+    RecordStateRequest(::ponder::platform::WindowState::Normal, properties.hidden);
+}
+
+bool WindowImpl::IsVisible() const
+{
+    return !GetProperties("visibility query").hidden;
+}
+
+bool WindowImpl::IsResizable() const
+{
+    return GetProperties("resizability query").resizable;
+}
+
+void WindowImpl::SetResizable(bool resizable)
+{
+    const BackendWindowProperties properties = GetProperties("resizability update");
+    if (properties.resizable == resizable)
     {
-        RecordStateRequest(::pond::platform::WindowState::Normal, properties.GetValue().hidden);
+        return;
     }
-    return restoreResult;
-}
-
-core::Result<bool> WindowImpl::IsVisible() const
-{
-    auto properties = GetProperties("visibility query");
-    RETURN_ERROR_IF_FAILED(properties);
-    return !properties.GetValue().hidden;
-}
-
-core::Result<bool> WindowImpl::IsResizable() const
-{
-    auto properties = GetProperties("resizability query");
-    RETURN_ERROR_IF_FAILED(properties);
-    return properties.GetValue().resizable;
-}
-
-core::VoidResult WindowImpl::SetResizable(bool resizable)
-{
-    auto properties = GetProperties("resizability update");
-    RETURN_ERROR_IF_FAILED(properties);
-    if (properties.GetValue().resizable == resizable)
+    if (properties.desktopFullscreen)
     {
-        return core::VoidResult::Success();
-    }
-    if (properties.GetValue().desktopFullscreen)
-    {
-        return core::VoidResult::FromError(
-            MakeUnsupportedError("Window resizability cannot change while window " +
-                                 std::to_string(m_id.GetValue()) + " is fullscreen."));
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::Unsupported, "Window resizability cannot change while window {} is fullscreen.", m_id);
     }
 
-    return m_backend.SetResizable(m_backendWindow, resizable);
+    m_backend.SetResizable(m_backendWindow, resizable);
 }
 
-core::Result<bool> WindowImpl::IsFocused() const
+bool WindowImpl::IsFocused() const
 {
-    auto properties = GetProperties("focus query");
-    RETURN_ERROR_IF_FAILED(properties);
-    return properties.GetValue().inputFocus;
+    return GetProperties("focus query").inputFocus;
 }
 
-core::Result<bool> WindowImpl::IsAlwaysOnTop() const
+bool WindowImpl::IsAlwaysOnTop() const
 {
-    auto properties = GetProperties("always-on-top query");
-    RETURN_ERROR_IF_FAILED(properties);
-    return properties.GetValue().alwaysOnTop;
+    return GetProperties("always-on-top query").alwaysOnTop;
 }
 
-core::VoidResult WindowImpl::SetAlwaysOnTop(bool alwaysOnTop)
+void WindowImpl::SetAlwaysOnTop(bool alwaysOnTop)
 {
-    auto properties = GetProperties("always-on-top update");
-    RETURN_ERROR_IF_FAILED(properties);
-    if (properties.GetValue().alwaysOnTop == alwaysOnTop)
+    const BackendWindowProperties properties = GetProperties("always-on-top update");
+    if (properties.alwaysOnTop == alwaysOnTop)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    return m_backend.SetAlwaysOnTop(m_backendWindow, alwaysOnTop);
+    m_backend.SetAlwaysOnTop(m_backendWindow, alwaysOnTop);
 }
 } // namespace detail
-core::Result<WindowPresentation> Window::GetPresentation() const
+WindowPresentation Window::GetPresentation() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->GetPresentation();
 }
 
-core::VoidResult Window::SetPresentation(WindowPresentation presentation)
+void Window::SetPresentation(WindowPresentation presentation)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->SetPresentation(presentation);
+    m_state->SetPresentation(presentation);
 }
 
-core::Result<WindowDecoration> Window::GetDecoration() const
+WindowDecoration Window::GetDecoration() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->GetDecoration();
 }
 
-core::VoidResult Window::SetDecoration(WindowDecoration decoration)
+void Window::SetDecoration(WindowDecoration decoration)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->SetDecoration(decoration);
+    m_state->SetDecoration(decoration);
 }
 
-core::Result<WindowState> Window::GetState() const
+WindowState Window::GetState() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->GetState();
 }
 
-core::VoidResult Window::Minimize()
+void Window::Minimize()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->Minimize();
+    m_state->Minimize();
 }
 
-core::VoidResult Window::Maximize()
+void Window::Maximize()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->Maximize();
+    m_state->Maximize();
 }
 
-core::VoidResult Window::Restore()
+void Window::Restore()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->Restore();
+    m_state->Restore();
 }
 
-core::Result<bool> Window::IsVisible() const
+bool Window::IsVisible() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->IsVisible();
 }
 
-core::Result<bool> Window::IsResizable() const
+bool Window::IsResizable() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->IsResizable();
 }
 
-core::VoidResult Window::SetResizable(bool resizable)
+void Window::SetResizable(bool resizable)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->SetResizable(resizable);
+    m_state->SetResizable(resizable);
 }
 
-core::Result<bool> Window::IsFocused() const
+bool Window::IsFocused() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->IsFocused();
 }
 
-core::Result<bool> Window::IsAlwaysOnTop() const
+bool Window::IsAlwaysOnTop() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->IsAlwaysOnTop();
 }
 
-core::VoidResult Window::SetAlwaysOnTop(bool alwaysOnTop)
+void Window::SetAlwaysOnTop(bool alwaysOnTop)
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
-    return m_state->SetAlwaysOnTop(alwaysOnTop);
+    m_state->SetAlwaysOnTop(alwaysOnTop);
 }
-} // namespace pond::platform
+} // namespace ponder::platform

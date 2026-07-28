@@ -22,8 +22,7 @@ static_assert(std::is_trivially_destructible_v<pond::math::Quaternion>);
 static_assert(!std::is_aggregate_v<pond::math::Quaternion>);
 static_assert(!std::is_constructible_v<pond::math::Quaternion, float, float, float, float>);
 
-[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
-                                                     float relativeTolerance)
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance, float relativeTolerance)
 {
     auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
@@ -32,12 +31,12 @@ static_assert(!std::is_constructible_v<pond::math::Quaternion, float, float, flo
 
 [[nodiscard]] float SquaredLength(pond::math::Quaternion quaternion) noexcept
 {
-    return quaternion.GetX() * quaternion.GetX() + quaternion.GetY() * quaternion.GetY() +
-           quaternion.GetZ() * quaternion.GetZ() + quaternion.GetW() * quaternion.GetW();
+    return quaternion.GetX() * quaternion.GetX() + quaternion.GetY() * quaternion.GetY() + quaternion.GetZ() * quaternion.GetZ() +
+           quaternion.GetW() * quaternion.GetW();
 }
 
-void ExpectQuaternionNear(pond::math::Quaternion actual, float expectedX, float expectedY,
-                          float expectedZ, float expectedW, float tolerance = 1.0e-5F)
+void ExpectQuaternionNear(pond::math::Quaternion actual, float expectedX, float expectedY, float expectedZ, float expectedW,
+                          float tolerance = 1.0e-5F)
 {
     EXPECT_NEAR(actual.GetX(), expectedX, tolerance);
     EXPECT_NEAR(actual.GetY(), expectedY, tolerance);
@@ -45,16 +44,14 @@ void ExpectQuaternionNear(pond::math::Quaternion actual, float expectedX, float 
     EXPECT_NEAR(actual.GetW(), expectedW, tolerance);
 }
 
-void ExpectVectorNear(pond::math::Vector3 actual, pond::math::Vector3 expected,
-                      float tolerance = 1.0e-5F)
+void ExpectVectorNear(pond::math::Vector3 actual, pond::math::Vector3 expected, float tolerance = 1.0e-5F)
 {
     EXPECT_NEAR(actual.x, expected.x, tolerance);
     EXPECT_NEAR(actual.y, expected.y, tolerance);
     EXPECT_NEAR(actual.z, expected.z, tolerance);
 }
 
-void ExpectMatrix3x3Near(pond::math::Matrix3x3 actual, pond::math::Matrix3x3 expected,
-                         float tolerance = 1.0e-5F)
+void ExpectMatrix3x3Near(pond::math::Matrix3x3 actual, pond::math::Matrix3x3 expected, float tolerance = 1.0e-5F)
 {
     EXPECT_NEAR(actual.row0Column0, expected.row0Column0, tolerance);
     EXPECT_NEAR(actual.row0Column1, expected.row0Column1, tolerance);
@@ -67,8 +64,7 @@ void ExpectMatrix3x3Near(pond::math::Matrix3x3 actual, pond::math::Matrix3x3 exp
     EXPECT_NEAR(actual.row2Column2, expected.row2Column2, tolerance);
 }
 
-void ExpectMatrix4x4Near(pond::math::Matrix4x4 actual, pond::math::Matrix4x4 expected,
-                         float tolerance = 1.0e-5F)
+void ExpectMatrix4x4Near(pond::math::Matrix4x4 actual, pond::math::Matrix4x4 expected, float tolerance = 1.0e-5F)
 {
     EXPECT_NEAR(actual.row0Column0, expected.row0Column0, tolerance);
     EXPECT_NEAR(actual.row0Column1, expected.row0Column1, tolerance);
@@ -87,8 +83,7 @@ void ExpectMatrix4x4Near(pond::math::Matrix4x4 actual, pond::math::Matrix4x4 exp
     EXPECT_NEAR(actual.row3Column2, expected.row3Column2, tolerance);
     EXPECT_NEAR(actual.row3Column3, expected.row3Column3, tolerance);
 }
-void ExpectQuaternionFailure(pond::core::Result<pond::math::Quaternion> result,
-                             pond::math::MathErrorCode expectedCode)
+void ExpectQuaternionFailure(pond::core::Result<pond::math::Quaternion> result, pond::math::MathErrorCode expectedCode)
 {
     ASSERT_FALSE(result.HasValue());
     EXPECT_EQ(result.GetError().GetCode(), pond::math::ToErrorCode(expectedCode));
@@ -122,8 +117,7 @@ TEST(QuaternionTests, NormalizesFiniteComponentConstructionAndPreservesOrder)
     ASSERT_TRUE(quaternion.HasValue());
 
     const float inverseLength = 1.0F / std::sqrt(30.0F);
-    ExpectQuaternionNear(quaternion.GetValue(), 1.0F * inverseLength, 2.0F * inverseLength,
-                         3.0F * inverseLength, 4.0F * inverseLength);
+    ExpectQuaternionNear(quaternion.GetValue(), 1.0F * inverseLength, 2.0F * inverseLength, 3.0F * inverseLength, 4.0F * inverseLength);
     EXPECT_TRUE(pond::core::IsNear(SquaredLength(quaternion.GetValue()), 1.0F, tolerance));
 
     const std::array<float, 4> storage = std::bit_cast<std::array<float, 4>>(quaternion.GetValue());
@@ -136,8 +130,7 @@ TEST(QuaternionTests, NormalizesFiniteComponentConstructionAndPreservesOrder)
     ASSERT_TRUE(identity.HasValue());
     EXPECT_EQ(identity.GetValue(), pond::math::Quaternion::Identity());
 
-    auto tiny = pond::math::Quaternion::FromComponents(std::numeric_limits<float>::denorm_min(),
-                                                       0.0F, 0.0F, 0.0F);
+    auto tiny = pond::math::Quaternion::FromComponents(std::numeric_limits<float>::denorm_min(), 0.0F, 0.0F, 0.0F);
     ASSERT_TRUE(tiny.HasValue());
     ExpectQuaternionNear(tiny.GetValue(), 1.0F, 0.0F, 0.0F, 0.0F, 0.0F);
 }
@@ -146,51 +139,40 @@ TEST(QuaternionTests, ConstructsPrincipalAxisRotationsFromAxisAngle)
 {
     const float halfSqrt = std::sqrt(0.5F);
 
-    auto quarterTurnX = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{2.0F, 0.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto quarterTurnX = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{2.0F, 0.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
     ASSERT_TRUE(quarterTurnX.HasValue());
     ExpectQuaternionNear(quarterTurnX.GetValue(), halfSqrt, 0.0F, 0.0F, halfSqrt);
 
-    auto halfTurnY = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 3.0F, 0.0F},
-                                                           pond::math::Radians{pond::core::kPi});
+    auto halfTurnY = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 3.0F, 0.0F}, pond::math::Radians{pond::core::kPi});
     ASSERT_TRUE(halfTurnY.HasValue());
     ExpectQuaternionNear(halfTurnY.GetValue(), 0.0F, 1.0F, 0.0F, 0.0F);
 
-    auto negativeQuarterTurnZ = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 0.0F, -4.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto negativeQuarterTurnZ =
+        pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, -4.0F}, pond::math::Radians{pond::core::kHalfPi});
     ASSERT_TRUE(negativeQuarterTurnZ.HasValue());
     ExpectQuaternionNear(negativeQuarterTurnZ.GetValue(), 0.0F, 0.0F, -halfSqrt, halfSqrt);
 
-    auto zeroAngle = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F},
-                                                           pond::math::Radians{0.0F});
+    auto zeroAngle = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{0.0F});
     ASSERT_TRUE(zeroAngle.HasValue());
     ExpectQuaternionNear(zeroAngle.GetValue(), 0.0F, 0.0F, 0.0F, 1.0F);
 }
 
 TEST(QuaternionTests, RejectsZeroAndNonFiniteConstructionInputs)
 {
-    ExpectQuaternionFailure(pond::math::Quaternion::FromComponents(0.0F, 0.0F, 0.0F, 0.0F),
-                            pond::math::MathErrorCode::DegenerateInput);
-    ExpectQuaternionFailure(pond::math::Quaternion::FromComponents(
-                                std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F, 1.0F),
+    ExpectQuaternionFailure(pond::math::Quaternion::FromComponents(0.0F, 0.0F, 0.0F, 0.0F), pond::math::MathErrorCode::DegenerateInput);
+    ExpectQuaternionFailure(pond::math::Quaternion::FromComponents(std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F, 1.0F),
                             pond::math::MathErrorCode::NonFiniteInput);
-    ExpectQuaternionFailure(pond::math::Quaternion::FromComponents(
-                                0.0F, std::numeric_limits<float>::infinity(), 0.0F, 1.0F),
+    ExpectQuaternionFailure(pond::math::Quaternion::FromComponents(0.0F, std::numeric_limits<float>::infinity(), 0.0F, 1.0F),
                             pond::math::MathErrorCode::NonFiniteInput);
 
-    ExpectQuaternionFailure(
-        pond::math::Quaternion::FromAxisAngle(pond::math::Vector3::Zero(),
-                                              pond::math::Radians{pond::core::kHalfPi}),
-        pond::math::MathErrorCode::DegenerateInput);
-    ExpectQuaternionFailure(
-        pond::math::Quaternion::FromAxisAngle(
-            pond::math::Vector3{1.0F, std::numeric_limits<float>::infinity(), 0.0F},
-            pond::math::Radians{pond::core::kHalfPi}),
-        pond::math::MathErrorCode::NonFiniteInput);
-    ExpectQuaternionFailure(pond::math::Quaternion::FromAxisAngle(
-                                pond::math::Vector3{1.0F, 0.0F, 0.0F},
-                                pond::math::Radians{std::numeric_limits<float>::infinity()}),
+    ExpectQuaternionFailure(pond::math::Quaternion::FromAxisAngle(pond::math::Vector3::Zero(), pond::math::Radians{pond::core::kHalfPi}),
+                            pond::math::MathErrorCode::DegenerateInput);
+    ExpectQuaternionFailure(pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, std::numeric_limits<float>::infinity(), 0.0F},
+                                                                  pond::math::Radians{pond::core::kHalfPi}),
                             pond::math::MathErrorCode::NonFiniteInput);
+    ExpectQuaternionFailure(
+        pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{std::numeric_limits<float>::infinity()}),
+        pond::math::MathErrorCode::NonFiniteInput);
 }
 
 TEST(QuaternionTests, UsesExactRepresentationEqualityOnly)
@@ -213,30 +195,23 @@ TEST(QuaternionTests, UsesExactRepresentationEqualityOnly)
 TEST(QuaternionTests, ConjugatesInvertsAndRotatesVectors)
 {
     const float halfSqrt = std::sqrt(0.5F);
-    auto quarterTurnZ = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto quarterTurnZ = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
     ASSERT_TRUE(quarterTurnZ.HasValue());
 
-    EXPECT_EQ(pond::math::Conjugate(pond::math::Quaternion::Identity()),
-              pond::math::Quaternion::Identity());
-    EXPECT_EQ(pond::math::Inverse(quarterTurnZ.GetValue()),
-              pond::math::Conjugate(quarterTurnZ.GetValue()));
-    ExpectQuaternionNear(pond::math::Conjugate(quarterTurnZ.GetValue()), 0.0F, 0.0F, -halfSqrt,
-                         halfSqrt);
+    EXPECT_EQ(pond::math::Conjugate(pond::math::Quaternion::Identity()), pond::math::Quaternion::Identity());
+    EXPECT_EQ(pond::math::Inverse(quarterTurnZ.GetValue()), pond::math::Conjugate(quarterTurnZ.GetValue()));
+    ExpectQuaternionNear(pond::math::Conjugate(quarterTurnZ.GetValue()), 0.0F, 0.0F, -halfSqrt, halfSqrt);
 
     const pond::math::Vector3 xAxis{1.0F, 0.0F, 0.0F};
     const pond::math::Vector3 rotated = pond::math::Rotate(quarterTurnZ.GetValue(), xAxis);
     ExpectVectorNear(rotated, pond::math::Vector3{0.0F, 1.0F, 0.0F});
-    ExpectVectorNear(pond::math::Rotate(pond::math::Inverse(quarterTurnZ.GetValue()), rotated),
-                     xAxis);
+    ExpectVectorNear(pond::math::Rotate(pond::math::Inverse(quarterTurnZ.GetValue()), rotated), xAxis);
 }
 
 TEST(QuaternionTests, ComposesInDocumentedApplicationOrder)
 {
-    auto quarterTurnZ = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
-    auto quarterTurnX = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto quarterTurnZ = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto quarterTurnX = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
     ASSERT_TRUE(quarterTurnZ.HasValue());
     ASSERT_TRUE(quarterTurnX.HasValue());
 
@@ -247,15 +222,13 @@ TEST(QuaternionTests, ComposesInDocumentedApplicationOrder)
     ExpectVectorNear(pond::math::Rotate(xAfterZ, xAxis), pond::math::Vector3{0.0F, 0.0F, 1.0F});
     ExpectVectorNear(pond::math::Rotate(zAfterX, xAxis), pond::math::Vector3{0.0F, 1.0F, 0.0F});
     ExpectVectorNear(pond::math::Rotate(xAfterZ, xAxis),
-                     pond::math::Rotate(quarterTurnX.GetValue(),
-                                        pond::math::Rotate(quarterTurnZ.GetValue(), xAxis)));
+                     pond::math::Rotate(quarterTurnX.GetValue(), pond::math::Rotate(quarterTurnZ.GetValue(), xAxis)));
 }
 
 TEST(QuaternionTests, RestoresUnitLengthAcrossRepeatedComposition)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
-    auto step = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F},
-                                                      pond::math::Radians{0.01F});
+    auto step = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{0.01F});
     ASSERT_TRUE(step.HasValue());
 
     pond::math::Quaternion accumulated = pond::math::Quaternion::Identity();
@@ -267,26 +240,22 @@ TEST(QuaternionTests, RestoresUnitLengthAcrossRepeatedComposition)
     EXPECT_TRUE(pond::core::IsNear(SquaredLength(accumulated), 1.0F, tolerance));
     const pond::math::Vector3 vector{0.25F, -0.5F, 2.0F};
     const pond::math::Vector3 rotated = pond::math::Rotate(accumulated, vector);
-    ExpectVectorNear(pond::math::Rotate(pond::math::Inverse(accumulated), rotated), vector,
-                     1.0e-4F);
+    ExpectVectorNear(pond::math::Rotate(pond::math::Inverse(accumulated), rotated), vector, 1.0e-4F);
 }
 
 TEST(QuaternionTests, ComparesComponentsAndSameRotationsSeparately)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-5F);
-    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F},
-                                                          pond::math::Radians{0.75F});
+    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{0.75F});
     ASSERT_TRUE(rotation.HasValue());
-    auto negated = pond::math::Quaternion::FromComponents(-rotation->GetX(), -rotation->GetY(),
-                                                          -rotation->GetZ(), -rotation->GetW());
+    auto negated = pond::math::Quaternion::FromComponents(-rotation->GetX(), -rotation->GetY(), -rotation->GetZ(), -rotation->GetW());
     ASSERT_TRUE(negated.HasValue());
 
     EXPECT_FALSE(rotation.GetValue() == negated.GetValue());
     EXPECT_FALSE(pond::math::IsNear(rotation.GetValue(), negated.GetValue(), tolerance));
     EXPECT_TRUE(pond::math::IsSameRotation(rotation.GetValue(), negated.GetValue(), tolerance));
 
-    auto close = pond::math::Quaternion::FromComponents(
-        rotation->GetX() + 1.0e-6F, rotation->GetY(), rotation->GetZ(), rotation->GetW());
+    auto close = pond::math::Quaternion::FromComponents(rotation->GetX() + 1.0e-6F, rotation->GetY(), rotation->GetZ(), rotation->GetW());
     ASSERT_TRUE(close.HasValue());
     EXPECT_TRUE(pond::math::IsNear(rotation.GetValue(), close.GetValue(), tolerance));
     EXPECT_TRUE(pond::math::IsSameRotation(rotation.GetValue(), close.GetValue(), tolerance));
@@ -295,14 +264,12 @@ TEST(QuaternionTests, ComparesComponentsAndSameRotationsSeparately)
 TEST(QuaternionTests, SlerpsShortestPathAndPreservesUnitLength)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
-    auto halfTurnY = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F},
-                                                           pond::math::Radians{pond::core::kPi});
+    auto halfTurnY = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{pond::core::kPi});
     ASSERT_TRUE(halfTurnY.HasValue());
 
     auto start = pond::math::Slerp(pond::math::Quaternion::Identity(), halfTurnY.GetValue(), 0.0F);
     auto end = pond::math::Slerp(pond::math::Quaternion::Identity(), halfTurnY.GetValue(), 1.0F);
-    auto halfway =
-        pond::math::Slerp(pond::math::Quaternion::Identity(), halfTurnY.GetValue(), 0.5F);
+    auto halfway = pond::math::Slerp(pond::math::Quaternion::Identity(), halfTurnY.GetValue(), 0.5F);
     ASSERT_TRUE(start.HasValue());
     ASSERT_TRUE(end.HasValue());
     ASSERT_TRUE(halfway.HasValue());
@@ -312,8 +279,7 @@ TEST(QuaternionTests, SlerpsShortestPathAndPreservesUnitLength)
     EXPECT_TRUE(pond::math::IsSameRotation(end.GetValue(), halfTurnY.GetValue(), tolerance));
     EXPECT_TRUE(pond::core::IsNear(SquaredLength(halfway.GetValue()), 1.0F, tolerance));
 
-    const pond::math::Vector3 halfwayRotated =
-        pond::math::Rotate(halfway.GetValue(), pond::math::Vector3{0.0F, 0.0F, 1.0F});
+    const pond::math::Vector3 halfwayRotated = pond::math::Rotate(halfway.GetValue(), pond::math::Vector3{0.0F, 0.0F, 1.0F});
     EXPECT_NEAR(std::abs(halfwayRotated.x), 1.0F, 1.0e-5F);
     EXPECT_NEAR(halfwayRotated.y, 0.0F, 1.0e-5F);
     EXPECT_NEAR(halfwayRotated.z, 0.0F, 1.0e-5F);
@@ -322,11 +288,9 @@ TEST(QuaternionTests, SlerpsShortestPathAndPreservesUnitLength)
 TEST(QuaternionTests, SlerpsAntipodalAndSmallAngleInputs)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
-    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F},
-                                                          pond::math::Radians{0.75F});
+    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{0.75F});
     ASSERT_TRUE(rotation.HasValue());
-    auto negated = pond::math::Quaternion::FromComponents(-rotation->GetX(), -rotation->GetY(),
-                                                          -rotation->GetZ(), -rotation->GetW());
+    auto negated = pond::math::Quaternion::FromComponents(-rotation->GetX(), -rotation->GetY(), -rotation->GetZ(), -rotation->GetW());
     ASSERT_TRUE(negated.HasValue());
 
     auto antipodal = pond::math::Slerp(rotation.GetValue(), negated.GetValue(), 0.5F);
@@ -334,110 +298,85 @@ TEST(QuaternionTests, SlerpsAntipodalAndSmallAngleInputs)
     EXPECT_TRUE(pond::math::IsSameRotation(antipodal.GetValue(), rotation.GetValue(), tolerance));
     EXPECT_TRUE(pond::core::IsNear(SquaredLength(antipodal.GetValue()), 1.0F, tolerance));
 
-    auto smallAngle = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F},
-                                                            pond::math::Radians{1.0e-4F});
-    auto expectedHalf = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F},
-                                                              pond::math::Radians{5.0e-5F});
+    auto smallAngle = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{1.0e-4F});
+    auto expectedHalf = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{5.0e-5F});
     ASSERT_TRUE(smallAngle.HasValue());
     ASSERT_TRUE(expectedHalf.HasValue());
 
-    auto smallHalf =
-        pond::math::Slerp(pond::math::Quaternion::Identity(), smallAngle.GetValue(), 0.5F);
+    auto smallHalf = pond::math::Slerp(pond::math::Quaternion::Identity(), smallAngle.GetValue(), 0.5F);
     ASSERT_TRUE(smallHalf.HasValue());
-    EXPECT_TRUE(
-        pond::math::IsSameRotation(smallHalf.GetValue(), expectedHalf.GetValue(), tolerance));
+    EXPECT_TRUE(pond::math::IsSameRotation(smallHalf.GetValue(), expectedHalf.GetValue(), tolerance));
     EXPECT_TRUE(pond::core::IsNear(SquaredLength(smallHalf.GetValue()), 1.0F, tolerance));
 }
 
 TEST(QuaternionTests, SlerpAcceptsFiniteExtrapolationAmounts)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
-    auto quarterTurn = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
-    auto expectedHalfTurn = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kPi});
+    auto quarterTurn = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto expectedHalfTurn = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kPi});
     ASSERT_TRUE(quarterTurn.HasValue());
     ASSERT_TRUE(expectedHalfTurn.HasValue());
 
-    auto extrapolated =
-        pond::math::Slerp(pond::math::Quaternion::Identity(), quarterTurn.GetValue(), 2.0F);
+    auto extrapolated = pond::math::Slerp(pond::math::Quaternion::Identity(), quarterTurn.GetValue(), 2.0F);
     ASSERT_TRUE(extrapolated.HasValue());
-    EXPECT_TRUE(pond::math::IsSameRotation(extrapolated.GetValue(), expectedHalfTurn.GetValue(),
-                                           tolerance));
+    EXPECT_TRUE(pond::math::IsSameRotation(extrapolated.GetValue(), expectedHalfTurn.GetValue(), tolerance));
 }
 
 TEST(QuaternionTests, RejectsInvalidSlerpParameters)
 {
-    ExpectQuaternionFailure(pond::math::Slerp(pond::math::Quaternion::Identity(),
-                                              pond::math::Quaternion::Identity(),
-                                              std::numeric_limits<float>::infinity()),
-                            pond::math::MathErrorCode::NonFiniteInput);
-    ExpectQuaternionFailure(pond::math::Slerp(pond::math::Quaternion::Identity(),
-                                              pond::math::Quaternion::Identity(),
-                                              std::numeric_limits<float>::quiet_NaN()),
-                            pond::math::MathErrorCode::NonFiniteInput);
+    ExpectQuaternionFailure(
+        pond::math::Slerp(pond::math::Quaternion::Identity(), pond::math::Quaternion::Identity(), std::numeric_limits<float>::infinity()),
+        pond::math::MathErrorCode::NonFiniteInput);
+    ExpectQuaternionFailure(
+        pond::math::Slerp(pond::math::Quaternion::Identity(), pond::math::Quaternion::Identity(), std::numeric_limits<float>::quiet_NaN()),
+        pond::math::MathErrorCode::NonFiniteInput);
 }
 
 TEST(QuaternionTests, ConvertsIdentityAndPrincipalAxisRotationsToMatrices)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-5F);
 
-    static_assert(pond::math::ToMatrix3x3(pond::math::Quaternion::Identity()) ==
-                  pond::math::Matrix3x3::Identity());
-    static_assert(pond::math::ToMatrix4x4(pond::math::Quaternion::Identity()) ==
-                  pond::math::Matrix4x4::Identity());
-    EXPECT_EQ(pond::math::ToMatrix3x3(pond::math::Quaternion::Identity()),
-              pond::math::Matrix3x3::Identity());
-    EXPECT_EQ(pond::math::ToMatrix4x4(pond::math::Quaternion::Identity()),
-              pond::math::Matrix4x4::Identity());
+    static_assert(pond::math::ToMatrix3x3(pond::math::Quaternion::Identity()) == pond::math::Matrix3x3::Identity());
+    static_assert(pond::math::ToMatrix4x4(pond::math::Quaternion::Identity()) == pond::math::Matrix4x4::Identity());
+    EXPECT_EQ(pond::math::ToMatrix3x3(pond::math::Quaternion::Identity()), pond::math::Matrix3x3::Identity());
+    EXPECT_EQ(pond::math::ToMatrix4x4(pond::math::Quaternion::Identity()), pond::math::Matrix4x4::Identity());
 
-    auto quarterTurnX = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
-    auto quarterTurnY = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
-    auto quarterTurnZ = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto quarterTurnX = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto quarterTurnY = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{pond::core::kHalfPi});
+    auto quarterTurnZ = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 0.0F, 1.0F}, pond::math::Radians{pond::core::kHalfPi});
     ASSERT_TRUE(quarterTurnX.HasValue());
     ASSERT_TRUE(quarterTurnY.HasValue());
     ASSERT_TRUE(quarterTurnZ.HasValue());
 
-    ExpectMatrix3x3Near(
-        pond::math::ToMatrix3x3(quarterTurnX.GetValue()),
-        pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, -1.0F, 0.0F, 1.0F, 0.0F}, 2.0e-5F);
-    ExpectMatrix3x3Near(
-        pond::math::ToMatrix3x3(quarterTurnY.GetValue()),
-        pond::math::Matrix3x3{0.0F, 0.0F, 1.0F, 0.0F, 1.0F, 0.0F, -1.0F, 0.0F, 0.0F}, 2.0e-5F);
-    ExpectMatrix3x3Near(
-        pond::math::ToMatrix3x3(quarterTurnZ.GetValue()),
-        pond::math::Matrix3x3{0.0F, -1.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}, 2.0e-5F);
+    ExpectMatrix3x3Near(pond::math::ToMatrix3x3(quarterTurnX.GetValue()),
+                        pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, -1.0F, 0.0F, 1.0F, 0.0F}, 2.0e-5F);
+    ExpectMatrix3x3Near(pond::math::ToMatrix3x3(quarterTurnY.GetValue()),
+                        pond::math::Matrix3x3{0.0F, 0.0F, 1.0F, 0.0F, 1.0F, 0.0F, -1.0F, 0.0F, 0.0F}, 2.0e-5F);
+    ExpectMatrix3x3Near(pond::math::ToMatrix3x3(quarterTurnZ.GetValue()),
+                        pond::math::Matrix3x3{0.0F, -1.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}, 2.0e-5F);
 
     const pond::math::Matrix4x4 quarterTurnZ4 = pond::math::ToMatrix4x4(quarterTurnZ.GetValue());
     ExpectMatrix4x4Near(quarterTurnZ4,
-                        pond::math::Matrix4x4{0.0F, -1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F,
-                                              0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F},
+                        pond::math::Matrix4x4{0.0F, -1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F},
                         2.0e-5F);
 
-    EXPECT_TRUE(pond::math::IsSameRotation(
-        pond::math::ToQuaternion(pond::math::ToMatrix3x3(quarterTurnX.GetValue()), tolerance)
-            .GetValue(),
-        quarterTurnX.GetValue(), tolerance));
+    EXPECT_TRUE(pond::math::IsSameRotation(pond::math::ToQuaternion(pond::math::ToMatrix3x3(quarterTurnX.GetValue()), tolerance).GetValue(),
+                                           quarterTurnX.GetValue(), tolerance));
 }
 
 TEST(QuaternionTests, RoundTripsArbitraryAndNearHalfTurnMatrixRotations)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(5.0e-5F, 5.0e-5F);
-    auto arbitrary = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, -2.0F, 3.0F},
-                                                           pond::math::Radians{1.25F});
-    auto nearHalfTurn = pond::math::Quaternion::FromAxisAngle(
-        pond::math::Vector3{0.25F, 1.0F, -0.5F}, pond::math::Radians{pond::core::kPi - 1.0e-4F});
+    auto arbitrary = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, -2.0F, 3.0F}, pond::math::Radians{1.25F});
+    auto nearHalfTurn =
+        pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.25F, 1.0F, -0.5F}, pond::math::Radians{pond::core::kPi - 1.0e-4F});
     ASSERT_TRUE(arbitrary.HasValue());
     ASSERT_TRUE(nearHalfTurn.HasValue());
 
     const pond::math::Matrix3x3 arbitraryMatrix = pond::math::ToMatrix3x3(arbitrary.GetValue());
     auto arbitraryRoundTrip = pond::math::ToQuaternion(arbitraryMatrix, tolerance);
     ASSERT_TRUE(arbitraryRoundTrip.HasValue());
-    EXPECT_TRUE(
-        pond::math::IsSameRotation(arbitraryRoundTrip.GetValue(), arbitrary.GetValue(), tolerance));
+    EXPECT_TRUE(pond::math::IsSameRotation(arbitraryRoundTrip.GetValue(), arbitrary.GetValue(), tolerance));
 
     const pond::math::Matrix4x4 arbitraryMatrix4{arbitraryMatrix.row0Column0,
                                                  arbitraryMatrix.row0Column1,
@@ -457,21 +396,17 @@ TEST(QuaternionTests, RoundTripsArbitraryAndNearHalfTurnMatrixRotations)
                                                  1.0F};
     auto arbitraryRoundTrip4 = pond::math::ToQuaternion(arbitraryMatrix4, tolerance);
     ASSERT_TRUE(arbitraryRoundTrip4.HasValue());
-    EXPECT_TRUE(pond::math::IsSameRotation(arbitraryRoundTrip4.GetValue(), arbitrary.GetValue(),
-                                           tolerance));
+    EXPECT_TRUE(pond::math::IsSameRotation(arbitraryRoundTrip4.GetValue(), arbitrary.GetValue(), tolerance));
 
-    auto nearHalfTurnRoundTrip =
-        pond::math::ToQuaternion(pond::math::ToMatrix3x3(nearHalfTurn.GetValue()), tolerance);
+    auto nearHalfTurnRoundTrip = pond::math::ToQuaternion(pond::math::ToMatrix3x3(nearHalfTurn.GetValue()), tolerance);
     ASSERT_TRUE(nearHalfTurnRoundTrip.HasValue());
-    EXPECT_TRUE(pond::math::IsSameRotation(nearHalfTurnRoundTrip.GetValue(),
-                                           nearHalfTurn.GetValue(), tolerance));
+    EXPECT_TRUE(pond::math::IsSameRotation(nearHalfTurnRoundTrip.GetValue(), nearHalfTurn.GetValue(), tolerance));
 }
 
 TEST(QuaternionTests, Matrix4x4ConversionUsesOnlyUpperLeftRotationBlock)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(2.0e-5F, 2.0e-5F);
-    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, -2.0F, 3.0F},
-                                                          pond::math::Radians{0.75F});
+    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, -2.0F, 3.0F}, pond::math::Radians{0.75F});
     ASSERT_TRUE(rotation.HasValue());
 
     pond::math::Matrix4x4 matrix = pond::math::ToMatrix4x4(rotation.GetValue());
@@ -490,8 +425,7 @@ TEST(QuaternionTests, Matrix4x4ConversionUsesOnlyUpperLeftRotationBlock)
 
 TEST(QuaternionTests, MatrixAndQuaternionApplicationRotateVectorsEquivalently)
 {
-    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, -2.0F, 3.0F},
-                                                          pond::math::Radians{1.25F});
+    auto rotation = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, -2.0F, 3.0F}, pond::math::Radians{1.25F});
     ASSERT_TRUE(rotation.HasValue());
 
     const pond::math::Vector3 vector{0.5F, -1.25F, 2.0F};
@@ -499,30 +433,24 @@ TEST(QuaternionTests, MatrixAndQuaternionApplicationRotateVectorsEquivalently)
     ExpectVectorNear(pond::math::ToMatrix3x3(rotation.GetValue()) * vector, expected, 1.0e-5F);
 
     const pond::math::Vector4 homogeneousVector{vector.x, vector.y, vector.z, 0.0F};
-    const pond::math::Vector4 matrix4Rotated =
-        pond::math::ToMatrix4x4(rotation.GetValue()) * homogeneousVector;
-    ExpectVectorNear(pond::math::Vector3{matrix4Rotated.x, matrix4Rotated.y, matrix4Rotated.z},
-                     expected, 1.0e-5F);
+    const pond::math::Vector4 matrix4Rotated = pond::math::ToMatrix4x4(rotation.GetValue()) * homogeneousVector;
+    ExpectVectorNear(pond::math::Vector3{matrix4Rotated.x, matrix4Rotated.y, matrix4Rotated.z}, expected, 1.0e-5F);
     EXPECT_NEAR(matrix4Rotated.w, 0.0F, 1.0e-5F);
 }
 
 TEST(QuaternionTests, MatrixCompositionMatchesQuaternionComposition)
 {
-    auto a = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F},
-                                                   pond::math::Radians{0.5F});
-    auto b = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F},
-                                                   pond::math::Radians{-0.75F});
+    auto a = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{1.0F, 0.0F, 0.0F}, pond::math::Radians{0.5F});
+    auto b = pond::math::Quaternion::FromAxisAngle(pond::math::Vector3{0.0F, 1.0F, 0.0F}, pond::math::Radians{-0.75F});
     ASSERT_TRUE(a.HasValue());
     ASSERT_TRUE(b.HasValue());
 
     const pond::math::Quaternion quaternionComposed = b.GetValue() * a.GetValue();
-    const pond::math::Matrix3x3 matrixComposed =
-        pond::math::ToMatrix3x3(b.GetValue()) * pond::math::ToMatrix3x3(a.GetValue());
+    const pond::math::Matrix3x3 matrixComposed = pond::math::ToMatrix3x3(b.GetValue()) * pond::math::ToMatrix3x3(a.GetValue());
     ExpectMatrix3x3Near(pond::math::ToMatrix3x3(quaternionComposed), matrixComposed, 1.0e-5F);
 
     const pond::math::Vector3 vector{0.25F, 1.5F, -2.0F};
-    ExpectVectorNear(matrixComposed * vector, pond::math::Rotate(quaternionComposed, vector),
-                     1.0e-5F);
+    ExpectVectorNear(matrixComposed * vector, pond::math::Rotate(quaternionComposed, vector), 1.0e-5F);
 }
 
 TEST(QuaternionTests, RejectsInvalidMatrixRotationInputs)
@@ -530,33 +458,20 @@ TEST(QuaternionTests, RejectsInvalidMatrixRotationInputs)
     const pond::core::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-5F);
 
     ExpectQuaternionFailure(
-        pond::math::ToQuaternion(pond::math::Matrix3x3{std::numeric_limits<float>::infinity(), 0.0F,
-                                                       0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F},
+        pond::math::ToQuaternion(pond::math::Matrix3x3{std::numeric_limits<float>::infinity(), 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F},
                                  tolerance),
         pond::math::MathErrorCode::NonFiniteInput);
+    ExpectQuaternionFailure(pond::math::ToQuaternion(pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}, tolerance),
+                            pond::math::MathErrorCode::SingularMatrix);
+    ExpectQuaternionFailure(pond::math::ToQuaternion(pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, -1.0F}, tolerance),
+                            pond::math::MathErrorCode::DegenerateInput);
+    ExpectQuaternionFailure(pond::math::ToQuaternion(pond::math::Matrix3x3{2.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F}, tolerance),
+                            pond::math::MathErrorCode::DegenerateInput);
+    ExpectQuaternionFailure(pond::math::ToQuaternion(pond::math::Matrix3x3{1.0F, 0.25F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F}, tolerance),
+                            pond::math::MathErrorCode::DegenerateInput);
     ExpectQuaternionFailure(
         pond::math::ToQuaternion(
-            pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}, tolerance),
-        pond::math::MathErrorCode::SingularMatrix);
-    ExpectQuaternionFailure(
-        pond::math::ToQuaternion(
-            pond::math::Matrix3x3{1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, -1.0F},
-            tolerance),
-        pond::math::MathErrorCode::DegenerateInput);
-    ExpectQuaternionFailure(
-        pond::math::ToQuaternion(
-            pond::math::Matrix3x3{2.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F}, tolerance),
-        pond::math::MathErrorCode::DegenerateInput);
-    ExpectQuaternionFailure(
-        pond::math::ToQuaternion(
-            pond::math::Matrix3x3{1.0F, 0.25F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F},
-            tolerance),
-        pond::math::MathErrorCode::DegenerateInput);
-    ExpectQuaternionFailure(
-        pond::math::ToQuaternion(pond::math::Matrix4x4{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 2.0F, 0.0F,
-                                                       0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F,
-                                                       0.0F, 1.0F},
-                                 tolerance),
+            pond::math::Matrix4x4{1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 2.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F}, tolerance),
         pond::math::MathErrorCode::DegenerateInput);
 }
 
@@ -564,14 +479,11 @@ TEST(QuaternionTests, CallerToleranceControlsMatrixRotationValidation)
 {
     const pond::core::Tolerance tightTolerance = RequireTolerance(1.0e-6F, 1.0e-6F);
     const pond::core::Tolerance looseTolerance = RequireTolerance(1.0e-3F, 1.0e-3F);
-    const pond::math::Matrix3x3 slightlyScaledIdentity{1.0001F, 0.0F, 0.0F, 0.0F, 1.0F,
-                                                       0.0F,    0.0F, 0.0F, 1.0F};
+    const pond::math::Matrix3x3 slightlyScaledIdentity{1.0001F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F};
 
-    ExpectQuaternionFailure(pond::math::ToQuaternion(slightlyScaledIdentity, tightTolerance),
-                            pond::math::MathErrorCode::DegenerateInput);
+    ExpectQuaternionFailure(pond::math::ToQuaternion(slightlyScaledIdentity, tightTolerance), pond::math::MathErrorCode::DegenerateInput);
     auto looseResult = pond::math::ToQuaternion(slightlyScaledIdentity, looseTolerance);
     ASSERT_TRUE(looseResult.HasValue());
-    EXPECT_TRUE(pond::math::IsSameRotation(looseResult.GetValue(),
-                                           pond::math::Quaternion::Identity(), looseTolerance));
+    EXPECT_TRUE(pond::math::IsSameRotation(looseResult.GetValue(), pond::math::Quaternion::Identity(), looseTolerance));
 }
 } // namespace

@@ -1,6 +1,6 @@
 # Core Library Boundary
 
-Status: current after final core foundation verification.
+Status: current after the core namespace and failure-policy migration.
 
 `ponder_core` owns the narrow project-wide foundation code that is safe for most
 other libraries to depend on. It should stay small, dependency-light at its public
@@ -10,7 +10,7 @@ revisiting basic error, diagnostic, and utility conventions.
 ## Public API Rules
 
 - Public headers live under `include/ponder/core/`.
-- Source code uses the `pond::core` namespace.
+- Source code uses the `ponder::core` namespace.
 - The CMake target is `ponder_core`; the alias is `ponder::core`.
 - Public APIs may use stable standard library vocabulary types when they improve
   clarity, such as `std::string`, `std::string_view`, `std::wstring`,
@@ -35,8 +35,8 @@ revisiting basic error, diagnostic, and utility conventions.
 - `Log.hpp`: logging levels, log entries, category-aware logging functions,
   macros, async flush/shutdown controls, and scoped test overrides.
 - `Numbers.hpp`: constrained constexpr numeric helpers.
-- `PonderException.hpp`: standalone exceptional-failure type and source-location
-  preserving throw helpers.
+- `Exception.hpp`: the standalone `Exception` root, `ExceptionWithData<T>`, and
+  source-location-preserving construction and throw helpers.
 - `Result.hpp`: recoverable error model, `Result<T>`, `VoidResult`, and
   `MakeUnexpected`.
 - `ScopeExit.hpp`: tiny no-throw local cleanup guard.
@@ -49,7 +49,8 @@ revisiting basic error, diagnostic, and utility conventions.
 
 ## Responsibilities
 
-- Recoverable errors use `Error`, `ErrorCode`, `ErrorCategory`, and `Result<T>`.
+- Expected or locally actionable failures use `Error`, `ErrorCode`,
+  `ErrorCategory`, and `Result<T>`.
   `Error` carries category/code, human-readable message, source location, and a
   best-effort stacktrace. `Result<T>` is a thin `[[nodiscard]]` project-owned
   wrapper around `std::expected<T, Error>` and includes the `Result<void>`
@@ -58,17 +59,26 @@ revisiting basic error, diagnostic, and utility conventions.
   construction is runtime-only; evaluated constexpr failure paths deliberately
   produce a compile-time diagnostic instead of pretending to build a runtime
   diagnostic object.
-- Exceptional failures use `PonderException`. It is a standalone project type and
-  must not derive from `std::exception` or any other type. It carries a
-  human-readable message, source location, and best-effort stacktrace, but does
-  not carry `Error`.
-- Throw helper macros/functions for `PonderException`, including
-  `PONDER_EXCEPTION` and `ThrowPonderException`, preserve source locations and
-  support std::format-style messages.
-- Assertions use `PONDER_ASSERT`, `PONDER_ASSERT_MESSAGE`, `PONDER_VERIFY`,
-  `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`. Debug-only assertions compile
-  out in release builds; `PONDER_VERIFY` remains active and throws
-  `PonderException` on failure.
+- `GetErrorCategoryName()` returns only registered category names. An
+  unknown category reaches `PONDER_UNREACHABLE` instead of returning a fabricated
+  value, so this observer is not `noexcept`.
+- Unexpected or rare failures use `Exception` when local recovery is not
+  realistic and useful handling belongs at a higher level. `Exception` is the
+  standalone project exception root and does not derive from `std::exception`.
+  It carries a human-readable message, source location, and best-effort
+  stacktrace, but does not carry `Error`.
+- `ExceptionWithData<T>` derives from `Exception` and owns a typed payload. Its
+  `std::formatter` specialization and stream insertion operator always remain
+  available; either channel renders `<unprintable>` when `T` does not support
+  that channel instead of making the exception type ill-formed.
+- `PONDER_EXCEPTION`, `PONDER_EXCEPTION_WITH_DATA`, `MakeException`, and
+  `MakeFormattedException` preserve source locations and support std::format-style
+  messages.
+- Assertions use one optionally formatted `PONDER_ASSERT` macro plus
+  `PONDER_VERIFY`, `PONDER_UNREACHABLE`, and `PONDER_DEBUG_BREAK`. Debug-only
+  assertions compile out in release builds; `PONDER_VERIFY` remains active and
+  throws `Exception` on failure. `PONDER_UNREACHABLE` debug-breaks in debug builds
+  and throws `Exception` in release builds.
 - Logging uses `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`,
   and `LOG_FATAL`, plus `_CATEGORY` variants. Log records capture timestamp,
   level, optional category, message, and source location.
@@ -108,7 +118,10 @@ defaults to the nil UUID, formats canonical lowercase text, and parses canonical
 UUID text with lowercase or uppercase hexadecimal digits. `MakeUuidV4` creates a
 version 4 UUID from caller-provided bytes, while `GenerateUuidV4` supports an
 injected entropy source for deterministic tests and a default entropy source for
-normal use.
+normal use. `UuidEntropySource` returns `void`; `GenerateUuidV4` returns `Uuid`
+directly, is `noexcept`, and requires a non-null injected source, enforced with a
+debug assertion. Entropy-source exceptions terminate under that `noexcept`
+contract. Text parsing remains a recoverable `Result<Uuid>`.
 
 Core owns only the generic UUID primitive. Domain-specific identifiers such as
 `AssetId`, `NodeId`, `MoleculeId`, or project-file handles belong in the library
@@ -150,8 +163,10 @@ finite-number checks, and checked numeric rounding used by higher-level
 libraries.
 
 `Tolerance::Create` validates explicit non-negative finite absolute and relative
-tolerances; the project defines no universal epsilon. `IsNear` combines those
-tolerances without overflow-prone float subtraction, and `Lerp` keeps finite,
+tolerances, returns `Tolerance` directly, and throws `Exception` when the inputs
+violate that programming contract; the project defines no universal epsilon.
+`IsNear` combines those tolerances without overflow-prone float subtraction,
+and `Lerp` keeps finite,
 representable interpolations stable across large endpoints, including
 opposite-sign extremes.
 `IsFinite` accepts integral and floating-point values except `bool`. Integral

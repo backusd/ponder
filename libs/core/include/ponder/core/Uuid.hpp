@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-namespace pond::core
+namespace ponder::core
 {
 class Uuid final
 {
@@ -22,7 +22,10 @@ public:
     using Bytes = std::array<Byte, kByteCount>;
 
     constexpr Uuid() noexcept = default;
-    explicit constexpr Uuid(Bytes bytes) noexcept : m_bytes(bytes) {}
+    explicit constexpr Uuid(Bytes bytes) noexcept :
+        m_bytes(bytes)
+    {
+    }
 
     [[nodiscard]] static constexpr Uuid Nil() noexcept
     {
@@ -71,8 +74,7 @@ public:
         return formatted;
     }
 
-    [[nodiscard]] friend constexpr auto operator<=>(const Uuid& lhs,
-                                                    const Uuid& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const Uuid& lhs, const Uuid& rhs) noexcept = default;
 
 private:
     static constexpr std::size_t kCanonicalStringLength{36};
@@ -86,7 +88,7 @@ private:
     Bytes m_bytes{};
 };
 
-using UuidEntropySource = bool (*)(std::span<Uuid::Byte, Uuid::kByteCount> bytes) noexcept;
+using UuidEntropySource = void (*)(std::span<Uuid::Byte, Uuid::kByteCount> bytes);
 
 [[nodiscard]] Result<Uuid> ParseUuid(std::string_view text);
 
@@ -98,16 +100,16 @@ using UuidEntropySource = bool (*)(std::span<Uuid::Byte, Uuid::kByteCount> bytes
     return Uuid{randomBytes};
 }
 
-[[nodiscard]] Result<Uuid> GenerateUuidV4(UuidEntropySource entropySource);
-[[nodiscard]] Result<Uuid> GenerateUuidV4();
-} // namespace pond::core
+[[nodiscard]] Uuid GenerateUuidV4(UuidEntropySource entropySource) noexcept;
+[[nodiscard]] Uuid GenerateUuidV4() noexcept;
+} // namespace ponder::core
 
 namespace std
 {
 template <>
-struct hash<pond::core::Uuid>
+struct hash<ponder::core::Uuid>
 {
-    [[nodiscard]] constexpr std::size_t operator()(const pond::core::Uuid& uuid) const noexcept
+    [[nodiscard]] constexpr std::size_t operator()(const ponder::core::Uuid& uuid) const noexcept
     {
         std::size_t hashValue{};
         std::size_t prime{};
@@ -123,7 +125,7 @@ struct hash<pond::core::Uuid>
             prime = 16777619U;
         }
 
-        for (pond::core::Uuid::Byte byte : uuid.GetBytes())
+        for (ponder::core::Uuid::Byte byte : uuid.GetBytes())
         {
             hashValue ^= static_cast<std::size_t>(byte);
             hashValue *= prime;

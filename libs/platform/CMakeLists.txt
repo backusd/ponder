@@ -1,59 +1,53 @@
 ponder_add_project_library(platform
     PUBLIC_HEADERS
-        include/ponder/platform/Dialog.hpp
         include/ponder/platform/Display.hpp
         include/ponder/platform/Geometry.hpp
-        include/ponder/platform/HintManager.hpp
+        include/ponder/platform/Hints.hpp
         include/ponder/platform/Identifiers.hpp
         include/ponder/platform/Keyboard.hpp
         include/ponder/platform/Mouse.hpp
         include/ponder/platform/NativeWindow.hpp
         include/ponder/platform/PlatformError.hpp
         include/ponder/platform/PlatformEvent.hpp
-        include/ponder/platform/PlatformRuntime.hpp
         include/ponder/platform/Process.hpp
+        include/ponder/platform/Runtime.hpp
         include/ponder/platform/TextInput.hpp
-        include/ponder/platform/Timing.hpp
         include/ponder/platform/Window.hpp
         include/ponder/platform/WindowGraphics.hpp
         include/ponder/platform/WindowState.hpp
     SOURCES
-        src/Dialog.cpp
         src/Display.cpp
-        src/EventPolling.cpp
-        src/HintManager.cpp
         src/Mouse.cpp
         src/NativeWindow.cpp
-        src/PlatformRuntime.cpp
-        src/PlatformRuntimeBackend.cpp
-        src/PlatformServices.cpp
+        src/PlatformCommon.cpp
         src/Process.cpp
+        src/Runtime.cpp
         src/RuntimeChildRegistry.cpp
         src/SdlCommon.cpp
         src/SdlDisplayBackend.cpp
         src/SdlEventTranslator.cpp
         src/SdlError.cpp
-        src/SdlRuntimeBackend.cpp
+        src/SdlRuntime.cpp
         src/SdlWindowBackend.cpp
         src/Window.cpp
         src/WindowProperties.cpp
+        src/WindowRegistry.cpp
         src/WindowTextInput.cpp
     PRIVATE_HEADERS
-        src/HintManagerBackend.hpp
         src/IPlatformDisplayBackend.hpp
-        src/IPlatformRuntimeBackend.hpp
         src/IPlatformWindowBackend.hpp
-        src/PlatformRuntimeBackend.hpp
-        src/PlatformRuntimeState.hpp
+        src/PlatformCommon.hpp
         src/ProcessBackend.hpp
         src/RuntimeChildRegistry.hpp
         src/SdlCommon.hpp
         src/SdlDisplayBackend.hpp
         src/SdlEventTranslator.hpp
         src/SdlError.hpp
-        src/SdlRuntimeBackend.hpp
+        src/SdlRuntime.hpp
+        src/SdlRuntimeTypes.hpp
         src/SdlWindowBackend.hpp
         src/WindowImpl.hpp
+        src/WindowRegistry.hpp
     PUBLIC_DEPS
         ponder::core
     PRIVATE_DEPS

@@ -64,7 +64,7 @@ with render disabled remains supported.
 
 ### Window Creation And Backend Selection
 
-`pond::platform::WindowGraphicsCompatibility` has these project-owned alternatives:
+`ponder::platform::WindowGraphicsCompatibility` has these project-owned alternatives:
 
 - `Default` requests no graphics-specific SDL creation flag.
 - `Vulkan` requests the native state needed by the Vulkan backend on Windows and Linux.
@@ -133,7 +133,7 @@ process-global renderer singleton.
 The renderer-to-window lifetime is caller-enforced: platform's child registry cannot observe a
 renderer-owned surface. Shutdown destroys or abandons active frame tokens, destroys render targets
 and unconsumed prepared surfaces, destroys the render device, destroys `RenderBootstrap`, destroys
-platform windows, and finally destroys `PlatformRuntime`.
+platform windows, and finally destroys `ponder::platform::Runtime`.
 
 Ordinary resize, minimize, hide/show, same-size display or scale changes, and swapchain
 staleness are

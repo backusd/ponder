@@ -33,3 +33,5 @@ Each ADR should include:
 - [ADR 0009: Fixed-Size Rendering Math](0009-fixed-size-rendering-math.md)
 - [ADR 0010: Project-Owned UI Rendering](0010-project-owned-ui-rendering.md)
 - [ADR 0011: Render Shader Toolchain](0011-render-shader-toolchain.md)
+- [ADR 0012: Core Namespace And Failure Policy](0012-core-namespace-and-failure-policy.md)
+- [ADR 0013: Platform Failure Policy](0013-platform-failure-policy.md)

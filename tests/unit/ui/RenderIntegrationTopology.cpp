@@ -15,12 +15,11 @@ namespace
 {
 [[nodiscard]] pond::render::RenderFrameMetrics MakeFrameMetrics()
 {
-    return pond::render::RenderFrameMetrics{
-        .windowId = pond::platform::WindowId{17U},
-        .logicalSize = pond::platform::LogicalSize{.width = 800U, .height = 600U},
-        .pixelSize = pond::platform::PixelSize{.width = 1200U, .height = 900U},
-        .metricsRevision = pond::render::PresentationEnvironmentRevision{23U},
-        .targetRevision = 29U};
+    return pond::render::RenderFrameMetrics{.windowId = ponder::platform::WindowId{17U},
+                                            .logicalSize = ponder::platform::LogicalSize{.width = 800U, .height = 600U},
+                                            .pixelSize = ponder::platform::PixelSize{.width = 1200U, .height = 900U},
+                                            .metricsRevision = pond::render::PresentationEnvironmentRevision{23U},
+                                            .targetRevision = 29U};
 }
 
 void ExpectUiError(const auto& result, pond::ui::UiErrorCode expected)
@@ -48,8 +47,7 @@ TEST(UiRenderIntegrationTopologyTests, ConvertsAndMatchesClosedActiveFrameMetric
     EXPECT_EQ(uiMetrics.GetLogicalSize(), (pond::ui::LogicalSize{800.0F, 600.0F}));
     EXPECT_EQ(uiMetrics.GetFramebufferPixelSize(), (pond::ui::FramebufferPixelSize{1200U, 900U}));
 
-    const auto validation =
-        pond::ui::detail::ValidateUiTargetMetricsForFrame(uiMetrics, frameMetrics);
+    const auto validation = pond::ui::detail::ValidateUiTargetMetricsForFrame(uiMetrics, frameMetrics);
     EXPECT_TRUE(validation.HasValue()) << validation.GetError().GetMessage();
 }
 
@@ -61,7 +59,7 @@ TEST(UiRenderIntegrationTopologyTests, RejectsEveryValidFrameMetricsMismatch)
     const pond::ui::UiTargetMetrics& matching = matchingResult.GetValue();
 
     std::array mismatches{frameMetrics, frameMetrics, frameMetrics, frameMetrics, frameMetrics};
-    mismatches[0].windowId = pond::platform::WindowId{18U};
+    mismatches[0].windowId = ponder::platform::WindowId{18U};
     mismatches[1].targetRevision = 30U;
     mismatches[2].metricsRevision = pond::render::PresentationEnvironmentRevision{24U};
     mismatches[3].logicalSize.width = 801U;
@@ -70,17 +68,14 @@ TEST(UiRenderIntegrationTopologyTests, RejectsEveryValidFrameMetricsMismatch)
     for (const pond::render::RenderFrameMetrics& mismatch : mismatches)
     {
         SCOPED_TRACE(mismatch.targetRevision);
-        ExpectUiError(pond::ui::detail::ValidateUiTargetMetricsForFrame(matching, mismatch),
-                      pond::ui::UiErrorCode::MetricsMismatch);
+        ExpectUiError(pond::ui::detail::ValidateUiTargetMetricsForFrame(matching, mismatch), pond::ui::UiErrorCode::MetricsMismatch);
     }
 }
 
 TEST(UiRenderIntegrationTopologyTests, RejectsInvalidMetricsAndAcceptsSuspendedFrameValues)
 {
-    ExpectUiError(pond::ui::detail::MakeUiTargetMetricsForFrame({}),
-                  pond::ui::UiErrorCode::InvalidMetrics);
-    ExpectUiError(pond::ui::detail::ValidateUiTargetMetricsForFrame(pond::ui::UiTargetMetrics{},
-                                                                    MakeFrameMetrics()),
+    ExpectUiError(pond::ui::detail::MakeUiTargetMetricsForFrame({}), pond::ui::UiErrorCode::InvalidMetrics);
+    ExpectUiError(pond::ui::detail::ValidateUiTargetMetricsForFrame(pond::ui::UiTargetMetrics{}, MakeFrameMetrics()),
                   pond::ui::UiErrorCode::InvalidMetrics);
 
     pond::render::RenderFrameMetrics suspendedFrame = MakeFrameMetrics();
@@ -89,7 +84,6 @@ TEST(UiRenderIntegrationTopologyTests, RejectsInvalidMetricsAndAcceptsSuspendedF
     const auto suspendedUi = pond::ui::detail::MakeUiTargetMetricsForFrame(suspendedFrame);
     ASSERT_TRUE(suspendedUi.HasValue()) << suspendedUi.GetError().GetMessage();
     EXPECT_FALSE(pond::ui::IsDrawable(suspendedUi.GetValue()));
-    const auto validation =
-        pond::ui::detail::ValidateUiTargetMetricsForFrame(suspendedUi.GetValue(), suspendedFrame);
+    const auto validation = pond::ui::detail::ValidateUiTargetMetricsForFrame(suspendedUi.GetValue(), suspendedFrame);
     EXPECT_TRUE(validation.HasValue()) << validation.GetError().GetMessage();
 }

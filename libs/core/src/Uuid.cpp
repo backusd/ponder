@@ -1,3 +1,4 @@
+#include <ponder/core/Assert.hpp>
 #include <ponder/core/Uuid.hpp>
 
 #include <array>
@@ -6,15 +7,13 @@
 #include <span>
 #include <string_view>
 
-namespace pond::core
+namespace ponder::core
 {
 namespace
 {
 constexpr std::size_t kCanonicalUuidLength{36};
-constexpr std::array<std::size_t, 16> kByteTextOffsets{0,  2,  4,  6,  9,  11, 14, 16,
-                                                       19, 21, 24, 26, 28, 30, 32, 34};
+constexpr std::array<std::size_t, 16> kByteTextOffsets{0, 2, 4, 6, 9, 11, 14, 16, 19, 21, 24, 26, 28, 30, 32, 34};
 constexpr ErrorCode kInvalidUuidFormat{ErrorCategory::Parse, 1};
-constexpr ErrorCode kUuidEntropyFailure{ErrorCategory::Internal, 2};
 
 [[nodiscard]] constexpr int FromHexDigit(char character) noexcept
 {
@@ -47,23 +46,14 @@ constexpr ErrorCode kUuidEntropyFailure{ErrorCategory::Internal, 2};
                                               "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx format.");
 }
 
-[[nodiscard]] bool FillRandomUuidBytes(std::span<Uuid::Byte, Uuid::kByteCount> bytes) noexcept
+void FillRandomUuidBytes(std::span<Uuid::Byte, Uuid::kByteCount> bytes)
 {
-    try
-    {
-        std::random_device randomDevice;
-        std::uniform_int_distribution<unsigned int> distribution{0U, 255U};
+    std::random_device randomDevice;
+    std::uniform_int_distribution<unsigned int> distribution{0U, 255U};
 
-        for (Uuid::Byte& byte : bytes)
-        {
-            byte = static_cast<Uuid::Byte>(distribution(randomDevice));
-        }
-
-        return true;
-    }
-    catch (...)
+    for (Uuid::Byte& byte : bytes)
     {
-        return false;
+        byte = static_cast<Uuid::Byte>(distribution(randomDevice));
     }
 }
 } // namespace
@@ -94,24 +84,18 @@ Result<Uuid> ParseUuid(std::string_view text)
     return Uuid{bytes};
 }
 
-Result<Uuid> GenerateUuidV4(UuidEntropySource entropySource)
+Uuid GenerateUuidV4(UuidEntropySource entropySource) noexcept
 {
-    if (entropySource == nullptr)
-    {
-        return MakeUnexpected(kUuidEntropyFailure, "UUID entropy source is null.");
-    }
+    PONDER_ASSERT(entropySource != nullptr);
 
     Uuid::Bytes bytes{};
-    if (!entropySource(std::span<Uuid::Byte, Uuid::kByteCount>{bytes}))
-    {
-        return MakeUnexpected(kUuidEntropyFailure, "UUID entropy source failed.");
-    }
+    entropySource(std::span<Uuid::Byte, Uuid::kByteCount>{bytes});
 
     return MakeUuidV4(bytes);
 }
 
-Result<Uuid> GenerateUuidV4()
+Uuid GenerateUuidV4() noexcept
 {
     return GenerateUuidV4(FillRandomUuidBytes);
 }
-} // namespace pond::core
+} // namespace ponder::core

@@ -40,8 +40,7 @@ TEST(RenderVulkanQueueSynchronizationTests, AliasedHandlesShareOneQueueLock)
     auto secondTarget = std::async(std::launch::async,
                                    [&]
                                    {
-                                       [[maybe_unused]] auto lock =
-                                           synchronization.LockQueue(queue);
+                                       [[maybe_unused]] auto lock = synchronization.LockQueue(queue);
                                    });
 
     EXPECT_EQ(secondTarget.wait_for(50ms), std::future_status::timeout);
@@ -50,8 +49,7 @@ TEST(RenderVulkanQueueSynchronizationTests, AliasedHandlesShareOneQueueLock)
     secondTarget.get();
 }
 
-TEST(RenderVulkanQueueSynchronizationTests,
-     OneTargetsBoundedWaitDoesNotBlockIndependentQueuePreparation)
+TEST(RenderVulkanQueueSynchronizationTests, OneTargetsBoundedWaitDoesNotBlockIndependentQueuePreparation)
 {
     using namespace std::chrono_literals;
 
@@ -65,8 +63,7 @@ TEST(RenderVulkanQueueSynchronizationTests,
     std::latch releaseBlockedTarget{1};
     std::jthread blockedTarget{[&]
                                {
-                                   [[maybe_unused]] auto lock =
-                                       synchronization.LockQueue(presentationQueue);
+                                   [[maybe_unused]] auto lock = synchronization.LockQueue(presentationQueue);
                                    blockedTargetReady.count_down();
                                    releaseBlockedTarget.wait();
                                }};
@@ -75,8 +72,7 @@ TEST(RenderVulkanQueueSynchronizationTests,
     auto independentTarget = std::async(std::launch::async,
                                         [&]
                                         {
-                                            [[maybe_unused]] auto lock =
-                                                synchronization.LockQueue(graphicsQueue);
+                                            [[maybe_unused]] auto lock = synchronization.LockQueue(graphicsQueue);
                                         });
 
     EXPECT_EQ(independentTarget.wait_for(500ms), std::future_status::ready);
@@ -97,8 +93,7 @@ TEST(RenderVulkanQueueSynchronizationTests, DeviceWaitExcludesEveryQueueOperatio
     std::latch releaseQueueLock{1};
     std::jthread queueOperation{[&]
                                 {
-                                    [[maybe_unused]] auto lock =
-                                        synchronization.LockQueue(graphicsQueue);
+                                    [[maybe_unused]] auto lock = synchronization.LockQueue(graphicsQueue);
                                     queueLockAcquired.count_down();
                                     releaseQueueLock.wait();
                                 }};

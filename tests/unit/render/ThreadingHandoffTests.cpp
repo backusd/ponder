@@ -10,18 +10,13 @@
 namespace
 {
 [[nodiscard]] constexpr pond::render::RenderTargetSnapshot MakeSnapshot(
-    std::uint64_t revision = 1, pond::platform::WindowId windowId = pond::platform::WindowId{42},
-    pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision =
-        pond::render::PresentationEnvironmentRevision{1U},
-    pond::platform::PixelSize pixelSize = pond::platform::PixelSize{.width = 800, .height = 600},
-    pond::platform::LogicalSize logicalSize = pond::platform::LogicalSize{.width = 800,
-                                                                          .height = 600},
-    bool visible = true,
-    pond::platform::WindowState windowState = pond::platform::WindowState::Normal)
+    std::uint64_t revision = 1, ponder::platform::WindowId windowId = ponder::platform::WindowId{42},
+    pond::render::PresentationEnvironmentRevision presentationEnvironmentRevision = pond::render::PresentationEnvironmentRevision{1U},
+    ponder::platform::PixelSize pixelSize = ponder::platform::PixelSize{.width = 800, .height = 600},
+    ponder::platform::LogicalSize logicalSize = ponder::platform::LogicalSize{.width = 800, .height = 600}, bool visible = true,
+    ponder::platform::WindowState windowState = ponder::platform::WindowState::Normal)
 {
-    return pond::render::RenderTargetSnapshot{
-        windowId, pixelSize, logicalSize, visible, windowState, presentationEnvironmentRevision,
-        revision};
+    return pond::render::RenderTargetSnapshot{windowId, pixelSize, logicalSize, visible, windowState, presentationEnvironmentRevision, revision};
 }
 
 [[nodiscard]] constexpr pond::render::SurfacePreparationDesc MakeSurfaceDesc(
@@ -31,8 +26,8 @@ namespace
     return pond::render::SurfacePreparationDesc{.targetSnapshot = snapshot, .reason = reason};
 }
 
-[[nodiscard]] pond::core::Result<pond::render::PreparedSurface> CreatePreparedSurfaceForTest(
-    pond::render::RenderBootstrap& bootstrap, const pond::render::SurfacePreparationDesc& desc)
+[[nodiscard]] pond::core::Result<pond::render::PreparedSurface> CreatePreparedSurfaceForTest(pond::render::RenderBootstrap& bootstrap,
+                                                                                             const pond::render::SurfacePreparationDesc& desc)
 {
     return pond::render::detail::RenderBootstrapTestAccess::CreatePreparedSurface(bootstrap, desc);
 }
@@ -54,24 +49,20 @@ TEST(RenderThreadingHandoffTests, ValidatesSurfacePreparationRequestWithoutNativ
 {
     const pond::render::SurfacePreparationDesc desc = MakeSurfaceDesc();
 
-    EXPECT_TRUE(pond::render::ValidateSurfacePreparationRequest(
-        pond::platform::WindowGraphicsCompatibility::Vulkan, pond::platform::WindowId{42}, desc));
+    EXPECT_TRUE(
+        pond::render::ValidateSurfacePreparationRequest(ponder::platform::WindowGraphicsCompatibility::Vulkan, ponder::platform::WindowId{42}, desc));
 
-    ExpectRenderError(pond::render::ValidateSurfacePreparationRequest(
-                          pond::platform::WindowGraphicsCompatibility::Default,
-                          pond::platform::WindowId{42}, desc),
-                      pond::render::RenderErrorCode::UnsupportedSurface);
     ExpectRenderError(
-        pond::render::ValidateSurfacePreparationRequest(
-            pond::platform::WindowGraphicsCompatibility::Metal, pond::platform::WindowId{42}, desc),
+        pond::render::ValidateSurfacePreparationRequest(ponder::platform::WindowGraphicsCompatibility::Default, ponder::platform::WindowId{42}, desc),
         pond::render::RenderErrorCode::UnsupportedSurface);
     ExpectRenderError(
-        pond::render::ValidateSurfacePreparationRequest(
-            pond::platform::WindowGraphicsCompatibility::Vulkan, pond::platform::WindowId{7}, desc),
+        pond::render::ValidateSurfacePreparationRequest(ponder::platform::WindowGraphicsCompatibility::Metal, ponder::platform::WindowId{42}, desc),
+        pond::render::RenderErrorCode::UnsupportedSurface);
+    ExpectRenderError(
+        pond::render::ValidateSurfacePreparationRequest(ponder::platform::WindowGraphicsCompatibility::Vulkan, ponder::platform::WindowId{7}, desc),
         pond::render::RenderErrorCode::InvalidArgument);
-    ExpectRenderError(pond::render::ValidateSurfacePreparationRequest(
-                          pond::platform::WindowGraphicsCompatibility::Vulkan,
-                          pond::platform::WindowId{42}, pond::render::SurfacePreparationDesc{}),
+    ExpectRenderError(pond::render::ValidateSurfacePreparationRequest(ponder::platform::WindowGraphicsCompatibility::Vulkan,
+                                                                      ponder::platform::WindowId{42}, pond::render::SurfacePreparationDesc{}),
                       pond::render::RenderErrorCode::InvalidArgument);
 }
 
@@ -79,43 +70,31 @@ TEST(RenderThreadingHandoffTests, ValidatesTargetSnapshotUpdateOrdering)
 {
     EXPECT_TRUE(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(1), MakeSnapshot(2)));
     EXPECT_TRUE(pond::render::ValidateTargetSnapshotUpdate(
-        MakeSnapshot(2), MakeSnapshot(3, pond::platform::WindowId{42},
-                                      pond::render::PresentationEnvironmentRevision{2U})));
+        MakeSnapshot(2), MakeSnapshot(3, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{2U})));
     EXPECT_TRUE(pond::render::ValidateTargetSnapshotUpdate(
-        MakeSnapshot(3),
-        MakeSnapshot(4, pond::platform::WindowId{42},
-                     pond::render::PresentationEnvironmentRevision{3U},
-                     pond::platform::PixelSize{800, 600}, pond::platform::LogicalSize{640, 480})));
+        MakeSnapshot(3), MakeSnapshot(4, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{3U},
+                                      ponder::platform::PixelSize{800, 600}, ponder::platform::LogicalSize{640, 480})));
 
-    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(
-                          MakeSnapshot(1), MakeSnapshot(2, pond::platform::WindowId{7})),
+    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(1), MakeSnapshot(2, ponder::platform::WindowId{7})),
                       pond::render::RenderErrorCode::InvalidArgument);
-    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(2)),
-                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(2)), pond::render::RenderErrorCode::InvalidState);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(
-                          MakeSnapshot(2),
-                          MakeSnapshot(2, pond::platform::WindowId{42},
-                                       pond::render::PresentationEnvironmentRevision{2U},
-                                       pond::platform::PixelSize{.width = 800, .height = 600},
-                                       pond::platform::LogicalSize{.width = 640, .height = 480})),
+                          MakeSnapshot(2), MakeSnapshot(2, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{2U},
+                                                        ponder::platform::PixelSize{.width = 800, .height = 600},
+                                                        ponder::platform::LogicalSize{.width = 640, .height = 480})),
                       pond::render::RenderErrorCode::InvalidState);
-    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(1)),
-                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), MakeSnapshot(1)), pond::render::RenderErrorCode::InvalidState);
     ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(
-                          MakeSnapshot(2, pond::platform::WindowId{42},
-                                       pond::render::PresentationEnvironmentRevision{2U}),
-                          MakeSnapshot(3, pond::platform::WindowId{42},
-                                       pond::render::PresentationEnvironmentRevision{1U})),
+                          MakeSnapshot(2, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{2U}),
+                          MakeSnapshot(3, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{1U})),
                       pond::render::RenderErrorCode::InvalidState);
-    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(
-                          MakeSnapshot(2), pond::render::RenderTargetSnapshot{}),
+    ExpectRenderError(pond::render::ValidateTargetSnapshotUpdate(MakeSnapshot(2), pond::render::RenderTargetSnapshot{}),
                       pond::render::RenderErrorCode::InvalidArgument);
 }
 
 TEST(RenderThreadingHandoffTests, BootstrapTracksPreparedSurfaceChildrenAcrossMoves)
 {
-    auto bootstrapResult = pond::render::RenderBootstrap::Create(
-        {.validationMode = pond::render::RenderValidationMode::Synchronization});
+    auto bootstrapResult = pond::render::RenderBootstrap::Create({.validationMode = pond::render::RenderValidationMode::Synchronization});
     ASSERT_TRUE(bootstrapResult);
     pond::render::RenderBootstrap bootstrap = std::move(bootstrapResult).GetValue();
 
@@ -124,8 +103,7 @@ TEST(RenderThreadingHandoffTests, BootstrapTracksPreparedSurfaceChildrenAcrossMo
     EXPECT_FALSE(bootstrap.HasActiveChildren());
     const pond::render::RenderBootstrapDiagnostics diagnostics = bootstrap.GetDiagnostics();
     EXPECT_EQ(diagnostics.backend, pond::render::RenderBackendKind::Vulkan);
-    EXPECT_EQ(diagnostics.requestedValidationMode,
-              pond::render::RenderValidationMode::Synchronization);
+    EXPECT_EQ(diagnostics.requestedValidationMode, pond::render::RenderValidationMode::Synchronization);
     EXPECT_EQ(diagnostics.enabledValidationMode, pond::render::RenderValidationMode::Disabled);
     EXPECT_EQ(diagnostics.negotiatedApiVersion, 0U);
     EXPECT_FALSE(diagnostics.validationEnabled);
@@ -142,14 +120,11 @@ TEST(RenderThreadingHandoffTests, BootstrapTracksPreparedSurfaceChildrenAcrossMo
         EXPECT_TRUE(bootstrap.HasActiveChildren());
         ASSERT_TRUE(surface.TransferToCurrentThread(surface.GetTargetSnapshot()));
 
-        const auto failedSelection =
-            bootstrap.SelectAdapter(surface, pond::render::RenderAdapterSelectionDesc{});
+        const auto failedSelection = bootstrap.SelectAdapter(surface, pond::render::RenderAdapterSelectionDesc{});
         ExpectRenderError(failedSelection, pond::render::RenderErrorCode::InvalidState);
-        const pond::render::RenderBootstrapDiagnostics failedDiagnostics =
-            bootstrap.GetDiagnostics();
+        const pond::render::RenderBootstrapDiagnostics failedDiagnostics = bootstrap.GetDiagnostics();
         ASSERT_TRUE(failedDiagnostics.lastFailure.has_value());
-        EXPECT_EQ(failedDiagnostics.lastFailure->renderCode,
-                  pond::render::RenderErrorCode::InvalidState);
+        EXPECT_EQ(failedDiagnostics.lastFailure->renderCode, pond::render::RenderErrorCode::InvalidState);
         EXPECT_EQ(failedDiagnostics.lastFailure->operation, "SelectAdapter");
         EXPECT_EQ(failedDiagnostics.lastFailure->windowId, surface.GetWindowId());
 
@@ -183,31 +158,30 @@ TEST(RenderThreadingHandoffTests, PreparedSurfaceTransfersOnceToCallerSelectedRe
     std::optional<pond::core::ErrorCode> verifyError;
     std::latch transferComplete{1};
     std::latch releaseSurface{1};
-    std::thread renderThread{[&surface, &transferSucceeded, &verifySucceededOnRenderThread,
-                              &transferError, &verifyError, &transferComplete, &releaseSurface]()
-                             {
-                                 pond::core::VoidResult transfer =
-                                     surface.TransferToCurrentThread(MakeSnapshot());
-                                 transferSucceeded = static_cast<bool>(transfer);
-                                 if (!transfer)
-                                 {
-                                     transferError = transfer.GetError().GetCode();
-                                 }
+    std::thread renderThread{
+        [&surface, &transferSucceeded, &verifySucceededOnRenderThread, &transferError, &verifyError, &transferComplete, &releaseSurface]()
+        {
+            pond::core::VoidResult transfer = surface.TransferToCurrentThread(MakeSnapshot());
+            transferSucceeded = static_cast<bool>(transfer);
+            if (!transfer)
+            {
+                transferError = transfer.GetError().GetCode();
+            }
 
-                                 pond::core::VoidResult verify = surface.VerifyRenderThread();
-                                 verifySucceededOnRenderThread = static_cast<bool>(verify);
-                                 if (!verify)
-                                 {
-                                     verifyError = verify.GetError().GetCode();
-                                 }
+            pond::core::VoidResult verify = surface.VerifyRenderThread();
+            verifySucceededOnRenderThread = static_cast<bool>(verify);
+            if (!verify)
+            {
+                verifyError = verify.GetError().GetCode();
+            }
 
-                                 transferComplete.count_down();
-                                 releaseSurface.wait();
-                                 if (transferSucceeded)
-                                 {
-                                     surface = pond::render::PreparedSurface{};
-                                 }
-                             }};
+            transferComplete.count_down();
+            releaseSurface.wait();
+            if (transferSucceeded)
+            {
+                surface = pond::render::PreparedSurface{};
+            }
+        }};
     transferComplete.wait();
 
     EXPECT_TRUE(transferSucceeded);
@@ -218,8 +192,7 @@ TEST(RenderThreadingHandoffTests, PreparedSurfaceTransfersOnceToCallerSelectedRe
     EXPECT_EQ(surface.GetTargetSnapshot(), MakeSnapshot());
 
     ExpectRenderError(surface.VerifyRenderThread(), pond::render::RenderErrorCode::InvalidState);
-    ExpectRenderError(surface.TransferToCurrentThread(MakeSnapshot(3)),
-                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(surface.TransferToCurrentThread(MakeSnapshot(3)), pond::render::RenderErrorCode::InvalidState);
 
     releaseSurface.count_down();
     renderThread.join();
@@ -227,60 +200,45 @@ TEST(RenderThreadingHandoffTests, PreparedSurfaceTransfersOnceToCallerSelectedRe
     EXPECT_EQ(bootstrap.GetActivePreparedSurfaceCount(), 0U);
 }
 
-TEST(RenderThreadingHandoffTests,
-     PreparedSurfaceRejectsOlderAndConflictingStateButAcceptsNewerState)
+TEST(RenderThreadingHandoffTests, PreparedSurfaceRejectsOlderAndConflictingStateButAcceptsNewerState)
 {
     auto bootstrapResult = pond::render::RenderBootstrap::Create({});
     ASSERT_TRUE(bootstrapResult);
     pond::render::RenderBootstrap bootstrap = std::move(bootstrapResult).GetValue();
 
-    auto wrongWindowSurfaceResult =
-        CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(1)));
+    auto wrongWindowSurfaceResult = CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(1)));
     ASSERT_TRUE(wrongWindowSurfaceResult);
-    pond::render::PreparedSurface wrongWindowSurface =
-        std::move(wrongWindowSurfaceResult).GetValue();
-    ExpectRenderError(
-        wrongWindowSurface.TransferToCurrentThread(MakeSnapshot(2, pond::platform::WindowId{7})),
-        pond::render::RenderErrorCode::InvalidArgument);
+    pond::render::PreparedSurface wrongWindowSurface = std::move(wrongWindowSurfaceResult).GetValue();
+    ExpectRenderError(wrongWindowSurface.TransferToCurrentThread(MakeSnapshot(2, ponder::platform::WindowId{7})),
+                      pond::render::RenderErrorCode::InvalidArgument);
 
-    auto staleSurfaceResult =
-        CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(3)));
+    auto staleSurfaceResult = CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(3)));
     ASSERT_TRUE(staleSurfaceResult);
     pond::render::PreparedSurface staleSurface = std::move(staleSurfaceResult).GetValue();
-    ExpectRenderError(staleSurface.TransferToCurrentThread(MakeSnapshot(2)),
-                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(staleSurface.TransferToCurrentThread(MakeSnapshot(2)), pond::render::RenderErrorCode::InvalidState);
 
-    auto conflictingSurfaceResult =
-        CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(3)));
+    auto conflictingSurfaceResult = CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(3)));
     ASSERT_TRUE(conflictingSurfaceResult);
-    pond::render::PreparedSurface conflictingSurface =
-        std::move(conflictingSurfaceResult).GetValue();
-    ExpectRenderError(conflictingSurface.TransferToCurrentThread(
-                          MakeSnapshot(3, pond::platform::WindowId{42},
-                                       pond::render::PresentationEnvironmentRevision{1U},
-                                       pond::platform::PixelSize{.width = 1024, .height = 768})),
-                      pond::render::RenderErrorCode::InvalidState);
+    pond::render::PreparedSurface conflictingSurface = std::move(conflictingSurfaceResult).GetValue();
+    ExpectRenderError(
+        conflictingSurface.TransferToCurrentThread(MakeSnapshot(3, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{1U},
+                                                                ponder::platform::PixelSize{.width = 1024, .height = 768})),
+        pond::render::RenderErrorCode::InvalidState);
 
     auto regressingSurfaceResult = CreatePreparedSurfaceForTest(
-        bootstrap,
-        MakeSurfaceDesc(MakeSnapshot(3, pond::platform::WindowId{42},
-                                     pond::render::PresentationEnvironmentRevision{2U})));
+        bootstrap, MakeSurfaceDesc(MakeSnapshot(3, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{2U})));
     ASSERT_TRUE(regressingSurfaceResult);
     pond::render::PreparedSurface regressingSurface = std::move(regressingSurfaceResult).GetValue();
     ExpectRenderError(
-        regressingSurface.TransferToCurrentThread(MakeSnapshot(
-            4, pond::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{1U})),
+        regressingSurface.TransferToCurrentThread(MakeSnapshot(4, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{1U})),
         pond::render::RenderErrorCode::InvalidState);
 
-    auto newerSurfaceResult =
-        CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(3)));
+    auto newerSurfaceResult = CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc(MakeSnapshot(3)));
     ASSERT_TRUE(newerSurfaceResult);
     pond::render::PreparedSurface newerSurface = std::move(newerSurfaceResult).GetValue();
-    EXPECT_TRUE(newerSurface.TransferToCurrentThread(MakeSnapshot(
-        4, pond::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{2U})));
-    EXPECT_EQ(newerSurface.GetTargetSnapshot(),
-              MakeSnapshot(4, pond::platform::WindowId{42},
-                           pond::render::PresentationEnvironmentRevision{2U}));
+    EXPECT_TRUE(
+        newerSurface.TransferToCurrentThread(MakeSnapshot(4, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{2U})));
+    EXPECT_EQ(newerSurface.GetTargetSnapshot(), MakeSnapshot(4, ponder::platform::WindowId{42}, pond::render::PresentationEnvironmentRevision{2U}));
 }
 
 TEST(RenderThreadingHandoffTests, PreparedSurfaceCreationIsOwnerThreadOnly)
@@ -293,8 +251,7 @@ TEST(RenderThreadingHandoffTests, PreparedSurfaceCreationIsOwnerThreadOnly)
     std::optional<pond::core::ErrorCode> wrongThreadCode;
     std::thread worker{[&bootstrap, &createdOnWrongThread, &wrongThreadCode]()
                        {
-                           auto surfaceResult =
-                               CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc());
+                           auto surfaceResult = CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc());
                            createdOnWrongThread = static_cast<bool>(surfaceResult);
                            if (!surfaceResult)
                            {
@@ -305,8 +262,7 @@ TEST(RenderThreadingHandoffTests, PreparedSurfaceCreationIsOwnerThreadOnly)
 
     EXPECT_FALSE(createdOnWrongThread);
     ASSERT_TRUE(wrongThreadCode.has_value());
-    EXPECT_EQ(*wrongThreadCode,
-              pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidState));
+    EXPECT_EQ(*wrongThreadCode, pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidState));
     EXPECT_EQ(bootstrap.GetActivePreparedSurfaceCount(), 0U);
 }
 
@@ -316,8 +272,8 @@ TEST(RenderThreadingHandoffTests, SurfaceLossRecoveryUsesAFreshOwnerThreadPrepar
     ASSERT_TRUE(bootstrapResult);
     pond::render::RenderBootstrap bootstrap = std::move(bootstrapResult).GetValue();
 
-    const pond::render::SurfacePreparationDesc recoveryDesc = MakeSurfaceDesc(
-        MakeSnapshot(10), pond::render::SurfacePreparationReason::SurfaceLossRecovery);
+    const pond::render::SurfacePreparationDesc recoveryDesc =
+        MakeSurfaceDesc(MakeSnapshot(10), pond::render::SurfacePreparationReason::SurfaceLossRecovery);
     ASSERT_TRUE(pond::render::IsValid(recoveryDesc));
 
     auto surfaceResult = CreatePreparedSurfaceForTest(bootstrap, recoveryDesc);
@@ -353,8 +309,7 @@ TEST(RenderThreadingHandoffTests, ShutdownRejectsLivePreparedSurfaceWithoutMutat
     ASSERT_TRUE(bootstrap.Shutdown());
     EXPECT_TRUE(bootstrap.IsShutdown());
     EXPECT_FALSE(bootstrap.IsValid());
-    ExpectRenderError(CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc()),
-                      pond::render::RenderErrorCode::InvalidState);
+    ExpectRenderError(CreatePreparedSurfaceForTest(bootstrap, MakeSurfaceDesc()), pond::render::RenderErrorCode::InvalidState);
 }
 
 TEST(RenderThreadingHandoffTests, ShutdownRejectsWrongOwnerThreadWithoutMutation)
@@ -378,8 +333,7 @@ TEST(RenderThreadingHandoffTests, ShutdownRejectsWrongOwnerThreadWithoutMutation
 
     EXPECT_FALSE(shutdownSucceeded);
     ASSERT_TRUE(shutdownError.has_value());
-    EXPECT_EQ(*shutdownError,
-              pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidState));
+    EXPECT_EQ(*shutdownError, pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidState));
     EXPECT_TRUE(bootstrap.IsValid());
     EXPECT_FALSE(bootstrap.IsShutdown());
     EXPECT_TRUE(bootstrap.IsOwnerThread());
@@ -399,9 +353,9 @@ TEST(RenderThreadingHandoffTests, PreparedSurfaceCopiesDescriptorStateAtCreation
     ASSERT_TRUE(surfaceResult);
     pond::render::PreparedSurface surface = std::move(surfaceResult).GetValue();
 
-    desc = MakeSurfaceDesc(MakeSnapshot(99, pond::platform::WindowId{77}));
+    desc = MakeSurfaceDesc(MakeSnapshot(99, ponder::platform::WindowId{77}));
 
     EXPECT_EQ(surface.GetTargetSnapshot(), MakeSnapshot(1));
-    EXPECT_EQ(surface.GetWindowId(), pond::platform::WindowId{42});
+    EXPECT_EQ(surface.GetWindowId(), ponder::platform::WindowId{42});
 }
 } // namespace

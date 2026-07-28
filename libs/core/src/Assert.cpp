@@ -1,6 +1,6 @@
 #include <ponder/core/Assert.hpp>
+#include <ponder/core/Exception.hpp>
 #include <ponder/core/Log.hpp>
-#include <ponder/core/PonderException.hpp>
 
 #include <atomic>
 #include <cstdlib>
@@ -15,7 +15,7 @@
 #include <csignal>
 #endif
 
-namespace pond::core
+namespace ponder::core
 {
 namespace
 {
@@ -58,9 +58,8 @@ AssertionFailureHandler SetVerifyFailureHandler(AssertionFailureHandler handler)
     return verifyFailureHandler.exchange(handler ? handler : DefaultVerifyFailureHandler);
 }
 
-ScopedAssertionFailureHandler::ScopedAssertionFailureHandler(
-    AssertionFailureHandler handler) noexcept
-    : m_previousHandler(SetAssertionFailureHandler(handler))
+ScopedAssertionFailureHandler::ScopedAssertionFailureHandler(AssertionFailureHandler handler) noexcept :
+    m_previousHandler(SetAssertionFailureHandler(handler))
 {
 }
 
@@ -69,8 +68,8 @@ ScopedAssertionFailureHandler::~ScopedAssertionFailureHandler()
     (void)SetAssertionFailureHandler(m_previousHandler);
 }
 
-ScopedVerifyFailureHandler::ScopedVerifyFailureHandler(AssertionFailureHandler handler) noexcept
-    : m_previousHandler(SetVerifyFailureHandler(handler))
+ScopedVerifyFailureHandler::ScopedVerifyFailureHandler(AssertionFailureHandler handler) noexcept :
+    m_previousHandler(SetVerifyFailureHandler(handler))
 {
 }
 
@@ -111,11 +110,9 @@ void DebugBreak() noexcept
 #endif
 }
 
-[[noreturn]] void HandleAssertionFailure(std::string_view expression, std::string message,
-                                         std::source_location location)
+[[noreturn]] void HandleAssertionFailure(std::string_view expression, std::string message, std::source_location location)
 {
-    const AssertionFailure failure{AssertionFailureKind::Assertion, std::string{expression},
-                                   std::move(message), location};
+    const AssertionFailure failure{AssertionFailureKind::Assertion, std::string{expression}, std::move(message), location};
 
     assertionFailureHandler.load()(failure);
 
@@ -123,25 +120,26 @@ void DebugBreak() noexcept
     std::abort();
 }
 
-[[noreturn]] void HandleVerifyFailure(std::string_view expression, std::string message,
-                                      std::source_location location)
+[[noreturn]] void HandleVerifyFailure(std::string_view expression, std::string message, std::source_location location)
 {
-    const AssertionFailure failure{AssertionFailureKind::Verify, std::string{expression},
-                                   std::move(message), location};
+    const AssertionFailure failure{AssertionFailureKind::Verify, std::string{expression}, std::move(message), location};
 
     verifyFailureHandler.load()(failure);
 
-    throw MakePonderException(FormatAssertionFailure(failure), location);
+    throw MakeException(FormatAssertionFailure(failure), location);
 }
 
 [[noreturn]] void HandleUnreachable(std::string message, std::source_location location)
 {
-    const AssertionFailure failure{AssertionFailureKind::Unreachable, std::string{},
-                                   std::move(message), location};
+    const AssertionFailure failure{AssertionFailureKind::Unreachable, std::string{}, std::move(message), location};
 
     assertionFailureHandler.load()(failure);
 
+#if defined(NDEBUG)
+    throw MakeException(FormatAssertionFailure(failure), location);
+#else
     DebugBreak();
     std::abort();
+#endif
 }
-} // namespace pond::core
+} // namespace ponder::core

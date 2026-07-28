@@ -13,15 +13,17 @@ class UiTargetId final
 public:
     constexpr UiTargetId() noexcept = default;
 
-    explicit constexpr UiTargetId(std::uint64_t value) noexcept : m_value{value} {}
+    explicit constexpr UiTargetId(std::uint64_t value) noexcept :
+        m_value{value}
+    {
+    }
 
     [[nodiscard]] constexpr std::uint64_t GetValue() const noexcept
     {
         return m_value;
     }
 
-    [[nodiscard]] friend constexpr auto operator<=>(const UiTargetId& lhs,
-                                                    const UiTargetId& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const UiTargetId& lhs, const UiTargetId& rhs) noexcept = default;
 
 private:
     std::uint64_t m_value{};
@@ -32,15 +34,17 @@ class UiTargetRevision final
 public:
     constexpr UiTargetRevision() noexcept = default;
 
-    explicit constexpr UiTargetRevision(std::uint64_t value) noexcept : m_value{value} {}
+    explicit constexpr UiTargetRevision(std::uint64_t value) noexcept :
+        m_value{value}
+    {
+    }
 
     [[nodiscard]] constexpr std::uint64_t GetValue() const noexcept
     {
         return m_value;
     }
 
-    [[nodiscard]] friend constexpr auto operator<=>(const UiTargetRevision& lhs,
-                                                    const UiTargetRevision& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const UiTargetRevision& lhs, const UiTargetRevision& rhs) noexcept = default;
 
 private:
     std::uint64_t m_value{};
@@ -51,15 +55,17 @@ class UiMetricsRevision final
 public:
     constexpr UiMetricsRevision() noexcept = default;
 
-    explicit constexpr UiMetricsRevision(std::uint64_t value) noexcept : m_value{value} {}
+    explicit constexpr UiMetricsRevision(std::uint64_t value) noexcept :
+        m_value{value}
+    {
+    }
 
     [[nodiscard]] constexpr std::uint64_t GetValue() const noexcept
     {
         return m_value;
     }
 
-    [[nodiscard]] friend constexpr auto operator<=>(
-        const UiMetricsRevision& lhs, const UiMetricsRevision& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr auto operator<=>(const UiMetricsRevision& lhs, const UiMetricsRevision& rhs) noexcept = default;
 
 private:
     std::uint64_t m_value{};
@@ -70,13 +76,10 @@ struct LogicalToFramebufferScale final
     float x{};
     float y{};
 
-    [[nodiscard]] friend constexpr bool operator==(const LogicalToFramebufferScale& lhs,
-                                                   const LogicalToFramebufferScale& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const LogicalToFramebufferScale& lhs, const LogicalToFramebufferScale& rhs) noexcept = default;
 };
 
-[[nodiscard]] constexpr float DeriveLogicalToFramebufferScale(
-    float logicalExtent, std::uint32_t framebufferExtent) noexcept
+[[nodiscard]] constexpr float DeriveLogicalToFramebufferScale(float logicalExtent, std::uint32_t framebufferExtent) noexcept
 {
     if (logicalExtent <= 0.0F || framebufferExtent == 0U)
     {
@@ -121,22 +124,20 @@ public:
         return m_logicalToFramebufferScale;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const UiTargetMetrics& lhs,
-                                                   const UiTargetMetrics& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const UiTargetMetrics& lhs, const UiTargetMetrics& rhs) noexcept = default;
 
 private:
-    friend core::Result<UiTargetMetrics> MakeUiTargetMetrics(
-        UiTargetId targetId, UiTargetRevision targetRevision, UiMetricsRevision metricsRevision,
-        LogicalSize logicalSize, FramebufferPixelSize framebufferPixelSize);
+    friend core::Result<UiTargetMetrics> MakeUiTargetMetrics(UiTargetId targetId, UiTargetRevision targetRevision, UiMetricsRevision metricsRevision,
+                                                             LogicalSize logicalSize, FramebufferPixelSize framebufferPixelSize);
 
-    constexpr UiTargetMetrics(UiTargetId targetId, UiTargetRevision targetRevision,
-                              UiMetricsRevision metricsRevision, LogicalSize logicalSize,
-                              FramebufferPixelSize framebufferPixelSize,
-                              LogicalToFramebufferScale logicalToFramebufferScale) noexcept
-        : m_targetId{targetId}, m_targetRevision{targetRevision},
-          m_metricsRevision{metricsRevision}, m_logicalSize{logicalSize},
-          m_framebufferPixelSize{framebufferPixelSize},
-          m_logicalToFramebufferScale{logicalToFramebufferScale}
+    constexpr UiTargetMetrics(UiTargetId targetId, UiTargetRevision targetRevision, UiMetricsRevision metricsRevision, LogicalSize logicalSize,
+                              FramebufferPixelSize framebufferPixelSize, LogicalToFramebufferScale logicalToFramebufferScale) noexcept :
+        m_targetId{targetId},
+        m_targetRevision{targetRevision},
+        m_metricsRevision{metricsRevision},
+        m_logicalSize{logicalSize},
+        m_framebufferPixelSize{framebufferPixelSize},
+        m_logicalToFramebufferScale{logicalToFramebufferScale}
     {
     }
 
@@ -170,8 +171,7 @@ private:
 
 [[nodiscard]] constexpr bool IsDrawable(const UiTargetMetrics& metrics) noexcept
 {
-    return HasPositiveArea(metrics.GetLogicalSize()) &&
-           HasPositiveArea(metrics.GetFramebufferPixelSize());
+    return HasPositiveArea(metrics.GetLogicalSize()) && HasPositiveArea(metrics.GetFramebufferPixelSize());
 }
 
 [[nodiscard]] constexpr bool IsValid(const UiTargetMetrics& metrics) noexcept
@@ -179,31 +179,26 @@ private:
     const LogicalSize logicalSize = metrics.GetLogicalSize();
     const FramebufferPixelSize framebufferPixelSize = metrics.GetFramebufferPixelSize();
     const LogicalToFramebufferScale scale = metrics.GetLogicalToFramebufferScale();
-    const LogicalToFramebufferScale derivedScale{
-        DeriveLogicalToFramebufferScale(logicalSize.width, framebufferPixelSize.width),
-        DeriveLogicalToFramebufferScale(logicalSize.height, framebufferPixelSize.height)};
+    const LogicalToFramebufferScale derivedScale{DeriveLogicalToFramebufferScale(logicalSize.width, framebufferPixelSize.width),
+                                                 DeriveLogicalToFramebufferScale(logicalSize.height, framebufferPixelSize.height)};
 
-    return IsValid(metrics.GetTargetId()) && IsValid(metrics.GetTargetRevision()) &&
-           IsValid(metrics.GetMetricsRevision()) && IsValid(logicalSize) && IsValid(scale) &&
-           scale == derivedScale;
+    return IsValid(metrics.GetTargetId()) && IsValid(metrics.GetTargetRevision()) && IsValid(metrics.GetMetricsRevision()) && IsValid(logicalSize) &&
+           IsValid(scale) && scale == derivedScale;
 }
 
-[[nodiscard]] inline core::Result<UiTargetMetrics> MakeUiTargetMetrics(
-    UiTargetId targetId, UiTargetRevision targetRevision, UiMetricsRevision metricsRevision,
-    LogicalSize logicalSize, FramebufferPixelSize framebufferPixelSize)
+[[nodiscard]] inline core::Result<UiTargetMetrics> MakeUiTargetMetrics(UiTargetId targetId, UiTargetRevision targetRevision,
+                                                                       UiMetricsRevision metricsRevision, LogicalSize logicalSize,
+                                                                       FramebufferPixelSize framebufferPixelSize)
 {
-    const LogicalToFramebufferScale scale{
-        DeriveLogicalToFramebufferScale(logicalSize.width, framebufferPixelSize.width),
-        DeriveLogicalToFramebufferScale(logicalSize.height, framebufferPixelSize.height)};
-    const UiTargetMetrics metrics{targetId,    targetRevision,       metricsRevision,
-                                  logicalSize, framebufferPixelSize, scale};
+    const LogicalToFramebufferScale scale{DeriveLogicalToFramebufferScale(logicalSize.width, framebufferPixelSize.width),
+                                          DeriveLogicalToFramebufferScale(logicalSize.height, framebufferPixelSize.height)};
+    const UiTargetMetrics metrics{targetId, targetRevision, metricsRevision, logicalSize, framebufferPixelSize, scale};
 
     if (!IsValid(metrics))
     {
-        return MakeUiFailure<UiTargetMetrics>(
-            UiErrorCode::InvalidMetrics,
-            "UI target metrics require valid identity, revisions, finite logical size, and "
-            "finite extent-derived scale.");
+        return MakeUiFailure<UiTargetMetrics>(UiErrorCode::InvalidMetrics,
+                                              "UI target metrics require valid identity, revisions, finite logical size, and "
+                                              "finite extent-derived scale.");
     }
 
     return metrics;

@@ -48,16 +48,11 @@ inline constexpr char kWin32SurfaceExtensionName[] = "VK_KHR_win32_surface";
 inline constexpr char kX11SurfaceExtensionName[] = "VK_KHR_xlib_surface";
 inline constexpr char kWaylandSurfaceExtensionName[] = "VK_KHR_wayland_surface";
 inline constexpr char kSwapchainExtensionName[] = "VK_KHR_swapchain";
-inline constexpr char kGetSurfaceCapabilities2ExtensionName[] =
-    VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
-inline constexpr char kKhrSurfaceMaintenance1ExtensionName[] =
-    VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
-inline constexpr char kExtSurfaceMaintenance1ExtensionName[] =
-    VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
-inline constexpr char kKhrSwapchainMaintenance1ExtensionName[] =
-    VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
-inline constexpr char kExtSwapchainMaintenance1ExtensionName[] =
-    VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+inline constexpr char kGetSurfaceCapabilities2ExtensionName[] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
+inline constexpr char kKhrSurfaceMaintenance1ExtensionName[] = VK_KHR_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+inline constexpr char kExtSurfaceMaintenance1ExtensionName[] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+inline constexpr char kKhrSwapchainMaintenance1ExtensionName[] = VK_KHR_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+inline constexpr char kExtSwapchainMaintenance1ExtensionName[] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
 inline constexpr char kPresentIdExtensionName[] = VK_KHR_PRESENT_ID_EXTENSION_NAME;
 inline constexpr char kPresentWaitExtensionName[] = VK_KHR_PRESENT_WAIT_EXTENSION_NAME;
 inline constexpr char kValidationLayerName[] = "VK_LAYER_KHRONOS_validation";
@@ -149,8 +144,7 @@ struct VulkanValidationSelection final
     return message;
 }
 
-[[nodiscard]] core::Error MakeVulkanError(RenderErrorCode code, std::string_view operation,
-                                          VkResult result)
+[[nodiscard]] core::Error MakeVulkanError(RenderErrorCode code, std::string_view operation, VkResult result)
 {
     std::string message = MakeVulkanFailureMessage(operation, result);
     VulkanDiagnosticScope::Record(BackendDiagnostic{.backend = RenderBackendKind::Vulkan,
@@ -164,8 +158,7 @@ struct VulkanValidationSelection final
 
 [[nodiscard]] std::string FormatVulkanVersion(std::uint32_t version)
 {
-    return std::to_string(VK_API_VERSION_MAJOR(version)) + "." +
-           std::to_string(VK_API_VERSION_MINOR(version)) + "." +
+    return std::to_string(VK_API_VERSION_MAJOR(version)) + "." + std::to_string(VK_API_VERSION_MINOR(version)) + "." +
            std::to_string(VK_API_VERSION_PATCH(version));
 }
 
@@ -270,71 +263,55 @@ struct VulkanValidationSelection final
 [[nodiscard]] bool HasRequiredDispatch(const VulkanGlobalDispatch& dispatch) noexcept
 {
     return dispatch.initialize != nullptr && dispatch.enumerateInstanceVersion != nullptr &&
-           dispatch.enumerateInstanceExtensionProperties != nullptr &&
-           dispatch.enumerateInstanceLayerProperties != nullptr &&
+           dispatch.enumerateInstanceExtensionProperties != nullptr && dispatch.enumerateInstanceLayerProperties != nullptr &&
            dispatch.createInstance != nullptr && dispatch.destroyInstance != nullptr &&
            (dispatch.loadInstanceTable != nullptr || dispatch.loadInstanceOnly != nullptr);
 }
 
 [[nodiscard]] bool HasDebugMessengerDispatch(const VulkanGlobalDispatch& dispatch) noexcept
 {
-    return dispatch.createDebugUtilsMessenger != nullptr &&
-           dispatch.destroyDebugUtilsMessenger != nullptr;
+    return dispatch.createDebugUtilsMessenger != nullptr && dispatch.destroyDebugUtilsMessenger != nullptr;
 }
 
-[[nodiscard]] bool HasSurfaceDispatch(const VulkanGlobalDispatch& dispatch,
-                                      VulkanGlobalDispatch::CreateSurfaceFn createSurface) noexcept
+[[nodiscard]] bool HasSurfaceDispatch(const VulkanGlobalDispatch& dispatch, VulkanGlobalDispatch::CreateSurfaceFn createSurface) noexcept
 {
     return createSurface != nullptr && dispatch.destroySurface != nullptr;
 }
 
 [[nodiscard]] bool HasAdapterDispatch(const VulkanGlobalDispatch& dispatch) noexcept
 {
-    return dispatch.enumeratePhysicalDevices != nullptr &&
-           dispatch.getPhysicalDeviceProperties2 != nullptr &&
-           dispatch.getPhysicalDeviceMemoryProperties != nullptr &&
-           dispatch.getPhysicalDeviceQueueFamilyProperties != nullptr &&
-           dispatch.getPhysicalDeviceSurfaceSupport != nullptr &&
-           dispatch.getPhysicalDeviceSurfaceCapabilities != nullptr &&
-           dispatch.getPhysicalDeviceSurfaceFormats != nullptr &&
-           dispatch.getPhysicalDeviceSurfacePresentModes != nullptr &&
+    return dispatch.enumeratePhysicalDevices != nullptr && dispatch.getPhysicalDeviceProperties2 != nullptr &&
+           dispatch.getPhysicalDeviceMemoryProperties != nullptr && dispatch.getPhysicalDeviceQueueFamilyProperties != nullptr &&
+           dispatch.getPhysicalDeviceSurfaceSupport != nullptr && dispatch.getPhysicalDeviceSurfaceCapabilities != nullptr &&
+           dispatch.getPhysicalDeviceSurfaceFormats != nullptr && dispatch.getPhysicalDeviceSurfacePresentModes != nullptr &&
            dispatch.enumerateDeviceExtensionProperties != nullptr;
 }
 
 [[nodiscard]] bool HasDeviceDispatch(const VulkanGlobalDispatch& dispatch) noexcept
 {
-    return HasAdapterDispatch(dispatch) && dispatch.getPhysicalDeviceFeatures2 != nullptr &&
-           dispatch.createDevice != nullptr && dispatch.destroyDevice != nullptr &&
-           (dispatch.loadDeviceTable != nullptr || dispatch.loadDevice != nullptr) &&
-           dispatch.getDeviceQueue != nullptr && dispatch.deviceWaitIdle != nullptr &&
-           dispatch.queueWaitIdle != nullptr &&
-           (dispatch.createOwnerLocalAllocator != nullptr || dispatch.createAllocator != nullptr) &&
-           dispatch.destroyAllocator != nullptr;
+    return HasAdapterDispatch(dispatch) && dispatch.getPhysicalDeviceFeatures2 != nullptr && dispatch.createDevice != nullptr &&
+           dispatch.destroyDevice != nullptr && (dispatch.loadDeviceTable != nullptr || dispatch.loadDevice != nullptr) &&
+           dispatch.getDeviceQueue != nullptr && dispatch.deviceWaitIdle != nullptr && dispatch.queueWaitIdle != nullptr &&
+           (dispatch.createOwnerLocalAllocator != nullptr || dispatch.createAllocator != nullptr) && dispatch.destroyAllocator != nullptr;
 }
 
 [[nodiscard]] bool HasSwapchainDispatch(const VulkanGlobalDispatch& dispatch) noexcept
 {
-    return dispatch.getPhysicalDeviceSurfaceCapabilities != nullptr &&
-           dispatch.getPhysicalDeviceSurfaceFormats != nullptr &&
-           dispatch.getPhysicalDeviceSurfacePresentModes != nullptr &&
-           dispatch.createSwapchain != nullptr && dispatch.destroySwapchain != nullptr &&
-           dispatch.getSwapchainImages != nullptr && dispatch.createImageView != nullptr &&
-           dispatch.destroyImageView != nullptr && dispatch.createRenderPass != nullptr &&
-           dispatch.destroyRenderPass != nullptr && dispatch.createFramebuffer != nullptr &&
+    return dispatch.getPhysicalDeviceSurfaceCapabilities != nullptr && dispatch.getPhysicalDeviceSurfaceFormats != nullptr &&
+           dispatch.getPhysicalDeviceSurfacePresentModes != nullptr && dispatch.createSwapchain != nullptr && dispatch.destroySwapchain != nullptr &&
+           dispatch.getSwapchainImages != nullptr && dispatch.createImageView != nullptr && dispatch.destroyImageView != nullptr &&
+           dispatch.createRenderPass != nullptr && dispatch.destroyRenderPass != nullptr && dispatch.createFramebuffer != nullptr &&
            dispatch.destroyFramebuffer != nullptr;
 }
 
 [[nodiscard]] bool HasFrameDispatch(const VulkanGlobalDispatch& dispatch) noexcept
 {
-    return dispatch.createCommandPool != nullptr && dispatch.destroyCommandPool != nullptr &&
-           dispatch.allocateCommandBuffers != nullptr && dispatch.resetCommandBuffer != nullptr &&
-           dispatch.beginCommandBuffer != nullptr && dispatch.endCommandBuffer != nullptr &&
-           dispatch.cmdBeginRenderPass != nullptr && dispatch.cmdEndRenderPass != nullptr &&
-           dispatch.createSemaphore != nullptr && dispatch.destroySemaphore != nullptr &&
-           dispatch.createFence != nullptr && dispatch.destroyFence != nullptr &&
-           dispatch.waitForFences != nullptr && dispatch.resetFences != nullptr &&
-           dispatch.acquireNextImage != nullptr && dispatch.queueSubmit != nullptr &&
-           dispatch.queuePresent != nullptr;
+    return dispatch.createCommandPool != nullptr && dispatch.destroyCommandPool != nullptr && dispatch.allocateCommandBuffers != nullptr &&
+           dispatch.resetCommandBuffer != nullptr && dispatch.beginCommandBuffer != nullptr && dispatch.endCommandBuffer != nullptr &&
+           dispatch.cmdBeginRenderPass != nullptr && dispatch.cmdEndRenderPass != nullptr && dispatch.createSemaphore != nullptr &&
+           dispatch.destroySemaphore != nullptr && dispatch.createFence != nullptr && dispatch.destroyFence != nullptr &&
+           dispatch.waitForFences != nullptr && dispatch.resetFences != nullptr && dispatch.acquireNextImage != nullptr &&
+           dispatch.queueSubmit != nullptr && dispatch.queuePresent != nullptr;
 }
 
 template <typename HandleType>
@@ -351,12 +328,10 @@ template <typename HandleType>
 }
 
 template <typename HandleType>
-void TryNameObject(const VulkanGlobalDispatch& dispatch, VkDevice device, HandleType handle,
-                   VkObjectType objectType, const char* name) noexcept
+void TryNameObject(const VulkanGlobalDispatch& dispatch, VkDevice device, HandleType handle, VkObjectType objectType, const char* name) noexcept
 {
     const std::uint64_t objectHandle = ToDebugObjectHandle(handle);
-    if (dispatch.setDebugUtilsObjectName == nullptr || device == VK_NULL_HANDLE ||
-        objectHandle == 0U || name == nullptr)
+    if (dispatch.setDebugUtilsObjectName == nullptr || device == VK_NULL_HANDLE || objectHandle == 0U || name == nullptr)
     {
         return;
     }
@@ -369,8 +344,7 @@ void TryNameObject(const VulkanGlobalDispatch& dispatch, VkDevice device, Handle
     [[maybe_unused]] const VkResult result = dispatch.setDebugUtilsObjectName(device, &nameInfo);
 }
 
-[[nodiscard]] std::string MakeTargetDebugObjectName(platform::WindowId windowId,
-                                                    std::string_view resourceName)
+[[nodiscard]] std::string MakeTargetDebugObjectName(ponder::platform::WindowId windowId, std::string_view resourceName)
 {
     std::string name{"pond.render.target/window:"};
     name += std::to_string(windowId.GetValue());
@@ -379,9 +353,7 @@ void TryNameObject(const VulkanGlobalDispatch& dispatch, VkDevice device, Handle
     return name;
 }
 
-[[nodiscard]] std::string MakeTargetDebugObjectName(platform::WindowId windowId,
-                                                    std::string_view resourceName,
-                                                    std::size_t resourceIndex)
+[[nodiscard]] std::string MakeTargetDebugObjectName(ponder::platform::WindowId windowId, std::string_view resourceName, std::size_t resourceIndex)
 {
     std::string name = MakeTargetDebugObjectName(windowId, resourceName);
     name += '.';
@@ -389,11 +361,9 @@ void TryNameObject(const VulkanGlobalDispatch& dispatch, VkDevice device, Handle
     return name;
 }
 
-void TryBeginLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBuffer,
-                   const char* name) noexcept
+void TryBeginLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBuffer, const char* name) noexcept
 {
-    if (dispatch.cmdBeginDebugUtilsLabel == nullptr || commandBuffer == VK_NULL_HANDLE ||
-        name == nullptr)
+    if (dispatch.cmdBeginDebugUtilsLabel == nullptr || commandBuffer == VK_NULL_HANDLE || name == nullptr)
     {
         return;
     }
@@ -415,17 +385,15 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
         dispatch.cmdEndDebugUtilsLabel(commandBuffer);
     }
 }
-[[nodiscard]] core::Result<std::vector<VkExtensionProperties>> EnumerateInstanceExtensions(
-    const VulkanGlobalDispatch& dispatch, const char* layerName = nullptr)
+[[nodiscard]] core::Result<std::vector<VkExtensionProperties>> EnumerateInstanceExtensions(const VulkanGlobalDispatch& dispatch,
+                                                                                           const char* layerName = nullptr)
 {
     std::uint32_t extensionCount{};
-    VkResult result =
-        dispatch.enumerateInstanceExtensionProperties(layerName, &extensionCount, nullptr);
+    VkResult result = dispatch.enumerateInstanceExtensionProperties(layerName, &extensionCount, nullptr);
     if (result != VK_SUCCESS)
     {
         return core::Result<std::vector<VkExtensionProperties>>::FromError(
-            MakeVulkanError(RenderErrorCode::BackendFailure,
-                            "vkEnumerateInstanceExtensionProperties.count", result));
+            MakeVulkanError(RenderErrorCode::BackendFailure, "vkEnumerateInstanceExtensionProperties.count", result));
     }
 
     std::vector<VkExtensionProperties> extensions(extensionCount);
@@ -434,28 +402,25 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
         return core::Result<std::vector<VkExtensionProperties>>::FromValue(std::move(extensions));
     }
 
-    result = dispatch.enumerateInstanceExtensionProperties(layerName, &extensionCount,
-                                                           extensions.data());
+    result = dispatch.enumerateInstanceExtensionProperties(layerName, &extensionCount, extensions.data());
     if (result != VK_SUCCESS && result != VK_INCOMPLETE)
     {
         return core::Result<std::vector<VkExtensionProperties>>::FromError(
-            MakeVulkanError(RenderErrorCode::BackendFailure,
-                            "vkEnumerateInstanceExtensionProperties.read", result));
+            MakeVulkanError(RenderErrorCode::BackendFailure, "vkEnumerateInstanceExtensionProperties.read", result));
     }
 
     extensions.resize(extensionCount);
     return core::Result<std::vector<VkExtensionProperties>>::FromValue(std::move(extensions));
 }
 
-[[nodiscard]] core::Result<std::vector<VkLayerProperties>> EnumerateInstanceLayers(
-    const VulkanGlobalDispatch& dispatch)
+[[nodiscard]] core::Result<std::vector<VkLayerProperties>> EnumerateInstanceLayers(const VulkanGlobalDispatch& dispatch)
 {
     std::uint32_t layerCount{};
     VkResult result = dispatch.enumerateInstanceLayerProperties(&layerCount, nullptr);
     if (result != VK_SUCCESS)
     {
-        return core::Result<std::vector<VkLayerProperties>>::FromError(MakeVulkanError(
-            RenderErrorCode::BackendFailure, "vkEnumerateInstanceLayerProperties.count", result));
+        return core::Result<std::vector<VkLayerProperties>>::FromError(
+            MakeVulkanError(RenderErrorCode::BackendFailure, "vkEnumerateInstanceLayerProperties.count", result));
     }
 
     std::vector<VkLayerProperties> layers(layerCount);
@@ -467,27 +432,24 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
     result = dispatch.enumerateInstanceLayerProperties(&layerCount, layers.data());
     if (result != VK_SUCCESS && result != VK_INCOMPLETE)
     {
-        return core::Result<std::vector<VkLayerProperties>>::FromError(MakeVulkanError(
-            RenderErrorCode::BackendFailure, "vkEnumerateInstanceLayerProperties.read", result));
+        return core::Result<std::vector<VkLayerProperties>>::FromError(
+            MakeVulkanError(RenderErrorCode::BackendFailure, "vkEnumerateInstanceLayerProperties.read", result));
     }
 
     layers.resize(layerCount);
     return core::Result<std::vector<VkLayerProperties>>::FromValue(std::move(layers));
 }
 
-[[nodiscard]] bool ContainsExtension(const std::vector<VkExtensionProperties>& extensions,
-                                     const char* requiredExtension) noexcept
+[[nodiscard]] bool ContainsExtension(const std::vector<VkExtensionProperties>& extensions, const char* requiredExtension) noexcept
 {
     return std::ranges::any_of(extensions,
                                [requiredExtension](const VkExtensionProperties& extension) noexcept
                                {
-                                   return std::strcmp(extension.extensionName, requiredExtension) ==
-                                          0;
+                                   return std::strcmp(extension.extensionName, requiredExtension) == 0;
                                });
 }
 
-[[nodiscard]] bool ContainsLayer(const std::vector<VkLayerProperties>& layers,
-                                 const char* requiredLayer) noexcept
+[[nodiscard]] bool ContainsLayer(const std::vector<VkLayerProperties>& layers, const char* requiredLayer) noexcept
 {
     return std::ranges::any_of(layers,
                                [requiredLayer](const VkLayerProperties& layer) noexcept
@@ -498,8 +460,7 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
 
 [[nodiscard]] bool IsValidationFeatureMode(RenderValidationMode mode) noexcept
 {
-    return mode == RenderValidationMode::Synchronization ||
-           mode == RenderValidationMode::BestPractices || mode == RenderValidationMode::GpuAssisted;
+    return mode == RenderValidationMode::Synchronization || mode == RenderValidationMode::BestPractices || mode == RenderValidationMode::GpuAssisted;
 }
 
 [[nodiscard]] VkValidationFeatureEnableEXT GetValidationFeature(RenderValidationMode mode) noexcept
@@ -521,19 +482,17 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
     return VK_VALIDATION_FEATURE_ENABLE_MAX_ENUM_EXT;
 }
 
-[[nodiscard]] VulkanDebugUtilityHooks MakeDebugUtilityHooks(const VulkanGlobalDispatch& dispatch,
-                                                            bool debugUtilsEnabled) noexcept
+[[nodiscard]] VulkanDebugUtilityHooks MakeDebugUtilityHooks(const VulkanGlobalDispatch& dispatch, bool debugUtilsEnabled) noexcept
 {
-    return VulkanDebugUtilityHooks{
-        .objectNames = debugUtilsEnabled && dispatch.setDebugUtilsObjectName != nullptr,
-        .commandLabels = debugUtilsEnabled && dispatch.cmdBeginDebugUtilsLabel != nullptr &&
-                         dispatch.cmdEndDebugUtilsLabel != nullptr,
-        .timingMarkers = false,
-        .captureRegions = false};
+    return VulkanDebugUtilityHooks{.objectNames = debugUtilsEnabled && dispatch.setDebugUtilsObjectName != nullptr,
+                                   .commandLabels =
+                                       debugUtilsEnabled && dispatch.cmdBeginDebugUtilsLabel != nullptr && dispatch.cmdEndDebugUtilsLabel != nullptr,
+                                   .timingMarkers = false,
+                                   .captureRegions = false};
 }
-[[nodiscard]] core::Result<VulkanValidationSelection> SelectValidationPolicy(
-    RenderValidationMode requestedMode, const std::vector<VkExtensionProperties>& extensions,
-    const std::vector<VkLayerProperties>& layers)
+[[nodiscard]] core::Result<VulkanValidationSelection> SelectValidationPolicy(RenderValidationMode requestedMode,
+                                                                             const std::vector<VkExtensionProperties>& extensions,
+                                                                             const std::vector<VkLayerProperties>& layers)
 {
     VulkanValidationSelection selection{.requestedMode = requestedMode};
     if (requestedMode == RenderValidationMode::Disabled)
@@ -543,8 +502,7 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
 
     const bool hasValidationLayer = ContainsLayer(layers, kValidationLayerName);
     const bool hasDebugUtils = ContainsExtension(extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    const bool hasValidationFeatures =
-        ContainsExtension(extensions, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+    const bool hasValidationFeatures = ContainsExtension(extensions, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
 
     RenderValidationMode effectiveMode = requestedMode;
     if (requestedMode == RenderValidationMode::Default)
@@ -559,18 +517,16 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
 
     if (!hasValidationLayer)
     {
-        return core::Result<VulkanValidationSelection>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedCapability,
-            std::string{"Explicit Vulkan validation requires missing instance layer "} +
-                kValidationLayerName + "."));
+        return core::Result<VulkanValidationSelection>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedCapability,
+                            std::string{"Explicit Vulkan validation requires missing instance layer "} + kValidationLayerName + "."));
     }
 
     if (!hasDebugUtils)
     {
-        return core::Result<VulkanValidationSelection>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedCapability,
-            std::string{"Explicit Vulkan validation requires missing instance extension "} +
-                VK_EXT_DEBUG_UTILS_EXTENSION_NAME + "."));
+        return core::Result<VulkanValidationSelection>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, std::string{"Explicit Vulkan validation requires missing instance extension "} +
+                                                                        VK_EXT_DEBUG_UTILS_EXTENSION_NAME + "."));
     }
 
     selection.enabledMode = effectiveMode;
@@ -583,10 +539,9 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
     {
         if (!hasValidationFeatures)
         {
-            return core::Result<VulkanValidationSelection>::FromError(MakeRenderError(
-                RenderErrorCode::UnsupportedCapability,
-                std::string{"Vulkan validation mode requires missing instance extension "} +
-                    VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME + "."));
+            return core::Result<VulkanValidationSelection>::FromError(
+                MakeRenderError(RenderErrorCode::UnsupportedCapability, std::string{"Vulkan validation mode requires missing instance extension "} +
+                                                                            VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME + "."));
         }
 
         selection.validationFeaturesEnabled = true;
@@ -597,25 +552,20 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
     return core::Result<VulkanValidationSelection>::FromValue(std::move(selection));
 }
 
-[[nodiscard]] VkDebugUtilsMessengerCreateInfoEXT MakeDebugMessengerCreateInfo(
-    VulkanDebugMessengerContext* context) noexcept
+[[nodiscard]] VkDebugUtilsMessengerCreateInfoEXT MakeDebugMessengerCreateInfo(VulkanDebugMessengerContext* context) noexcept
 {
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                              VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = &HandleVulkanDebugUtilsMessage;
     createInfo.pUserData = context;
     return createInfo;
 }
 
-[[nodiscard]] core::LogLevel MapDebugSeverity(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity) noexcept
+[[nodiscard]] core::LogLevel MapDebugSeverity(VkDebugUtilsMessageSeverityFlagBitsEXT severity) noexcept
 {
     if ((severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0)
     {
@@ -637,16 +587,13 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
 
 [[nodiscard]] bool IsWarningOrError(VkDebugUtilsMessageSeverityFlagBitsEXT severity) noexcept
 {
-    return (severity & (VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)) != 0;
+    return (severity & (VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)) != 0;
 }
 
-[[nodiscard]] bool IsFiltered(const VulkanDebugMessengerContext& context,
-                              const VkDebugUtilsMessengerCallbackDataEXT* callbackData) noexcept
+[[nodiscard]] bool IsFiltered(const VulkanDebugMessengerContext& context, const VkDebugUtilsMessengerCallbackDataEXT* callbackData) noexcept
 {
-    const std::string_view name = callbackData != nullptr && callbackData->pMessageIdName != nullptr
-                                      ? std::string_view{callbackData->pMessageIdName}
-                                      : std::string_view{};
+    const std::string_view name =
+        callbackData != nullptr && callbackData->pMessageIdName != nullptr ? std::string_view{callbackData->pMessageIdName} : std::string_view{};
     const std::int32_t number = callbackData != nullptr ? callbackData->messageIdNumber : 0;
 
     return std::ranges::any_of(context.exactMessageFilters,
@@ -655,16 +602,11 @@ void TryEndLabel(const VulkanGlobalDispatch& dispatch, VkCommandBuffer commandBu
                                    return filter.Matches(name, number);
                                });
 }
-void AppendCallbackMessage(std::string& output,
-                           const VkDebugUtilsMessengerCallbackDataEXT* callbackData)
+void AppendCallbackMessage(std::string& output, const VkDebugUtilsMessengerCallbackDataEXT* callbackData)
 {
-    const char* const idName = callbackData != nullptr && callbackData->pMessageIdName != nullptr
-                                   ? callbackData->pMessageIdName
-                                   : "unknown-message";
+    const char* const idName = callbackData != nullptr && callbackData->pMessageIdName != nullptr ? callbackData->pMessageIdName : "unknown-message";
     const std::int32_t idNumber = callbackData != nullptr ? callbackData->messageIdNumber : 0;
-    const char* const message = callbackData != nullptr && callbackData->pMessage != nullptr
-                                    ? callbackData->pMessage
-                                    : "no message";
+    const char* const message = callbackData != nullptr && callbackData->pMessage != nullptr ? callbackData->pMessage : "no message";
     const std::uint32_t objectCount = callbackData != nullptr ? callbackData->objectCount : 0U;
 
     output += "messageId=";
@@ -674,8 +616,8 @@ void AppendCallbackMessage(std::string& output,
     output += " objects=";
     output += std::to_string(objectCount);
 
-    if (callbackData != nullptr && callbackData->objectCount > 0U &&
-        callbackData->pObjects != nullptr && callbackData->pObjects[0].pObjectName != nullptr)
+    if (callbackData != nullptr && callbackData->objectCount > 0U && callbackData->pObjects != nullptr &&
+        callbackData->pObjects[0].pObjectName != nullptr)
     {
         output += " firstObject=";
         output += callbackData->pObjects[0].pObjectName;
@@ -713,8 +655,7 @@ void VolkLoadInstanceTable(VolkInstanceTable* table, VkInstance instance) noexce
     volkLoadInstanceTable(table, instance);
 }
 
-void VolkLoadDeviceTable(VolkDeviceTable* table, PFN_vkGetDeviceProcAddr getDeviceProcAddr,
-                         VkDevice device) noexcept
+void VolkLoadDeviceTable(VolkDeviceTable* table, PFN_vkGetDeviceProcAddr getDeviceProcAddr, VkDevice device) noexcept
 {
     const std::scoped_lock lock{g_volkTableLoadMutex};
     vkGetDeviceProcAddr = getDeviceProcAddr;
@@ -732,20 +673,18 @@ void VolkLoadDeviceTable(VolkDeviceTable* table, PFN_vkGetDeviceProcAddr getDevi
     return vkEnumerateInstanceVersion(version);
 }
 
-[[nodiscard]] VkResult VolkEnumerateInstanceExtensionProperties(
-    const char* layerName, std::uint32_t* propertyCount, VkExtensionProperties* properties) noexcept
+[[nodiscard]] VkResult VolkEnumerateInstanceExtensionProperties(const char* layerName, std::uint32_t* propertyCount,
+                                                                VkExtensionProperties* properties) noexcept
 {
     return vkEnumerateInstanceExtensionProperties(layerName, propertyCount, properties);
 }
 
-[[nodiscard]] VkResult VolkEnumerateInstanceLayerProperties(std::uint32_t* propertyCount,
-                                                            VkLayerProperties* properties) noexcept
+[[nodiscard]] VkResult VolkEnumerateInstanceLayerProperties(std::uint32_t* propertyCount, VkLayerProperties* properties) noexcept
 {
     return vkEnumerateInstanceLayerProperties(propertyCount, properties);
 }
 
-[[nodiscard]] VkResult VolkCreateInstance(const VkInstanceCreateInfo* createInfo,
-                                          const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateInstance(const VkInstanceCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                           VkInstance* instance) noexcept
 {
     return vkCreateInstance(createInfo, allocator, instance);
@@ -756,32 +695,27 @@ void VolkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* alloc
     vkDestroyInstance(instance, allocator);
 }
 
-[[nodiscard]] VkResult VolkCreateDebugUtilsMessenger(
-    VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* createInfo,
-    const VkAllocationCallbacks* allocator, VkDebugUtilsMessengerEXT* messenger) noexcept
+[[nodiscard]] VkResult VolkCreateDebugUtilsMessenger(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* createInfo,
+                                                     const VkAllocationCallbacks* allocator, VkDebugUtilsMessengerEXT* messenger) noexcept
 {
     return vkCreateDebugUtilsMessengerEXT(instance, createInfo, allocator, messenger);
 }
 
-void VolkDestroyDebugUtilsMessenger(VkInstance instance, VkDebugUtilsMessengerEXT messenger,
-                                    const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyDebugUtilsMessenger(VkInstance instance, VkDebugUtilsMessengerEXT messenger, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyDebugUtilsMessengerEXT(instance, messenger, allocator);
 }
-[[nodiscard]] VkResult VolkCreateWin32Surface(VkInstance instance, const void* createInfo,
-                                              const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateWin32Surface(VkInstance instance, const void* createInfo, const VkAllocationCallbacks* allocator,
                                               VkSurfaceKHR* surface) noexcept
 {
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-    const auto function = reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(
-        vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR"));
+    const auto function = reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(vkGetInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR"));
     if (function == nullptr)
     {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 
-    return function(instance, static_cast<const VkWin32SurfaceCreateInfoKHR*>(createInfo),
-                    allocator, surface);
+    return function(instance, static_cast<const VkWin32SurfaceCreateInfoKHR*>(createInfo), allocator, surface);
 #else
     (void)instance;
     (void)createInfo;
@@ -791,20 +725,17 @@ void VolkDestroyDebugUtilsMessenger(VkInstance instance, VkDebugUtilsMessengerEX
 #endif
 }
 
-[[nodiscard]] VkResult VolkCreateX11Surface(VkInstance instance, const void* createInfo,
-                                            const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateX11Surface(VkInstance instance, const void* createInfo, const VkAllocationCallbacks* allocator,
                                             VkSurfaceKHR* surface) noexcept
 {
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-    const auto function = reinterpret_cast<PFN_vkCreateXlibSurfaceKHR>(
-        vkGetInstanceProcAddr(instance, "vkCreateXlibSurfaceKHR"));
+    const auto function = reinterpret_cast<PFN_vkCreateXlibSurfaceKHR>(vkGetInstanceProcAddr(instance, "vkCreateXlibSurfaceKHR"));
     if (function == nullptr)
     {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 
-    return function(instance, static_cast<const VkXlibSurfaceCreateInfoKHR*>(createInfo), allocator,
-                    surface);
+    return function(instance, static_cast<const VkXlibSurfaceCreateInfoKHR*>(createInfo), allocator, surface);
 #else
     (void)instance;
     (void)createInfo;
@@ -814,20 +745,17 @@ void VolkDestroyDebugUtilsMessenger(VkInstance instance, VkDebugUtilsMessengerEX
 #endif
 }
 
-[[nodiscard]] VkResult VolkCreateWaylandSurface(VkInstance instance, const void* createInfo,
-                                                const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateWaylandSurface(VkInstance instance, const void* createInfo, const VkAllocationCallbacks* allocator,
                                                 VkSurfaceKHR* surface) noexcept
 {
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    const auto function = reinterpret_cast<PFN_vkCreateWaylandSurfaceKHR>(
-        vkGetInstanceProcAddr(instance, "vkCreateWaylandSurfaceKHR"));
+    const auto function = reinterpret_cast<PFN_vkCreateWaylandSurfaceKHR>(vkGetInstanceProcAddr(instance, "vkCreateWaylandSurfaceKHR"));
     if (function == nullptr)
     {
         return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
 
-    return function(instance, static_cast<const VkWaylandSurfaceCreateInfoKHR*>(createInfo),
-                    allocator, surface);
+    return function(instance, static_cast<const VkWaylandSurfaceCreateInfoKHR*>(createInfo), allocator, surface);
 #else
     (void)instance;
     (void)createInfo;
@@ -837,92 +765,73 @@ void VolkDestroyDebugUtilsMessenger(VkInstance instance, VkDebugUtilsMessengerEX
 #endif
 }
 
-void VolkDestroySurface(VkInstance instance, VkSurfaceKHR surface,
-                        const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroySurface(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* allocator) noexcept
 {
-    const auto function = reinterpret_cast<PFN_vkDestroySurfaceKHR>(
-        vkGetInstanceProcAddr(instance, "vkDestroySurfaceKHR"));
+    const auto function = reinterpret_cast<PFN_vkDestroySurfaceKHR>(vkGetInstanceProcAddr(instance, "vkDestroySurfaceKHR"));
     if (function != nullptr)
     {
         function(instance, surface, allocator);
     }
 }
 
-[[nodiscard]] VkResult VolkEnumeratePhysicalDevices(VkInstance instance,
-                                                    std::uint32_t* physicalDeviceCount,
+[[nodiscard]] VkResult VolkEnumeratePhysicalDevices(VkInstance instance, std::uint32_t* physicalDeviceCount,
                                                     VkPhysicalDevice* physicalDevices) noexcept
 {
     return vkEnumeratePhysicalDevices(instance, physicalDeviceCount, physicalDevices);
 }
 
-void VolkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
-                                      VkPhysicalDeviceProperties2* properties) noexcept
+void VolkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* properties) noexcept
 {
     vkGetPhysicalDeviceProperties2(physicalDevice, properties);
 }
 
-void VolkGetPhysicalDeviceMemoryProperties(
-    VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* memoryProperties) noexcept
+void VolkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties* memoryProperties) noexcept
 {
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, memoryProperties);
 }
 
-void VolkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice,
-                                                std::uint32_t* propertyCount,
+void VolkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, std::uint32_t* propertyCount,
                                                 VkQueueFamilyProperties* properties) noexcept
 {
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, propertyCount, properties);
 }
 
-[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfaceSupport(VkPhysicalDevice physicalDevice,
-                                                           std::uint32_t queueFamilyIndex,
-                                                           VkSurfaceKHR surface,
+[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfaceSupport(VkPhysicalDevice physicalDevice, std::uint32_t queueFamilyIndex, VkSurfaceKHR surface,
                                                            VkBool32* supported) noexcept
 {
-    return vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndex, surface,
-                                                supported);
+    return vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamilyIndex, surface, supported);
 }
 
-[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfaceFormats(
-    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, std::uint32_t* surfaceFormatCount,
-    VkSurfaceFormatKHR* surfaceFormats) noexcept
+[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfaceFormats(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, std::uint32_t* surfaceFormatCount,
+                                                           VkSurfaceFormatKHR* surfaceFormats) noexcept
 {
-    return vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, surfaceFormatCount,
-                                                surfaceFormats);
+    return vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, surfaceFormatCount, surfaceFormats);
 }
 
-[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfacePresentModes(
-    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, std::uint32_t* presentModeCount,
-    VkPresentModeKHR* presentModes) noexcept
+[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfacePresentModes(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                                std::uint32_t* presentModeCount, VkPresentModeKHR* presentModes) noexcept
 {
-    return vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, presentModeCount,
-                                                     presentModes);
+    return vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, presentModeCount, presentModes);
 }
 
-[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfaceCapabilities(
-    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-    VkSurfaceCapabilitiesKHR* capabilities) noexcept
+[[nodiscard]] VkResult VolkGetPhysicalDeviceSurfaceCapabilities(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+                                                                VkSurfaceCapabilitiesKHR* capabilities) noexcept
 {
     return vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, capabilities);
 }
 
-[[nodiscard]] VkResult VolkEnumerateDeviceExtensionProperties(
-    VkPhysicalDevice physicalDevice, const char* layerName, std::uint32_t* propertyCount,
-    VkExtensionProperties* properties) noexcept
+[[nodiscard]] VkResult VolkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice, const char* layerName, std::uint32_t* propertyCount,
+                                                              VkExtensionProperties* properties) noexcept
 {
-    return vkEnumerateDeviceExtensionProperties(physicalDevice, layerName, propertyCount,
-                                                properties);
+    return vkEnumerateDeviceExtensionProperties(physicalDevice, layerName, propertyCount, properties);
 }
 
-void VolkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
-                                    VkPhysicalDeviceFeatures2* features) noexcept
+void VolkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures2* features) noexcept
 {
     vkGetPhysicalDeviceFeatures2(physicalDevice, features);
 }
 
-[[nodiscard]] VkResult VolkCreateDevice(VkPhysicalDevice physicalDevice,
-                                        const VkDeviceCreateInfo* createInfo,
-                                        const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                         VkDevice* device) noexcept
 {
     return vkCreateDevice(physicalDevice, createInfo, allocator, device);
@@ -933,8 +842,7 @@ void VolkDestroyDevice(VkDevice device, const VkAllocationCallbacks* allocator) 
     vkDestroyDevice(device, allocator);
 }
 
-void VolkGetDeviceQueue(VkDevice device, std::uint32_t queueFamilyIndex, std::uint32_t queueIndex,
-                        VkQueue* queue) noexcept
+void VolkGetDeviceQueue(VkDevice device, std::uint32_t queueFamilyIndex, std::uint32_t queueIndex, VkQueue* queue) noexcept
 {
     vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, queue);
 }
@@ -949,35 +857,29 @@ void VolkGetDeviceQueue(VkDevice device, std::uint32_t queueFamilyIndex, std::ui
     return vkQueueWaitIdle(queue);
 }
 
-[[nodiscard]] VkResult VolkCreateCommandPool(VkDevice device,
-                                             const VkCommandPoolCreateInfo* createInfo,
-                                             const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                              VkCommandPool* commandPool) noexcept
 {
     return vkCreateCommandPool(device, createInfo, allocator, commandPool);
 }
 
-void VolkDestroyCommandPool(VkDevice device, VkCommandPool commandPool,
-                            const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyCommandPool(device, commandPool, allocator);
 }
 
-[[nodiscard]] VkResult VolkAllocateCommandBuffers(VkDevice device,
-                                                  const VkCommandBufferAllocateInfo* allocateInfo,
+[[nodiscard]] VkResult VolkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* allocateInfo,
                                                   VkCommandBuffer* commandBuffers) noexcept
 {
     return vkAllocateCommandBuffers(device, allocateInfo, commandBuffers);
 }
 
-[[nodiscard]] VkResult VolkResetCommandBuffer(VkCommandBuffer commandBuffer,
-                                              VkCommandBufferResetFlags flags) noexcept
+[[nodiscard]] VkResult VolkResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags) noexcept
 {
     return vkResetCommandBuffer(commandBuffer, flags);
 }
 
-[[nodiscard]] VkResult VolkBeginCommandBuffer(VkCommandBuffer commandBuffer,
-                                              const VkCommandBufferBeginInfo* beginInfo) noexcept
+[[nodiscard]] VkResult VolkBeginCommandBuffer(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo* beginInfo) noexcept
 {
     return vkBeginCommandBuffer(commandBuffer, beginInfo);
 }
@@ -987,9 +889,7 @@ void VolkDestroyCommandPool(VkDevice device, VkCommandPool commandPool,
     return vkEndCommandBuffer(commandBuffer);
 }
 
-void VolkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
-                            const VkRenderPassBeginInfo* renderPassBegin,
-                            VkSubpassContents contents) noexcept
+void VolkCmdBeginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* renderPassBegin, VkSubpassContents contents) noexcept
 {
     vkCmdBeginRenderPass(commandBuffer, renderPassBegin, contents);
 }
@@ -999,54 +899,46 @@ void VolkCmdEndRenderPass(VkCommandBuffer commandBuffer) noexcept
     vkCmdEndRenderPass(commandBuffer);
 }
 
-[[nodiscard]] VkResult VolkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* createInfo,
-                                           const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                            VkSemaphore* semaphore) noexcept
 {
     return vkCreateSemaphore(device, createInfo, allocator, semaphore);
 }
 
-void VolkDestroySemaphore(VkDevice device, VkSemaphore semaphore,
-                          const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroySemaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroySemaphore(device, semaphore, allocator);
 }
 
-[[nodiscard]] VkResult VolkCreateFence(VkDevice device, const VkFenceCreateInfo* createInfo,
-                                       const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateFence(VkDevice device, const VkFenceCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                        VkFence* fence) noexcept
 {
     return vkCreateFence(device, createInfo, allocator, fence);
 }
 
-void VolkDestroyFence(VkDevice device, VkFence fence,
-                      const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyFence(VkDevice device, VkFence fence, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyFence(device, fence, allocator);
 }
 
-[[nodiscard]] VkResult VolkWaitForFences(VkDevice device, std::uint32_t fenceCount,
-                                         const VkFence* fences, VkBool32 waitAll,
+[[nodiscard]] VkResult VolkWaitForFences(VkDevice device, std::uint32_t fenceCount, const VkFence* fences, VkBool32 waitAll,
                                          std::uint64_t timeout) noexcept
 {
     return vkWaitForFences(device, fenceCount, fences, waitAll, timeout);
 }
 
-[[nodiscard]] VkResult VolkResetFences(VkDevice device, std::uint32_t fenceCount,
-                                       const VkFence* fences) noexcept
+[[nodiscard]] VkResult VolkResetFences(VkDevice device, std::uint32_t fenceCount, const VkFence* fences) noexcept
 {
     return vkResetFences(device, fenceCount, fences);
 }
 
-[[nodiscard]] VkResult VolkAcquireNextImage(VkDevice device, VkSwapchainKHR swapchain,
-                                            std::uint64_t timeout, VkSemaphore semaphore,
-                                            VkFence fence, std::uint32_t* imageIndex) noexcept
+[[nodiscard]] VkResult VolkAcquireNextImage(VkDevice device, VkSwapchainKHR swapchain, std::uint64_t timeout, VkSemaphore semaphore, VkFence fence,
+                                            std::uint32_t* imageIndex) noexcept
 {
     return vkAcquireNextImageKHR(device, swapchain, timeout, semaphore, fence, imageIndex);
 }
 
-[[nodiscard]] VkResult VolkQueueSubmit(VkQueue queue, std::uint32_t submitCount,
-                                       const VkSubmitInfo* submits, VkFence fence) noexcept
+[[nodiscard]] VkResult VolkQueueSubmit(VkQueue queue, std::uint32_t submitCount, const VkSubmitInfo* submits, VkFence fence) noexcept
 {
     return vkQueueSubmit(queue, submitCount, submits, fence);
 }
@@ -1056,14 +948,12 @@ void VolkDestroyFence(VkDevice device, VkFence fence,
     return vkQueuePresentKHR(queue, presentInfo);
 }
 
-[[nodiscard]] VkResult VolkWaitForPresent(VkDevice device, VkSwapchainKHR swapchain,
-                                          std::uint64_t presentId, std::uint64_t timeout) noexcept
+[[nodiscard]] VkResult VolkWaitForPresent(VkDevice device, VkSwapchainKHR swapchain, std::uint64_t presentId, std::uint64_t timeout) noexcept
 {
     return vkWaitForPresentKHR(device, swapchain, presentId, timeout);
 }
 
-[[nodiscard]] VkResult VolkSetDebugUtilsObjectName(
-    VkDevice device, const VkDebugUtilsObjectNameInfoEXT* nameInfo) noexcept
+[[nodiscard]] VkResult VolkSetDebugUtilsObjectName(VkDevice device, const VkDebugUtilsObjectNameInfoEXT* nameInfo) noexcept
 {
     if (vkSetDebugUtilsObjectNameEXT == nullptr)
     {
@@ -1073,8 +963,7 @@ void VolkDestroyFence(VkDevice device, VkFence fence,
     return vkSetDebugUtilsObjectNameEXT(device, nameInfo);
 }
 
-void VolkCmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer,
-                                 const VkDebugUtilsLabelEXT* labelInfo) noexcept
+void VolkCmdBeginDebugUtilsLabel(VkCommandBuffer commandBuffer, const VkDebugUtilsLabelEXT* labelInfo) noexcept
 {
     if (vkCmdBeginDebugUtilsLabelEXT != nullptr)
     {
@@ -1090,118 +979,93 @@ void VolkCmdEndDebugUtilsLabel(VkCommandBuffer commandBuffer) noexcept
     }
 }
 
-[[nodiscard]] VkResult VolkCreateSwapchain(VkDevice device,
-                                           const VkSwapchainCreateInfoKHR* createInfo,
-                                           const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateSwapchain(VkDevice device, const VkSwapchainCreateInfoKHR* createInfo, const VkAllocationCallbacks* allocator,
                                            VkSwapchainKHR* swapchain) noexcept
 {
     return vkCreateSwapchainKHR(device, createInfo, allocator, swapchain);
 }
 
-void VolkDestroySwapchain(VkDevice device, VkSwapchainKHR swapchain,
-                          const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroySwapchain(VkDevice device, VkSwapchainKHR swapchain, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroySwapchainKHR(device, swapchain, allocator);
 }
 
-[[nodiscard]] VkResult VolkGetSwapchainImages(VkDevice device, VkSwapchainKHR swapchain,
-                                              std::uint32_t* imageCount, VkImage* images) noexcept
+[[nodiscard]] VkResult VolkGetSwapchainImages(VkDevice device, VkSwapchainKHR swapchain, std::uint32_t* imageCount, VkImage* images) noexcept
 {
     return vkGetSwapchainImagesKHR(device, swapchain, imageCount, images);
 }
 
-[[nodiscard]] VkResult VolkCreateImageView(VkDevice device, const VkImageViewCreateInfo* createInfo,
-                                           const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateImageView(VkDevice device, const VkImageViewCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                            VkImageView* imageView) noexcept
 {
     return vkCreateImageView(device, createInfo, allocator, imageView);
 }
 
-void VolkDestroyImageView(VkDevice device, VkImageView imageView,
-                          const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyImageView(device, imageView, allocator);
 }
 
-[[nodiscard]] VkResult VolkCreateRenderPass(VkDevice device,
-                                            const VkRenderPassCreateInfo* createInfo,
-                                            const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                             VkRenderPass* renderPass) noexcept
 {
     return vkCreateRenderPass(device, createInfo, allocator, renderPass);
 }
 
-void VolkDestroyRenderPass(VkDevice device, VkRenderPass renderPass,
-                           const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyRenderPass(VkDevice device, VkRenderPass renderPass, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyRenderPass(device, renderPass, allocator);
 }
 
-[[nodiscard]] VkResult VolkCreateFramebuffer(VkDevice device,
-                                             const VkFramebufferCreateInfo* createInfo,
-                                             const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                              VkFramebuffer* framebuffer) noexcept
 {
     return vkCreateFramebuffer(device, createInfo, allocator, framebuffer);
 }
 
-void VolkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer,
-                            const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyFramebuffer(device, framebuffer, allocator);
 }
-[[nodiscard]] VkResult VolkCreateShaderModule(VkDevice device,
-                                              const VkShaderModuleCreateInfo* createInfo,
-                                              const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                               VkShaderModule* shaderModule) noexcept
 {
     return vkCreateShaderModule(device, createInfo, allocator, shaderModule);
 }
 
-void VolkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule,
-                             const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyShaderModule(device, shaderModule, allocator);
 }
 
-[[nodiscard]] VkResult VolkCreatePipelineLayout(VkDevice device,
-                                                const VkPipelineLayoutCreateInfo* createInfo,
-                                                const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* createInfo, const VkAllocationCallbacks* allocator,
                                                 VkPipelineLayout* layout) noexcept
 {
     return vkCreatePipelineLayout(device, createInfo, allocator, layout);
 }
 
-void VolkDestroyPipelineLayout(VkDevice device, VkPipelineLayout layout,
-                               const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyPipelineLayout(VkDevice device, VkPipelineLayout layout, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyPipelineLayout(device, layout, allocator);
 }
 
-[[nodiscard]] VkResult VolkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache,
-                                                   std::uint32_t createInfoCount,
-                                                   const VkGraphicsPipelineCreateInfo* createInfos,
-                                                   const VkAllocationCallbacks* allocator,
+[[nodiscard]] VkResult VolkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, std::uint32_t createInfoCount,
+                                                   const VkGraphicsPipelineCreateInfo* createInfos, const VkAllocationCallbacks* allocator,
                                                    VkPipeline* pipelines) noexcept
 {
-    return vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, createInfos, allocator,
-                                     pipelines);
+    return vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, createInfos, allocator, pipelines);
 }
 
-void VolkDestroyPipeline(VkDevice device, VkPipeline pipeline,
-                         const VkAllocationCallbacks* allocator) noexcept
+void VolkDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks* allocator) noexcept
 {
     vkDestroyPipeline(device, pipeline, allocator);
 }
 
-[[nodiscard]] VkResult VmaCreateBufferDispatch(void* allocator,
-                                               const VkBufferCreateInfo* bufferInfo,
-                                               const VulkanHostBufferAllocationRequest* request,
-                                               VkBuffer* buffer, void** allocation,
+[[nodiscard]] VkResult VmaCreateBufferDispatch(void* allocator, const VkBufferCreateInfo* bufferInfo,
+                                               const VulkanHostBufferAllocationRequest* request, VkBuffer* buffer, void** allocation,
                                                VulkanHostBufferAllocationResult* output) noexcept
 {
-    if (allocator == nullptr || bufferInfo == nullptr || request == nullptr || buffer == nullptr ||
-        allocation == nullptr || output == nullptr)
+    if (allocator == nullptr || bufferInfo == nullptr || request == nullptr || buffer == nullptr || allocation == nullptr || output == nullptr)
     {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
@@ -1215,15 +1079,13 @@ void VolkDestroyPipeline(VkDevice device, VkPipeline pipeline,
     VmaAllocation createdAllocation{};
     VmaAllocationInfo createdAllocationInfo{};
     const VkResult result =
-        vmaCreateBuffer(static_cast<VmaAllocator>(allocator), bufferInfo, &allocationInfo, buffer,
-                        &createdAllocation, &createdAllocationInfo);
+        vmaCreateBuffer(static_cast<VmaAllocator>(allocator), bufferInfo, &allocationInfo, buffer, &createdAllocation, &createdAllocationInfo);
     *allocation = result == VK_SUCCESS ? static_cast<void*>(createdAllocation) : nullptr;
     output->memoryProperties = 0U;
     output->allocationSize = 0U;
     if (result == VK_SUCCESS)
     {
-        vmaGetAllocationMemoryProperties(static_cast<VmaAllocator>(allocator), createdAllocation,
-                                         &output->memoryProperties);
+        vmaGetAllocationMemoryProperties(static_cast<VmaAllocator>(allocator), createdAllocation, &output->memoryProperties);
         output->allocationSize = createdAllocationInfo.size;
     }
     return result;
@@ -1233,8 +1095,7 @@ void VmaDestroyBufferDispatch(void* allocator, VkBuffer buffer, void* allocation
 {
     if (allocator != nullptr && buffer != VK_NULL_HANDLE && allocation != nullptr)
     {
-        vmaDestroyBuffer(static_cast<VmaAllocator>(allocator), buffer,
-                         static_cast<VmaAllocation>(allocation));
+        vmaDestroyBuffer(static_cast<VmaAllocator>(allocator), buffer, static_cast<VmaAllocation>(allocation));
     }
 }
 
@@ -1245,79 +1106,66 @@ void VmaDestroyBufferDispatch(void* allocator, VkBuffer buffer, void* allocation
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    return vmaMapMemory(static_cast<VmaAllocator>(allocator),
-                        static_cast<VmaAllocation>(allocation), data);
+    return vmaMapMemory(static_cast<VmaAllocator>(allocator), static_cast<VmaAllocation>(allocation), data);
 }
 
 void VmaUnmapMemoryDispatch(void* allocator, void* allocation) noexcept
 {
     if (allocator != nullptr && allocation != nullptr)
     {
-        vmaUnmapMemory(static_cast<VmaAllocator>(allocator),
-                       static_cast<VmaAllocation>(allocation));
+        vmaUnmapMemory(static_cast<VmaAllocator>(allocator), static_cast<VmaAllocation>(allocation));
     }
 }
 
-[[nodiscard]] VkResult VmaFlushAllocationDispatch(void* allocator, void* allocation,
-                                                  VkDeviceSize offset, VkDeviceSize size) noexcept
+[[nodiscard]] VkResult VmaFlushAllocationDispatch(void* allocator, void* allocation, VkDeviceSize offset, VkDeviceSize size) noexcept
 {
     if (allocator == nullptr || allocation == nullptr)
     {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    return vmaFlushAllocation(static_cast<VmaAllocator>(allocator),
-                              static_cast<VmaAllocation>(allocation), offset, size);
+    return vmaFlushAllocation(static_cast<VmaAllocator>(allocator), static_cast<VmaAllocation>(allocation), offset, size);
 }
 
-void VolkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
-                         VkPipeline pipeline) noexcept
+void VolkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) noexcept
 {
     vkCmdBindPipeline(commandBuffer, pipelineBindPoint, pipeline);
 }
 
-void VolkCmdSetViewport(VkCommandBuffer commandBuffer, std::uint32_t firstViewport,
-                        std::uint32_t viewportCount, const VkViewport* viewports) noexcept
+void VolkCmdSetViewport(VkCommandBuffer commandBuffer, std::uint32_t firstViewport, std::uint32_t viewportCount, const VkViewport* viewports) noexcept
 {
     vkCmdSetViewport(commandBuffer, firstViewport, viewportCount, viewports);
 }
 
-void VolkCmdSetScissor(VkCommandBuffer commandBuffer, std::uint32_t firstScissor,
-                       std::uint32_t scissorCount, const VkRect2D* scissors) noexcept
+void VolkCmdSetScissor(VkCommandBuffer commandBuffer, std::uint32_t firstScissor, std::uint32_t scissorCount, const VkRect2D* scissors) noexcept
 {
     vkCmdSetScissor(commandBuffer, firstScissor, scissorCount, scissors);
 }
 
-void VolkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, std::uint32_t firstBinding,
-                              std::uint32_t bindingCount, const VkBuffer* buffers,
+void VolkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, std::uint32_t firstBinding, std::uint32_t bindingCount, const VkBuffer* buffers,
                               const VkDeviceSize* offsets) noexcept
 {
     vkCmdBindVertexBuffers(commandBuffer, firstBinding, bindingCount, buffers, offsets);
 }
 
-void VolkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
-                            VkIndexType indexType) noexcept
+void VolkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType) noexcept
 {
     vkCmdBindIndexBuffer(commandBuffer, buffer, offset, indexType);
 }
 
-void VolkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
-                          VkShaderStageFlags stageFlags, std::uint32_t offset, std::uint32_t size,
-                          const void* values) noexcept
+void VolkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags, std::uint32_t offset,
+                          std::uint32_t size, const void* values) noexcept
 {
     vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, values);
 }
 
-void VolkCmdDrawIndexed(VkCommandBuffer commandBuffer, std::uint32_t indexCount,
-                        std::uint32_t instanceCount, std::uint32_t firstIndex,
+void VolkCmdDrawIndexed(VkCommandBuffer commandBuffer, std::uint32_t indexCount, std::uint32_t instanceCount, std::uint32_t firstIndex,
                         std::int32_t vertexOffset, std::uint32_t firstInstance) noexcept
 {
-    vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset,
-                     firstInstance);
+    vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-[[nodiscard]] VulkanGlobalDispatch BindInstanceDispatch(VulkanGlobalDispatch dispatch,
-                                                        const VolkInstanceTable& table) noexcept
+[[nodiscard]] VulkanGlobalDispatch BindInstanceDispatch(VulkanGlobalDispatch dispatch, const VolkInstanceTable& table) noexcept
 {
     if (dispatch.getInstanceProcAddr == nullptr)
     {
@@ -1335,8 +1183,7 @@ void VolkCmdDrawIndexed(VkCommandBuffer commandBuffer, std::uint32_t indexCount,
     dispatch.getPhysicalDeviceProperties2 = table.vkGetPhysicalDeviceProperties2;
     dispatch.getPhysicalDeviceFeatures2 = table.vkGetPhysicalDeviceFeatures2;
     dispatch.getPhysicalDeviceMemoryProperties = table.vkGetPhysicalDeviceMemoryProperties;
-    dispatch.getPhysicalDeviceQueueFamilyProperties =
-        table.vkGetPhysicalDeviceQueueFamilyProperties;
+    dispatch.getPhysicalDeviceQueueFamilyProperties = table.vkGetPhysicalDeviceQueueFamilyProperties;
     dispatch.getPhysicalDeviceSurfaceSupport = table.vkGetPhysicalDeviceSurfaceSupportKHR;
     dispatch.getPhysicalDeviceSurfaceFormats = table.vkGetPhysicalDeviceSurfaceFormatsKHR;
     dispatch.getPhysicalDeviceSurfacePresentModes = table.vkGetPhysicalDeviceSurfacePresentModesKHR;
@@ -1346,8 +1193,7 @@ void VolkCmdDrawIndexed(VkCommandBuffer commandBuffer, std::uint32_t indexCount,
     return dispatch;
 }
 
-[[nodiscard]] VulkanGlobalDispatch BindDeviceDispatch(VulkanGlobalDispatch dispatch,
-                                                      const VolkDeviceTable& table) noexcept
+[[nodiscard]] VulkanGlobalDispatch BindDeviceDispatch(VulkanGlobalDispatch dispatch, const VolkDeviceTable& table) noexcept
 {
     dispatch.destroyDevice = table.vkDestroyDevice;
     dispatch.loadDevice = nullptr;
@@ -1396,11 +1242,8 @@ void VolkCmdDrawIndexed(VkCommandBuffer commandBuffer, std::uint32_t indexCount,
     dispatch.waitForPresent = table.vkWaitForPresentKHR;
     return dispatch;
 }
-[[nodiscard]] VkResult CreateOwnerLocalVmaAllocator(VkInstance instance,
-                                                    VkPhysicalDevice physicalDevice,
-                                                    VkDevice device, std::uint32_t apiVersion,
-                                                    PFN_vkGetInstanceProcAddr getInstanceProcAddr,
-                                                    PFN_vkGetDeviceProcAddr getDeviceProcAddr,
+[[nodiscard]] VkResult CreateOwnerLocalVmaAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, std::uint32_t apiVersion,
+                                                    PFN_vkGetInstanceProcAddr getInstanceProcAddr, PFN_vkGetDeviceProcAddr getDeviceProcAddr,
                                                     void** allocator) noexcept
 {
     if (allocator == nullptr || getInstanceProcAddr == nullptr || getDeviceProcAddr == nullptr)
@@ -1489,8 +1332,7 @@ struct VulkanAdapterCandidate final
     }
 }
 
-[[nodiscard]] RenderAdapterId MakeRenderAdapterId(
-    const VkPhysicalDeviceIDProperties& idProperties) noexcept
+[[nodiscard]] RenderAdapterId MakeRenderAdapterId(const VkPhysicalDeviceIDProperties& idProperties) noexcept
 {
     RenderAdapterId id{};
     for (std::size_t index = 0; index < id.deviceUuid.size() && index < VK_UUID_SIZE; ++index)
@@ -1508,8 +1350,7 @@ struct VulkanAdapterCandidate final
     return id;
 }
 
-[[nodiscard]] std::optional<PresentationPolicy> MapPresentMode(
-    VkPresentModeKHR presentMode) noexcept
+[[nodiscard]] std::optional<PresentationPolicy> MapPresentMode(VkPresentModeKHR presentMode) noexcept
 {
     switch (presentMode)
     {
@@ -1539,40 +1380,36 @@ struct VulkanAdapterCandidate final
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-[[nodiscard]] bool ContainsVkPresentMode(const std::vector<VkPresentModeKHR>& presentModes,
-                                         VkPresentModeKHR expected) noexcept
+[[nodiscard]] bool ContainsVkPresentMode(const std::vector<VkPresentModeKHR>& presentModes, VkPresentModeKHR expected) noexcept
 {
     return std::ranges::find(presentModes, expected) != presentModes.end();
 }
 
-[[nodiscard]] core::Result<VkSurfaceCapabilitiesKHR> QuerySurfaceCapabilities(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device, VkSurfaceKHR surface)
+[[nodiscard]] core::Result<VkSurfaceCapabilitiesKHR> QuerySurfaceCapabilities(const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device,
+                                                                              VkSurfaceKHR surface)
 {
     VkSurfaceCapabilitiesKHR capabilities{};
-    const VkResult result =
-        dispatch.getPhysicalDeviceSurfaceCapabilities(device, surface, &capabilities);
+    const VkResult result = dispatch.getPhysicalDeviceSurfaceCapabilities(device, surface, &capabilities);
     if (result != VK_SUCCESS)
     {
-        return core::Result<VkSurfaceCapabilitiesKHR>::FromError(MakeVulkanError(
-            MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", result));
+        return core::Result<VkSurfaceCapabilitiesKHR>::FromError(
+            MakeVulkanError(MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", result));
     }
 
     return core::Result<VkSurfaceCapabilitiesKHR>::FromValue(capabilities);
 }
 
-[[nodiscard]] core::Result<std::vector<VkSurfaceFormatKHR>> QuerySurfaceFormats(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device, VkSurfaceKHR surface)
+[[nodiscard]] core::Result<std::vector<VkSurfaceFormatKHR>> QuerySurfaceFormats(const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device,
+                                                                                VkSurfaceKHR surface)
 {
     for (;;)
     {
         std::uint32_t formatCount{};
-        VkResult result =
-            dispatch.getPhysicalDeviceSurfaceFormats(device, surface, &formatCount, nullptr);
+        VkResult result = dispatch.getPhysicalDeviceSurfaceFormats(device, surface, &formatCount, nullptr);
         if (result != VK_SUCCESS)
         {
             return core::Result<std::vector<VkSurfaceFormatKHR>>::FromError(
-                MakeVulkanError(MapAdapterQueryFailure(result),
-                                "vkGetPhysicalDeviceSurfaceFormatsKHR.count", result));
+                MakeVulkanError(MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfaceFormatsKHR.count", result));
         }
 
         std::vector<VkSurfaceFormatKHR> formats(formatCount);
@@ -1581,8 +1418,7 @@ struct VulkanAdapterCandidate final
             return core::Result<std::vector<VkSurfaceFormatKHR>>::FromValue(std::move(formats));
         }
 
-        result =
-            dispatch.getPhysicalDeviceSurfaceFormats(device, surface, &formatCount, formats.data());
+        result = dispatch.getPhysicalDeviceSurfaceFormats(device, surface, &formatCount, formats.data());
         if (result == VK_INCOMPLETE)
         {
             continue;
@@ -1590,8 +1426,7 @@ struct VulkanAdapterCandidate final
         if (result != VK_SUCCESS)
         {
             return core::Result<std::vector<VkSurfaceFormatKHR>>::FromError(
-                MakeVulkanError(MapAdapterQueryFailure(result),
-                                "vkGetPhysicalDeviceSurfaceFormatsKHR.read", result));
+                MakeVulkanError(MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfaceFormatsKHR.read", result));
         }
 
         formats.resize(formatCount);
@@ -1599,19 +1434,17 @@ struct VulkanAdapterCandidate final
     }
 }
 
-[[nodiscard]] core::Result<std::vector<VkPresentModeKHR>> QueryPresentModes(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device, VkSurfaceKHR surface)
+[[nodiscard]] core::Result<std::vector<VkPresentModeKHR>> QueryPresentModes(const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device,
+                                                                            VkSurfaceKHR surface)
 {
     for (;;)
     {
         std::uint32_t presentModeCount{};
-        VkResult result = dispatch.getPhysicalDeviceSurfacePresentModes(device, surface,
-                                                                        &presentModeCount, nullptr);
+        VkResult result = dispatch.getPhysicalDeviceSurfacePresentModes(device, surface, &presentModeCount, nullptr);
         if (result != VK_SUCCESS)
         {
             return core::Result<std::vector<VkPresentModeKHR>>::FromError(
-                MakeVulkanError(MapAdapterQueryFailure(result),
-                                "vkGetPhysicalDeviceSurfacePresentModesKHR.count", result));
+                MakeVulkanError(MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfacePresentModesKHR.count", result));
         }
 
         std::vector<VkPresentModeKHR> presentModes(presentModeCount);
@@ -1620,8 +1453,7 @@ struct VulkanAdapterCandidate final
             return core::Result<std::vector<VkPresentModeKHR>>::FromValue(std::move(presentModes));
         }
 
-        result = dispatch.getPhysicalDeviceSurfacePresentModes(device, surface, &presentModeCount,
-                                                               presentModes.data());
+        result = dispatch.getPhysicalDeviceSurfacePresentModes(device, surface, &presentModeCount, presentModes.data());
         if (result == VK_INCOMPLETE)
         {
             continue;
@@ -1629,8 +1461,7 @@ struct VulkanAdapterCandidate final
         if (result != VK_SUCCESS)
         {
             return core::Result<std::vector<VkPresentModeKHR>>::FromError(
-                MakeVulkanError(MapAdapterQueryFailure(result),
-                                "vkGetPhysicalDeviceSurfacePresentModesKHR.read", result));
+                MakeVulkanError(MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfacePresentModesKHR.read", result));
         }
 
         presentModes.resize(presentModeCount);
@@ -1638,26 +1469,22 @@ struct VulkanAdapterCandidate final
     }
 }
 
-[[nodiscard]] constexpr bool IsRequiredSdrSrgbSurfaceFormat(VkFormat format,
-                                                            VkColorSpaceKHR colorSpace) noexcept
+[[nodiscard]] constexpr bool IsRequiredSdrSrgbSurfaceFormat(VkFormat format, VkColorSpaceKHR colorSpace) noexcept
 {
-    return colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR &&
-           (format == VK_FORMAT_B8G8R8A8_SRGB || format == VK_FORMAT_R8G8B8A8_SRGB);
+    return colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR && (format == VK_FORMAT_B8G8R8A8_SRGB || format == VK_FORMAT_R8G8B8A8_SRGB);
 }
 
-[[nodiscard]] std::optional<VkSurfaceFormatKHR> SelectSurfaceFormat(
-    const std::vector<VkSurfaceFormatKHR>& formats) noexcept
+[[nodiscard]] std::optional<VkSurfaceFormatKHR> SelectSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) noexcept
 {
     constexpr VkFormat preferredFormats[] = {VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB};
     for (const VkFormat preferredFormat : preferredFormats)
     {
-        const auto format = std::ranges::find_if(
-            formats,
-            [preferredFormat](VkSurfaceFormatKHR candidate) noexcept
-            {
-                return candidate.format == preferredFormat &&
-                       IsRequiredSdrSrgbSurfaceFormat(candidate.format, candidate.colorSpace);
-            });
+        const auto format = std::ranges::find_if(formats,
+                                                 [preferredFormat](VkSurfaceFormatKHR candidate) noexcept
+                                                 {
+                                                     return candidate.format == preferredFormat &&
+                                                            IsRequiredSdrSrgbSurfaceFormat(candidate.format, candidate.colorSpace);
+                                                 });
         if (format != formats.end())
         {
             return *format;
@@ -1673,82 +1500,70 @@ struct VulkanSurfaceOutputSupport final
     std::vector<VkSurfaceFormatKHR> formats{};
 };
 
-[[nodiscard]] core::Result<VulkanSurfaceOutputSupport> QuerySurfaceOutputSupport(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device, VkSurfaceKHR surface)
+[[nodiscard]] core::Result<VulkanSurfaceOutputSupport> QuerySurfaceOutputSupport(const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device,
+                                                                                 VkSurfaceKHR surface)
 {
-    core::Result<VkSurfaceCapabilitiesKHR> capabilities =
-        QuerySurfaceCapabilities(dispatch, device, surface);
+    core::Result<VkSurfaceCapabilitiesKHR> capabilities = QuerySurfaceCapabilities(dispatch, device, surface);
     if (!capabilities)
     {
-        return core::Result<VulkanSurfaceOutputSupport>::FromError(
-            std::move(capabilities).GetError());
+        return core::Result<VulkanSurfaceOutputSupport>::FromError(std::move(capabilities).GetError());
     }
 
-    core::Result<std::vector<VkSurfaceFormatKHR>> formats =
-        QuerySurfaceFormats(dispatch, device, surface);
+    core::Result<std::vector<VkSurfaceFormatKHR>> formats = QuerySurfaceFormats(dispatch, device, surface);
     if (!formats)
     {
         return core::Result<VulkanSurfaceOutputSupport>::FromError(std::move(formats).GetError());
     }
 
-    return core::Result<VulkanSurfaceOutputSupport>::FromValue(VulkanSurfaceOutputSupport{
-        .capabilities = capabilities.GetValue(), .formats = std::move(formats).GetValue()});
+    return core::Result<VulkanSurfaceOutputSupport>::FromValue(
+        VulkanSurfaceOutputSupport{.capabilities = capabilities.GetValue(), .formats = std::move(formats).GetValue()});
 }
 
-[[nodiscard]] core::VoidResult ValidateRequiredSdrSrgbOutput(
-    const VulkanSurfaceOutputSupport& support)
+[[nodiscard]] core::VoidResult ValidateRequiredSdrSrgbOutput(const VulkanSurfaceOutputSupport& support)
 {
     if (support.formats.empty())
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                            "Vulkan surface reported no supported swapchain formats."));
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Vulkan surface reported no supported swapchain formats."));
     }
 
     if (!SelectSurfaceFormat(support.formats).has_value())
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedSurface,
-            "Vulkan surface does not support the required SDR sRGB presentation format."));
+        return core::VoidResult::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Vulkan surface does not support the required SDR sRGB presentation format."));
     }
 
     if ((support.capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) == 0U)
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                            "Vulkan surface does not support required opaque composition."));
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Vulkan surface does not support required opaque composition."));
     }
 
     if ((support.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0U)
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                            "Vulkan surface does not support color-attachment swapchain images."));
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Vulkan surface does not support color-attachment swapchain images."));
     }
 
     return core::VoidResult::Success();
 }
 
-[[nodiscard]] core::Result<VkPresentModeKHR> SelectPresentMode(
-    PresentationPolicyRequest request, const std::vector<VkPresentModeKHR>& presentModes,
-    PresentationPolicyFallbackReason& fallbackReason)
+[[nodiscard]] core::Result<VkPresentModeKHR> SelectPresentMode(PresentationPolicyRequest request, const std::vector<VkPresentModeKHR>& presentModes,
+                                                               PresentationPolicyFallbackReason& fallbackReason)
 {
     fallbackReason = PresentationPolicyFallbackReason::None;
-    const auto requireMode =
-        [&presentModes](VkPresentModeKHR mode) -> core::Result<VkPresentModeKHR>
+    const auto requireMode = [&presentModes](VkPresentModeKHR mode) -> core::Result<VkPresentModeKHR>
     {
         if (!ContainsVkPresentMode(presentModes, mode))
         {
-            return core::Result<VkPresentModeKHR>::FromError(MakeRenderError(
-                RenderErrorCode::UnsupportedSurface,
-                "The required presentation policy is unavailable for this target."));
+            return core::Result<VkPresentModeKHR>::FromError(
+                MakeRenderError(RenderErrorCode::UnsupportedSurface, "The required presentation policy is unavailable for this target."));
         }
 
         return core::Result<VkPresentModeKHR>::FromValue(mode);
     };
 
-    const auto selectFallback =
-        [&fallbackReason](VkPresentModeKHR mode) -> core::Result<VkPresentModeKHR>
+    const auto selectFallback = [&fallbackReason](VkPresentModeKHR mode) -> core::Result<VkPresentModeKHR>
     {
         fallbackReason = PresentationPolicyFallbackReason::UnavailableForTarget;
         return core::Result<VkPresentModeKHR>::FromValue(mode);
@@ -1792,32 +1607,25 @@ struct VulkanSurfaceOutputSupport final
         return selectFallback(VK_PRESENT_MODE_FIFO_KHR);
     }
 
-    return core::Result<VkPresentModeKHR>::FromError(
-        MakeRenderError(RenderErrorCode::InvalidArgument, "Presentation policy is invalid."));
+    return core::Result<VkPresentModeKHR>::FromError(MakeRenderError(RenderErrorCode::InvalidArgument, "Presentation policy is invalid."));
 }
 
-[[nodiscard]] VkExtent2D SelectSurfaceExtent(const VkSurfaceCapabilitiesKHR& capabilities,
-                                             platform::PixelSize requestedExtent) noexcept
+[[nodiscard]] VkExtent2D SelectSurfaceExtent(const VkSurfaceCapabilitiesKHR& capabilities, ponder::platform::PixelSize requestedExtent) noexcept
 {
     if (capabilities.currentExtent.width != std::numeric_limits<std::uint32_t>::max())
     {
         return capabilities.currentExtent;
     }
 
-    return VkExtent2D{.width = std::clamp(requestedExtent.width, capabilities.minImageExtent.width,
-                                          capabilities.maxImageExtent.width),
-                      .height =
-                          std::clamp(requestedExtent.height, capabilities.minImageExtent.height,
-                                     capabilities.maxImageExtent.height)};
+    return VkExtent2D{.width = std::clamp(requestedExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
+                      .height = std::clamp(requestedExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)};
 }
 
-[[nodiscard]] std::uint32_t SelectSwapchainImageCount(
-    const VkSurfaceCapabilitiesKHR& capabilities, QueuedFrameLatencyRequest request,
-    QueuedFrameLatency& selectedLatency, QueuedFrameLatencyFallbackReason& fallbackReason)
+[[nodiscard]] std::uint32_t SelectSwapchainImageCount(const VkSurfaceCapabilitiesKHR& capabilities, QueuedFrameLatencyRequest request,
+                                                      QueuedFrameLatency& selectedLatency, QueuedFrameLatencyFallbackReason& fallbackReason)
 {
     const QueuedFrameLatency requestedLatency = request.maximumQueuedFrames;
-    std::uint32_t preferredImageCount =
-        std::max(capabilities.minImageCount, requestedLatency.frameCount + 1U);
+    std::uint32_t preferredImageCount = std::max(capabilities.minImageCount, requestedLatency.frameCount + 1U);
     if (capabilities.maxImageCount > 0U)
     {
         preferredImageCount = std::min(preferredImageCount, capabilities.maxImageCount);
@@ -1829,21 +1637,19 @@ struct VulkanSurfaceOutputSupport final
         selectedLatency.frameCount = preferredImageCount;
     }
 
-    fallbackReason = selectedLatency == requestedLatency
-                         ? QueuedFrameLatencyFallbackReason::None
-                         : QueuedFrameLatencyFallbackReason::TargetMaximumExceeded;
+    fallbackReason =
+        selectedLatency == requestedLatency ? QueuedFrameLatencyFallbackReason::None : QueuedFrameLatencyFallbackReason::TargetMaximumExceeded;
     return preferredImageCount;
 }
 
-[[nodiscard]] core::Result<std::vector<VkPhysicalDevice>> EnumeratePhysicalDevices(
-    const VulkanGlobalDispatch& dispatch, VkInstance instance)
+[[nodiscard]] core::Result<std::vector<VkPhysicalDevice>> EnumeratePhysicalDevices(const VulkanGlobalDispatch& dispatch, VkInstance instance)
 {
     std::uint32_t deviceCount{};
     VkResult result = dispatch.enumeratePhysicalDevices(instance, &deviceCount, nullptr);
     if (result != VK_SUCCESS)
     {
-        return core::Result<std::vector<VkPhysicalDevice>>::FromError(MakeVulkanError(
-            MapAdapterQueryFailure(result), "vkEnumeratePhysicalDevices.count", result));
+        return core::Result<std::vector<VkPhysicalDevice>>::FromError(
+            MakeVulkanError(MapAdapterQueryFailure(result), "vkEnumeratePhysicalDevices.count", result));
     }
 
     std::vector<VkPhysicalDevice> devices(deviceCount);
@@ -1855,24 +1661,23 @@ struct VulkanSurfaceOutputSupport final
     result = dispatch.enumeratePhysicalDevices(instance, &deviceCount, devices.data());
     if (result != VK_SUCCESS && result != VK_INCOMPLETE)
     {
-        return core::Result<std::vector<VkPhysicalDevice>>::FromError(MakeVulkanError(
-            MapAdapterQueryFailure(result), "vkEnumeratePhysicalDevices.read", result));
+        return core::Result<std::vector<VkPhysicalDevice>>::FromError(
+            MakeVulkanError(MapAdapterQueryFailure(result), "vkEnumeratePhysicalDevices.read", result));
     }
 
     devices.resize(deviceCount);
     return core::Result<std::vector<VkPhysicalDevice>>::FromValue(std::move(devices));
 }
 
-[[nodiscard]] core::Result<std::vector<VkExtensionProperties>> EnumerateDeviceExtensions(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device)
+[[nodiscard]] core::Result<std::vector<VkExtensionProperties>> EnumerateDeviceExtensions(const VulkanGlobalDispatch& dispatch,
+                                                                                         VkPhysicalDevice device)
 {
     std::uint32_t extensionCount{};
-    VkResult result =
-        dispatch.enumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+    VkResult result = dispatch.enumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
     if (result != VK_SUCCESS)
     {
-        return core::Result<std::vector<VkExtensionProperties>>::FromError(MakeVulkanError(
-            MapAdapterQueryFailure(result), "vkEnumerateDeviceExtensionProperties.count", result));
+        return core::Result<std::vector<VkExtensionProperties>>::FromError(
+            MakeVulkanError(MapAdapterQueryFailure(result), "vkEnumerateDeviceExtensionProperties.count", result));
     }
 
     std::vector<VkExtensionProperties> extensions(extensionCount);
@@ -1881,20 +1686,18 @@ struct VulkanSurfaceOutputSupport final
         return core::Result<std::vector<VkExtensionProperties>>::FromValue(std::move(extensions));
     }
 
-    result = dispatch.enumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
-                                                         extensions.data());
+    result = dispatch.enumerateDeviceExtensionProperties(device, nullptr, &extensionCount, extensions.data());
     if (result != VK_SUCCESS && result != VK_INCOMPLETE)
     {
-        return core::Result<std::vector<VkExtensionProperties>>::FromError(MakeVulkanError(
-            MapAdapterQueryFailure(result), "vkEnumerateDeviceExtensionProperties.read", result));
+        return core::Result<std::vector<VkExtensionProperties>>::FromError(
+            MakeVulkanError(MapAdapterQueryFailure(result), "vkEnumerateDeviceExtensionProperties.read", result));
     }
 
     extensions.resize(extensionCount);
     return core::Result<std::vector<VkExtensionProperties>>::FromValue(std::move(extensions));
 }
 
-[[nodiscard]] std::vector<RenderAdapterMemoryHeap> MakeMemoryHeapSnapshots(
-    const VkPhysicalDeviceMemoryProperties& memoryProperties)
+[[nodiscard]] std::vector<RenderAdapterMemoryHeap> MakeMemoryHeapSnapshots(const VkPhysicalDeviceMemoryProperties& memoryProperties)
 {
     std::vector<RenderAdapterMemoryHeap> heaps;
     heaps.reserve(memoryProperties.memoryHeapCount);
@@ -1906,16 +1709,15 @@ struct VulkanSurfaceOutputSupport final
             continue;
         }
 
-        heaps.push_back(RenderAdapterMemoryHeap{
-            .sizeBytes = static_cast<std::uint64_t>(heap.size),
-            .deviceLocal = (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0});
+        heaps.push_back(RenderAdapterMemoryHeap{.sizeBytes = static_cast<std::uint64_t>(heap.size),
+                                                .deviceLocal = (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) != 0});
     }
 
     return heaps;
 }
 
-[[nodiscard]] core::Result<std::vector<VulkanQueueFamilySnapshot>> MakeQueueFamilySnapshots(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device, VkSurfaceKHR surface)
+[[nodiscard]] core::Result<std::vector<VulkanQueueFamilySnapshot>> MakeQueueFamilySnapshots(const VulkanGlobalDispatch& dispatch,
+                                                                                            VkPhysicalDevice device, VkSurfaceKHR surface)
 {
     std::uint32_t queueFamilyCount{};
     dispatch.getPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
@@ -1923,8 +1725,7 @@ struct VulkanSurfaceOutputSupport final
     std::vector<VkQueueFamilyProperties> queueProperties(queueFamilyCount);
     if (queueFamilyCount > 0U)
     {
-        dispatch.getPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
-                                                        queueProperties.data());
+        dispatch.getPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueProperties.data());
         queueProperties.resize(queueFamilyCount);
     }
 
@@ -1933,54 +1734,44 @@ struct VulkanSurfaceOutputSupport final
     for (std::uint32_t index = 0; index < queueProperties.size(); ++index)
     {
         VkBool32 presentationSupported{VK_FALSE};
-        const VkResult result = dispatch.getPhysicalDeviceSurfaceSupport(device, index, surface,
-                                                                         &presentationSupported);
+        const VkResult result = dispatch.getPhysicalDeviceSurfaceSupport(device, index, surface, &presentationSupported);
         if (result != VK_SUCCESS)
         {
-            return core::Result<std::vector<VulkanQueueFamilySnapshot>>::FromError(MakeVulkanError(
-                MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfaceSupportKHR", result));
+            return core::Result<std::vector<VulkanQueueFamilySnapshot>>::FromError(
+                MakeVulkanError(MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfaceSupportKHR", result));
         }
 
-        queueFamilies.push_back(VulkanQueueFamilySnapshot{
-            .familyIndex = index,
-            .queueCount = queueProperties[index].queueCount,
-            .supportsGraphics = (queueProperties[index].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0,
-            .supportsPresentation = presentationSupported == VK_TRUE});
+        queueFamilies.push_back(VulkanQueueFamilySnapshot{.familyIndex = index,
+                                                          .queueCount = queueProperties[index].queueCount,
+                                                          .supportsGraphics = (queueProperties[index].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0,
+                                                          .supportsPresentation = presentationSupported == VK_TRUE});
     }
 
-    return core::Result<std::vector<VulkanQueueFamilySnapshot>>::FromValue(
-        std::move(queueFamilies));
+    return core::Result<std::vector<VulkanQueueFamilySnapshot>>::FromValue(std::move(queueFamilies));
 }
 
-[[nodiscard]] bool HasGraphicsQueue(
-    const std::vector<VulkanQueueFamilySnapshot>& queueFamilies) noexcept
+[[nodiscard]] bool HasGraphicsQueue(const std::vector<VulkanQueueFamilySnapshot>& queueFamilies) noexcept
 {
     return std::ranges::any_of(queueFamilies,
                                [](const VulkanQueueFamilySnapshot& queueFamily) noexcept
                                {
-                                   return queueFamily.queueCount > 0U &&
-                                          queueFamily.supportsGraphics;
+                                   return queueFamily.queueCount > 0U && queueFamily.supportsGraphics;
                                });
 }
 
-[[nodiscard]] bool HasPresentationQueue(
-    const std::vector<VulkanQueueFamilySnapshot>& queueFamilies) noexcept
+[[nodiscard]] bool HasPresentationQueue(const std::vector<VulkanQueueFamilySnapshot>& queueFamilies) noexcept
 {
     return std::ranges::any_of(queueFamilies,
                                [](const VulkanQueueFamilySnapshot& queueFamily) noexcept
                                {
-                                   return queueFamily.queueCount > 0U &&
-                                          queueFamily.supportsPresentation;
+                                   return queueFamily.queueCount > 0U && queueFamily.supportsPresentation;
                                });
 }
 
-[[nodiscard]] std::vector<PresentationPolicy> MakeSupportedPresentationPolicies(
-    const std::vector<VkPresentModeKHR>& presentModes)
+[[nodiscard]] std::vector<PresentationPolicy> MakeSupportedPresentationPolicies(const std::vector<VkPresentModeKHR>& presentModes)
 {
     std::vector<PresentationPolicy> policies;
-    constexpr std::array orderedPolicies{PresentationPolicy::VSync,
-                                         PresentationPolicy::LowLatencyVSync,
-                                         PresentationPolicy::Uncapped};
+    constexpr std::array orderedPolicies{PresentationPolicy::VSync, PresentationPolicy::LowLatencyVSync, PresentationPolicy::Uncapped};
     policies.reserve(orderedPolicies.size());
     for (const PresentationPolicy policy : orderedPolicies)
     {
@@ -1992,27 +1783,20 @@ struct VulkanSurfaceOutputSupport final
     return policies;
 }
 
-[[nodiscard]] QueuedFrameLatencyRange MakeQueuedLatencyRange(
-    const VkSurfaceCapabilitiesKHR& capabilities) noexcept
+[[nodiscard]] QueuedFrameLatencyRange MakeQueuedLatencyRange(const VkSurfaceCapabilitiesKHR& capabilities) noexcept
 {
-    const std::uint32_t maximum =
-        capabilities.maxImageCount == 0U
-            ? QueuedFrameLatency::kMaximumFrames
-            : std::clamp(capabilities.maxImageCount, QueuedFrameLatency::kMinimumFrames,
-                         QueuedFrameLatency::kMaximumFrames);
-    return QueuedFrameLatencyRange{.minimum =
-                                       QueuedFrameLatency{QueuedFrameLatency::kMinimumFrames},
-                                   .maximum = QueuedFrameLatency{maximum}};
+    const std::uint32_t maximum = capabilities.maxImageCount == 0U ? QueuedFrameLatency::kMaximumFrames
+                                                                   : std::clamp(capabilities.maxImageCount, QueuedFrameLatency::kMinimumFrames,
+                                                                                QueuedFrameLatency::kMaximumFrames);
+    return QueuedFrameLatencyRange{.minimum = QueuedFrameLatency{QueuedFrameLatency::kMinimumFrames}, .maximum = QueuedFrameLatency{maximum}};
 }
 
-[[nodiscard]] bool IsExplicitlyRequested(const RenderAdapterSelectionDesc& desc,
-                                         const RenderAdapterId& adapterId) noexcept
+[[nodiscard]] bool IsExplicitlyRequested(const RenderAdapterSelectionDesc& desc, const RenderAdapterId& adapterId) noexcept
 {
     return desc.explicitAdapterId.has_value() && *desc.explicitAdapterId == adapterId;
 }
 
-[[nodiscard]] std::uint32_t GetAdapterPreferenceRank(RenderAdapterType type,
-                                                     RenderAdapterPreference preference) noexcept
+[[nodiscard]] std::uint32_t GetAdapterPreferenceRank(RenderAdapterType type, RenderAdapterPreference preference) noexcept
 {
     switch (preference)
     {
@@ -2054,8 +1838,7 @@ struct VulkanSurfaceOutputSupport final
     return 5U;
 }
 
-[[nodiscard]] bool IsStableAdapterLess(const RenderAdapterSnapshot& lhs,
-                                       const RenderAdapterSnapshot& rhs) noexcept
+[[nodiscard]] bool IsStableAdapterLess(const RenderAdapterSnapshot& lhs, const RenderAdapterSnapshot& rhs) noexcept
 {
     if (lhs.identity.vendorId != rhs.identity.vendorId)
     {
@@ -2085,8 +1868,7 @@ struct VulkanSurfaceOutputSupport final
     return lhs.adapterId.deviceNodeMask < rhs.adapterId.deviceNodeMask;
 }
 
-[[nodiscard]] bool IsPreferredAdapterLess(const RenderAdapterSnapshot& lhs,
-                                          const RenderAdapterSnapshot& rhs,
+[[nodiscard]] bool IsPreferredAdapterLess(const RenderAdapterSnapshot& lhs, const RenderAdapterSnapshot& rhs,
                                           RenderAdapterPreference preference) noexcept
 {
     const std::uint32_t lhsRank = GetAdapterPreferenceRank(lhs.identity.adapterType, preference);
@@ -2099,9 +1881,8 @@ struct VulkanSurfaceOutputSupport final
     return IsStableAdapterLess(lhs, rhs);
 }
 
-[[nodiscard]] core::Result<VulkanAdapterCandidate> BuildAdapterCandidate(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device, VkSurfaceKHR surface,
-    const RenderAdapterSelectionDesc& desc)
+[[nodiscard]] core::Result<VulkanAdapterCandidate> BuildAdapterCandidate(const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device,
+                                                                         VkSurfaceKHR surface, const RenderAdapterSelectionDesc& desc)
 {
     VkPhysicalDeviceDriverProperties driverProperties{};
     driverProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES;
@@ -2118,95 +1899,72 @@ struct VulkanSurfaceOutputSupport final
     VkPhysicalDeviceMemoryProperties memoryProperties{};
     dispatch.getPhysicalDeviceMemoryProperties(device, &memoryProperties);
 
-    core::Result<std::vector<VulkanQueueFamilySnapshot>> queueFamilies =
-        MakeQueueFamilySnapshots(dispatch, device, surface);
+    core::Result<std::vector<VulkanQueueFamilySnapshot>> queueFamilies = MakeQueueFamilySnapshots(dispatch, device, surface);
     if (!queueFamilies)
     {
         return core::Result<VulkanAdapterCandidate>::FromError(std::move(queueFamilies).GetError());
     }
 
-    core::Result<VkSurfaceCapabilitiesKHR> surfaceCapabilities =
-        QuerySurfaceCapabilities(dispatch, device, surface);
+    core::Result<VkSurfaceCapabilitiesKHR> surfaceCapabilities = QuerySurfaceCapabilities(dispatch, device, surface);
     if (!surfaceCapabilities)
     {
-        return core::Result<VulkanAdapterCandidate>::FromError(
-            std::move(surfaceCapabilities).GetError());
+        return core::Result<VulkanAdapterCandidate>::FromError(std::move(surfaceCapabilities).GetError());
     }
 
-    core::Result<std::vector<VkSurfaceFormatKHR>> surfaceFormats =
-        QuerySurfaceFormats(dispatch, device, surface);
+    core::Result<std::vector<VkSurfaceFormatKHR>> surfaceFormats = QuerySurfaceFormats(dispatch, device, surface);
     if (!surfaceFormats)
     {
-        return core::Result<VulkanAdapterCandidate>::FromError(
-            std::move(surfaceFormats).GetError());
+        return core::Result<VulkanAdapterCandidate>::FromError(std::move(surfaceFormats).GetError());
     }
 
-    core::Result<std::vector<VkPresentModeKHR>> presentModes =
-        QueryPresentModes(dispatch, device, surface);
+    core::Result<std::vector<VkPresentModeKHR>> presentModes = QueryPresentModes(dispatch, device, surface);
     if (!presentModes)
     {
         return core::Result<VulkanAdapterCandidate>::FromError(std::move(presentModes).GetError());
     }
 
-    core::Result<std::vector<VkExtensionProperties>> deviceExtensions =
-        EnumerateDeviceExtensions(dispatch, device);
+    core::Result<std::vector<VkExtensionProperties>> deviceExtensions = EnumerateDeviceExtensions(dispatch, device);
     if (!deviceExtensions)
     {
-        return core::Result<VulkanAdapterCandidate>::FromError(
-            std::move(deviceExtensions).GetError());
+        return core::Result<VulkanAdapterCandidate>::FromError(std::move(deviceExtensions).GetError());
     }
 
     const VkPhysicalDeviceProperties& properties = properties2.properties;
-    const bool supportsSwapchain =
-        ContainsExtension(deviceExtensions.GetValue(), kSwapchainExtensionName);
+    const bool supportsSwapchain = ContainsExtension(deviceExtensions.GetValue(), kSwapchainExtensionName);
     const bool supportsPresentation = HasPresentationQueue(queueFamilies.GetValue());
-    const bool supportsRequiredOutput =
-        std::ranges::any_of(surfaceFormats.GetValue(),
-                            [](const VkSurfaceFormatKHR& format) noexcept
-                            {
-                                return IsRequiredSdrSrgbSurfaceFormat(format.format,
-                                                                      format.colorSpace);
-                            }) &&
-        (surfaceCapabilities.GetValue().supportedCompositeAlpha &
-         VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) != 0U &&
-        (surfaceCapabilities.GetValue().supportedUsageFlags &
-         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0U;
-    std::vector<PresentationPolicy> supportedPolicies =
-        MakeSupportedPresentationPolicies(presentModes.GetValue());
-    const bool hasVSync =
-        std::ranges::find(supportedPolicies, PresentationPolicy::VSync) != supportedPolicies.end();
+    const bool supportsRequiredOutput = std::ranges::any_of(surfaceFormats.GetValue(),
+                                                            [](const VkSurfaceFormatKHR& format) noexcept
+                                                            {
+                                                                return IsRequiredSdrSrgbSurfaceFormat(format.format, format.colorSpace);
+                                                            }) &&
+                                        (surfaceCapabilities.GetValue().supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) != 0U &&
+                                        (surfaceCapabilities.GetValue().supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0U;
+    std::vector<PresentationPolicy> supportedPolicies = MakeSupportedPresentationPolicies(presentModes.GetValue());
+    const bool hasVSync = std::ranges::find(supportedPolicies, PresentationPolicy::VSync) != supportedPolicies.end();
 
     VulkanAdapterCandidate candidate{.device = device};
     candidate.snapshot = RenderAdapterSnapshot{
         .adapterId = MakeRenderAdapterId(idProperties),
         .backend = RenderBackendKind::Vulkan,
         .apiVersion = properties.apiVersion,
-        .identity =
-            RenderAdapterIdentity{
-                .vendorId = properties.vendorID,
-                .deviceId = properties.deviceID,
-                .adapterType = MapPhysicalDeviceType(properties.deviceType),
-                .name = CopyFixedString(properties.deviceName, sizeof(properties.deviceName))},
-        .driver =
-            RenderAdapterDriverIdentity{
-                .driverVersion = properties.driverVersion,
-                .driverName = CopyFixedString(driverProperties.driverName,
-                                              sizeof(driverProperties.driverName)),
-                .driverInfo = CopyFixedString(driverProperties.driverInfo,
-                                              sizeof(driverProperties.driverInfo))},
-        .limits =
-            RenderAdapterLimits{.maxImageDimension2D = properties.limits.maxImageDimension2D,
-                                .maxFramebufferWidth = properties.limits.maxFramebufferWidth,
-                                .maxFramebufferHeight = properties.limits.maxFramebufferHeight,
-                                .maxColorAttachments = properties.limits.maxColorAttachments},
+        .identity = RenderAdapterIdentity{.vendorId = properties.vendorID,
+                                          .deviceId = properties.deviceID,
+                                          .adapterType = MapPhysicalDeviceType(properties.deviceType),
+                                          .name = CopyFixedString(properties.deviceName, sizeof(properties.deviceName))},
+        .driver = RenderAdapterDriverIdentity{.driverVersion = properties.driverVersion,
+                                              .driverName = CopyFixedString(driverProperties.driverName, sizeof(driverProperties.driverName)),
+                                              .driverInfo = CopyFixedString(driverProperties.driverInfo, sizeof(driverProperties.driverInfo))},
+        .limits = RenderAdapterLimits{.maxImageDimension2D = properties.limits.maxImageDimension2D,
+                                      .maxFramebufferWidth = properties.limits.maxFramebufferWidth,
+                                      .maxFramebufferHeight = properties.limits.maxFramebufferHeight,
+                                      .maxColorAttachments = properties.limits.maxColorAttachments},
         .memoryHeaps = MakeMemoryHeapSnapshots(memoryProperties),
-        .presentation = RenderPresentationCapabilities{
-            .supportedPolicies = std::move(supportedPolicies),
-            .queuedLatency = MakeQueuedLatencyRange(surfaceCapabilities.GetValue()),
-            .supportsWindowPresentation =
-                supportsSwapchain && HasGraphicsQueue(queueFamilies.GetValue()) &&
-                supportsPresentation && supportsRequiredOutput && hasVSync,
-            .supportsOpaqueSdrSrgbOutput = supportsRequiredOutput}};
+        .presentation =
+            RenderPresentationCapabilities{.supportedPolicies = std::move(supportedPolicies),
+                                           .queuedLatency = MakeQueuedLatencyRange(surfaceCapabilities.GetValue()),
+                                           .supportsWindowPresentation = supportsSwapchain && HasGraphicsQueue(queueFamilies.GetValue()) &&
+                                                                         supportsPresentation && supportsRequiredOutput && hasVSync,
+                                           .supportsOpaqueSdrSrgbOutput = supportsRequiredOutput}};
     candidate.queueFamilies = std::move(queueFamilies).GetValue();
     candidate.surfaceFormats = std::move(surfaceFormats).GetValue();
     candidate.presentModes = std::move(presentModes).GetValue();
@@ -2214,22 +1972,18 @@ struct VulkanSurfaceOutputSupport final
 
     if (!pond::render::IsValid(candidate.snapshot.adapterId))
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter does not expose a stable Vulkan device UUID or LUID.");
+        candidate.rejectionReasons.push_back("Adapter does not expose a stable Vulkan device UUID or LUID.");
     }
 
-    if (desc.explicitAdapterId.has_value() &&
-        !IsExplicitlyRequested(desc, candidate.snapshot.adapterId))
+    if (desc.explicitAdapterId.has_value() && !IsExplicitlyRequested(desc, candidate.snapshot.adapterId))
     {
         candidate.rejectionReasons.push_back("Adapter does not match the explicit adapter ID.");
     }
 
     if (candidate.snapshot.apiVersion < GetMinimumVulkanInstanceVersion())
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter reports Vulkan API " + FormatVulkanVersion(candidate.snapshot.apiVersion) +
-            ", below the required Vulkan " +
-            FormatVulkanVersion(GetMinimumVulkanInstanceVersion()) + ".");
+        candidate.rejectionReasons.push_back("Adapter reports Vulkan API " + FormatVulkanVersion(candidate.snapshot.apiVersion) +
+                                             ", below the required Vulkan " + FormatVulkanVersion(GetMinimumVulkanInstanceVersion()) + ".");
     }
 
     if (!HasGraphicsQueue(candidate.queueFamilies))
@@ -2239,69 +1993,54 @@ struct VulkanSurfaceOutputSupport final
 
     if (!supportsPresentation)
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter cannot present to the first prepared surface.");
+        candidate.rejectionReasons.push_back("Adapter cannot present to the first prepared surface.");
     }
 
     if (candidate.surfaceFormats.empty())
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter exposes no formats for the first prepared surface.");
+        candidate.rejectionReasons.push_back("Adapter exposes no formats for the first prepared surface.");
     }
     else if (!std::ranges::any_of(candidate.surfaceFormats,
                                   [](const VkSurfaceFormatKHR& format) noexcept
                                   {
-                                      return IsRequiredSdrSrgbSurfaceFormat(format.format,
-                                                                            format.colorSpace);
+                                      return IsRequiredSdrSrgbSurfaceFormat(format.format, format.colorSpace);
                                   }))
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter cannot provide the required SDR sRGB format and color space for the first "
-            "prepared surface.");
+        candidate.rejectionReasons.push_back("Adapter cannot provide the required SDR sRGB format and color space for the first "
+                                             "prepared surface.");
     }
 
-    if ((surfaceCapabilities.GetValue().supportedCompositeAlpha &
-         VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) == 0U)
+    if ((surfaceCapabilities.GetValue().supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) == 0U)
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter cannot provide required opaque composition for the first prepared surface.");
+        candidate.rejectionReasons.push_back("Adapter cannot provide required opaque composition for the first prepared surface.");
     }
 
-    if ((surfaceCapabilities.GetValue().supportedUsageFlags &
-         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0U)
+    if ((surfaceCapabilities.GetValue().supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0U)
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter cannot use first-surface swapchain images as color attachments.");
+        candidate.rejectionReasons.push_back("Adapter cannot use first-surface swapchain images as color attachments.");
     }
 
     if (!ContainsVkPresentMode(candidate.presentModes, VK_PRESENT_MODE_FIFO_KHR))
     {
-        candidate.rejectionReasons.push_back(
-            "Adapter does not expose required FIFO presentation for the first prepared surface.");
+        candidate.rejectionReasons.push_back("Adapter does not expose required FIFO presentation for the first prepared surface.");
     }
 
     if (!candidate.supportsSwapchain)
     {
-        candidate.rejectionReasons.push_back(
-            std::string{"Adapter does not expose required device extension "} +
-            kSwapchainExtensionName + ".");
+        candidate.rejectionReasons.push_back(std::string{"Adapter does not expose required device extension "} + kSwapchainExtensionName + ".");
     }
 
     if (!desc.explicitAdapterId.has_value())
     {
-        if (desc.adapterPreference == RenderAdapterPreference::Software &&
-            candidate.snapshot.identity.adapterType != RenderAdapterType::Cpu)
+        if (desc.adapterPreference == RenderAdapterPreference::Software && candidate.snapshot.identity.adapterType != RenderAdapterType::Cpu)
         {
-            candidate.rejectionReasons.push_back(
-                "Software adapter preference excludes hardware adapters.");
+            candidate.rejectionReasons.push_back("Software adapter preference excludes hardware adapters.");
         }
-        else if (desc.adapterPreference != RenderAdapterPreference::Software &&
-                 candidate.snapshot.identity.adapterType == RenderAdapterType::Cpu)
+        else if (desc.adapterPreference != RenderAdapterPreference::Software && candidate.snapshot.identity.adapterType == RenderAdapterType::Cpu)
         {
-            candidate.rejectionReasons.push_back(
-                "Software adapters require RenderAdapterPreference::Software or an explicit "
-                "adapter "
-                "ID.");
+            candidate.rejectionReasons.push_back("Software adapters require RenderAdapterPreference::Software or an explicit "
+                                                 "adapter "
+                                                 "ID.");
         }
     }
 
@@ -2316,8 +2055,7 @@ struct VulkanSurfaceOutputSupport final
                                   .reasons = candidate.rejectionReasons};
 }
 
-[[nodiscard]] std::string MakeNoCompatibleAdapterMessage(
-    const std::vector<RenderAdapterRejection>& rejections)
+[[nodiscard]] std::string MakeNoCompatibleAdapterMessage(const std::vector<RenderAdapterRejection>& rejections)
 {
     std::string message{"No Vulkan adapter satisfied the first-surface requirements."};
     for (const RenderAdapterRejection& rejection : rejections)
@@ -2344,14 +2082,12 @@ struct VulkanDeviceFeatureSelection final
     std::vector<const char*> enabledExtensions{};
 };
 
-[[nodiscard]] bool ContainsQueueFamilyIndex(const std::vector<std::uint32_t>& indices,
-                                            std::uint32_t expected) noexcept
+[[nodiscard]] bool ContainsQueueFamilyIndex(const std::vector<std::uint32_t>& indices, std::uint32_t expected) noexcept
 {
     return std::ranges::find(indices, expected) != indices.end();
 }
 
-[[nodiscard]] std::optional<std::uint32_t> FindGraphicsQueueFamily(
-    const std::vector<VulkanQueueFamilySnapshot>& queueFamilies) noexcept
+[[nodiscard]] std::optional<std::uint32_t> FindGraphicsQueueFamily(const std::vector<VulkanQueueFamilySnapshot>& queueFamilies) noexcept
 {
     for (const VulkanQueueFamilySnapshot& queueFamily : queueFamilies)
     {
@@ -2364,14 +2100,12 @@ struct VulkanDeviceFeatureSelection final
     return std::nullopt;
 }
 
-[[nodiscard]] std::optional<std::uint32_t> FindPresentationQueueFamily(
-    const std::vector<VulkanQueueFamilySnapshot>& queueFamilies,
-    std::uint32_t preferredFamilyIndex) noexcept
+[[nodiscard]] std::optional<std::uint32_t> FindPresentationQueueFamily(const std::vector<VulkanQueueFamilySnapshot>& queueFamilies,
+                                                                       std::uint32_t preferredFamilyIndex) noexcept
 {
     for (const VulkanQueueFamilySnapshot& queueFamily : queueFamilies)
     {
-        if (queueFamily.queueCount > 0U && queueFamily.supportsPresentation &&
-            queueFamily.familyIndex == preferredFamilyIndex)
+        if (queueFamily.queueCount > 0U && queueFamily.supportsPresentation && queueFamily.familyIndex == preferredFamilyIndex)
         {
             return queueFamily.familyIndex;
         }
@@ -2388,32 +2122,27 @@ struct VulkanDeviceFeatureSelection final
     return std::nullopt;
 }
 
-[[nodiscard]] core::Result<VulkanDeviceQueuePlan> MakeDeviceQueuePlan(
-    const std::vector<VulkanQueueFamilySnapshot>& queueFamilies)
+[[nodiscard]] core::Result<VulkanDeviceQueuePlan> MakeDeviceQueuePlan(const std::vector<VulkanQueueFamilySnapshot>& queueFamilies)
 {
     const std::optional<std::uint32_t> graphicsFamily = FindGraphicsQueueFamily(queueFamilies);
     if (!graphicsFamily.has_value())
     {
         return core::Result<VulkanDeviceQueuePlan>::FromError(
-            MakeRenderError(RenderErrorCode::NoCompatibleAdapter,
-                            "Selected Vulkan adapter no longer exposes a graphics queue family."));
+            MakeRenderError(RenderErrorCode::NoCompatibleAdapter, "Selected Vulkan adapter no longer exposes a graphics queue family."));
     }
 
-    const std::optional<std::uint32_t> presentationFamily =
-        FindPresentationQueueFamily(queueFamilies, *graphicsFamily);
+    const std::optional<std::uint32_t> presentationFamily = FindPresentationQueueFamily(queueFamilies, *graphicsFamily);
     if (!presentationFamily.has_value())
     {
-        return core::Result<VulkanDeviceQueuePlan>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedSurface,
-            "Selected Vulkan adapter no longer exposes a presentation queue for the surface."));
+        return core::Result<VulkanDeviceQueuePlan>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Selected Vulkan adapter no longer exposes a presentation queue for the surface."));
     }
 
     std::vector<std::uint32_t> provisionedFamilies;
     provisionedFamilies.reserve(queueFamilies.size());
     for (const VulkanQueueFamilySnapshot& queueFamily : queueFamilies)
     {
-        if (queueFamily.queueCount > 0U &&
-            !ContainsQueueFamilyIndex(provisionedFamilies, queueFamily.familyIndex))
+        if (queueFamily.queueCount > 0U && !ContainsQueueFamilyIndex(provisionedFamilies, queueFamily.familyIndex))
         {
             provisionedFamilies.push_back(queueFamily.familyIndex);
         }
@@ -2422,13 +2151,11 @@ struct VulkanDeviceFeatureSelection final
     VulkanDeviceQueuePlan plan{.graphicsQueueFamilyIndex = *graphicsFamily,
                                .presentationQueueFamilyIndex = *presentationFamily,
                                .provisionedQueueFamilyIndices = std::move(provisionedFamilies),
-                               .usesDistinctPresentationQueue =
-                                   *graphicsFamily != *presentationFamily};
+                               .usesDistinctPresentationQueue = *graphicsFamily != *presentationFamily};
     if (!IsValidVulkanDeviceQueuePlan(plan))
     {
         return core::Result<VulkanDeviceQueuePlan>::FromError(
-            MakeRenderError(RenderErrorCode::BackendFailure,
-                            "Internal Vulkan logical-device queue plan failed validation."));
+            MakeRenderError(RenderErrorCode::BackendFailure, "Internal Vulkan logical-device queue plan failed validation."));
     }
 
     return core::Result<VulkanDeviceQueuePlan>::FromValue(std::move(plan));
@@ -2437,23 +2164,19 @@ struct VulkanDeviceFeatureSelection final
 void AppendFeatureStruct(void**& nextLink, void* featureStruct) noexcept
 {
     *nextLink = featureStruct;
-    nextLink =
-        reinterpret_cast<void**>(&reinterpret_cast<VkBaseOutStructure*>(featureStruct)->pNext);
+    nextLink = reinterpret_cast<void**>(&reinterpret_cast<VkBaseOutStructure*>(featureStruct)->pNext);
 }
 
-[[nodiscard]] VulkanDeviceFeatureSelection SelectOptionalDeviceFeatures(
-    const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device,
-    const std::vector<VkExtensionProperties>& extensions, bool khrSurfaceMaintenance1Enabled,
-    bool extSurfaceMaintenance1Enabled)
+[[nodiscard]] VulkanDeviceFeatureSelection SelectOptionalDeviceFeatures(const VulkanGlobalDispatch& dispatch, VkPhysicalDevice device,
+                                                                        const std::vector<VkExtensionProperties>& extensions,
+                                                                        bool khrSurfaceMaintenance1Enabled, bool extSurfaceMaintenance1Enabled)
 {
     const char* swapchainMaintenance1Extension = nullptr;
-    if (khrSurfaceMaintenance1Enabled &&
-        ContainsExtension(extensions, kKhrSwapchainMaintenance1ExtensionName))
+    if (khrSurfaceMaintenance1Enabled && ContainsExtension(extensions, kKhrSwapchainMaintenance1ExtensionName))
     {
         swapchainMaintenance1Extension = kKhrSwapchainMaintenance1ExtensionName;
     }
-    else if (extSurfaceMaintenance1Enabled &&
-             ContainsExtension(extensions, kExtSwapchainMaintenance1ExtensionName))
+    else if (extSurfaceMaintenance1Enabled && ContainsExtension(extensions, kExtSwapchainMaintenance1ExtensionName))
     {
         swapchainMaintenance1Extension = kExtSwapchainMaintenance1ExtensionName;
     }
@@ -2466,8 +2189,7 @@ void AppendFeatureStruct(void**& nextLink, void* featureStruct) noexcept
     availableFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 
     VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR maintenanceFeatures{};
-    maintenanceFeatures.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR;
+    maintenanceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR;
 
     VkPhysicalDevicePresentIdFeaturesKHR presentIdFeatures{};
     presentIdFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
@@ -2500,9 +2222,8 @@ void AppendFeatureStruct(void**& nextLink, void* featureStruct) noexcept
         selection.enabledExtensions.push_back(swapchainMaintenance1Extension);
     }
 
-    const bool canEnablePresentCompletion = hasPresentId && hasPresentWait &&
-                                            presentIdFeatures.presentId == VK_TRUE &&
-                                            presentWaitFeatures.presentWait == VK_TRUE;
+    const bool canEnablePresentCompletion =
+        hasPresentId && hasPresentWait && presentIdFeatures.presentId == VK_TRUE && presentWaitFeatures.presentWait == VK_TRUE;
     if (canEnablePresentCompletion)
     {
         selection.optionalCapabilities.presentId = true;
@@ -2514,22 +2235,18 @@ void AppendFeatureStruct(void**& nextLink, void* featureStruct) noexcept
     return selection;
 }
 
-[[nodiscard]] core::Result<VulkanAdapterCandidate> FindSelectedAdapterCandidate(
-    const VulkanGlobalDispatch& dispatch, VkInstance instance, VkSurfaceKHR surface,
-    const RenderAdapterSelection& selection)
+[[nodiscard]] core::Result<VulkanAdapterCandidate> FindSelectedAdapterCandidate(const VulkanGlobalDispatch& dispatch, VkInstance instance,
+                                                                                VkSurfaceKHR surface, const RenderAdapterSelection& selection)
 {
-    core::Result<std::vector<VkPhysicalDevice>> physicalDevices =
-        EnumeratePhysicalDevices(dispatch, instance);
+    core::Result<std::vector<VkPhysicalDevice>> physicalDevices = EnumeratePhysicalDevices(dispatch, instance);
     if (!physicalDevices)
     {
-        return core::Result<VulkanAdapterCandidate>::FromError(
-            std::move(physicalDevices).GetError());
+        return core::Result<VulkanAdapterCandidate>::FromError(std::move(physicalDevices).GetError());
     }
 
     for (VkPhysicalDevice physicalDevice : physicalDevices.GetValue())
     {
-        core::Result<VulkanAdapterCandidate> candidate =
-            BuildAdapterCandidate(dispatch, physicalDevice, surface, selection.request);
+        core::Result<VulkanAdapterCandidate> candidate = BuildAdapterCandidate(dispatch, physicalDevice, surface, selection.request);
         if (!candidate)
         {
             return core::Result<VulkanAdapterCandidate>::FromError(std::move(candidate).GetError());
@@ -2541,8 +2258,7 @@ void AppendFeatureStruct(void**& nextLink, void* featureStruct) noexcept
             if (!value.compatible)
             {
                 return core::Result<VulkanAdapterCandidate>::FromError(MakeRenderError(
-                    RenderErrorCode::UnsupportedSurface,
-                    "Selected Vulkan adapter no longer satisfies the first-surface requirements."));
+                    RenderErrorCode::UnsupportedSurface, "Selected Vulkan adapter no longer satisfies the first-surface requirements."));
             }
 
             return core::Result<VulkanAdapterCandidate>::FromValue(std::move(value));
@@ -2550,13 +2266,11 @@ void AppendFeatureStruct(void**& nextLink, void* featureStruct) noexcept
     }
 
     return core::Result<VulkanAdapterCandidate>::FromError(
-        MakeRenderError(RenderErrorCode::NoCompatibleAdapter,
-                        "Selected Vulkan adapter was not found during logical-device creation."));
+        MakeRenderError(RenderErrorCode::NoCompatibleAdapter, "Selected Vulkan adapter was not found during logical-device creation."));
 }
 } // namespace
 
-bool VulkanValidationMessageFilter::Matches(std::string_view inputName,
-                                            std::int32_t inputNumber) const noexcept
+bool VulkanValidationMessageFilter::Matches(std::string_view inputName, std::int32_t inputNumber) const noexcept
 {
     return messageIdName == inputName && messageIdNumber == inputNumber;
 }
@@ -2564,8 +2278,7 @@ bool VulkanValidationMessageFilter::Matches(std::string_view inputName,
 namespace
 {
 template <std::size_t Size>
-[[nodiscard]] bool CopyBoundedValidationText(std::array<char, Size>& destination,
-                                             std::string_view source) noexcept
+[[nodiscard]] bool CopyBoundedValidationText(std::array<char, Size>& destination, std::string_view source) noexcept
 {
     static_assert(Size > 0U);
     const std::size_t characterCount = std::min(source.size(), Size - 1U);
@@ -2575,8 +2288,7 @@ template <std::size_t Size>
 }
 
 template <std::size_t Size>
-[[nodiscard]] bool CopyBoundedValidationText(std::array<char, Size>& destination,
-                                             const char* source) noexcept
+[[nodiscard]] bool CopyBoundedValidationText(std::array<char, Size>& destination, const char* source) noexcept
 {
     static_assert(Size > 0U);
     if (source == nullptr)
@@ -2595,8 +2307,7 @@ template <std::size_t Size>
     return source[characterCount] != '\0';
 }
 
-void CaptureValidationMessage(VulkanDebugMessengerContext& context,
-                              VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+void CaptureValidationMessage(VulkanDebugMessengerContext& context, VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                               const VkDebugUtilsMessengerCallbackDataEXT* callbackData) noexcept
 {
     const bool isError = (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
@@ -2617,49 +2328,48 @@ void CaptureValidationMessage(VulkanDebugMessengerContext& context,
     }
 
     VulkanDebugMessengerContext::CapturedMessage& captured = context.capturedMessages[index];
-    captured.message.severity =
-        isError ? RenderValidationMessageSeverity::Error : RenderValidationMessageSeverity::Warning;
+    captured.message.severity = isError ? RenderValidationMessageSeverity::Error : RenderValidationMessageSeverity::Warning;
     captured.message.messageIdNumber = callbackData != nullptr ? callbackData->messageIdNumber : 0;
     const char* const sourceName =
-        callbackData != nullptr && callbackData->pMessageIdName != nullptr
-            ? callbackData->pMessageIdName
-            : "unknown-message";
+        callbackData != nullptr && callbackData->pMessageIdName != nullptr ? callbackData->pMessageIdName : "unknown-message";
     (void)CopyBoundedValidationText(captured.message.messageIdName, sourceName);
 
-    const std::string_view operationContext =
-        context.currentOperation.empty() ? std::string_view{"unknown"} : context.currentOperation;
-    captured.message.operationContextTruncated =
-        CopyBoundedValidationText(captured.message.operationContext, operationContext);
+    const std::string_view operationContext = context.currentOperation.empty() ? std::string_view{"unknown"} : context.currentOperation;
+    captured.message.operationContextTruncated = CopyBoundedValidationText(captured.message.operationContext, operationContext);
 
-    const char* const sourceMessage = callbackData != nullptr && callbackData->pMessage != nullptr
-                                          ? callbackData->pMessage
-                                          : "no message";
-    captured.message.messageTextTruncated =
-        CopyBoundedValidationText(captured.message.messageText, sourceMessage);
+    const char* const sourceMessage = callbackData != nullptr && callbackData->pMessage != nullptr ? callbackData->pMessage : "no message";
+    captured.message.messageTextTruncated = CopyBoundedValidationText(captured.message.messageText, sourceMessage);
     captured.ready.store(true, std::memory_order_release);
 }
 } // namespace
 
 VulkanInstanceOwner::VulkanInstanceOwner() noexcept = default;
 
-VulkanInstanceOwner::VulkanInstanceOwner(
-    VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-    VulkanGlobalDispatch::DestroyInstanceFn destroyInstance,
-    VulkanGlobalDispatch::DestroyDebugUtilsMessengerFn destroyDebugMessenger,
-    VulkanGlobalDispatch dispatch, std::optional<VolkInstanceTable> volkTable,
-    VulkanInstanceInfo info, std::unique_ptr<VulkanDebugMessengerContext> debugContext) noexcept
-    : m_instance{instance}, m_debugMessenger{debugMessenger}, m_destroyInstance{destroyInstance},
-      m_destroyDebugMessenger{destroyDebugMessenger}, m_dispatch{dispatch},
-      m_volkTable{std::move(volkTable)}, m_info{info}, m_debugContext{std::move(debugContext)}
+VulkanInstanceOwner::VulkanInstanceOwner(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                                         VulkanGlobalDispatch::DestroyInstanceFn destroyInstance,
+                                         VulkanGlobalDispatch::DestroyDebugUtilsMessengerFn destroyDebugMessenger, VulkanGlobalDispatch dispatch,
+                                         std::optional<VolkInstanceTable> volkTable, VulkanInstanceInfo info,
+                                         std::unique_ptr<VulkanDebugMessengerContext> debugContext) noexcept :
+    m_instance{instance},
+    m_debugMessenger{debugMessenger},
+    m_destroyInstance{destroyInstance},
+    m_destroyDebugMessenger{destroyDebugMessenger},
+    m_dispatch{dispatch},
+    m_volkTable{std::move(volkTable)},
+    m_info{info},
+    m_debugContext{std::move(debugContext)}
 {
 }
 
-VulkanInstanceOwner::VulkanInstanceOwner(VulkanInstanceOwner&& other) noexcept
-    : m_instance{other.m_instance}, m_debugMessenger{other.m_debugMessenger},
-      m_destroyInstance{other.m_destroyInstance},
-      m_destroyDebugMessenger{other.m_destroyDebugMessenger}, m_dispatch{other.m_dispatch},
-      m_volkTable{std::move(other.m_volkTable)}, m_info{other.m_info},
-      m_debugContext{std::move(other.m_debugContext)}
+VulkanInstanceOwner::VulkanInstanceOwner(VulkanInstanceOwner&& other) noexcept :
+    m_instance{other.m_instance},
+    m_debugMessenger{other.m_debugMessenger},
+    m_destroyInstance{other.m_destroyInstance},
+    m_destroyDebugMessenger{other.m_destroyDebugMessenger},
+    m_dispatch{other.m_dispatch},
+    m_volkTable{std::move(other.m_volkTable)},
+    m_info{other.m_info},
+    m_debugContext{std::move(other.m_debugContext)}
 {
     other.m_instance = VK_NULL_HANDLE;
     other.m_debugMessenger = VK_NULL_HANDLE;
@@ -2725,15 +2435,12 @@ RenderValidationReport VulkanInstanceOwner::GetValidationReport() const noexcept
 
     report.warningCount = m_debugContext->warningCount.load(std::memory_order_relaxed);
     report.errorCount = m_debugContext->errorCount.load(std::memory_order_relaxed);
-    report.droppedMessageCount =
-        m_debugContext->droppedMessageCount.load(std::memory_order_relaxed);
+    report.droppedMessageCount = m_debugContext->droppedMessageCount.load(std::memory_order_relaxed);
     const std::size_t reserved =
-        std::min(m_debugContext->reservedMessageCount.load(std::memory_order_acquire),
-                 m_debugContext->capturedMessages.size());
+        std::min(m_debugContext->reservedMessageCount.load(std::memory_order_acquire), m_debugContext->capturedMessages.size());
     for (std::size_t index = 0U; index < reserved; ++index)
     {
-        const VulkanDebugMessengerContext::CapturedMessage& captured =
-            m_debugContext->capturedMessages[index];
+        const VulkanDebugMessengerContext::CapturedMessage& captured = m_debugContext->capturedMessages[index];
         if (!captured.ready.load(std::memory_order_acquire))
         {
             continue;
@@ -2778,18 +2485,20 @@ void VulkanInstanceOwner::Reset() noexcept
 }
 VulkanSurfaceOwner::VulkanSurfaceOwner() noexcept = default;
 
-VulkanSurfaceOwner::VulkanSurfaceOwner(std::shared_ptr<VulkanInstanceOwner> instance,
-                                       VkSurfaceKHR surface,
-                                       VulkanGlobalDispatch::DestroySurfaceFn destroySurface,
-                                       VulkanSurfaceInfo info) noexcept
-    : m_instance{std::move(instance)}, m_surface{surface}, m_destroySurface{destroySurface},
-      m_info{info}
+VulkanSurfaceOwner::VulkanSurfaceOwner(std::shared_ptr<VulkanInstanceOwner> instance, VkSurfaceKHR surface,
+                                       VulkanGlobalDispatch::DestroySurfaceFn destroySurface, VulkanSurfaceInfo info) noexcept :
+    m_instance{std::move(instance)},
+    m_surface{surface},
+    m_destroySurface{destroySurface},
+    m_info{info}
 {
 }
 
-VulkanSurfaceOwner::VulkanSurfaceOwner(VulkanSurfaceOwner&& other) noexcept
-    : m_instance{std::move(other.m_instance)}, m_surface{other.m_surface},
-      m_destroySurface{other.m_destroySurface}, m_info{other.m_info}
+VulkanSurfaceOwner::VulkanSurfaceOwner(VulkanSurfaceOwner&& other) noexcept :
+    m_instance{std::move(other.m_instance)},
+    m_surface{other.m_surface},
+    m_destroySurface{other.m_destroySurface},
+    m_info{other.m_info}
 {
     other.m_surface = VK_NULL_HANDLE;
     other.m_destroySurface = nullptr;
@@ -2840,8 +2549,7 @@ std::shared_ptr<VulkanInstanceOwner> VulkanSurfaceOwner::GetInstanceOwner() cons
 
 void VulkanSurfaceOwner::Reset() noexcept
 {
-    if (m_surface != VK_NULL_HANDLE && m_destroySurface != nullptr && m_instance != nullptr &&
-        m_instance->IsValid())
+    if (m_surface != VK_NULL_HANDLE && m_destroySurface != nullptr && m_instance != nullptr && m_instance->IsValid())
     {
         m_destroySurface(m_instance->GetHandle(), m_surface, nullptr);
     }
@@ -2853,33 +2561,44 @@ void VulkanSurfaceOwner::Reset() noexcept
 }
 VulkanDeviceOwner::VulkanDeviceOwner() noexcept = default;
 
-VulkanDeviceOwner::VulkanDeviceOwner(
-    std::shared_ptr<VulkanInstanceOwner> instance, VkPhysicalDevice physicalDevice, VkDevice device,
-    void* allocator, std::vector<VkQueue> queues,
-    std::unique_ptr<VulkanQueueSynchronization> queueSynchronization,
-    VulkanGlobalDispatch::DestroyDeviceFn destroyDevice,
-    VulkanGlobalDispatch::DeviceWaitIdleFn deviceWaitIdle,
-    VulkanGlobalDispatch::QueueWaitIdleFn queueWaitIdle,
-    VulkanGlobalDispatch::DestroyAllocatorFn destroyAllocator, VulkanGlobalDispatch dispatch,
-    std::optional<VolkDeviceTable> volkTable, VulkanDeviceInfo info,
-    std::shared_ptr<VulkanDeviceChildLifetime> childLifetime) noexcept
-    : m_instance{std::move(instance)}, m_physicalDevice{physicalDevice}, m_device{device},
-      m_allocator{allocator}, m_queues{std::move(queues)},
-      m_queueSynchronization{std::move(queueSynchronization)}, m_destroyDevice{destroyDevice},
-      m_deviceWaitIdle{deviceWaitIdle}, m_queueWaitIdle{queueWaitIdle},
-      m_destroyAllocator{destroyAllocator}, m_dispatch{dispatch}, m_volkTable{std::move(volkTable)},
-      m_info{std::move(info)}, m_childLifetime{std::move(childLifetime)}
+VulkanDeviceOwner::VulkanDeviceOwner(std::shared_ptr<VulkanInstanceOwner> instance, VkPhysicalDevice physicalDevice, VkDevice device, void* allocator,
+                                     std::vector<VkQueue> queues, std::unique_ptr<VulkanQueueSynchronization> queueSynchronization,
+                                     VulkanGlobalDispatch::DestroyDeviceFn destroyDevice, VulkanGlobalDispatch::DeviceWaitIdleFn deviceWaitIdle,
+                                     VulkanGlobalDispatch::QueueWaitIdleFn queueWaitIdle, VulkanGlobalDispatch::DestroyAllocatorFn destroyAllocator,
+                                     VulkanGlobalDispatch dispatch, std::optional<VolkDeviceTable> volkTable, VulkanDeviceInfo info,
+                                     std::shared_ptr<VulkanDeviceChildLifetime> childLifetime) noexcept :
+    m_instance{std::move(instance)},
+    m_physicalDevice{physicalDevice},
+    m_device{device},
+    m_allocator{allocator},
+    m_queues{std::move(queues)},
+    m_queueSynchronization{std::move(queueSynchronization)},
+    m_destroyDevice{destroyDevice},
+    m_deviceWaitIdle{deviceWaitIdle},
+    m_queueWaitIdle{queueWaitIdle},
+    m_destroyAllocator{destroyAllocator},
+    m_dispatch{dispatch},
+    m_volkTable{std::move(volkTable)},
+    m_info{std::move(info)},
+    m_childLifetime{std::move(childLifetime)}
 {
 }
 
-VulkanDeviceOwner::VulkanDeviceOwner(VulkanDeviceOwner&& other) noexcept
-    : m_instance{std::move(other.m_instance)}, m_physicalDevice{other.m_physicalDevice},
-      m_device{other.m_device}, m_allocator{other.m_allocator}, m_queues{std::move(other.m_queues)},
-      m_queueSynchronization{std::move(other.m_queueSynchronization)},
-      m_destroyDevice{other.m_destroyDevice}, m_deviceWaitIdle{other.m_deviceWaitIdle},
-      m_queueWaitIdle{other.m_queueWaitIdle}, m_destroyAllocator{other.m_destroyAllocator},
-      m_dispatch{other.m_dispatch}, m_volkTable{std::move(other.m_volkTable)},
-      m_info{std::move(other.m_info)}, m_childLifetime{std::move(other.m_childLifetime)}
+VulkanDeviceOwner::VulkanDeviceOwner(VulkanDeviceOwner&& other) noexcept :
+    m_instance{std::move(other.m_instance)},
+    m_physicalDevice{other.m_physicalDevice},
+    m_device{other.m_device},
+    m_allocator{other.m_allocator},
+    m_queues{std::move(other.m_queues)},
+    m_queueSynchronization{std::move(other.m_queueSynchronization)},
+    m_destroyDevice{other.m_destroyDevice},
+    m_deviceWaitIdle{other.m_deviceWaitIdle},
+    m_queueWaitIdle{other.m_queueWaitIdle},
+    m_destroyAllocator{other.m_destroyAllocator},
+    m_dispatch{other.m_dispatch},
+    m_volkTable{std::move(other.m_volkTable)},
+    m_info{std::move(other.m_info)},
+    m_childLifetime{std::move(other.m_childLifetime)}
 {
     other.m_physicalDevice = VK_NULL_HANDLE;
     other.m_device = VK_NULL_HANDLE;
@@ -2934,8 +2653,8 @@ VulkanDeviceOwner::~VulkanDeviceOwner()
 
 bool VulkanDeviceOwner::IsValid() const noexcept
 {
-    return m_device != VK_NULL_HANDLE && m_instance != nullptr && m_instance->IsValid() &&
-           m_childLifetime != nullptr && m_childLifetime->active.load(std::memory_order_acquire);
+    return m_device != VK_NULL_HANDLE && m_instance != nullptr && m_instance->IsValid() && m_childLifetime != nullptr &&
+           m_childLifetime->active.load(std::memory_order_acquire);
 }
 
 VkDevice VulkanDeviceOwner::GetHandle() const noexcept
@@ -2958,8 +2677,7 @@ VkDeviceSize VulkanDeviceOwner::GetNonCoherentAtomSize() const noexcept
     return std::max<VkDeviceSize>(m_info.nonCoherentAtomSize, 1U);
 }
 
-const std::shared_ptr<VulkanDeviceChildLifetime>& VulkanDeviceOwner::GetChildLifetime()
-    const noexcept
+const std::shared_ptr<VulkanDeviceChildLifetime>& VulkanDeviceOwner::GetChildLifetime() const noexcept
 {
     return m_childLifetime;
 }
@@ -2976,11 +2694,9 @@ const VulkanGlobalDispatch& VulkanDeviceOwner::GetDispatch() const noexcept
 
 VkQueue VulkanDeviceOwner::GetQueue(std::uint32_t queueFamilyIndex) const noexcept
 {
-    for (std::size_t index = 0U; index < m_info.queuePlan.provisionedQueueFamilyIndices.size();
-         ++index)
+    for (std::size_t index = 0U; index < m_info.queuePlan.provisionedQueueFamilyIndices.size(); ++index)
     {
-        if (m_info.queuePlan.provisionedQueueFamilyIndices[index] == queueFamilyIndex &&
-            index < m_queues.size())
+        if (m_info.queuePlan.provisionedQueueFamilyIndices[index] == queueFamilyIndex && index < m_queues.size())
         {
             return m_queues[index];
         }
@@ -2989,11 +2705,9 @@ VkQueue VulkanDeviceOwner::GetQueue(std::uint32_t queueFamilyIndex) const noexce
     return VK_NULL_HANDLE;
 }
 
-VulkanQueueSynchronization::QueueOperationLock VulkanDeviceOwner::LockQueueOperation(
-    VkQueue queue) const
+VulkanQueueSynchronization::QueueOperationLock VulkanDeviceOwner::LockQueueOperation(VkQueue queue) const
 {
-    PONDER_VERIFY(m_queueSynchronization != nullptr,
-                  "A live Vulkan device must own queue synchronization state");
+    PONDER_VERIFY(m_queueSynchronization != nullptr, "A live Vulkan device must own queue synchronization state");
     return m_queueSynchronization->LockQueue(queue);
 }
 
@@ -3001,16 +2715,14 @@ core::VoidResult VulkanDeviceOwner::WaitIdle() const
 {
     if (!IsValid() || m_deviceWaitIdle == nullptr || m_queueSynchronization == nullptr)
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Vulkan device wait-idle requires a live device."));
+        return core::VoidResult::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Vulkan device wait-idle requires a live device."));
     }
 
     [[maybe_unused]] auto deviceLock = m_queueSynchronization->LockDevice();
     const VkResult result = m_deviceWaitIdle(m_device);
     if (result != VK_SUCCESS)
     {
-        return core::VoidResult::FromError(
-            MakeVulkanError(MapDeviceFailure(result), "vkDeviceWaitIdle", result));
+        return core::VoidResult::FromError(MakeVulkanError(MapDeviceFailure(result), "vkDeviceWaitIdle", result));
     }
 
     return core::VoidResult::Success();
@@ -3019,19 +2731,16 @@ core::VoidResult VulkanDeviceOwner::WaitIdle() const
 core::VoidResult VulkanDeviceOwner::WaitQueueIdle(std::uint32_t queueFamilyIndex) const
 {
     const VkQueue queue = GetQueue(queueFamilyIndex);
-    if (!IsValid() || queue == VK_NULL_HANDLE || m_queueWaitIdle == nullptr ||
-        m_queueSynchronization == nullptr)
+    if (!IsValid() || queue == VK_NULL_HANDLE || m_queueWaitIdle == nullptr || m_queueSynchronization == nullptr)
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Vulkan queue wait-idle requires a live queue."));
+        return core::VoidResult::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Vulkan queue wait-idle requires a live queue."));
     }
 
     [[maybe_unused]] auto queueLock = m_queueSynchronization->LockQueue(queue);
     const VkResult result = m_queueWaitIdle(queue);
     if (result != VK_SUCCESS)
     {
-        return core::VoidResult::FromError(
-            MakeVulkanError(MapDeviceFailure(result), "vkQueueWaitIdle", result));
+        return core::VoidResult::FromError(MakeVulkanError(MapDeviceFailure(result), "vkQueueWaitIdle", result));
     }
 
     return core::VoidResult::Success();
@@ -3041,12 +2750,10 @@ void VulkanDeviceOwner::Reset() noexcept
 {
     if (m_device != VK_NULL_HANDLE)
     {
-        PONDER_VERIFY(m_childLifetime != nullptr,
-                      "A live Vulkan device must own child-lifetime state");
-        PONDER_VERIFY(
-            m_childLifetime->draw2DPipelineChildren.load(std::memory_order_acquire) == 0U,
-            "VulkanDeviceOwner destruction requires every Draw2D pipeline child to be destroyed "
-            "first");
+        PONDER_VERIFY(m_childLifetime != nullptr, "A live Vulkan device must own child-lifetime state");
+        PONDER_VERIFY(m_childLifetime->draw2DPipelineChildren.load(std::memory_order_acquire) == 0U,
+                      "VulkanDeviceOwner destruction requires every Draw2D pipeline child to be destroyed "
+                      "first");
         m_childLifetime->active.store(false, std::memory_order_release);
     }
 
@@ -3090,29 +2797,38 @@ void VulkanDeviceOwner::Reset() noexcept
 }
 VulkanSwapchainOwner::VulkanSwapchainOwner() noexcept = default;
 
-VulkanSwapchainOwner::VulkanSwapchainOwner(
-    VkDevice device, VkSwapchainKHR swapchain, std::vector<VkImage> images,
-    std::vector<VkImageView> imageViews, VkRenderPass renderPass,
-    std::vector<VkFramebuffer> framebuffers,
-    VulkanGlobalDispatch::DestroySwapchainFn destroySwapchain,
-    VulkanGlobalDispatch::DestroyImageViewFn destroyImageView,
-    VulkanGlobalDispatch::DestroyRenderPassFn destroyRenderPass,
-    VulkanGlobalDispatch::DestroyFramebufferFn destroyFramebuffer,
-    VulkanSwapchainConfig config) noexcept
-    : m_device{device}, m_swapchain{swapchain}, m_images{std::move(images)},
-      m_imageViews{std::move(imageViews)}, m_renderPass{renderPass},
-      m_framebuffers{std::move(framebuffers)}, m_destroySwapchain{destroySwapchain},
-      m_destroyImageView{destroyImageView}, m_destroyRenderPass{destroyRenderPass},
-      m_destroyFramebuffer{destroyFramebuffer}, m_config{std::move(config)}
+VulkanSwapchainOwner::VulkanSwapchainOwner(VkDevice device, VkSwapchainKHR swapchain, std::vector<VkImage> images,
+                                           std::vector<VkImageView> imageViews, VkRenderPass renderPass, std::vector<VkFramebuffer> framebuffers,
+                                           VulkanGlobalDispatch::DestroySwapchainFn destroySwapchain,
+                                           VulkanGlobalDispatch::DestroyImageViewFn destroyImageView,
+                                           VulkanGlobalDispatch::DestroyRenderPassFn destroyRenderPass,
+                                           VulkanGlobalDispatch::DestroyFramebufferFn destroyFramebuffer, VulkanSwapchainConfig config) noexcept :
+    m_device{device},
+    m_swapchain{swapchain},
+    m_images{std::move(images)},
+    m_imageViews{std::move(imageViews)},
+    m_renderPass{renderPass},
+    m_framebuffers{std::move(framebuffers)},
+    m_destroySwapchain{destroySwapchain},
+    m_destroyImageView{destroyImageView},
+    m_destroyRenderPass{destroyRenderPass},
+    m_destroyFramebuffer{destroyFramebuffer},
+    m_config{std::move(config)}
 {
 }
 
-VulkanSwapchainOwner::VulkanSwapchainOwner(VulkanSwapchainOwner&& other) noexcept
-    : m_device{other.m_device}, m_swapchain{other.m_swapchain}, m_images{std::move(other.m_images)},
-      m_imageViews{std::move(other.m_imageViews)}, m_renderPass{other.m_renderPass},
-      m_framebuffers{std::move(other.m_framebuffers)}, m_destroySwapchain{other.m_destroySwapchain},
-      m_destroyImageView{other.m_destroyImageView}, m_destroyRenderPass{other.m_destroyRenderPass},
-      m_destroyFramebuffer{other.m_destroyFramebuffer}, m_config{std::move(other.m_config)}
+VulkanSwapchainOwner::VulkanSwapchainOwner(VulkanSwapchainOwner&& other) noexcept :
+    m_device{other.m_device},
+    m_swapchain{other.m_swapchain},
+    m_images{std::move(other.m_images)},
+    m_imageViews{std::move(other.m_imageViews)},
+    m_renderPass{other.m_renderPass},
+    m_framebuffers{std::move(other.m_framebuffers)},
+    m_destroySwapchain{other.m_destroySwapchain},
+    m_destroyImageView{other.m_destroyImageView},
+    m_destroyRenderPass{other.m_destroyRenderPass},
+    m_destroyFramebuffer{other.m_destroyFramebuffer},
+    m_config{std::move(other.m_config)}
 {
     other.m_device = VK_NULL_HANDLE;
     other.m_swapchain = VK_NULL_HANDLE;
@@ -3161,8 +2877,7 @@ VulkanSwapchainOwner::~VulkanSwapchainOwner()
 
 bool VulkanSwapchainOwner::IsValid() const noexcept
 {
-    return m_device != VK_NULL_HANDLE && m_swapchain != VK_NULL_HANDLE &&
-           m_renderPass != VK_NULL_HANDLE && !m_imageViews.empty() &&
+    return m_device != VK_NULL_HANDLE && m_swapchain != VK_NULL_HANDLE && m_renderPass != VK_NULL_HANDLE && !m_imageViews.empty() &&
            m_imageViews.size() == m_framebuffers.size();
 }
 
@@ -3247,31 +2962,36 @@ void VulkanSwapchainOwner::Reset() noexcept
 }
 VulkanFrameResourcesOwner::VulkanFrameResourcesOwner() noexcept = default;
 
-VulkanFrameResourcesOwner::VulkanFrameResourcesOwner(
-    VkDevice device, VkCommandPool commandPool, std::vector<VulkanFrameSlotResources> slots,
-    std::vector<VkSemaphore> renderFinishedSemaphores, VulkanDraw2DUploadArena&& draw2DUploadArena,
-    std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines,
-    VulkanGlobalDispatch::DestroyCommandPoolFn destroyCommandPool,
-    VulkanGlobalDispatch::DestroySemaphoreFn destroySemaphore,
-    VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept
-    : m_device{device}, m_commandPool{commandPool}, m_slots{std::move(slots)},
-      m_renderFinishedSemaphores{std::move(renderFinishedSemaphores)},
-      m_draw2DUploadArena{std::move(draw2DUploadArena)},
-      m_draw2DSubmissionPipelines{std::move(draw2DSubmissionPipelines)},
-      m_destroyCommandPool{destroyCommandPool}, m_destroySemaphore{destroySemaphore},
-      m_destroyFence{destroyFence}
+VulkanFrameResourcesOwner::VulkanFrameResourcesOwner(VkDevice device, VkCommandPool commandPool, std::vector<VulkanFrameSlotResources> slots,
+                                                     std::vector<VkSemaphore> renderFinishedSemaphores, VulkanDraw2DUploadArena&& draw2DUploadArena,
+                                                     std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines,
+                                                     VulkanGlobalDispatch::DestroyCommandPoolFn destroyCommandPool,
+                                                     VulkanGlobalDispatch::DestroySemaphoreFn destroySemaphore,
+                                                     VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept :
+    m_device{device},
+    m_commandPool{commandPool},
+    m_slots{std::move(slots)},
+    m_renderFinishedSemaphores{std::move(renderFinishedSemaphores)},
+    m_draw2DUploadArena{std::move(draw2DUploadArena)},
+    m_draw2DSubmissionPipelines{std::move(draw2DSubmissionPipelines)},
+    m_destroyCommandPool{destroyCommandPool},
+    m_destroySemaphore{destroySemaphore},
+    m_destroyFence{destroyFence}
 {
 }
 
-VulkanFrameResourcesOwner::VulkanFrameResourcesOwner(VulkanFrameResourcesOwner&& other) noexcept
-    : m_device{other.m_device}, m_commandPool{other.m_commandPool},
-      m_slots{std::move(other.m_slots)},
-      m_renderFinishedSemaphores{std::move(other.m_renderFinishedSemaphores)},
-      m_completedSubmissionSlots{std::move(other.m_completedSubmissionSlots)},
-      m_draw2DUploadArena{std::move(other.m_draw2DUploadArena)},
-      m_draw2DSubmissionPipelines{std::move(other.m_draw2DSubmissionPipelines)},
-      m_poisoned{other.m_poisoned}, m_destroyCommandPool{other.m_destroyCommandPool},
-      m_destroySemaphore{other.m_destroySemaphore}, m_destroyFence{other.m_destroyFence}
+VulkanFrameResourcesOwner::VulkanFrameResourcesOwner(VulkanFrameResourcesOwner&& other) noexcept :
+    m_device{other.m_device},
+    m_commandPool{other.m_commandPool},
+    m_slots{std::move(other.m_slots)},
+    m_renderFinishedSemaphores{std::move(other.m_renderFinishedSemaphores)},
+    m_completedSubmissionSlots{std::move(other.m_completedSubmissionSlots)},
+    m_draw2DUploadArena{std::move(other.m_draw2DUploadArena)},
+    m_draw2DSubmissionPipelines{std::move(other.m_draw2DSubmissionPipelines)},
+    m_poisoned{other.m_poisoned},
+    m_destroyCommandPool{other.m_destroyCommandPool},
+    m_destroySemaphore{other.m_destroySemaphore},
+    m_destroyFence{other.m_destroyFence}
 {
     other.m_device = VK_NULL_HANDLE;
     other.m_commandPool = VK_NULL_HANDLE;
@@ -3281,8 +3001,7 @@ VulkanFrameResourcesOwner::VulkanFrameResourcesOwner(VulkanFrameResourcesOwner&&
     other.m_destroyFence = nullptr;
 }
 
-VulkanFrameResourcesOwner& VulkanFrameResourcesOwner::operator=(
-    VulkanFrameResourcesOwner&& other) noexcept
+VulkanFrameResourcesOwner& VulkanFrameResourcesOwner::operator=(VulkanFrameResourcesOwner&& other) noexcept
 {
     if (this != &other)
     {
@@ -3317,9 +3036,8 @@ VulkanFrameResourcesOwner::~VulkanFrameResourcesOwner()
 
 bool VulkanFrameResourcesOwner::IsValid() const noexcept
 {
-    if (m_device == VK_NULL_HANDLE || m_commandPool == VK_NULL_HANDLE || m_slots.empty() ||
-        m_renderFinishedSemaphores.empty() || !m_draw2DUploadArena.IsValid() ||
-        m_draw2DUploadArena.GetSlotCount() != static_cast<std::uint32_t>(m_slots.size()) ||
+    if (m_device == VK_NULL_HANDLE || m_commandPool == VK_NULL_HANDLE || m_slots.empty() || m_renderFinishedSemaphores.empty() ||
+        !m_draw2DUploadArena.IsValid() || m_draw2DUploadArena.GetSlotCount() != static_cast<std::uint32_t>(m_slots.size()) ||
         m_draw2DSubmissionPipelines.size() != m_slots.size())
     {
         return false;
@@ -3357,8 +3075,7 @@ VulkanFrameSlotResources VulkanFrameResourcesOwner::GetSlot(std::uint32_t slotIn
     return m_slots[slotIndex];
 }
 
-VkSemaphore VulkanFrameResourcesOwner::GetRenderFinishedSemaphore(
-    std::uint32_t imageIndex) const noexcept
+VkSemaphore VulkanFrameResourcesOwner::GetRenderFinishedSemaphore(std::uint32_t imageIndex) const noexcept
 {
     if (imageIndex >= m_renderFinishedSemaphores.size())
     {
@@ -3368,23 +3085,19 @@ VkSemaphore VulkanFrameResourcesOwner::GetRenderFinishedSemaphore(
     return m_renderFinishedSemaphores[imageIndex];
 }
 
-core::Result<bool> VulkanFrameResourcesOwner::PrepareFrameSlot(const VulkanGlobalDispatch& dispatch,
-                                                               std::uint32_t slotIndex,
+core::Result<bool> VulkanFrameResourcesOwner::PrepareFrameSlot(const VulkanGlobalDispatch& dispatch, std::uint32_t slotIndex,
                                                                std::uint64_t timeoutNanoseconds)
 {
     if (!IsValid() || m_poisoned)
     {
-        return core::Result<bool>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "Vulkan frame-slot preparation requires live, reusable frame resources."));
+        return core::Result<bool>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan frame-slot preparation requires live, reusable frame resources."));
     }
 
-    if (slotIndex >= m_slots.size() || dispatch.waitForFences == nullptr ||
-        dispatch.resetFences == nullptr)
+    if (slotIndex >= m_slots.size() || dispatch.waitForFences == nullptr || dispatch.resetFences == nullptr)
     {
-        return core::Result<bool>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure,
-            "Vulkan frame-slot preparation requires valid fence state and dispatch."));
+        return core::Result<bool>::FromError(
+            MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan frame-slot preparation requires valid fence state and dispatch."));
     }
 
     VulkanFrameSlotResources& slot = m_slots[slotIndex];
@@ -3401,16 +3114,14 @@ core::Result<bool> VulkanFrameResourcesOwner::PrepareFrameSlot(const VulkanGloba
 
     if (pendingFenceCount > 0U)
     {
-        const VkResult waitResult = dispatch.waitForFences(
-            m_device, pendingFenceCount, pendingFences.data(), VK_TRUE, timeoutNanoseconds);
+        const VkResult waitResult = dispatch.waitForFences(m_device, pendingFenceCount, pendingFences.data(), VK_TRUE, timeoutNanoseconds);
         if (waitResult == VK_TIMEOUT || waitResult == VK_NOT_READY)
         {
             return core::Result<bool>::FromValue(false);
         }
         if (waitResult != VK_SUCCESS)
         {
-            return core::Result<bool>::FromError(
-                MakeVulkanError(MapFrameFailure(waitResult), "vkWaitForFences.frame", waitResult));
+            return core::Result<bool>::FromError(MakeVulkanError(MapFrameFailure(waitResult), "vkWaitForFences.frame", waitResult));
         }
 
         if (slot.acquireFencePending)
@@ -3423,8 +3134,7 @@ core::Result<bool> VulkanFrameResourcesOwner::PrepareFrameSlot(const VulkanGloba
             slot.submissionFencePending = false;
             m_draw2DUploadArena.Complete(slotIndex);
             m_draw2DSubmissionPipelines[slotIndex].reset();
-            PONDER_VERIFY(m_completedSubmissionSlots.count <
-                              m_completedSubmissionSlots.values.size(),
+            PONDER_VERIFY(m_completedSubmissionSlots.count < m_completedSubmissionSlots.values.size(),
                           "Completed Vulkan submission batch exceeds the frame-slot maximum");
             m_completedSubmissionSlots.values[m_completedSubmissionSlots.count++] = slotIndex;
         }
@@ -3435,8 +3145,7 @@ core::Result<bool> VulkanFrameResourcesOwner::PrepareFrameSlot(const VulkanGloba
         const VkResult resetResult = dispatch.resetFences(m_device, 1U, &slot.imageAcquiredFence);
         if (resetResult != VK_SUCCESS)
         {
-            return core::Result<bool>::FromError(MakeVulkanError(
-                MapFrameFailure(resetResult), "vkResetFences.acquire", resetResult));
+            return core::Result<bool>::FromError(MakeVulkanError(MapFrameFailure(resetResult), "vkResetFences.acquire", resetResult));
         }
         slot.acquireFenceNeedsReset = false;
     }
@@ -3458,8 +3167,7 @@ void VulkanFrameResourcesOwner::RecordSubmissionQueued(std::uint32_t slotIndex) 
     {
         VulkanFrameSlotResources& slot = m_slots[slotIndex];
         slot.submissionFencePending = true;
-        if (m_draw2DUploadArena.GetSlotSnapshot(slotIndex).state ==
-            VulkanDraw2DUploadSlotState::Reserved)
+        if (m_draw2DUploadArena.GetSlotSnapshot(slotIndex).state == VulkanDraw2DUploadSlotState::Reserved)
         {
             m_draw2DUploadArena.MarkSubmitted(slotIndex);
         }
@@ -3476,18 +3184,14 @@ const VulkanDraw2DUploadArena& VulkanFrameResourcesOwner::GetDraw2DUploadArena()
     return m_draw2DUploadArena;
 }
 
-core::VoidResult VulkanFrameResourcesOwner::AttachDraw2DPipeline(
-    std::uint32_t slotIndex, std::shared_ptr<const VulkanDraw2DPipelineOwner> pipeline)
+core::VoidResult VulkanFrameResourcesOwner::AttachDraw2DPipeline(std::uint32_t slotIndex, std::shared_ptr<const VulkanDraw2DPipelineOwner> pipeline)
 {
-    if (slotIndex >= m_draw2DSubmissionPipelines.size() || pipeline == nullptr ||
-        !pipeline->IsValid() ||
-        m_draw2DUploadArena.GetSlotSnapshot(slotIndex).state !=
-            VulkanDraw2DUploadSlotState::Reserved ||
+    if (slotIndex >= m_draw2DSubmissionPipelines.size() || pipeline == nullptr || !pipeline->IsValid() ||
+        m_draw2DUploadArena.GetSlotSnapshot(slotIndex).state != VulkanDraw2DUploadSlotState::Reserved ||
         m_draw2DSubmissionPipelines[slotIndex] != nullptr)
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Draw2D pipeline attachment requires one reserved completion slot."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Draw2D pipeline attachment requires one reserved completion slot."));
     }
     m_draw2DSubmissionPipelines[slotIndex] = std::move(pipeline);
     return core::VoidResult::Success();
@@ -3513,8 +3217,7 @@ VulkanCompletedSubmissionSlots VulkanFrameResourcesOwner::ConsumeCompletedSubmis
     return std::exchange(m_completedSubmissionSlots, {});
 }
 
-core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(
-    const VulkanGlobalDispatch& dispatch, std::uint64_t timeoutNanoseconds)
+core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(const VulkanGlobalDispatch& dispatch, std::uint64_t timeoutNanoseconds)
 {
     if (!IsValid())
     {
@@ -3523,8 +3226,7 @@ core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(
 
     if (dispatch.waitForFences == nullptr)
     {
-        return core::Result<bool>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure, "Vulkan fence wait dispatch is unavailable."));
+        return core::Result<bool>::FromError(MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan fence wait dispatch is unavailable."));
     }
 
     std::vector<VkFence> fences;
@@ -3546,9 +3248,7 @@ core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(
         return core::Result<bool>::FromValue(true);
     }
 
-    const VkResult result =
-        dispatch.waitForFences(m_device, static_cast<std::uint32_t>(fences.size()), fences.data(),
-                               VK_TRUE, timeoutNanoseconds);
+    const VkResult result = dispatch.waitForFences(m_device, static_cast<std::uint32_t>(fences.size()), fences.data(), VK_TRUE, timeoutNanoseconds);
     if (result == VK_SUCCESS)
     {
         for (std::uint32_t slotIndex = 0U; slotIndex < m_slots.size(); ++slotIndex)
@@ -3564,8 +3264,7 @@ core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(
                 slot.submissionFencePending = false;
                 m_draw2DUploadArena.Complete(slotIndex);
                 m_draw2DSubmissionPipelines[slotIndex].reset();
-                PONDER_VERIFY(m_completedSubmissionSlots.count <
-                                  m_completedSubmissionSlots.values.size(),
+                PONDER_VERIFY(m_completedSubmissionSlots.count < m_completedSubmissionSlots.values.size(),
                               "Completed Vulkan submission batch exceeds the frame-slot maximum");
                 m_completedSubmissionSlots.values[m_completedSubmissionSlots.count++] = slotIndex;
             }
@@ -3578,8 +3277,7 @@ core::Result<bool> VulkanFrameResourcesOwner::AreAllFencesSignaled(
         return core::Result<bool>::FromValue(false);
     }
 
-    return core::Result<bool>::FromError(
-        MakeVulkanError(MapFrameFailure(result), "vkWaitForFences.retire", result));
+    return core::Result<bool>::FromError(MakeVulkanError(MapFrameFailure(result), "vkWaitForFences.retire", result));
 }
 
 void VulkanFrameResourcesOwner::Reset() noexcept
@@ -3641,35 +3339,39 @@ void VulkanFrameResourcesOwner::Reset() noexcept
 }
 VulkanPresentationTrackerOwner::VulkanPresentationTrackerOwner() noexcept = default;
 
-VulkanPresentationTrackerOwner::VulkanPresentationTrackerOwner(
-    VkDevice device, VulkanPresentationCompletionPath completionPath, bool usesPresentIds,
-    std::vector<std::uint64_t> imagePresentationSerials,
-    std::vector<std::uint64_t> pendingAcquireSerials, std::vector<bool> acquireProofPending,
-    std::vector<VulkanPresentFenceSlot> presentFenceSlots,
-    VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept
-    : m_device{device}, m_completionPath{completionPath}, m_usesPresentIds{usesPresentIds},
-      m_imagePresentationSerials{std::move(imagePresentationSerials)},
-      m_pendingAcquireSerials{std::move(pendingAcquireSerials)},
-      m_acquireProofPending{std::move(acquireProofPending)},
-      m_presentFenceSlots{std::move(presentFenceSlots)}, m_destroyFence{destroyFence}
+VulkanPresentationTrackerOwner::VulkanPresentationTrackerOwner(VkDevice device, VulkanPresentationCompletionPath completionPath, bool usesPresentIds,
+                                                               std::vector<std::uint64_t> imagePresentationSerials,
+                                                               std::vector<std::uint64_t> pendingAcquireSerials,
+                                                               std::vector<bool> acquireProofPending,
+                                                               std::vector<VulkanPresentFenceSlot> presentFenceSlots,
+                                                               VulkanGlobalDispatch::DestroyFenceFn destroyFence) noexcept :
+    m_device{device},
+    m_completionPath{completionPath},
+    m_usesPresentIds{usesPresentIds},
+    m_imagePresentationSerials{std::move(imagePresentationSerials)},
+    m_pendingAcquireSerials{std::move(pendingAcquireSerials)},
+    m_acquireProofPending{std::move(acquireProofPending)},
+    m_presentFenceSlots{std::move(presentFenceSlots)},
+    m_destroyFence{destroyFence}
 {
 }
 
-VulkanPresentationTrackerOwner::VulkanPresentationTrackerOwner(
-    VulkanPresentationTrackerOwner&& other) noexcept
-    : m_device{other.m_device}, m_completionPath{other.m_completionPath},
-      m_usesPresentIds{other.m_usesPresentIds},
-      m_hadQueuedPresentation{other.m_hadQueuedPresentation},
-      m_completionSatisfied{other.m_completionSatisfied},
-      m_usedExplicitCompletion{other.m_usedExplicitCompletion},
-      m_nextPresentId{other.m_nextPresentId}, m_lastQueuedPresentId{other.m_lastQueuedPresentId},
-      m_nextCorePresentationSerial{other.m_nextCorePresentationSerial},
-      m_coreCompletionObserved{other.m_coreCompletionObserved},
-      m_imagePresentationSerials{std::move(other.m_imagePresentationSerials)},
-      m_pendingAcquireSerials{std::move(other.m_pendingAcquireSerials)},
-      m_acquireProofPending{std::move(other.m_acquireProofPending)},
-      m_presentFenceSlots{std::move(other.m_presentFenceSlots)},
-      m_destroyFence{other.m_destroyFence}
+VulkanPresentationTrackerOwner::VulkanPresentationTrackerOwner(VulkanPresentationTrackerOwner&& other) noexcept :
+    m_device{other.m_device},
+    m_completionPath{other.m_completionPath},
+    m_usesPresentIds{other.m_usesPresentIds},
+    m_hadQueuedPresentation{other.m_hadQueuedPresentation},
+    m_completionSatisfied{other.m_completionSatisfied},
+    m_usedExplicitCompletion{other.m_usedExplicitCompletion},
+    m_nextPresentId{other.m_nextPresentId},
+    m_lastQueuedPresentId{other.m_lastQueuedPresentId},
+    m_nextCorePresentationSerial{other.m_nextCorePresentationSerial},
+    m_coreCompletionObserved{other.m_coreCompletionObserved},
+    m_imagePresentationSerials{std::move(other.m_imagePresentationSerials)},
+    m_pendingAcquireSerials{std::move(other.m_pendingAcquireSerials)},
+    m_acquireProofPending{std::move(other.m_acquireProofPending)},
+    m_presentFenceSlots{std::move(other.m_presentFenceSlots)},
+    m_destroyFence{other.m_destroyFence}
 {
     other.m_device = VK_NULL_HANDLE;
     other.m_usesPresentIds = false;
@@ -3683,8 +3385,7 @@ VulkanPresentationTrackerOwner::VulkanPresentationTrackerOwner(
     other.m_destroyFence = nullptr;
 }
 
-VulkanPresentationTrackerOwner& VulkanPresentationTrackerOwner::operator=(
-    VulkanPresentationTrackerOwner&& other) noexcept
+VulkanPresentationTrackerOwner& VulkanPresentationTrackerOwner::operator=(VulkanPresentationTrackerOwner&& other) noexcept
 {
     if (this != &other)
     {
@@ -3727,8 +3428,7 @@ VulkanPresentationTrackerOwner::~VulkanPresentationTrackerOwner()
 
 bool VulkanPresentationTrackerOwner::IsValid() const noexcept
 {
-    if (m_device == VK_NULL_HANDLE || m_imagePresentationSerials.empty() ||
-        m_pendingAcquireSerials.empty() ||
+    if (m_device == VK_NULL_HANDLE || m_imagePresentationSerials.empty() || m_pendingAcquireSerials.empty() ||
         m_pendingAcquireSerials.size() != m_acquireProofPending.size())
     {
         return false;
@@ -3739,12 +3439,11 @@ bool VulkanPresentationTrackerOwner::IsValid() const noexcept
         return true;
     }
 
-    return m_presentFenceSlots.size() == m_pendingAcquireSerials.size() &&
-           std::ranges::all_of(m_presentFenceSlots,
-                               [](VulkanPresentFenceSlot slot) noexcept
-                               {
-                                   return slot.fence != VK_NULL_HANDLE;
-                               });
+    return m_presentFenceSlots.size() == m_pendingAcquireSerials.size() && std::ranges::all_of(m_presentFenceSlots,
+                                                                                               [](VulkanPresentFenceSlot slot) noexcept
+                                                                                               {
+                                                                                                   return slot.fence != VK_NULL_HANDLE;
+                                                                                               });
 }
 
 VulkanPresentationCompletionPath VulkanPresentationTrackerOwner::GetCompletionPath() const noexcept
@@ -3767,14 +3466,12 @@ bool VulkanPresentationTrackerOwner::HasQueuedPresentation() const noexcept
     return m_hadQueuedPresentation;
 }
 
-core::Result<bool> VulkanPresentationTrackerOwner::PrepareFrameSlot(
-    const VulkanGlobalDispatch& dispatch, std::uint32_t frameSlotIndex,
-    std::uint64_t timeoutNanoseconds)
+core::Result<bool> VulkanPresentationTrackerOwner::PrepareFrameSlot(const VulkanGlobalDispatch& dispatch, std::uint32_t frameSlotIndex,
+                                                                    std::uint64_t timeoutNanoseconds)
 {
     if (!IsValid())
     {
-        return core::Result<bool>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Presentation tracking requires a live Vulkan device."));
+        return core::Result<bool>::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Presentation tracking requires a live Vulkan device."));
     }
 
     if (!UsesPresentFences())
@@ -3782,11 +3479,9 @@ core::Result<bool> VulkanPresentationTrackerOwner::PrepareFrameSlot(
         return core::Result<bool>::FromValue(true);
     }
 
-    if (frameSlotIndex >= m_presentFenceSlots.size() || dispatch.waitForFences == nullptr ||
-        dispatch.resetFences == nullptr)
+    if (frameSlotIndex >= m_presentFenceSlots.size() || dispatch.waitForFences == nullptr || dispatch.resetFences == nullptr)
     {
-        return core::Result<bool>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure, "Vulkan present-fence dispatch is unavailable."));
+        return core::Result<bool>::FromError(MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan present-fence dispatch is unavailable."));
     }
 
     VulkanPresentFenceSlot& slot = m_presentFenceSlots[frameSlotIndex];
@@ -3795,23 +3490,20 @@ core::Result<bool> VulkanPresentationTrackerOwner::PrepareFrameSlot(
         return core::Result<bool>::FromValue(true);
     }
 
-    VkResult result =
-        dispatch.waitForFences(m_device, 1U, &slot.fence, VK_TRUE, timeoutNanoseconds);
+    VkResult result = dispatch.waitForFences(m_device, 1U, &slot.fence, VK_TRUE, timeoutNanoseconds);
     if (result == VK_TIMEOUT || result == VK_NOT_READY)
     {
         return core::Result<bool>::FromValue(false);
     }
     if (result != VK_SUCCESS)
     {
-        return core::Result<bool>::FromError(
-            MakeVulkanError(MapFrameFailure(result), "vkWaitForFences.present", result));
+        return core::Result<bool>::FromError(MakeVulkanError(MapFrameFailure(result), "vkWaitForFences.present", result));
     }
 
     result = dispatch.resetFences(m_device, 1U, &slot.fence);
     if (result != VK_SUCCESS)
     {
-        return core::Result<bool>::FromError(
-            MakeVulkanError(MapFrameFailure(result), "vkResetFences.present", result));
+        return core::Result<bool>::FromError(MakeVulkanError(MapFrameFailure(result), "vkResetFences.present", result));
     }
 
     slot.pending = false;
@@ -3841,8 +3533,7 @@ std::uint64_t VulkanPresentationTrackerOwner::ReservePresentId() noexcept
     return presentId;
 }
 
-void VulkanPresentationTrackerOwner::RecordFrameFenceCompletion(
-    std::uint32_t frameSlotIndex) noexcept
+void VulkanPresentationTrackerOwner::RecordFrameFenceCompletion(std::uint32_t frameSlotIndex) noexcept
 {
     if (frameSlotIndex < m_acquireProofPending.size() && m_acquireProofPending[frameSlotIndex])
     {
@@ -3851,11 +3542,9 @@ void VulkanPresentationTrackerOwner::RecordFrameFenceCompletion(
     }
 }
 
-void VulkanPresentationTrackerOwner::RecordImageAcquired(std::uint32_t frameSlotIndex,
-                                                         std::uint32_t imageIndex) noexcept
+void VulkanPresentationTrackerOwner::RecordImageAcquired(std::uint32_t frameSlotIndex, std::uint32_t imageIndex) noexcept
 {
-    if (frameSlotIndex >= m_pendingAcquireSerials.size() ||
-        imageIndex >= m_imagePresentationSerials.size())
+    if (frameSlotIndex >= m_pendingAcquireSerials.size() || imageIndex >= m_imagePresentationSerials.size())
     {
         return;
     }
@@ -3885,9 +3574,7 @@ void VulkanPresentationTrackerOwner::AbandonAcquiredFrame(std::uint32_t frameSlo
     m_acquireProofPending[frameSlotIndex] = false;
 }
 
-void VulkanPresentationTrackerOwner::RecordPresentResult(std::uint32_t frameSlotIndex,
-                                                         std::uint32_t imageIndex,
-                                                         std::uint64_t presentId,
+void VulkanPresentationTrackerOwner::RecordPresentResult(std::uint32_t frameSlotIndex, std::uint32_t imageIndex, std::uint64_t presentId,
                                                          VkResult result) noexcept
 {
     if (!WasPresentationOperationEnqueued(result))
@@ -3909,9 +3596,7 @@ void VulkanPresentationTrackerOwner::RecordPresentResult(std::uint32_t frameSlot
     {
         m_imagePresentationSerials[imageIndex] = m_nextCorePresentationSerial;
         m_nextCorePresentationSerial =
-            m_nextCorePresentationSerial == std::numeric_limits<std::uint64_t>::max()
-                ? 0U
-                : m_nextCorePresentationSerial + 1U;
+            m_nextCorePresentationSerial == std::numeric_limits<std::uint64_t>::max() ? 0U : m_nextCorePresentationSerial + 1U;
     }
 }
 
@@ -3920,21 +3605,20 @@ bool VulkanPresentationTrackerOwner::ConsumeCorePresentationCompletion() noexcep
     return std::exchange(m_coreCompletionObserved, false);
 }
 
-core::Result<VulkanPresentationCompletionResult> VulkanPresentationTrackerOwner::PollCompletion(
-    const VulkanGlobalDispatch& dispatch, VkSwapchainKHR swapchain,
-    std::uint64_t timeoutNanoseconds)
+core::Result<VulkanPresentationCompletionResult> VulkanPresentationTrackerOwner::PollCompletion(const VulkanGlobalDispatch& dispatch,
+                                                                                                VkSwapchainKHR swapchain,
+                                                                                                std::uint64_t timeoutNanoseconds)
 {
     if (!IsValid())
     {
-        return core::Result<VulkanPresentationCompletionResult>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Presentation completion requires a live tracker."));
+        return core::Result<VulkanPresentationCompletionResult>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Presentation completion requires a live tracker."));
     }
 
     if (m_completionSatisfied || !m_hadQueuedPresentation)
     {
         return core::Result<VulkanPresentationCompletionResult>::FromValue(
-            VulkanPresentationCompletionResult{.status =
-                                                   VulkanPresentationCompletionStatus::Complete,
+            VulkanPresentationCompletionResult{.status = VulkanPresentationCompletionStatus::Complete,
                                                .usedExplicitCompletion = m_usedExplicitCompletion});
     }
 
@@ -3942,8 +3626,8 @@ core::Result<VulkanPresentationCompletionResult> VulkanPresentationTrackerOwner:
     {
         if (dispatch.waitForFences == nullptr)
         {
-            return core::Result<VulkanPresentationCompletionResult>::FromError(MakeRenderError(
-                RenderErrorCode::BackendFailure, "Vulkan present-fence wait is unavailable."));
+            return core::Result<VulkanPresentationCompletionResult>::FromError(
+                MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan present-fence wait is unavailable."));
         }
 
         std::vector<VkFence> pendingFences;
@@ -3964,18 +3648,16 @@ core::Result<VulkanPresentationCompletionResult> VulkanPresentationTrackerOwner:
         else
         {
             const VkResult result =
-                dispatch.waitForFences(m_device, static_cast<std::uint32_t>(pendingFences.size()),
-                                       pendingFences.data(), VK_TRUE, timeoutNanoseconds);
+                dispatch.waitForFences(m_device, static_cast<std::uint32_t>(pendingFences.size()), pendingFences.data(), VK_TRUE, timeoutNanoseconds);
             if (result == VK_TIMEOUT || result == VK_NOT_READY)
             {
                 return core::Result<VulkanPresentationCompletionResult>::FromValue(
-                    VulkanPresentationCompletionResult{
-                        .status = VulkanPresentationCompletionStatus::Pending});
+                    VulkanPresentationCompletionResult{.status = VulkanPresentationCompletionStatus::Pending});
             }
             if (result != VK_SUCCESS)
             {
-                return core::Result<VulkanPresentationCompletionResult>::FromError(MakeVulkanError(
-                    MapFrameFailure(result), "vkWaitForFences.present_retire", result));
+                return core::Result<VulkanPresentationCompletionResult>::FromError(
+                    MakeVulkanError(MapFrameFailure(result), "vkWaitForFences.present_retire", result));
             }
 
             for (VulkanPresentFenceSlot& slot : m_presentFenceSlots)
@@ -3987,47 +3669,37 @@ core::Result<VulkanPresentationCompletionResult> VulkanPresentationTrackerOwner:
         }
 
         return core::Result<VulkanPresentationCompletionResult>::FromValue(
-            VulkanPresentationCompletionResult{.status =
-                                                   VulkanPresentationCompletionStatus::Complete,
-                                               .usedExplicitCompletion = true});
+            VulkanPresentationCompletionResult{.status = VulkanPresentationCompletionStatus::Complete, .usedExplicitCompletion = true});
     }
 
     if (m_completionPath == VulkanPresentationCompletionPath::PresentWait)
     {
-        if (swapchain == VK_NULL_HANDLE || m_lastQueuedPresentId == 0U ||
-            dispatch.waitForPresent == nullptr)
+        if (swapchain == VK_NULL_HANDLE || m_lastQueuedPresentId == 0U || dispatch.waitForPresent == nullptr)
         {
-            return core::Result<VulkanPresentationCompletionResult>::FromError(MakeRenderError(
-                RenderErrorCode::BackendFailure, "Vulkan present-wait dispatch is unavailable."));
+            return core::Result<VulkanPresentationCompletionResult>::FromError(
+                MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan present-wait dispatch is unavailable."));
         }
 
-        const VkResult result =
-            dispatch.waitForPresent(m_device, swapchain, m_lastQueuedPresentId, timeoutNanoseconds);
+        const VkResult result = dispatch.waitForPresent(m_device, swapchain, m_lastQueuedPresentId, timeoutNanoseconds);
         if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR)
         {
             m_completionSatisfied = true;
             m_usedExplicitCompletion = true;
             return core::Result<VulkanPresentationCompletionResult>::FromValue(
-                VulkanPresentationCompletionResult{.status =
-                                                       VulkanPresentationCompletionStatus::Complete,
-                                                   .usedExplicitCompletion = true});
+                VulkanPresentationCompletionResult{.status = VulkanPresentationCompletionStatus::Complete, .usedExplicitCompletion = true});
         }
         if (result == VK_TIMEOUT || result == VK_NOT_READY)
         {
             return core::Result<VulkanPresentationCompletionResult>::FromValue(
-                VulkanPresentationCompletionResult{
-                    .status = VulkanPresentationCompletionStatus::Pending});
+                VulkanPresentationCompletionResult{.status = VulkanPresentationCompletionStatus::Pending});
         }
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR ||
-            result == VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT)
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR || result == VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT)
         {
             return core::Result<VulkanPresentationCompletionResult>::FromValue(
-                VulkanPresentationCompletionResult{
-                    .status = VulkanPresentationCompletionStatus::PracticalIdleFallbackRequired});
+                VulkanPresentationCompletionResult{.status = VulkanPresentationCompletionStatus::PracticalIdleFallbackRequired});
         }
 
-        return core::Result<VulkanPresentationCompletionResult>::FromError(
-            MakeVulkanError(MapFrameFailure(result), "vkWaitForPresentKHR", result));
+        return core::Result<VulkanPresentationCompletionResult>::FromError(MakeVulkanError(MapFrameFailure(result), "vkWaitForPresentKHR", result));
     }
 
     return core::Result<VulkanPresentationCompletionResult>::FromValue(
@@ -4074,35 +3746,30 @@ void VulkanPresentationTrackerOwner::Reset() noexcept
     m_presentFenceSlots.clear();
     m_destroyFence = nullptr;
 }
-core::Result<VulkanInstanceInfo> VulkanInstanceBootstrap::EnsureInitialized(
-    const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
-    RenderValidationMode validationMode)
+core::Result<VulkanInstanceInfo> VulkanInstanceBootstrap::EnsureInitialized(const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
+                                                                            RenderValidationMode validationMode)
 {
     if (m_owner != nullptr)
     {
         const VulkanInstanceInfo info = m_owner->GetInfo();
         if (info.wsiKind != wsiKind)
         {
-            return core::Result<VulkanInstanceInfo>::FromError(MakeRenderError(
-                RenderErrorCode::UnsupportedSurface,
-                "RenderBootstrap already initialized Vulkan for " +
-                    std::string{GetVulkanWsiKindName(info.wsiKind)} +
-                    " WSI and cannot mix it with " + std::string{GetVulkanWsiKindName(wsiKind)} +
-                    " in the same instance."));
+            return core::Result<VulkanInstanceInfo>::FromError(
+                MakeRenderError(RenderErrorCode::UnsupportedSurface,
+                                "RenderBootstrap already initialized Vulkan for " + std::string{GetVulkanWsiKindName(info.wsiKind)} +
+                                    " WSI and cannot mix it with " + std::string{GetVulkanWsiKindName(wsiKind)} + " in the same instance."));
         }
 
         if (info.requestedValidationMode != validationMode)
         {
-            return core::Result<VulkanInstanceInfo>::FromError(MakeRenderError(
-                RenderErrorCode::InvalidState,
-                "RenderBootstrap already initialized Vulkan with a different validation policy."));
+            return core::Result<VulkanInstanceInfo>::FromError(
+                MakeRenderError(RenderErrorCode::InvalidState, "RenderBootstrap already initialized Vulkan with a different validation policy."));
         }
 
         return core::Result<VulkanInstanceInfo>::FromValue(info);
     }
 
-    core::Result<VulkanInstanceOwner> created =
-        CreateVulkanInstanceForWsi(dispatch, wsiKind, validationMode);
+    core::Result<VulkanInstanceOwner> created = CreateVulkanInstanceForWsi(dispatch, wsiKind, validationMode);
     if (!created)
     {
         return core::Result<VulkanInstanceInfo>::FromError(std::move(created).GetError());
@@ -4145,129 +3812,120 @@ void VulkanInstanceBootstrap::Reset() noexcept
 
 VulkanGlobalDispatch CreateVolkGlobalDispatch() noexcept
 {
-    return VulkanGlobalDispatch{
-        .initialize = &VolkInitialize,
-        .enumerateInstanceVersion = &VolkEnumerateInstanceVersion,
-        .enumerateInstanceExtensionProperties = &VolkEnumerateInstanceExtensionProperties,
-        .enumerateInstanceLayerProperties = &VolkEnumerateInstanceLayerProperties,
-        .createInstance = &VolkCreateInstance,
-        .destroyInstance = &VolkDestroyInstance,
-        .loadInstanceTable = &VolkLoadInstanceTable,
-        .createDebugUtilsMessenger = &VolkCreateDebugUtilsMessenger,
-        .destroyDebugUtilsMessenger = &VolkDestroyDebugUtilsMessenger,
-        .createWin32Surface = &VolkCreateWin32Surface,
-        .createX11Surface = &VolkCreateX11Surface,
-        .createWaylandSurface = &VolkCreateWaylandSurface,
-        .destroySurface = &VolkDestroySurface,
-        .enumeratePhysicalDevices = &VolkEnumeratePhysicalDevices,
-        .getPhysicalDeviceProperties2 = &VolkGetPhysicalDeviceProperties2,
-        .getPhysicalDeviceFeatures2 = &VolkGetPhysicalDeviceFeatures2,
-        .getPhysicalDeviceMemoryProperties = &VolkGetPhysicalDeviceMemoryProperties,
-        .getPhysicalDeviceQueueFamilyProperties = &VolkGetPhysicalDeviceQueueFamilyProperties,
-        .getPhysicalDeviceSurfaceSupport = &VolkGetPhysicalDeviceSurfaceSupport,
-        .getPhysicalDeviceSurfaceFormats = &VolkGetPhysicalDeviceSurfaceFormats,
-        .getPhysicalDeviceSurfacePresentModes = &VolkGetPhysicalDeviceSurfacePresentModes,
-        .getPhysicalDeviceSurfaceCapabilities = &VolkGetPhysicalDeviceSurfaceCapabilities,
-        .enumerateDeviceExtensionProperties = &VolkEnumerateDeviceExtensionProperties,
-        .createDevice = &VolkCreateDevice,
-        .destroyDevice = &VolkDestroyDevice,
-        .loadDeviceTable = &VolkLoadDeviceTable,
-        .getDeviceQueue = &VolkGetDeviceQueue,
-        .deviceWaitIdle = &VolkDeviceWaitIdle,
-        .queueWaitIdle = &VolkQueueWaitIdle,
-        .createSwapchain = &VolkCreateSwapchain,
-        .destroySwapchain = &VolkDestroySwapchain,
-        .getSwapchainImages = &VolkGetSwapchainImages,
-        .createImageView = &VolkCreateImageView,
-        .destroyImageView = &VolkDestroyImageView,
-        .createRenderPass = &VolkCreateRenderPass,
-        .destroyRenderPass = &VolkDestroyRenderPass,
-        .createFramebuffer = &VolkCreateFramebuffer,
-        .destroyFramebuffer = &VolkDestroyFramebuffer,
-        .createShaderModule = &VolkCreateShaderModule,
-        .destroyShaderModule = &VolkDestroyShaderModule,
-        .createPipelineLayout = &VolkCreatePipelineLayout,
-        .destroyPipelineLayout = &VolkDestroyPipelineLayout,
-        .createGraphicsPipelines = &VolkCreateGraphicsPipelines,
-        .destroyPipeline = &VolkDestroyPipeline,
-        .createBuffer = &VmaCreateBufferDispatch,
-        .destroyBuffer = &VmaDestroyBufferDispatch,
-        .mapMemory = &VmaMapMemoryDispatch,
-        .unmapMemory = &VmaUnmapMemoryDispatch,
-        .flushAllocation = &VmaFlushAllocationDispatch,
-        .cmdBindPipeline = &VolkCmdBindPipeline,
-        .cmdSetViewport = &VolkCmdSetViewport,
-        .cmdSetScissor = &VolkCmdSetScissor,
-        .cmdBindVertexBuffers = &VolkCmdBindVertexBuffers,
-        .cmdBindIndexBuffer = &VolkCmdBindIndexBuffer,
-        .cmdPushConstants = &VolkCmdPushConstants,
-        .cmdDrawIndexed = &VolkCmdDrawIndexed,
-        .createCommandPool = &VolkCreateCommandPool,
-        .destroyCommandPool = &VolkDestroyCommandPool,
-        .allocateCommandBuffers = &VolkAllocateCommandBuffers,
-        .resetCommandBuffer = &VolkResetCommandBuffer,
-        .beginCommandBuffer = &VolkBeginCommandBuffer,
-        .endCommandBuffer = &VolkEndCommandBuffer,
-        .cmdBeginRenderPass = &VolkCmdBeginRenderPass,
-        .cmdEndRenderPass = &VolkCmdEndRenderPass,
-        .createSemaphore = &VolkCreateSemaphore,
-        .destroySemaphore = &VolkDestroySemaphore,
-        .createFence = &VolkCreateFence,
-        .destroyFence = &VolkDestroyFence,
-        .waitForFences = &VolkWaitForFences,
-        .resetFences = &VolkResetFences,
-        .acquireNextImage = &VolkAcquireNextImage,
-        .queueSubmit = &VolkQueueSubmit,
-        .queuePresent = &VolkQueuePresent,
-        .waitForPresent = &VolkWaitForPresent,
-        .setDebugUtilsObjectName = &VolkSetDebugUtilsObjectName,
-        .cmdBeginDebugUtilsLabel = &VolkCmdBeginDebugUtilsLabel,
-        .cmdEndDebugUtilsLabel = &VolkCmdEndDebugUtilsLabel,
-        .createOwnerLocalAllocator = &CreateOwnerLocalVmaAllocator,
-        .destroyAllocator = &DestroyVmaAllocator};
+    return VulkanGlobalDispatch{.initialize = &VolkInitialize,
+                                .enumerateInstanceVersion = &VolkEnumerateInstanceVersion,
+                                .enumerateInstanceExtensionProperties = &VolkEnumerateInstanceExtensionProperties,
+                                .enumerateInstanceLayerProperties = &VolkEnumerateInstanceLayerProperties,
+                                .createInstance = &VolkCreateInstance,
+                                .destroyInstance = &VolkDestroyInstance,
+                                .loadInstanceTable = &VolkLoadInstanceTable,
+                                .createDebugUtilsMessenger = &VolkCreateDebugUtilsMessenger,
+                                .destroyDebugUtilsMessenger = &VolkDestroyDebugUtilsMessenger,
+                                .createWin32Surface = &VolkCreateWin32Surface,
+                                .createX11Surface = &VolkCreateX11Surface,
+                                .createWaylandSurface = &VolkCreateWaylandSurface,
+                                .destroySurface = &VolkDestroySurface,
+                                .enumeratePhysicalDevices = &VolkEnumeratePhysicalDevices,
+                                .getPhysicalDeviceProperties2 = &VolkGetPhysicalDeviceProperties2,
+                                .getPhysicalDeviceFeatures2 = &VolkGetPhysicalDeviceFeatures2,
+                                .getPhysicalDeviceMemoryProperties = &VolkGetPhysicalDeviceMemoryProperties,
+                                .getPhysicalDeviceQueueFamilyProperties = &VolkGetPhysicalDeviceQueueFamilyProperties,
+                                .getPhysicalDeviceSurfaceSupport = &VolkGetPhysicalDeviceSurfaceSupport,
+                                .getPhysicalDeviceSurfaceFormats = &VolkGetPhysicalDeviceSurfaceFormats,
+                                .getPhysicalDeviceSurfacePresentModes = &VolkGetPhysicalDeviceSurfacePresentModes,
+                                .getPhysicalDeviceSurfaceCapabilities = &VolkGetPhysicalDeviceSurfaceCapabilities,
+                                .enumerateDeviceExtensionProperties = &VolkEnumerateDeviceExtensionProperties,
+                                .createDevice = &VolkCreateDevice,
+                                .destroyDevice = &VolkDestroyDevice,
+                                .loadDeviceTable = &VolkLoadDeviceTable,
+                                .getDeviceQueue = &VolkGetDeviceQueue,
+                                .deviceWaitIdle = &VolkDeviceWaitIdle,
+                                .queueWaitIdle = &VolkQueueWaitIdle,
+                                .createSwapchain = &VolkCreateSwapchain,
+                                .destroySwapchain = &VolkDestroySwapchain,
+                                .getSwapchainImages = &VolkGetSwapchainImages,
+                                .createImageView = &VolkCreateImageView,
+                                .destroyImageView = &VolkDestroyImageView,
+                                .createRenderPass = &VolkCreateRenderPass,
+                                .destroyRenderPass = &VolkDestroyRenderPass,
+                                .createFramebuffer = &VolkCreateFramebuffer,
+                                .destroyFramebuffer = &VolkDestroyFramebuffer,
+                                .createShaderModule = &VolkCreateShaderModule,
+                                .destroyShaderModule = &VolkDestroyShaderModule,
+                                .createPipelineLayout = &VolkCreatePipelineLayout,
+                                .destroyPipelineLayout = &VolkDestroyPipelineLayout,
+                                .createGraphicsPipelines = &VolkCreateGraphicsPipelines,
+                                .destroyPipeline = &VolkDestroyPipeline,
+                                .createBuffer = &VmaCreateBufferDispatch,
+                                .destroyBuffer = &VmaDestroyBufferDispatch,
+                                .mapMemory = &VmaMapMemoryDispatch,
+                                .unmapMemory = &VmaUnmapMemoryDispatch,
+                                .flushAllocation = &VmaFlushAllocationDispatch,
+                                .cmdBindPipeline = &VolkCmdBindPipeline,
+                                .cmdSetViewport = &VolkCmdSetViewport,
+                                .cmdSetScissor = &VolkCmdSetScissor,
+                                .cmdBindVertexBuffers = &VolkCmdBindVertexBuffers,
+                                .cmdBindIndexBuffer = &VolkCmdBindIndexBuffer,
+                                .cmdPushConstants = &VolkCmdPushConstants,
+                                .cmdDrawIndexed = &VolkCmdDrawIndexed,
+                                .createCommandPool = &VolkCreateCommandPool,
+                                .destroyCommandPool = &VolkDestroyCommandPool,
+                                .allocateCommandBuffers = &VolkAllocateCommandBuffers,
+                                .resetCommandBuffer = &VolkResetCommandBuffer,
+                                .beginCommandBuffer = &VolkBeginCommandBuffer,
+                                .endCommandBuffer = &VolkEndCommandBuffer,
+                                .cmdBeginRenderPass = &VolkCmdBeginRenderPass,
+                                .cmdEndRenderPass = &VolkCmdEndRenderPass,
+                                .createSemaphore = &VolkCreateSemaphore,
+                                .destroySemaphore = &VolkDestroySemaphore,
+                                .createFence = &VolkCreateFence,
+                                .destroyFence = &VolkDestroyFence,
+                                .waitForFences = &VolkWaitForFences,
+                                .resetFences = &VolkResetFences,
+                                .acquireNextImage = &VolkAcquireNextImage,
+                                .queueSubmit = &VolkQueueSubmit,
+                                .queuePresent = &VolkQueuePresent,
+                                .waitForPresent = &VolkWaitForPresent,
+                                .setDebugUtilsObjectName = &VolkSetDebugUtilsObjectName,
+                                .cmdBeginDebugUtilsLabel = &VolkCmdBeginDebugUtilsLabel,
+                                .cmdEndDebugUtilsLabel = &VolkCmdEndDebugUtilsLabel,
+                                .createOwnerLocalAllocator = &CreateOwnerLocalVmaAllocator,
+                                .destroyAllocator = &DestroyVmaAllocator};
 }
 
-core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalDispatch& dispatch,
-                                                             VulkanWsiKind wsiKind,
+core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalDispatch& dispatch, VulkanWsiKind wsiKind,
                                                              RenderValidationMode validationMode)
 {
     if (!HasRequiredDispatch(dispatch))
     {
-        return core::Result<VulkanInstanceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::LoaderUnavailable,
-            "Vulkan global dispatch is incomplete; install or repair the system Vulkan loader."));
+        return core::Result<VulkanInstanceOwner>::FromError(
+            MakeRenderError(RenderErrorCode::LoaderUnavailable, "Vulkan global dispatch is incomplete; install or repair the system Vulkan loader."));
     }
 
     VkResult result = dispatch.initialize();
     if (result != VK_SUCCESS)
     {
-        [[maybe_unused]] const core::Error nativeFailure =
-            MakeVulkanError(RenderErrorCode::LoaderUnavailable, "volkInitialize", result);
-        return core::Result<VulkanInstanceOwner>::FromError(
-            MakeRenderError(RenderErrorCode::LoaderUnavailable,
-                            "Could not open the system Vulkan loader. " +
-                                MakeVulkanFailureMessage("volkInitialize", result)));
+        [[maybe_unused]] const core::Error nativeFailure = MakeVulkanError(RenderErrorCode::LoaderUnavailable, "volkInitialize", result);
+        return core::Result<VulkanInstanceOwner>::FromError(MakeRenderError(
+            RenderErrorCode::LoaderUnavailable, "Could not open the system Vulkan loader. " + MakeVulkanFailureMessage("volkInitialize", result)));
     }
 
     std::uint32_t loaderVersion{};
     result = dispatch.enumerateInstanceVersion(&loaderVersion);
     if (result != VK_SUCCESS)
     {
-        return core::Result<VulkanInstanceOwner>::FromError(
-            MakeVulkanError(RenderErrorCode::BackendFailure, "vkEnumerateInstanceVersion", result));
+        return core::Result<VulkanInstanceOwner>::FromError(MakeVulkanError(RenderErrorCode::BackendFailure, "vkEnumerateInstanceVersion", result));
     }
 
     if (loaderVersion < GetMinimumVulkanInstanceVersion())
     {
-        return core::Result<VulkanInstanceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedCapability,
-            "The installed Vulkan loader reports API " + FormatVulkanVersion(loaderVersion) +
-                ", but ponder_render requires at least Vulkan " +
-                FormatVulkanVersion(GetMinimumVulkanInstanceVersion()) + "."));
+        return core::Result<VulkanInstanceOwner>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "The installed Vulkan loader reports API " + FormatVulkanVersion(loaderVersion) +
+                                                                        ", but ponder_render requires at least Vulkan " +
+                                                                        FormatVulkanVersion(GetMinimumVulkanInstanceVersion()) + "."));
     }
 
-    core::Result<std::vector<VkExtensionProperties>> extensions =
-        EnumerateInstanceExtensions(dispatch);
+    core::Result<std::vector<VkExtensionProperties>> extensions = EnumerateInstanceExtensions(dispatch);
     if (!extensions)
     {
         return core::Result<VulkanInstanceOwner>::FromError(std::move(extensions).GetError());
@@ -4279,15 +3937,12 @@ core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalD
         return core::Result<VulkanInstanceOwner>::FromError(std::move(layers).GetError());
     }
 
-    if (IsValidationFeatureMode(validationMode) &&
-        ContainsLayer(layers.GetValue(), kValidationLayerName))
+    if (IsValidationFeatureMode(validationMode) && ContainsLayer(layers.GetValue(), kValidationLayerName))
     {
-        core::Result<std::vector<VkExtensionProperties>> validationLayerExtensions =
-            EnumerateInstanceExtensions(dispatch, kValidationLayerName);
+        core::Result<std::vector<VkExtensionProperties>> validationLayerExtensions = EnumerateInstanceExtensions(dispatch, kValidationLayerName);
         if (!validationLayerExtensions)
         {
-            return core::Result<VulkanInstanceOwner>::FromError(
-                std::move(validationLayerExtensions).GetError());
+            return core::Result<VulkanInstanceOwner>::FromError(std::move(validationLayerExtensions).GetError());
         }
 
         for (const VkExtensionProperties& extension : validationLayerExtensions.GetValue())
@@ -4306,33 +3961,26 @@ core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalD
         if (!ContainsExtension(extensions.GetValue(), requiredExtension))
         {
             return core::Result<VulkanInstanceOwner>::FromError(
-                MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                                "The Vulkan loader does not expose required instance extension " +
-                                    std::string{requiredExtension} + " for " +
-                                    std::string{GetVulkanWsiKindName(wsiKind)} + " WSI."));
+                MakeRenderError(RenderErrorCode::UnsupportedSurface, "The Vulkan loader does not expose required instance extension " +
+                                                                         std::string{requiredExtension} + " for " +
+                                                                         std::string{GetVulkanWsiKindName(wsiKind)} + " WSI."));
         }
     }
 
-    core::Result<VulkanValidationSelection> validation =
-        SelectValidationPolicy(validationMode, extensions.GetValue(), layers.GetValue());
+    core::Result<VulkanValidationSelection> validation = SelectValidationPolicy(validationMode, extensions.GetValue(), layers.GetValue());
     if (!validation)
     {
         return core::Result<VulkanInstanceOwner>::FromError(std::move(validation).GetError());
     }
 
     const VulkanValidationSelection validationSelection = std::move(validation).GetValue();
-    std::vector<const char*> enabledExtensions{requiredSurfaceExtensions.begin(),
-                                               requiredSurfaceExtensions.end()};
-    const bool getSurfaceCapabilities2Enabled =
-        ContainsExtension(extensions.GetValue(), kGetSurfaceCapabilities2ExtensionName);
+    std::vector<const char*> enabledExtensions{requiredSurfaceExtensions.begin(), requiredSurfaceExtensions.end()};
+    const bool getSurfaceCapabilities2Enabled = ContainsExtension(extensions.GetValue(), kGetSurfaceCapabilities2ExtensionName);
     const bool khrSurfaceMaintenance1Enabled =
-        getSurfaceCapabilities2Enabled &&
-        ContainsExtension(extensions.GetValue(), kKhrSurfaceMaintenance1ExtensionName);
+        getSurfaceCapabilities2Enabled && ContainsExtension(extensions.GetValue(), kKhrSurfaceMaintenance1ExtensionName);
     const bool extSurfaceMaintenance1Enabled =
-        getSurfaceCapabilities2Enabled &&
-        ContainsExtension(extensions.GetValue(), kExtSurfaceMaintenance1ExtensionName);
-    const bool surfaceMaintenance1Enabled =
-        khrSurfaceMaintenance1Enabled || extSurfaceMaintenance1Enabled;
+        getSurfaceCapabilities2Enabled && ContainsExtension(extensions.GetValue(), kExtSurfaceMaintenance1ExtensionName);
+    const bool surfaceMaintenance1Enabled = khrSurfaceMaintenance1Enabled || extSurfaceMaintenance1Enabled;
     if (surfaceMaintenance1Enabled)
     {
         enabledExtensions.push_back(kGetSurfaceCapabilities2ExtensionName);
@@ -4345,11 +3993,9 @@ core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalD
     {
         enabledExtensions.push_back(kExtSurfaceMaintenance1ExtensionName);
     }
-    enabledExtensions.insert(enabledExtensions.end(), validationSelection.enabledExtensions.begin(),
-                             validationSelection.enabledExtensions.end());
+    enabledExtensions.insert(enabledExtensions.end(), validationSelection.enabledExtensions.begin(), validationSelection.enabledExtensions.end());
 
-    const std::uint32_t selectedVersion =
-        std::min(loaderVersion, GetMaximumHeaderVulkanInstanceVersion());
+    const std::uint32_t selectedVersion = std::min(loaderVersion, GetMaximumHeaderVulkanInstanceVersion());
 
     VkApplicationInfo applicationInfo{};
     applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -4371,23 +4017,18 @@ core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalD
     if (validationSelection.validationFeaturesEnabled)
     {
         validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-        validationFeatures.enabledValidationFeatureCount =
-            static_cast<std::uint32_t>(validationSelection.enabledFeatures.size());
+        validationFeatures.enabledValidationFeatureCount = static_cast<std::uint32_t>(validationSelection.enabledFeatures.size());
         validationFeatures.pEnabledValidationFeatures = validationSelection.enabledFeatures.data();
-        validationFeatures.pNext =
-            validationSelection.debugUtilsEnabled ? &debugCreateInfo : nullptr;
+        validationFeatures.pNext = validationSelection.debugUtilsEnabled ? &debugCreateInfo : nullptr;
     }
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pNext =
-        validationSelection.validationFeaturesEnabled
-            ? static_cast<const void*>(&validationFeatures)
-            : static_cast<const void*>(validationSelection.debugUtilsEnabled ? &debugCreateInfo
-                                                                             : nullptr);
+    createInfo.pNext = validationSelection.validationFeaturesEnabled
+                           ? static_cast<const void*>(&validationFeatures)
+                           : static_cast<const void*>(validationSelection.debugUtilsEnabled ? &debugCreateInfo : nullptr);
     createInfo.pApplicationInfo = &applicationInfo;
-    createInfo.enabledLayerCount =
-        static_cast<std::uint32_t>(validationSelection.enabledLayers.size());
+    createInfo.enabledLayerCount = static_cast<std::uint32_t>(validationSelection.enabledLayers.size());
     createInfo.ppEnabledLayerNames = validationSelection.enabledLayers.data();
     createInfo.enabledExtensionCount = static_cast<std::uint32_t>(enabledExtensions.size());
     createInfo.ppEnabledExtensionNames = enabledExtensions.data();
@@ -4396,8 +4037,7 @@ core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalD
     result = dispatch.createInstance(&createInfo, nullptr, &instance);
     if (result != VK_SUCCESS)
     {
-        return core::Result<VulkanInstanceOwner>::FromError(
-            MakeVulkanError(MapInstanceCreateFailure(result), "vkCreateInstance", result));
+        return core::Result<VulkanInstanceOwner>::FromError(MakeVulkanError(MapInstanceCreateFailure(result), "vkCreateInstance", result));
     }
 
     std::optional<VolkInstanceTable> volkTable;
@@ -4420,53 +4060,46 @@ core::Result<VulkanInstanceOwner> CreateVulkanInstanceForWsi(const VulkanGlobalD
         {
             instanceDispatch.destroyInstance(instance, nullptr);
             return core::Result<VulkanInstanceOwner>::FromError(MakeRenderError(
-                RenderErrorCode::UnsupportedCapability,
-                "VK_EXT_debug_utils was selected but debug messenger dispatch is unavailable."));
+                RenderErrorCode::UnsupportedCapability, "VK_EXT_debug_utils was selected but debug messenger dispatch is unavailable."));
         }
 
         debugContext->currentOperation = "vkCreateDebugUtilsMessengerEXT";
-        result = instanceDispatch.createDebugUtilsMessenger(instance, &debugCreateInfo, nullptr,
-                                                            &debugMessenger);
+        result = instanceDispatch.createDebugUtilsMessenger(instance, &debugCreateInfo, nullptr, &debugMessenger);
         if (result != VK_SUCCESS)
         {
             instanceDispatch.destroyInstance(instance, nullptr);
-            return core::Result<VulkanInstanceOwner>::FromError(MakeVulkanError(
-                MapInstanceCreateFailure(result), "vkCreateDebugUtilsMessengerEXT", result));
+            return core::Result<VulkanInstanceOwner>::FromError(
+                MakeVulkanError(MapInstanceCreateFailure(result), "vkCreateDebugUtilsMessengerEXT", result));
         }
 
         debugContext->currentOperation = "vulkan-runtime-validation";
     }
 
-    const VulkanInstanceInfo info{
-        .apiVersion = selectedVersion,
-        .wsiKind = wsiKind,
-        .requestedValidationMode = validationMode,
-        .enabledValidationMode = validationSelection.enabledMode,
-        .validationEnabled = validationSelection.validationEnabled,
-        .debugUtilsEnabled = validationSelection.debugUtilsEnabled,
-        .debugMessengerEnabled = debugMessenger != VK_NULL_HANDLE,
-        .validationFeaturesEnabled = validationSelection.validationFeaturesEnabled,
-        .surfaceMaintenance1Enabled = surfaceMaintenance1Enabled,
-        .khrSurfaceMaintenance1Enabled = khrSurfaceMaintenance1Enabled,
-        .extSurfaceMaintenance1Enabled = extSurfaceMaintenance1Enabled,
-        .debugUtilityHooks =
-            MakeDebugUtilityHooks(instanceDispatch, validationSelection.debugUtilsEnabled)};
+    const VulkanInstanceInfo info{.apiVersion = selectedVersion,
+                                  .wsiKind = wsiKind,
+                                  .requestedValidationMode = validationMode,
+                                  .enabledValidationMode = validationSelection.enabledMode,
+                                  .validationEnabled = validationSelection.validationEnabled,
+                                  .debugUtilsEnabled = validationSelection.debugUtilsEnabled,
+                                  .debugMessengerEnabled = debugMessenger != VK_NULL_HANDLE,
+                                  .validationFeaturesEnabled = validationSelection.validationFeaturesEnabled,
+                                  .surfaceMaintenance1Enabled = surfaceMaintenance1Enabled,
+                                  .khrSurfaceMaintenance1Enabled = khrSurfaceMaintenance1Enabled,
+                                  .extSurfaceMaintenance1Enabled = extSurfaceMaintenance1Enabled,
+                                  .debugUtilityHooks = MakeDebugUtilityHooks(instanceDispatch, validationSelection.debugUtilsEnabled)};
 
-    return core::Result<VulkanInstanceOwner>::FromValue(
-        VulkanInstanceOwner{instance, debugMessenger, instanceDispatch.destroyInstance,
-                            instanceDispatch.destroyDebugUtilsMessenger, instanceDispatch,
-                            std::move(volkTable), info, std::move(debugContext)});
+    return core::Result<VulkanInstanceOwner>::FromValue(VulkanInstanceOwner{instance, debugMessenger, instanceDispatch.destroyInstance,
+                                                                            instanceDispatch.destroyDebugUtilsMessenger, instanceDispatch,
+                                                                            std::move(volkTable), info, std::move(debugContext)});
 }
 
-core::Result<VulkanSurfaceOwner> CreateVulkanSurfaceForNativeWindow(
-    const VulkanGlobalDispatch&, std::shared_ptr<VulkanInstanceOwner> instance,
-    const platform::NativeWindowHandle& nativeWindowHandle)
+core::Result<VulkanSurfaceOwner> CreateVulkanSurfaceForNativeWindow(const VulkanGlobalDispatch&, std::shared_ptr<VulkanInstanceOwner> instance,
+                                                                    const ponder::platform::NativeWindowHandle& nativeWindowHandle)
 {
     if (instance == nullptr || !instance->IsValid())
     {
         return core::Result<VulkanSurfaceOwner>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan surface creation requires a live Vulkan instance owner."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan surface creation requires a live Vulkan instance owner."));
     }
 
     const VulkanGlobalDispatch& dispatch = instance->GetDispatch();
@@ -4474,126 +4107,108 @@ core::Result<VulkanSurfaceOwner> CreateVulkanSurfaceForNativeWindow(
     const VulkanWsiKind nativeWsiKind = GetVulkanWsiKind(nativeWindowHandle);
     if (instance->GetInfo().wsiKind != nativeWsiKind)
     {
-        return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedSurface,
-            "Native window WSI " + std::string{GetVulkanWsiKindName(nativeWsiKind)} +
-                " does not match the initialized Vulkan instance WSI " +
-                std::string{GetVulkanWsiKindName(instance->GetInfo().wsiKind)} + "."));
+        return core::Result<VulkanSurfaceOwner>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Native window WSI " + std::string{GetVulkanWsiKindName(nativeWsiKind)} +
+                                                                     " does not match the initialized Vulkan instance WSI " +
+                                                                     std::string{GetVulkanWsiKindName(instance->GetInfo().wsiKind)} + "."));
     }
 
-    const auto createSurface = [&](VulkanWsiKind wsiKind, const void* createInfo,
-                                   VulkanGlobalDispatch::CreateSurfaceFn createSurfaceFn,
+    const auto createSurface = [&](VulkanWsiKind wsiKind, const void* createInfo, VulkanGlobalDispatch::CreateSurfaceFn createSurfaceFn,
                                    std::string_view operation) -> core::Result<VulkanSurfaceOwner>
     {
         if (!HasSurfaceDispatch(dispatch, createSurfaceFn))
         {
             return core::Result<VulkanSurfaceOwner>::FromError(
-                MakeRenderError(RenderErrorCode::UnsupportedCapability,
-                                std::string{operation} + " dispatch is unavailable."));
+                MakeRenderError(RenderErrorCode::UnsupportedCapability, std::string{operation} + " dispatch is unavailable."));
         }
 
         VkSurfaceKHR surface{VK_NULL_HANDLE};
-        const VkResult result =
-            createSurfaceFn(instance->GetHandle(), createInfo, nullptr, &surface);
+        const VkResult result = createSurfaceFn(instance->GetHandle(), createInfo, nullptr, &surface);
         if (result != VK_SUCCESS)
         {
-            return core::Result<VulkanSurfaceOwner>::FromError(
-                MakeVulkanError(MapSurfaceCreateFailure(result), operation, result));
+            return core::Result<VulkanSurfaceOwner>::FromError(MakeVulkanError(MapSurfaceCreateFailure(result), operation, result));
         }
 
-        return core::Result<VulkanSurfaceOwner>::FromValue(VulkanSurfaceOwner{
-            instance, surface, dispatch.destroySurface, VulkanSurfaceInfo{.wsiKind = wsiKind}});
+        return core::Result<VulkanSurfaceOwner>::FromValue(
+            VulkanSurfaceOwner{instance, surface, dispatch.destroySurface, VulkanSurfaceInfo{.wsiKind = wsiKind}});
     };
 
     return std::visit(
-        Overloaded{
-            [&](platform::NativeWin32Window native) -> core::Result<VulkanSurfaceOwner>
-            {
-                if (native.instance == nullptr || native.window == nullptr)
-                {
-                    return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
-                        RenderErrorCode::InvalidArgument,
-                        "Win32 Vulkan surface creation requires non-null HINSTANCE and HWND."));
-                }
+        Overloaded{[&](ponder::platform::NativeWin32Window native) -> core::Result<VulkanSurfaceOwner>
+                   {
+                       if (native.instance == nullptr || native.window == nullptr)
+                       {
+                           return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
+                               RenderErrorCode::InvalidArgument, "Win32 Vulkan surface creation requires non-null HINSTANCE and HWND."));
+                       }
 
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
-                VkWin32SurfaceCreateInfoKHR createInfo{};
-                createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-                createInfo.hinstance = reinterpret_cast<HINSTANCE>(native.instance);
-                createInfo.hwnd = reinterpret_cast<HWND>(native.window);
-                return createSurface(VulkanWsiKind::Win32, &createInfo, dispatch.createWin32Surface,
-                                     "vkCreateWin32SurfaceKHR");
+                       VkWin32SurfaceCreateInfoKHR createInfo{};
+                       createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+                       createInfo.hinstance = reinterpret_cast<HINSTANCE>(native.instance);
+                       createInfo.hwnd = reinterpret_cast<HWND>(native.window);
+                       return createSurface(VulkanWsiKind::Win32, &createInfo, dispatch.createWin32Surface, "vkCreateWin32SurfaceKHR");
 #else
-                return createSurface(VulkanWsiKind::Win32, nullptr, dispatch.createWin32Surface,
-                                     "vkCreateWin32SurfaceKHR");
+                       return createSurface(VulkanWsiKind::Win32, nullptr, dispatch.createWin32Surface, "vkCreateWin32SurfaceKHR");
 #endif
-            },
-            [&](platform::NativeX11Window native) -> core::Result<VulkanSurfaceOwner>
-            {
-                if (native.display == nullptr || native.window == 0U)
-                {
-                    return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
-                        RenderErrorCode::InvalidArgument,
-                        "X11 Vulkan surface creation requires non-null Display and Window."));
-                }
+                   },
+                   [&](ponder::platform::NativeX11Window native) -> core::Result<VulkanSurfaceOwner>
+                   {
+                       if (native.display == nullptr || native.window == 0U)
+                       {
+                           return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
+                               RenderErrorCode::InvalidArgument, "X11 Vulkan surface creation requires non-null Display and Window."));
+                       }
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
-                if (native.window > static_cast<std::uintptr_t>(std::numeric_limits<Window>::max()))
-                {
-                    return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
-                        RenderErrorCode::InvalidArgument,
-                        "X11 native Window value cannot be represented by this build."));
-                }
+                       if (native.window > static_cast<std::uintptr_t>(std::numeric_limits<Window>::max()))
+                       {
+                           return core::Result<VulkanSurfaceOwner>::FromError(
+                               MakeRenderError(RenderErrorCode::InvalidArgument, "X11 native Window value cannot be represented by this build."));
+                       }
 
-                VkXlibSurfaceCreateInfoKHR createInfo{};
-                createInfo.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-                createInfo.dpy = reinterpret_cast<Display*>(native.display);
-                createInfo.window = static_cast<Window>(native.window);
-                return createSurface(VulkanWsiKind::X11, &createInfo, dispatch.createX11Surface,
-                                     "vkCreateXlibSurfaceKHR");
+                       VkXlibSurfaceCreateInfoKHR createInfo{};
+                       createInfo.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+                       createInfo.dpy = reinterpret_cast<Display*>(native.display);
+                       createInfo.window = static_cast<Window>(native.window);
+                       return createSurface(VulkanWsiKind::X11, &createInfo, dispatch.createX11Surface, "vkCreateXlibSurfaceKHR");
 #else
-                return createSurface(VulkanWsiKind::X11, nullptr, dispatch.createX11Surface,
-                                     "vkCreateXlibSurfaceKHR");
+                       return createSurface(VulkanWsiKind::X11, nullptr, dispatch.createX11Surface, "vkCreateXlibSurfaceKHR");
 #endif
-            },
-            [&](platform::NativeWaylandWindow native) -> core::Result<VulkanSurfaceOwner>
-            {
-                if (native.display == nullptr || native.surface == nullptr)
-                {
-                    return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
-                        RenderErrorCode::InvalidArgument,
-                        "Wayland Vulkan surface creation requires non-null display and surface."));
-                }
+                   },
+                   [&](ponder::platform::NativeWaylandWindow native) -> core::Result<VulkanSurfaceOwner>
+                   {
+                       if (native.display == nullptr || native.surface == nullptr)
+                       {
+                           return core::Result<VulkanSurfaceOwner>::FromError(MakeRenderError(
+                               RenderErrorCode::InvalidArgument, "Wayland Vulkan surface creation requires non-null display and surface."));
+                       }
 
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-                VkWaylandSurfaceCreateInfoKHR createInfo{};
-                createInfo.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
-                createInfo.display = reinterpret_cast<wl_display*>(native.display);
-                createInfo.surface = reinterpret_cast<wl_surface*>(native.surface);
-                return createSurface(VulkanWsiKind::Wayland, &createInfo,
-                                     dispatch.createWaylandSurface, "vkCreateWaylandSurfaceKHR");
+                       VkWaylandSurfaceCreateInfoKHR createInfo{};
+                       createInfo.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
+                       createInfo.display = reinterpret_cast<wl_display*>(native.display);
+                       createInfo.surface = reinterpret_cast<wl_surface*>(native.surface);
+                       return createSurface(VulkanWsiKind::Wayland, &createInfo, dispatch.createWaylandSurface, "vkCreateWaylandSurfaceKHR");
 #else
-                return createSurface(VulkanWsiKind::Wayland, nullptr, dispatch.createWaylandSurface,
-                                     "vkCreateWaylandSurfaceKHR");
+                       return createSurface(VulkanWsiKind::Wayland, nullptr, dispatch.createWaylandSurface, "vkCreateWaylandSurfaceKHR");
 #endif
-            }},
+                   }},
         nativeWindowHandle);
 }
-core::Result<RenderAdapterSelection> SelectVulkanAdapterForSurface(
-    const VulkanGlobalDispatch&, std::shared_ptr<VulkanInstanceOwner> instance,
-    VkSurfaceKHR surface, const RenderAdapterSelectionDesc& desc)
+core::Result<RenderAdapterSelection> SelectVulkanAdapterForSurface(const VulkanGlobalDispatch&, std::shared_ptr<VulkanInstanceOwner> instance,
+                                                                   VkSurfaceKHR surface, const RenderAdapterSelectionDesc& desc)
 {
     if (!pond::render::IsValid(desc))
     {
-        return core::Result<RenderAdapterSelection>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Render adapter selection descriptor is invalid."));
+        return core::Result<RenderAdapterSelection>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Render adapter selection descriptor is invalid."));
     }
 
     if (instance == nullptr || !instance->IsValid())
     {
         return core::Result<RenderAdapterSelection>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan adapter selection requires a live Vulkan instance owner."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan adapter selection requires a live Vulkan instance owner."));
     }
 
     const VulkanGlobalDispatch& dispatch = instance->GetDispatch();
@@ -4601,30 +4216,25 @@ core::Result<RenderAdapterSelection> SelectVulkanAdapterForSurface(
     if (surface == VK_NULL_HANDLE)
     {
         return core::Result<RenderAdapterSelection>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan adapter selection requires a live first prepared surface."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan adapter selection requires a live first prepared surface."));
     }
 
     if (!HasAdapterDispatch(dispatch))
     {
         return core::Result<RenderAdapterSelection>::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedCapability,
-                            "Vulkan physical-device dispatch is unavailable."));
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "Vulkan physical-device dispatch is unavailable."));
     }
 
-    core::Result<std::vector<VkPhysicalDevice>> physicalDevices =
-        EnumeratePhysicalDevices(dispatch, instance->GetHandle());
+    core::Result<std::vector<VkPhysicalDevice>> physicalDevices = EnumeratePhysicalDevices(dispatch, instance->GetHandle());
     if (!physicalDevices)
     {
-        return core::Result<RenderAdapterSelection>::FromError(
-            std::move(physicalDevices).GetError());
+        return core::Result<RenderAdapterSelection>::FromError(std::move(physicalDevices).GetError());
     }
 
     if (physicalDevices.GetValue().empty())
     {
         return core::Result<RenderAdapterSelection>::FromError(
-            MakeRenderError(RenderErrorCode::NoCompatibleAdapter,
-                            "No Vulkan physical devices were reported by the selected instance."));
+            MakeRenderError(RenderErrorCode::NoCompatibleAdapter, "No Vulkan physical devices were reported by the selected instance."));
     }
 
     std::vector<RenderAdapterSnapshot> compatibleAdapters;
@@ -4634,8 +4244,7 @@ core::Result<RenderAdapterSelection> SelectVulkanAdapterForSurface(
 
     for (VkPhysicalDevice physicalDevice : physicalDevices.GetValue())
     {
-        core::Result<VulkanAdapterCandidate> candidate =
-            BuildAdapterCandidate(dispatch, physicalDevice, surface, desc);
+        core::Result<VulkanAdapterCandidate> candidate = BuildAdapterCandidate(dispatch, physicalDevice, surface, desc);
         if (!candidate)
         {
             return core::Result<RenderAdapterSelection>::FromError(std::move(candidate).GetError());
@@ -4652,94 +4261,82 @@ core::Result<RenderAdapterSelection> SelectVulkanAdapterForSurface(
         }
     }
 
-    std::ranges::sort(
-        compatibleAdapters,
-        [preference = desc.adapterPreference](const RenderAdapterSnapshot& lhs,
-                                              const RenderAdapterSnapshot& rhs) noexcept
-        {
-            return IsPreferredAdapterLess(lhs, rhs, preference);
-        });
+    std::ranges::sort(compatibleAdapters,
+                      [preference = desc.adapterPreference](const RenderAdapterSnapshot& lhs, const RenderAdapterSnapshot& rhs) noexcept
+                      {
+                          return IsPreferredAdapterLess(lhs, rhs, preference);
+                      });
 
-    std::ranges::sort(
-        rejectedAdapters,
-        [](const RenderAdapterRejection& lhs, const RenderAdapterRejection& rhs) noexcept
-        {
-            if (lhs.identity.vendorId != rhs.identity.vendorId)
-            {
-                return lhs.identity.vendorId < rhs.identity.vendorId;
-            }
-            if (lhs.identity.deviceId != rhs.identity.deviceId)
-            {
-                return lhs.identity.deviceId < rhs.identity.deviceId;
-            }
-            if (lhs.identity.name != rhs.identity.name)
-            {
-                return lhs.identity.name < rhs.identity.name;
-            }
+    std::ranges::sort(rejectedAdapters,
+                      [](const RenderAdapterRejection& lhs, const RenderAdapterRejection& rhs) noexcept
+                      {
+                          if (lhs.identity.vendorId != rhs.identity.vendorId)
+                          {
+                              return lhs.identity.vendorId < rhs.identity.vendorId;
+                          }
+                          if (lhs.identity.deviceId != rhs.identity.deviceId)
+                          {
+                              return lhs.identity.deviceId < rhs.identity.deviceId;
+                          }
+                          if (lhs.identity.name != rhs.identity.name)
+                          {
+                              return lhs.identity.name < rhs.identity.name;
+                          }
 
-            return lhs.adapterId.deviceUuid < rhs.adapterId.deviceUuid;
-        });
+                          return lhs.adapterId.deviceUuid < rhs.adapterId.deviceUuid;
+                      });
 
     if (compatibleAdapters.empty())
     {
         return core::Result<RenderAdapterSelection>::FromError(
-            MakeRenderError(RenderErrorCode::NoCompatibleAdapter,
-                            MakeNoCompatibleAdapterMessage(rejectedAdapters)));
+            MakeRenderError(RenderErrorCode::NoCompatibleAdapter, MakeNoCompatibleAdapterMessage(rejectedAdapters)));
     }
 
     const RenderAdapterSnapshot selectedAdapter = compatibleAdapters.front();
     const bool selectedByPreferenceFallback =
-        !desc.explicitAdapterId.has_value() &&
-        GetAdapterPreferenceRank(selectedAdapter.identity.adapterType, desc.adapterPreference) > 0U;
+        !desc.explicitAdapterId.has_value() && GetAdapterPreferenceRank(selectedAdapter.identity.adapterType, desc.adapterPreference) > 0U;
 
-    return core::Result<RenderAdapterSelection>::FromValue(
-        RenderAdapterSelection{.request = desc,
-                               .selectedAdapter = selectedAdapter,
-                               .compatibleAdapters = std::move(compatibleAdapters),
-                               .rejectedAdapters = std::move(rejectedAdapters),
-                               .selectedByPreferenceFallback = selectedByPreferenceFallback});
+    return core::Result<RenderAdapterSelection>::FromValue(RenderAdapterSelection{.request = desc,
+                                                                                  .selectedAdapter = selectedAdapter,
+                                                                                  .compatibleAdapters = std::move(compatibleAdapters),
+                                                                                  .rejectedAdapters = std::move(rejectedAdapters),
+                                                                                  .selectedByPreferenceFallback = selectedByPreferenceFallback});
 }
-core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
-    const VulkanGlobalDispatch&, std::shared_ptr<VulkanInstanceOwner> instance,
-    VkSurfaceKHR surface, const RenderAdapterSelection& selection, const RenderDeviceDesc& desc)
+core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(const VulkanGlobalDispatch&, std::shared_ptr<VulkanInstanceOwner> instance,
+                                                                      VkSurfaceKHR surface, const RenderAdapterSelection& selection,
+                                                                      const RenderDeviceDesc& desc)
 {
     if (!pond::render::IsValid(desc))
     {
-        return core::Result<VulkanDeviceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Render device descriptor is invalid."));
+        return core::Result<VulkanDeviceOwner>::FromError(MakeRenderError(RenderErrorCode::InvalidArgument, "Render device descriptor is invalid."));
     }
 
     if (!pond::render::IsValid(selection))
     {
-        return core::Result<VulkanDeviceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Render adapter selection is invalid."));
+        return core::Result<VulkanDeviceOwner>::FromError(MakeRenderError(RenderErrorCode::InvalidArgument, "Render adapter selection is invalid."));
     }
 
     if (instance == nullptr || !instance->IsValid())
     {
-        return core::Result<VulkanDeviceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "Vulkan logical-device creation requires a live Vulkan instance owner."));
+        return core::Result<VulkanDeviceOwner>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan logical-device creation requires a live Vulkan instance owner."));
     }
 
     const VulkanGlobalDispatch& dispatch = instance->GetDispatch();
 
     if (surface == VK_NULL_HANDLE)
     {
-        return core::Result<VulkanDeviceOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "Vulkan logical-device creation requires a live first prepared surface."));
+        return core::Result<VulkanDeviceOwner>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan logical-device creation requires a live first prepared surface."));
     }
 
     if (!HasDeviceDispatch(dispatch))
     {
         return core::Result<VulkanDeviceOwner>::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedCapability,
-                            "Vulkan logical-device dispatch is unavailable."));
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "Vulkan logical-device dispatch is unavailable."));
     }
 
-    core::Result<VulkanAdapterCandidate> selectedCandidate =
-        FindSelectedAdapterCandidate(dispatch, instance->GetHandle(), surface, selection);
+    core::Result<VulkanAdapterCandidate> selectedCandidate = FindSelectedAdapterCandidate(dispatch, instance->GetHandle(), surface, selection);
     if (!selectedCandidate)
     {
         return core::Result<VulkanDeviceOwner>::FromError(std::move(selectedCandidate).GetError());
@@ -4752,18 +4349,16 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
         return core::Result<VulkanDeviceOwner>::FromError(std::move(queuePlan).GetError());
     }
 
-    core::Result<std::vector<VkExtensionProperties>> availableExtensions =
-        EnumerateDeviceExtensions(dispatch, candidate.device);
+    core::Result<std::vector<VkExtensionProperties>> availableExtensions = EnumerateDeviceExtensions(dispatch, candidate.device);
     if (!availableExtensions)
     {
-        return core::Result<VulkanDeviceOwner>::FromError(
-            std::move(availableExtensions).GetError());
+        return core::Result<VulkanDeviceOwner>::FromError(std::move(availableExtensions).GetError());
     }
 
     const VulkanInstanceInfo instanceInfo = instance->GetInfo();
-    VulkanDeviceFeatureSelection featureSelection = SelectOptionalDeviceFeatures(
-        dispatch, candidate.device, availableExtensions.GetValue(),
-        instanceInfo.khrSurfaceMaintenance1Enabled, instanceInfo.extSurfaceMaintenance1Enabled);
+    VulkanDeviceFeatureSelection featureSelection =
+        SelectOptionalDeviceFeatures(dispatch, candidate.device, availableExtensions.GetValue(), instanceInfo.khrSurfaceMaintenance1Enabled,
+                                     instanceInfo.extSurfaceMaintenance1Enabled);
 
     const float queuePriority = 1.0F;
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -4782,8 +4377,7 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
     enabledFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 
     VkPhysicalDeviceSwapchainMaintenance1FeaturesKHR enabledMaintenanceFeatures{};
-    enabledMaintenanceFeatures.sType =
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR;
+    enabledMaintenanceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_KHR;
 
     VkPhysicalDevicePresentIdFeaturesKHR enabledPresentIdFeatures{};
     enabledPresentIdFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
@@ -4813,18 +4407,15 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
     createInfo.pNext = &enabledFeatures;
     createInfo.queueCreateInfoCount = static_cast<std::uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.enabledExtensionCount =
-        static_cast<std::uint32_t>(featureSelection.enabledExtensions.size());
+    createInfo.enabledExtensionCount = static_cast<std::uint32_t>(featureSelection.enabledExtensions.size());
     createInfo.ppEnabledExtensionNames = featureSelection.enabledExtensions.data();
 
     VkPhysicalDeviceProperties2 physicalDeviceProperties{};
     physicalDeviceProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     dispatch.getPhysicalDeviceProperties2(candidate.device, &physicalDeviceProperties);
-    const VkDeviceSize nonCoherentAtomSize =
-        std::max<VkDeviceSize>(physicalDeviceProperties.properties.limits.nonCoherentAtomSize, 1U);
-    const std::array<std::uint32_t, 2U> maximumViewportDimensions{
-        physicalDeviceProperties.properties.limits.maxViewportDimensions[0],
-        physicalDeviceProperties.properties.limits.maxViewportDimensions[1]};
+    const VkDeviceSize nonCoherentAtomSize = std::max<VkDeviceSize>(physicalDeviceProperties.properties.limits.nonCoherentAtomSize, 1U);
+    const std::array<std::uint32_t, 2U> maximumViewportDimensions{physicalDeviceProperties.properties.limits.maxViewportDimensions[0],
+                                                                  physicalDeviceProperties.properties.limits.maxViewportDimensions[1]};
 
     VulkanDeviceInfo info{.selectedAdapter = std::move(candidate.snapshot),
                           .queuePlan = std::move(queuePlan).GetValue(),
@@ -4840,16 +4431,14 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
     catch (const std::bad_alloc&)
     {
         return core::Result<VulkanDeviceOwner>::FromError(
-            MakeRenderError(RenderErrorCode::OutOfMemory,
-                            "Vulkan device child-lifetime state could not allocate host memory."));
+            MakeRenderError(RenderErrorCode::OutOfMemory, "Vulkan device child-lifetime state could not allocate host memory."));
     }
 
     VkDevice device{VK_NULL_HANDLE};
     VkResult result = dispatch.createDevice(candidate.device, &createInfo, nullptr, &device);
     if (result != VK_SUCCESS)
     {
-        return core::Result<VulkanDeviceOwner>::FromError(
-            MakeVulkanError(MapDeviceFailure(result), "vkCreateDevice", result));
+        return core::Result<VulkanDeviceOwner>::FromError(MakeVulkanError(MapDeviceFailure(result), "vkCreateDevice", result));
     }
 
     std::optional<VolkDeviceTable> volkTable;
@@ -4861,8 +4450,7 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
         {
             dispatch.destroyDevice(device, nullptr);
             return core::Result<VulkanDeviceOwner>::FromError(
-                MakeRenderError(RenderErrorCode::UnsupportedCapability,
-                                "Owner-local Vulkan proc-address dispatch is unavailable."));
+                MakeRenderError(RenderErrorCode::UnsupportedCapability, "Owner-local Vulkan proc-address dispatch is unavailable."));
         }
 
         volkTable.emplace();
@@ -4886,9 +4474,8 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
             if (queue == VK_NULL_HANDLE)
             {
                 deviceDispatch.destroyDevice(device, nullptr);
-                return core::Result<VulkanDeviceOwner>::FromError(MakeRenderError(
-                    RenderErrorCode::BackendFailure,
-                    "vkGetDeviceQueue returned a null queue for a provisioned family."));
+                return core::Result<VulkanDeviceOwner>::FromError(
+                    MakeRenderError(RenderErrorCode::BackendFailure, "vkGetDeviceQueue returned a null queue for a provisioned family."));
             }
 
             queues.push_back(queue);
@@ -4900,91 +4487,77 @@ core::Result<VulkanDeviceOwner> CreateVulkanDeviceForAdapterSelection(
     {
         deviceDispatch.destroyDevice(device, nullptr);
         return core::Result<VulkanDeviceOwner>::FromError(
-            MakeRenderError(RenderErrorCode::OutOfMemory,
-                            "Vulkan queue synchronization could not allocate host memory."));
+            MakeRenderError(RenderErrorCode::OutOfMemory, "Vulkan queue synchronization could not allocate host memory."));
     }
 
     void* allocator{};
     if (deviceDispatch.createOwnerLocalAllocator != nullptr)
     {
-        result = deviceDispatch.createOwnerLocalAllocator(
-            instance->GetHandle(), candidate.device, device, info.selectedAdapter.apiVersion,
-            deviceDispatch.getInstanceProcAddr, instance->GetDeviceProcAddr(), &allocator);
+        result = deviceDispatch.createOwnerLocalAllocator(instance->GetHandle(), candidate.device, device, info.selectedAdapter.apiVersion,
+                                                          deviceDispatch.getInstanceProcAddr, instance->GetDeviceProcAddr(), &allocator);
     }
     else
     {
-        result = deviceDispatch.createAllocator(instance->GetHandle(), candidate.device, device,
-                                                info.selectedAdapter.apiVersion, &allocator);
+        result = deviceDispatch.createAllocator(instance->GetHandle(), candidate.device, device, info.selectedAdapter.apiVersion, &allocator);
     }
     if (result != VK_SUCCESS || allocator == nullptr)
     {
         deviceDispatch.destroyDevice(device, nullptr);
-        return core::Result<VulkanDeviceOwner>::FromError(
-            MakeVulkanError(MapDeviceFailure(result), "vmaCreateAllocator", result));
+        return core::Result<VulkanDeviceOwner>::FromError(MakeVulkanError(MapDeviceFailure(result), "vmaCreateAllocator", result));
     }
 
     info.optionalCapabilities.vmaAllocator = true;
 
     return core::Result<VulkanDeviceOwner>::FromValue(
-        VulkanDeviceOwner{std::move(instance), candidate.device, device, allocator,
-                          std::move(queues), std::move(queueSynchronization),
-                          deviceDispatch.destroyDevice, deviceDispatch.deviceWaitIdle,
-                          deviceDispatch.queueWaitIdle, deviceDispatch.destroyAllocator,
+        VulkanDeviceOwner{std::move(instance), candidate.device, device, allocator, std::move(queues), std::move(queueSynchronization),
+                          deviceDispatch.destroyDevice, deviceDispatch.deviceWaitIdle, deviceDispatch.queueWaitIdle, deviceDispatch.destroyAllocator,
                           deviceDispatch, volkTable, std::move(info), std::move(childLifetime)});
 }
-core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface)
+core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                             VkSurfaceKHR surface)
 {
     if (!device.IsValid() || device.GetPhysicalDevice() == VK_NULL_HANDLE)
     {
         return core::Result<VulkanDeviceQueuePlan>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan target compatibility requires a live logical device."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan target compatibility requires a live logical device."));
     }
 
     if (surface == VK_NULL_HANDLE)
     {
         return core::Result<VulkanDeviceQueuePlan>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan target compatibility requires a live prepared surface."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan target compatibility requires a live prepared surface."));
     }
 
     if (dispatch.getPhysicalDeviceSurfaceSupport == nullptr)
     {
         return core::Result<VulkanDeviceQueuePlan>::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedCapability,
-                            "Vulkan surface presentation support dispatch is unavailable."));
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "Vulkan surface presentation support dispatch is unavailable."));
     }
 
     const VulkanDeviceInfo& info = device.GetInfo();
     if (!IsValidVulkanDeviceQueuePlan(info.queuePlan))
     {
-        return core::Result<VulkanDeviceQueuePlan>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan device queue plan is invalid."));
+        return core::Result<VulkanDeviceQueuePlan>::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Vulkan device queue plan is invalid."));
     }
 
     const auto queryPresentationSupport = [&](std::uint32_t queueFamilyIndex) -> core::Result<bool>
     {
         VkBool32 supported{VK_FALSE};
-        const VkResult result = dispatch.getPhysicalDeviceSurfaceSupport(
-            device.GetPhysicalDevice(), queueFamilyIndex, surface, &supported);
+        const VkResult result = dispatch.getPhysicalDeviceSurfaceSupport(device.GetPhysicalDevice(), queueFamilyIndex, surface, &supported);
         if (result != VK_SUCCESS)
         {
             return core::Result<bool>::FromError(
-                MakeVulkanError(MapAdapterQueryFailure(result),
-                                "vkGetPhysicalDeviceSurfaceSupportKHR.target", result));
+                MakeVulkanError(MapAdapterQueryFailure(result), "vkGetPhysicalDeviceSurfaceSupportKHR.target", result));
         }
 
         return core::Result<bool>::FromValue(supported == VK_TRUE);
     };
 
     VulkanDeviceQueuePlan queuePlan = info.queuePlan;
-    core::Result<bool> currentPresentationSupport =
-        queryPresentationSupport(queuePlan.presentationQueueFamilyIndex);
+    core::Result<bool> currentPresentationSupport = queryPresentationSupport(queuePlan.presentationQueueFamilyIndex);
     if (!currentPresentationSupport)
     {
-        return core::Result<VulkanDeviceQueuePlan>::FromError(
-            std::move(currentPresentationSupport).GetError());
+        return core::Result<VulkanDeviceQueuePlan>::FromError(std::move(currentPresentationSupport).GetError());
     }
 
     if (!currentPresentationSupport.GetValue())
@@ -4995,8 +4568,7 @@ core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(
             core::Result<bool> familySupport = queryPresentationSupport(familyIndex);
             if (!familySupport)
             {
-                return core::Result<VulkanDeviceQueuePlan>::FromError(
-                    std::move(familySupport).GetError());
+                return core::Result<VulkanDeviceQueuePlan>::FromError(std::move(familySupport).GetError());
             }
 
             if (familySupport.GetValue())
@@ -5009,52 +4581,43 @@ core::Result<VulkanDeviceQueuePlan> ValidateVulkanDeviceSurfaceCompatibility(
 
         if (!foundPresentationQueue)
         {
-            return core::Result<VulkanDeviceQueuePlan>::FromError(MakeRenderError(
-                RenderErrorCode::UnsupportedSurface, "Selected Vulkan device has no pre-created "
-                                                     "queue that can present to this surface."));
+            return core::Result<VulkanDeviceQueuePlan>::FromError(MakeRenderError(RenderErrorCode::UnsupportedSurface,
+                                                                                  "Selected Vulkan device has no pre-created "
+                                                                                  "queue that can present to this surface."));
         }
     }
 
-    queuePlan.usesDistinctPresentationQueue =
-        queuePlan.graphicsQueueFamilyIndex != queuePlan.presentationQueueFamilyIndex;
+    queuePlan.usesDistinctPresentationQueue = queuePlan.graphicsQueueFamilyIndex != queuePlan.presentationQueueFamilyIndex;
     if (!IsValidVulkanDeviceQueuePlan(queuePlan))
     {
         return core::Result<VulkanDeviceQueuePlan>::FromError(
-            MakeRenderError(RenderErrorCode::BackendFailure,
-                            "Validated target queue plan is internally inconsistent."));
+            MakeRenderError(RenderErrorCode::BackendFailure, "Validated target queue plan is internally inconsistent."));
     }
 
     return core::Result<VulkanDeviceQueuePlan>::FromValue(std::move(queuePlan));
 }
 
-core::VoidResult ValidateVulkanSurfaceOutputCompatibility(const VulkanGlobalDispatch& dispatch,
-                                                          const VulkanDeviceOwner& device,
-                                                          VkSurfaceKHR surface)
+core::VoidResult ValidateVulkanSurfaceOutputCompatibility(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface)
 {
     if (!device.IsValid() || device.GetPhysicalDevice() == VK_NULL_HANDLE)
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan output compatibility requires a live logical device."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan output compatibility requires a live logical device."));
     }
 
     if (surface == VK_NULL_HANDLE)
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan output compatibility requires a live prepared surface."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan output compatibility requires a live prepared surface."));
     }
 
-    if (dispatch.getPhysicalDeviceSurfaceCapabilities == nullptr ||
-        dispatch.getPhysicalDeviceSurfaceFormats == nullptr)
+    if (dispatch.getPhysicalDeviceSurfaceCapabilities == nullptr || dispatch.getPhysicalDeviceSurfaceFormats == nullptr)
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedCapability,
-                            "Vulkan surface output query dispatch is unavailable."));
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "Vulkan surface output query dispatch is unavailable."));
     }
 
-    core::Result<VulkanSurfaceOutputSupport> outputSupport =
-        QuerySurfaceOutputSupport(dispatch, device.GetPhysicalDevice(), surface);
+    core::Result<VulkanSurfaceOutputSupport> outputSupport = QuerySurfaceOutputSupport(dispatch, device.GetPhysicalDevice(), surface);
     if (!outputSupport)
     {
         return core::VoidResult::FromError(std::move(outputSupport).GetError());
@@ -5063,55 +4626,50 @@ core::VoidResult ValidateVulkanSurfaceOutputCompatibility(const VulkanGlobalDisp
     return ValidateRequiredSdrSrgbOutput(outputSupport.GetValue());
 }
 
-core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-    const VulkanDeviceQueuePlan& queuePlan, const RenderTargetDesc& desc)
+core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                VkSurfaceKHR surface, const VulkanDeviceQueuePlan& queuePlan,
+                                                                const RenderTargetDesc& desc)
 {
     if (!device.IsValid() || device.GetPhysicalDevice() == VK_NULL_HANDLE)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan swapchain selection requires a live logical device."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan swapchain selection requires a live logical device."));
     }
 
     if (surface == VK_NULL_HANDLE)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan swapchain selection requires a live prepared surface."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan swapchain selection requires a live prepared surface."));
     }
 
     if (!IsValidVulkanDeviceQueuePlan(queuePlan) || !pond::render::IsValid(desc))
     {
-        return core::Result<VulkanSwapchainConfig>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Vulkan swapchain selection inputs are invalid."));
+        return core::Result<VulkanSwapchainConfig>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Vulkan swapchain selection inputs are invalid."));
     }
 
     const RenderTargetSnapshot snapshot = desc.targetSnapshot;
-    const platform::PixelSize requestedExtent = snapshot.GetPixelSize();
-    if (snapshot.GetWindowState() == platform::WindowState::Minimized || !snapshot.IsVisible() ||
-        requestedExtent.width == 0U || requestedExtent.height == 0U)
+    const ponder::platform::PixelSize requestedExtent = snapshot.GetPixelSize();
+    if (snapshot.GetWindowState() == ponder::platform::WindowState::Minimized || !snapshot.IsVisible() || requestedExtent.width == 0U ||
+        requestedExtent.height == 0U)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Suspended render targets do not have Vulkan swapchains."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Suspended render targets do not have Vulkan swapchains."));
     }
 
     if (!HasSwapchainDispatch(dispatch))
     {
-        return core::Result<VulkanSwapchainConfig>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedCapability, "Vulkan swapchain dispatch is unavailable."));
+        return core::Result<VulkanSwapchainConfig>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "Vulkan swapchain dispatch is unavailable."));
     }
 
-    core::Result<VulkanSurfaceOutputSupport> outputSupport =
-        QuerySurfaceOutputSupport(dispatch, device.GetPhysicalDevice(), surface);
+    core::Result<VulkanSurfaceOutputSupport> outputSupport = QuerySurfaceOutputSupport(dispatch, device.GetPhysicalDevice(), surface);
     if (!outputSupport)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(std::move(outputSupport).GetError());
     }
 
-    if (core::VoidResult validOutput = ValidateRequiredSdrSrgbOutput(outputSupport.GetValue());
-        !validOutput)
+    if (core::VoidResult validOutput = ValidateRequiredSdrSrgbOutput(outputSupport.GetValue()); !validOutput)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(std::move(validOutput).GetError());
     }
@@ -5119,51 +4677,44 @@ core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(
     const VkSurfaceCapabilitiesKHR& surfaceCapabilities = outputSupport.GetValue().capabilities;
     const std::vector<VkSurfaceFormatKHR>& surfaceFormats = outputSupport.GetValue().formats;
 
-    core::Result<std::vector<VkPresentModeKHR>> presentModes =
-        QueryPresentModes(dispatch, device.GetPhysicalDevice(), surface);
+    core::Result<std::vector<VkPresentModeKHR>> presentModes = QueryPresentModes(dispatch, device.GetPhysicalDevice(), surface);
     if (!presentModes)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(std::move(presentModes).GetError());
     }
 
     PresentationPolicyFallbackReason policyFallback{};
-    core::Result<VkPresentModeKHR> selectedPresentMode =
-        SelectPresentMode(desc.presentation, presentModes.GetValue(), policyFallback);
+    core::Result<VkPresentModeKHR> selectedPresentMode = SelectPresentMode(desc.presentation, presentModes.GetValue(), policyFallback);
     if (!selectedPresentMode)
     {
-        return core::Result<VulkanSwapchainConfig>::FromError(
-            std::move(selectedPresentMode).GetError());
+        return core::Result<VulkanSwapchainConfig>::FromError(std::move(selectedPresentMode).GetError());
     }
 
     const std::optional<VkSurfaceFormatKHR> selectedFormat = SelectSurfaceFormat(surfaceFormats);
     if (!selectedFormat.has_value())
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::BackendFailure,
-                            "Validated Vulkan surface output support could not be selected."));
+            MakeRenderError(RenderErrorCode::BackendFailure, "Validated Vulkan surface output support could not be selected."));
     }
 
     const VkExtent2D selectedExtent = SelectSurfaceExtent(surfaceCapabilities, requestedExtent);
     if (selectedExtent.width == 0U || selectedExtent.height == 0U)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                            "Vulkan surface reported a zero-sized swapchain extent."));
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Vulkan surface reported a zero-sized swapchain extent."));
     }
 
-    constexpr VkCompositeAlphaFlagBitsKHR selectedCompositeAlpha =
-        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    constexpr VkCompositeAlphaFlagBitsKHR selectedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
-    constexpr VkSurfaceTransformFlagBitsKHR preferredTransforms[] = {
-        VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
-        VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
-        VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR,
-        VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR,
-        VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_BIT_KHR,
-        VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR,
-        VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180_BIT_KHR,
-        VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR,
-        VK_SURFACE_TRANSFORM_INHERIT_BIT_KHR};
+    constexpr VkSurfaceTransformFlagBitsKHR preferredTransforms[] = {VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR,
+                                                                     VK_SURFACE_TRANSFORM_INHERIT_BIT_KHR};
     VkSurfaceTransformFlagBitsKHR selectedTransform = surfaceCapabilities.currentTransform;
     if ((surfaceCapabilities.supportedTransforms & selectedTransform) == 0U)
     {
@@ -5180,21 +4731,16 @@ core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(
 
     QueuedFrameLatency selectedLatency{};
     QueuedFrameLatencyFallbackReason latencyFallback{};
-    const std::uint32_t imageCount = SelectSwapchainImageCount(
-        surfaceCapabilities, desc.queuedLatency, selectedLatency, latencyFallback);
-    if (imageCount < surfaceCapabilities.minImageCount ||
-        (surfaceCapabilities.maxImageCount > 0U && imageCount > surfaceCapabilities.maxImageCount))
+    const std::uint32_t imageCount = SelectSwapchainImageCount(surfaceCapabilities, desc.queuedLatency, selectedLatency, latencyFallback);
+    if (imageCount < surfaceCapabilities.minImageCount || (surfaceCapabilities.maxImageCount > 0U && imageCount > surfaceCapabilities.maxImageCount))
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                            "Vulkan surface image-count limits are inconsistent."));
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "Vulkan surface image-count limits are inconsistent."));
     }
-    if (desc.queuedLatency.strength == RequirementStrength::Required &&
-        latencyFallback != QueuedFrameLatencyFallbackReason::None)
+    if (desc.queuedLatency.strength == RequirementStrength::Required && latencyFallback != QueuedFrameLatencyFallbackReason::None)
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedSurface,
-                            "The required queued-frame latency is unavailable for this target."));
+            MakeRenderError(RenderErrorCode::UnsupportedSurface, "The required queued-frame latency is unavailable for this target."));
     }
 
     VulkanSwapchainConfig config{};
@@ -5206,102 +4752,89 @@ core::Result<VulkanSwapchainConfig> SelectVulkanSwapchainConfig(
     config.preTransform = selectedTransform;
     config.presentMode = selectedPresentMode.GetValue();
     config.imageCount = imageCount;
-    config.usesSurfaceCurrentExtent =
-        surfaceCapabilities.currentExtent.width != std::numeric_limits<std::uint32_t>::max();
+    config.usesSurfaceCurrentExtent = surfaceCapabilities.currentExtent.width != std::numeric_limits<std::uint32_t>::max();
 
     if (queuePlan.usesDistinctPresentationQueue)
     {
         config.sharingMode = VK_SHARING_MODE_CONCURRENT;
-        config.sharingQueueFamilyIndices = {queuePlan.graphicsQueueFamilyIndex,
-                                            queuePlan.presentationQueueFamilyIndex};
+        config.sharingQueueFamilyIndices = {queuePlan.graphicsQueueFamilyIndex, queuePlan.presentationQueueFamilyIndex};
     }
     else
     {
         config.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    config.presentation = SelectedPresentationConfig{
-        .requestedPolicy = desc.presentation,
-        .actualPolicy = MapPresentMode(config.presentMode).value_or(PresentationPolicy::VSync),
-        .policyFallback = policyFallback,
-        .requestedQueuedLatency = desc.queuedLatency,
-        .actualQueuedLatency = selectedLatency,
-        .queuedLatencyFallback = latencyFallback,
-        .output = PresentationOutput::OpaqueSdrSrgb,
-        .pixelExtent =
-            platform::PixelSize{.width = selectedExtent.width, .height = selectedExtent.height}};
+    config.presentation =
+        SelectedPresentationConfig{.requestedPolicy = desc.presentation,
+                                   .actualPolicy = MapPresentMode(config.presentMode).value_or(PresentationPolicy::VSync),
+                                   .policyFallback = policyFallback,
+                                   .requestedQueuedLatency = desc.queuedLatency,
+                                   .actualQueuedLatency = selectedLatency,
+                                   .queuedLatencyFallback = latencyFallback,
+                                   .output = PresentationOutput::OpaqueSdrSrgb,
+                                   .pixelExtent = ponder::platform::PixelSize{.width = selectedExtent.width, .height = selectedExtent.height}};
 
     if (!pond::render::IsValid(config.presentation))
     {
         return core::Result<VulkanSwapchainConfig>::FromError(
-            MakeRenderError(RenderErrorCode::BackendFailure,
-                            "Selected Vulkan swapchain presentation config is invalid."));
+            MakeRenderError(RenderErrorCode::BackendFailure, "Selected Vulkan swapchain presentation config is invalid."));
     }
 
     return core::Result<VulkanSwapchainConfig>::FromValue(std::move(config));
 }
 
-core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForTarget(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-    const VulkanDeviceQueuePlan& queuePlan, const RenderTargetDesc& desc)
+core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForTarget(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                  VkSurfaceKHR surface, const VulkanDeviceQueuePlan& queuePlan,
+                                                                  const RenderTargetDesc& desc)
 {
-    core::Result<VulkanSwapchainConfig> selectedConfig =
-        SelectVulkanSwapchainConfig(dispatch, device, surface, queuePlan, desc);
+    core::Result<VulkanSwapchainConfig> selectedConfig = SelectVulkanSwapchainConfig(dispatch, device, surface, queuePlan, desc);
     if (!selectedConfig)
     {
         return core::Result<VulkanSwapchainOwner>::FromError(std::move(selectedConfig).GetError());
     }
 
     VulkanSwapchainCreationState creationState;
-    return CreateVulkanSwapchainForSelectedConfig(
-        dispatch, device, surface, selectedConfig.GetValue(), VK_NULL_HANDLE, creationState);
+    return CreateVulkanSwapchainForSelectedConfig(dispatch, device, surface, selectedConfig.GetValue(), VK_NULL_HANDLE, creationState);
 }
 
-core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, VkSurfaceKHR surface,
-    const VulkanSwapchainConfig& selectedConfig, VkSwapchainKHR oldSwapchain,
-    VulkanSwapchainCreationState& creationState)
+core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                          VkSurfaceKHR surface, const VulkanSwapchainConfig& selectedConfig,
+                                                                          VkSwapchainKHR oldSwapchain, VulkanSwapchainCreationState& creationState)
 {
     creationState = {};
     if (!device.IsValid())
     {
         return core::Result<VulkanSwapchainOwner>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Vulkan swapchain creation requires a live logical device."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Vulkan swapchain creation requires a live logical device."));
     }
 
     if (!HasSwapchainDispatch(dispatch) || surface == VK_NULL_HANDLE)
     {
-        return core::Result<VulkanSwapchainOwner>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedCapability, "Vulkan swapchain dispatch is unavailable."));
+        return core::Result<VulkanSwapchainOwner>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "Vulkan swapchain dispatch is unavailable."));
     }
 
-    const std::optional<PresentationPolicy> selectedPolicy =
-        MapPresentMode(selectedConfig.presentMode);
+    const std::optional<PresentationPolicy> selectedPolicy = MapPresentMode(selectedConfig.presentMode);
     const bool presentationMetadataMatchesNativeConfig =
         selectedPolicy.has_value() && selectedConfig.presentation.actualPolicy == *selectedPolicy &&
         selectedConfig.presentation.output == PresentationOutput::OpaqueSdrSrgb &&
         selectedConfig.presentation.pixelExtent ==
-            platform::PixelSize{.width = selectedConfig.extent.width,
-                                .height = selectedConfig.extent.height};
+            ponder::platform::PixelSize{.width = selectedConfig.extent.width, .height = selectedConfig.extent.height};
 
     if (!IsValid(selectedConfig.presentation) || !presentationMetadataMatchesNativeConfig ||
         !IsRequiredSdrSrgbSurfaceFormat(selectedConfig.format, selectedConfig.colorSpace) ||
-        selectedConfig.compositeAlpha != VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR ||
-        !selectedConfig.windowId.IsValid() || selectedConfig.extent.width == 0U ||
-        selectedConfig.extent.height == 0U || selectedConfig.imageCount == 0U)
+        selectedConfig.compositeAlpha != VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR || !selectedConfig.windowId.IsValid() ||
+        selectedConfig.extent.width == 0U || selectedConfig.extent.height == 0U || selectedConfig.imageCount == 0U)
     {
-        return core::Result<VulkanSwapchainOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Selected Vulkan swapchain config is invalid."));
+        return core::Result<VulkanSwapchainOwner>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Selected Vulkan swapchain config is invalid."));
     }
 
     VulkanSwapchainOwner swapchainOwner;
     try
     {
         VulkanSwapchainConfig config = selectedConfig;
-        const std::uint32_t* queueFamilyIndices = config.sharingQueueFamilyIndices.empty()
-                                                      ? nullptr
-                                                      : config.sharingQueueFamilyIndices.data();
+        const std::uint32_t* queueFamilyIndices = config.sharingQueueFamilyIndices.empty() ? nullptr : config.sharingQueueFamilyIndices.data();
 
         VkSwapchainCreateInfoKHR createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -5313,8 +4846,7 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
         createInfo.imageArrayLayers = 1U;
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         createInfo.imageSharingMode = config.sharingMode;
-        createInfo.queueFamilyIndexCount =
-            static_cast<std::uint32_t>(config.sharingQueueFamilyIndices.size());
+        createInfo.queueFamilyIndexCount = static_cast<std::uint32_t>(config.sharingQueueFamilyIndices.size());
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
         createInfo.preTransform = config.preTransform;
         createInfo.compositeAlpha = config.compositeAlpha;
@@ -5325,8 +4857,7 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
         VkSwapchainPresentModesCreateInfoKHR presentModesCreateInfo{};
         if (device.GetInfo().optionalCapabilities.swapchainMaintenance1)
         {
-            presentModesCreateInfo.sType =
-                VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR;
+            presentModesCreateInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR;
             presentModesCreateInfo.presentModeCount = 1U;
             presentModesCreateInfo.pPresentModes = &config.presentMode;
             createInfo.pNext = &presentModesCreateInfo;
@@ -5335,16 +4866,14 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
         VkSwapchainKHR swapchain{VK_NULL_HANDLE};
         creationState.nativeCallAttempted = true;
         creationState.oldSwapchainRetired = oldSwapchain != VK_NULL_HANDLE;
-        VkResult result =
-            dispatch.createSwapchain(device.GetHandle(), &createInfo, nullptr, &swapchain);
+        VkResult result = dispatch.createSwapchain(device.GetHandle(), &createInfo, nullptr, &swapchain);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
             creationState.outcome = VulkanSwapchainCreationOutcome::OutOfDate;
         }
         if (result != VK_SUCCESS)
         {
-            return core::Result<VulkanSwapchainOwner>::FromError(
-                MakeVulkanError(MapSwapchainFailure(result), "vkCreateSwapchainKHR", result));
+            return core::Result<VulkanSwapchainOwner>::FromError(MakeVulkanError(MapSwapchainFailure(result), "vkCreateSwapchainKHR", result));
         }
         creationState.outcome = VulkanSwapchainCreationOutcome::Created;
 
@@ -5360,31 +4889,26 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
                                               dispatch.destroyFramebuffer,
                                               std::move(config)};
 
-        TryNameObject(
-            dispatch, device.GetHandle(), swapchain, VK_OBJECT_TYPE_SWAPCHAIN_KHR,
-            MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "swapchain").c_str());
+        TryNameObject(dispatch, device.GetHandle(), swapchain, VK_OBJECT_TYPE_SWAPCHAIN_KHR,
+                      MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "swapchain").c_str());
 
         std::vector<VkImage>& images = swapchainOwner.m_images;
         for (;;)
         {
             std::uint32_t imageCount{};
-            result =
-                dispatch.getSwapchainImages(device.GetHandle(), swapchain, &imageCount, nullptr);
+            result = dispatch.getSwapchainImages(device.GetHandle(), swapchain, &imageCount, nullptr);
             if (result == VK_ERROR_OUT_OF_DATE_KHR)
             {
                 creationState.outcome = VulkanSwapchainCreationOutcome::OutOfDate;
             }
             if (result != VK_SUCCESS || imageCount == 0U)
             {
-                return core::Result<VulkanSwapchainOwner>::FromError(
-                    MakeVulkanError(result == VK_SUCCESS ? RenderErrorCode::BackendFailure
-                                                         : MapSwapchainFailure(result),
-                                    "vkGetSwapchainImagesKHR.count", result));
+                return core::Result<VulkanSwapchainOwner>::FromError(MakeVulkanError(
+                    result == VK_SUCCESS ? RenderErrorCode::BackendFailure : MapSwapchainFailure(result), "vkGetSwapchainImagesKHR.count", result));
             }
 
             images.resize(imageCount);
-            result = dispatch.getSwapchainImages(device.GetHandle(), swapchain, &imageCount,
-                                                 images.data());
+            result = dispatch.getSwapchainImages(device.GetHandle(), swapchain, &imageCount, images.data());
             if (result == VK_ERROR_OUT_OF_DATE_KHR)
             {
                 creationState.outcome = VulkanSwapchainCreationOutcome::OutOfDate;
@@ -5396,10 +4920,8 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
             }
             if (result != VK_SUCCESS || imageCount == 0U)
             {
-                return core::Result<VulkanSwapchainOwner>::FromError(
-                    MakeVulkanError(result == VK_SUCCESS ? RenderErrorCode::BackendFailure
-                                                         : MapSwapchainFailure(result),
-                                    "vkGetSwapchainImagesKHR.read", result));
+                return core::Result<VulkanSwapchainOwner>::FromError(MakeVulkanError(
+                    result == VK_SUCCESS ? RenderErrorCode::BackendFailure : MapSwapchainFailure(result), "vkGetSwapchainImagesKHR.read", result));
             }
 
             images.resize(imageCount);
@@ -5427,23 +4949,17 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
             imageViewCreateInfo.subresourceRange.layerCount = 1U;
 
             VkImageView imageView{VK_NULL_HANDLE};
-            result = dispatch.createImageView(device.GetHandle(), &imageViewCreateInfo, nullptr,
-                                              &imageView);
+            result = dispatch.createImageView(device.GetHandle(), &imageViewCreateInfo, nullptr, &imageView);
             if (result != VK_SUCCESS)
             {
-                return core::Result<VulkanSwapchainOwner>::FromError(
-                    MakeVulkanError(MapSwapchainFailure(result), "vkCreateImageView", result));
+                return core::Result<VulkanSwapchainOwner>::FromError(MakeVulkanError(MapSwapchainFailure(result), "vkCreateImageView", result));
             }
 
             imageViews.push_back(imageView);
             TryNameObject(dispatch, device.GetHandle(), image, VK_OBJECT_TYPE_IMAGE,
-                          MakeTargetDebugObjectName(swapchainOwner.m_config.windowId,
-                                                    "swapchain_image", imageIndex)
-                              .c_str());
+                          MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "swapchain_image", imageIndex).c_str());
             TryNameObject(dispatch, device.GetHandle(), imageView, VK_OBJECT_TYPE_IMAGE_VIEW,
-                          MakeTargetDebugObjectName(swapchainOwner.m_config.windowId,
-                                                    "swapchain_image_view", imageIndex)
-                              .c_str());
+                          MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "swapchain_image_view", imageIndex).c_str());
         }
 
         VkAttachmentDescription colorAttachment{};
@@ -5482,19 +4998,15 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
         renderPassCreateInfo.pDependencies = &dependency;
 
         VkRenderPass renderPass{VK_NULL_HANDLE};
-        result = dispatch.createRenderPass(device.GetHandle(), &renderPassCreateInfo, nullptr,
-                                           &renderPass);
+        result = dispatch.createRenderPass(device.GetHandle(), &renderPassCreateInfo, nullptr, &renderPass);
         if (result != VK_SUCCESS)
         {
-            return core::Result<VulkanSwapchainOwner>::FromError(
-                MakeVulkanError(MapSwapchainFailure(result), "vkCreateRenderPass", result));
+            return core::Result<VulkanSwapchainOwner>::FromError(MakeVulkanError(MapSwapchainFailure(result), "vkCreateRenderPass", result));
         }
         swapchainOwner.m_renderPass = renderPass;
 
-        TryNameObject(
-            dispatch, device.GetHandle(), renderPass, VK_OBJECT_TYPE_RENDER_PASS,
-            MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "clear_render_pass")
-                .c_str());
+        TryNameObject(dispatch, device.GetHandle(), renderPass, VK_OBJECT_TYPE_RENDER_PASS,
+                      MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "clear_render_pass").c_str());
 
         std::vector<VkFramebuffer>& framebuffers = swapchainOwner.m_framebuffers;
         framebuffers.reserve(imageViews.size());
@@ -5511,19 +5023,15 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
             framebufferCreateInfo.layers = 1U;
 
             VkFramebuffer framebuffer{VK_NULL_HANDLE};
-            result = dispatch.createFramebuffer(device.GetHandle(), &framebufferCreateInfo, nullptr,
-                                                &framebuffer);
+            result = dispatch.createFramebuffer(device.GetHandle(), &framebufferCreateInfo, nullptr, &framebuffer);
             if (result != VK_SUCCESS)
             {
-                return core::Result<VulkanSwapchainOwner>::FromError(
-                    MakeVulkanError(MapSwapchainFailure(result), "vkCreateFramebuffer", result));
+                return core::Result<VulkanSwapchainOwner>::FromError(MakeVulkanError(MapSwapchainFailure(result), "vkCreateFramebuffer", result));
             }
 
             framebuffers.push_back(framebuffer);
             TryNameObject(dispatch, device.GetHandle(), framebuffer, VK_OBJECT_TYPE_FRAMEBUFFER,
-                          MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "framebuffer",
-                                                    imageIndex)
-                              .c_str());
+                          MakeTargetDebugObjectName(swapchainOwner.m_config.windowId, "framebuffer", imageIndex).c_str());
         }
 
         return core::Result<VulkanSwapchainOwner>::FromValue(std::move(swapchainOwner));
@@ -5531,40 +5039,36 @@ core::Result<VulkanSwapchainOwner> CreateVulkanSwapchainForSelectedConfig(
     catch (const std::bad_alloc&)
     {
         return core::Result<VulkanSwapchainOwner>::FromError(
-            MakeRenderError(RenderErrorCode::OutOfMemory,
-                            "Vulkan swapchain creation could not allocate host memory."));
+            MakeRenderError(RenderErrorCode::OutOfMemory, "Vulkan swapchain creation could not allocate host memory."));
     }
     catch (const std::length_error&)
     {
-        return core::Result<VulkanSwapchainOwner>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure,
-            "Vulkan swapchain creation received an unrepresentable resource count."));
+        return core::Result<VulkanSwapchainOwner>::FromError(
+            MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan swapchain creation received an unrepresentable resource count."));
     }
 }
 
-core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    platform::WindowId windowId, const VulkanDeviceQueuePlan& queuePlan,
-    QueuedFrameLatency queuedLatency, std::uint32_t swapchainImageCount)
+core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                            ponder::platform::WindowId windowId,
+                                                                            const VulkanDeviceQueuePlan& queuePlan, QueuedFrameLatency queuedLatency,
+                                                                            std::uint32_t swapchainImageCount)
 {
     if (!device.IsValid())
     {
-        return core::Result<VulkanFrameResourcesOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Frame resources require a live Vulkan device."));
+        return core::Result<VulkanFrameResourcesOwner>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Frame resources require a live Vulkan device."));
     }
 
-    if (!windowId.IsValid() || !IsValidVulkanDeviceQueuePlan(queuePlan) ||
-        !pond::render::IsValid(queuedLatency) || swapchainImageCount == 0U)
+    if (!windowId.IsValid() || !IsValidVulkanDeviceQueuePlan(queuePlan) || !pond::render::IsValid(queuedLatency) || swapchainImageCount == 0U)
     {
-        return core::Result<VulkanFrameResourcesOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Frame resources require valid queue, latency, and swapchain-image state."));
+        return core::Result<VulkanFrameResourcesOwner>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Frame resources require valid queue, latency, and swapchain-image state."));
     }
 
     if (!HasFrameDispatch(dispatch))
     {
-        return core::Result<VulkanFrameResourcesOwner>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure, "Vulkan frame dispatch is incomplete."));
+        return core::Result<VulkanFrameResourcesOwner>::FromError(
+            MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan frame dispatch is incomplete."));
     }
 
     VulkanFrameResourcesOwner frameResourcesOwner;
@@ -5574,14 +5078,12 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
         std::vector<VulkanFrameSlotResources> slots(slotCount);
         std::vector<VkSemaphore> renderFinishedSemaphores(swapchainImageCount);
         std::vector<VkCommandBuffer> commandBuffers(slotCount);
-        std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines(
-            slotCount);
-        core::Result<VulkanDraw2DUploadArena> uploadArena = VulkanDraw2DUploadArena::Create(
-            dispatch, device, slotCount, draw2d::kDefaultDraw2DPacketLimits.maxUploadBytes);
+        std::vector<std::shared_ptr<const VulkanDraw2DPipelineOwner>> draw2DSubmissionPipelines(slotCount);
+        core::Result<VulkanDraw2DUploadArena> uploadArena =
+            VulkanDraw2DUploadArena::Create(dispatch, device, slotCount, draw2d::kDefaultDraw2DPacketLimits.maxUploadBytes);
         if (!uploadArena)
         {
-            return core::Result<VulkanFrameResourcesOwner>::FromError(
-                std::move(uploadArena).GetError());
+            return core::Result<VulkanFrameResourcesOwner>::FromError(std::move(uploadArena).GetError());
         }
 
         VkCommandPoolCreateInfo commandPoolCreateInfo{};
@@ -5590,12 +5092,10 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
         commandPoolCreateInfo.queueFamilyIndex = queuePlan.graphicsQueueFamilyIndex;
 
         VkCommandPool commandPool{VK_NULL_HANDLE};
-        VkResult result = dispatch.createCommandPool(device.GetHandle(), &commandPoolCreateInfo,
-                                                     nullptr, &commandPool);
+        VkResult result = dispatch.createCommandPool(device.GetHandle(), &commandPoolCreateInfo, nullptr, &commandPool);
         if (result != VK_SUCCESS)
         {
-            return core::Result<VulkanFrameResourcesOwner>::FromError(
-                MakeVulkanError(MapFrameFailure(result), "vkCreateCommandPool", result));
+            return core::Result<VulkanFrameResourcesOwner>::FromError(MakeVulkanError(MapFrameFailure(result), "vkCreateCommandPool", result));
         }
 
         frameResourcesOwner = VulkanFrameResourcesOwner{device.GetHandle(),
@@ -5613,12 +5113,10 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
         allocateInfo.commandPool = commandPool;
         allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocateInfo.commandBufferCount = slotCount;
-        result = dispatch.allocateCommandBuffers(device.GetHandle(), &allocateInfo,
-                                                 commandBuffers.data());
+        result = dispatch.allocateCommandBuffers(device.GetHandle(), &allocateInfo, commandBuffers.data());
         if (result != VK_SUCCESS)
         {
-            return core::Result<VulkanFrameResourcesOwner>::FromError(
-                MakeVulkanError(MapFrameFailure(result), "vkAllocateCommandBuffers", result));
+            return core::Result<VulkanFrameResourcesOwner>::FromError(MakeVulkanError(MapFrameFailure(result), "vkAllocateCommandBuffers", result));
         }
 
         VkSemaphoreCreateInfo semaphoreCreateInfo{};
@@ -5636,39 +5134,34 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
             VulkanFrameSlotResources& slot = frameResourcesOwner.m_slots[index];
             slot.commandBuffer = commandBuffers[index];
 
-            result = dispatch.createSemaphore(device.GetHandle(), &semaphoreCreateInfo, nullptr,
-                                              &slot.imageAvailableSemaphore);
-            if (result != VK_SUCCESS)
-            {
-                return core::Result<VulkanFrameResourcesOwner>::FromError(MakeVulkanError(
-                    MapFrameFailure(result), "vkCreateSemaphore.imageAvailable", result));
-            }
-
-            result = dispatch.createFence(device.GetHandle(), &acquireFenceCreateInfo, nullptr,
-                                          &slot.imageAcquiredFence);
-            if (result != VK_SUCCESS)
-            {
-                return core::Result<VulkanFrameResourcesOwner>::FromError(MakeVulkanError(
-                    MapFrameFailure(result), "vkCreateFence.imageAcquired", result));
-            }
-
-            result = dispatch.createFence(device.GetHandle(), &submissionFenceCreateInfo, nullptr,
-                                          &slot.inFlightFence);
+            result = dispatch.createSemaphore(device.GetHandle(), &semaphoreCreateInfo, nullptr, &slot.imageAvailableSemaphore);
             if (result != VK_SUCCESS)
             {
                 return core::Result<VulkanFrameResourcesOwner>::FromError(
-                    MakeVulkanError(MapFrameFailure(result), "vkCreateFence.inFlight", result));
+                    MakeVulkanError(MapFrameFailure(result), "vkCreateSemaphore.imageAvailable", result));
+            }
+
+            result = dispatch.createFence(device.GetHandle(), &acquireFenceCreateInfo, nullptr, &slot.imageAcquiredFence);
+            if (result != VK_SUCCESS)
+            {
+                return core::Result<VulkanFrameResourcesOwner>::FromError(
+                    MakeVulkanError(MapFrameFailure(result), "vkCreateFence.imageAcquired", result));
+            }
+
+            result = dispatch.createFence(device.GetHandle(), &submissionFenceCreateInfo, nullptr, &slot.inFlightFence);
+            if (result != VK_SUCCESS)
+            {
+                return core::Result<VulkanFrameResourcesOwner>::FromError(MakeVulkanError(MapFrameFailure(result), "vkCreateFence.inFlight", result));
             }
         }
 
         for (VkSemaphore& semaphore : frameResourcesOwner.m_renderFinishedSemaphores)
         {
-            result = dispatch.createSemaphore(device.GetHandle(), &semaphoreCreateInfo, nullptr,
-                                              &semaphore);
+            result = dispatch.createSemaphore(device.GetHandle(), &semaphoreCreateInfo, nullptr, &semaphore);
             if (result != VK_SUCCESS)
             {
-                return core::Result<VulkanFrameResourcesOwner>::FromError(MakeVulkanError(
-                    MapFrameFailure(result), "vkCreateSemaphore.renderFinished", result));
+                return core::Result<VulkanFrameResourcesOwner>::FromError(
+                    MakeVulkanError(MapFrameFailure(result), "vkCreateSemaphore.renderFinished", result));
             }
         }
 
@@ -5677,25 +5170,19 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
         for (std::uint32_t index = 0U; index < slotCount; ++index)
         {
             const VulkanFrameSlotResources& slot = frameResourcesOwner.m_slots[index];
-            TryNameObject(dispatch, device.GetHandle(), slot.commandBuffer,
-                          VK_OBJECT_TYPE_COMMAND_BUFFER,
+            TryNameObject(dispatch, device.GetHandle(), slot.commandBuffer, VK_OBJECT_TYPE_COMMAND_BUFFER,
                           MakeTargetDebugObjectName(windowId, "command_buffer", index).c_str());
-            TryNameObject(dispatch, device.GetHandle(), slot.imageAvailableSemaphore,
-                          VK_OBJECT_TYPE_SEMAPHORE,
+            TryNameObject(dispatch, device.GetHandle(), slot.imageAvailableSemaphore, VK_OBJECT_TYPE_SEMAPHORE,
                           MakeTargetDebugObjectName(windowId, "image_available", index).c_str());
-            TryNameObject(dispatch, device.GetHandle(), slot.imageAcquiredFence,
-                          VK_OBJECT_TYPE_FENCE,
+            TryNameObject(dispatch, device.GetHandle(), slot.imageAcquiredFence, VK_OBJECT_TYPE_FENCE,
                           MakeTargetDebugObjectName(windowId, "image_acquired", index).c_str());
             TryNameObject(dispatch, device.GetHandle(), slot.inFlightFence, VK_OBJECT_TYPE_FENCE,
                           MakeTargetDebugObjectName(windowId, "in_flight", index).c_str());
         }
         for (std::uint32_t imageIndex = 0U; imageIndex < swapchainImageCount; ++imageIndex)
         {
-            TryNameObject(
-                dispatch, device.GetHandle(),
-                frameResourcesOwner.m_renderFinishedSemaphores[imageIndex],
-                VK_OBJECT_TYPE_SEMAPHORE,
-                MakeTargetDebugObjectName(windowId, "render_finished", imageIndex).c_str());
+            TryNameObject(dispatch, device.GetHandle(), frameResourcesOwner.m_renderFinishedSemaphores[imageIndex], VK_OBJECT_TYPE_SEMAPHORE,
+                          MakeTargetDebugObjectName(windowId, "render_finished", imageIndex).c_str());
         }
 
         return core::Result<VulkanFrameResourcesOwner>::FromValue(std::move(frameResourcesOwner));
@@ -5703,38 +5190,35 @@ core::Result<VulkanFrameResourcesOwner> CreateVulkanFrameResourcesForTarget(
     catch (const std::bad_alloc&)
     {
         return core::Result<VulkanFrameResourcesOwner>::FromError(
-            MakeRenderError(RenderErrorCode::OutOfMemory,
-                            "Vulkan frame-resource creation could not allocate host memory."));
+            MakeRenderError(RenderErrorCode::OutOfMemory, "Vulkan frame-resource creation could not allocate host memory."));
     }
     catch (const std::length_error&)
     {
-        return core::Result<VulkanFrameResourcesOwner>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure,
-            "Vulkan frame-resource creation received an unrepresentable resource count."));
+        return core::Result<VulkanFrameResourcesOwner>::FromError(
+            MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan frame-resource creation received an unrepresentable resource count."));
     }
 }
 
-core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForTarget(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    platform::WindowId windowId, std::uint32_t frameSlotCount, std::uint32_t swapchainImageCount)
+core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForTarget(const VulkanGlobalDispatch& dispatch,
+                                                                                      const VulkanDeviceOwner& device,
+                                                                                      ponder::platform::WindowId windowId,
+                                                                                      std::uint32_t frameSlotCount, std::uint32_t swapchainImageCount)
 {
     if (!device.IsValid())
     {
-        return core::Result<VulkanPresentationTrackerOwner>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Presentation tracking requires a live Vulkan device."));
+        return core::Result<VulkanPresentationTrackerOwner>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Presentation tracking requires a live Vulkan device."));
     }
 
     if (!windowId.IsValid() || frameSlotCount == 0U || swapchainImageCount == 0U)
     {
         return core::Result<VulkanPresentationTrackerOwner>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidArgument,
-                            "Presentation tracking requires frame slots and swapchain images."));
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Presentation tracking requires frame slots and swapchain images."));
     }
 
     const VulkanDeviceOptionalCapabilities capabilities = device.GetInfo().optionalCapabilities;
     const bool usesPresentIds = capabilities.presentId && capabilities.presentWait;
-    VulkanPresentationCompletionPath completionPath =
-        VulkanPresentationCompletionPath::CoreAcquireHistory;
+    VulkanPresentationCompletionPath completionPath = VulkanPresentationCompletionPath::CoreAcquireHistory;
     if (capabilities.swapchainMaintenance1)
     {
         completionPath = VulkanPresentationCompletionPath::SwapchainMaintenanceFence;
@@ -5744,21 +5228,17 @@ core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForT
         completionPath = VulkanPresentationCompletionPath::PresentWait;
     }
 
-    if (completionPath == VulkanPresentationCompletionPath::PresentWait &&
-        dispatch.waitForPresent == nullptr)
+    if (completionPath == VulkanPresentationCompletionPath::PresentWait && dispatch.waitForPresent == nullptr)
     {
-        return core::Result<VulkanPresentationTrackerOwner>::FromError(MakeRenderError(
-            RenderErrorCode::UnsupportedCapability,
-            "VK_KHR_present_wait was enabled but vkWaitForPresentKHR is unavailable."));
+        return core::Result<VulkanPresentationTrackerOwner>::FromError(
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "VK_KHR_present_wait was enabled but vkWaitForPresentKHR is unavailable."));
     }
 
     if (completionPath == VulkanPresentationCompletionPath::SwapchainMaintenanceFence &&
-        (dispatch.createFence == nullptr || dispatch.destroyFence == nullptr ||
-         dispatch.waitForFences == nullptr || dispatch.resetFences == nullptr))
+        (dispatch.createFence == nullptr || dispatch.destroyFence == nullptr || dispatch.waitForFences == nullptr || dispatch.resetFences == nullptr))
     {
         return core::Result<VulkanPresentationTrackerOwner>::FromError(
-            MakeRenderError(RenderErrorCode::UnsupportedCapability,
-                            "swapchain-maintenance1 present-fence dispatch is unavailable."));
+            MakeRenderError(RenderErrorCode::UnsupportedCapability, "swapchain-maintenance1 present-fence dispatch is unavailable."));
     }
 
     VulkanPresentationTrackerOwner presentationTrackerOwner;
@@ -5773,15 +5253,14 @@ core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForT
             presentFenceSlots.resize(frameSlotCount);
         }
 
-        presentationTrackerOwner =
-            VulkanPresentationTrackerOwner{device.GetHandle(),
-                                           completionPath,
-                                           usesPresentIds,
-                                           std::move(imagePresentationSerials),
-                                           std::move(pendingAcquireSerials),
-                                           std::move(acquireProofPending),
-                                           std::move(presentFenceSlots),
-                                           dispatch.destroyFence};
+        presentationTrackerOwner = VulkanPresentationTrackerOwner{device.GetHandle(),
+                                                                  completionPath,
+                                                                  usesPresentIds,
+                                                                  std::move(imagePresentationSerials),
+                                                                  std::move(pendingAcquireSerials),
+                                                                  std::move(acquireProofPending),
+                                                                  std::move(presentFenceSlots),
+                                                                  dispatch.destroyFence};
 
         if (presentationTrackerOwner.UsesPresentFences())
         {
@@ -5790,8 +5269,7 @@ core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForT
             for (std::uint32_t index = 0U; index < frameSlotCount; ++index)
             {
                 VulkanPresentFenceSlot& slot = presentationTrackerOwner.m_presentFenceSlots[index];
-                const VkResult result =
-                    dispatch.createFence(device.GetHandle(), &createInfo, nullptr, &slot.fence);
+                const VkResult result = dispatch.createFence(device.GetHandle(), &createInfo, nullptr, &slot.fence);
                 if (result != VK_SUCCESS)
                 {
                     return core::Result<VulkanPresentationTrackerOwner>::FromError(
@@ -5803,25 +5281,21 @@ core::Result<VulkanPresentationTrackerOwner> CreateVulkanPresentationTrackerForT
             }
         }
 
-        return core::Result<VulkanPresentationTrackerOwner>::FromValue(
-            std::move(presentationTrackerOwner));
+        return core::Result<VulkanPresentationTrackerOwner>::FromValue(std::move(presentationTrackerOwner));
     }
     catch (const std::bad_alloc&)
     {
         return core::Result<VulkanPresentationTrackerOwner>::FromError(
-            MakeRenderError(RenderErrorCode::OutOfMemory,
-                            "Vulkan presentation tracking could not allocate host memory."));
+            MakeRenderError(RenderErrorCode::OutOfMemory, "Vulkan presentation tracking could not allocate host memory."));
     }
     catch (const std::length_error&)
     {
-        return core::Result<VulkanPresentationTrackerOwner>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure,
-            "Vulkan presentation tracking received an unrepresentable resource count."));
+        return core::Result<VulkanPresentationTrackerOwner>::FromError(
+            MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan presentation tracking received an unrepresentable resource count."));
     }
 }
 
-void AbandonVulkanFrame(VulkanFrameResourcesOwner& frameResources,
-                        VulkanPresentationTrackerOwner& presentationTracker,
+void AbandonVulkanFrame(VulkanFrameResourcesOwner& frameResources, VulkanPresentationTrackerOwner& presentationTracker,
                         VulkanFrameRecordingState& recording) noexcept
 {
     if (!recording.IsActive())
@@ -5835,32 +5309,30 @@ void AbandonVulkanFrame(VulkanFrameResourcesOwner& frameResources,
     recording.phase = VulkanFrameRecordingPhase::Terminal;
 }
 
-core::Result<VulkanFrameBeginResult> BeginVulkanFrame(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
-    VulkanPresentationTrackerOwner& presentationTracker, const VulkanDeviceQueuePlan& queuePlan,
-    std::uint32_t frameSlotIndex)
+core::Result<VulkanFrameBeginResult> BeginVulkanFrame(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                      const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
+                                                      VulkanPresentationTrackerOwner& presentationTracker, const VulkanDeviceQueuePlan& queuePlan,
+                                                      std::uint32_t frameSlotIndex)
 {
     constexpr std::uint64_t kFenceWaitTimeoutNanoseconds = 100'000'000ULL;
     constexpr std::uint64_t kAcquireTimeoutNanoseconds = 16'666'667ULL;
 
-    if (!device.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() ||
-        frameResources.IsPoisoned() || !presentationTracker.IsValid())
+    if (!device.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() || frameResources.IsPoisoned() || !presentationTracker.IsValid())
     {
-        return core::Result<VulkanFrameBeginResult>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Frame begin requires live Vulkan target resources."));
+        return core::Result<VulkanFrameBeginResult>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Frame begin requires live Vulkan target resources."));
     }
 
     if (!HasFrameDispatch(dispatch))
     {
-        return core::Result<VulkanFrameBeginResult>::FromError(MakeRenderError(
-            RenderErrorCode::BackendFailure, "Vulkan frame dispatch is incomplete."));
+        return core::Result<VulkanFrameBeginResult>::FromError(
+            MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan frame dispatch is incomplete."));
     }
 
     if (frameSlotIndex >= frameResources.GetSlotCount())
     {
-        return core::Result<VulkanFrameBeginResult>::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Frame begin received an invalid frame slot."));
+        return core::Result<VulkanFrameBeginResult>::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Frame begin received an invalid frame slot."));
     }
 
     const VkQueue graphicsQueue = device.GetQueue(queuePlan.graphicsQueueFamilyIndex);
@@ -5868,34 +5340,27 @@ core::Result<VulkanFrameBeginResult> BeginVulkanFrame(
     if (graphicsQueue == VK_NULL_HANDLE || presentationQueue == VK_NULL_HANDLE)
     {
         return core::Result<VulkanFrameBeginResult>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Frame begin requires live graphics and presentation queues."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Frame begin requires live graphics and presentation queues."));
     }
 
-    core::Result<bool> presentSlotReady = presentationTracker.PrepareFrameSlot(
-        dispatch, frameSlotIndex, kFenceWaitTimeoutNanoseconds);
+    core::Result<bool> presentSlotReady = presentationTracker.PrepareFrameSlot(dispatch, frameSlotIndex, kFenceWaitTimeoutNanoseconds);
     if (!presentSlotReady)
     {
-        return core::Result<VulkanFrameBeginResult>::FromError(
-            std::move(presentSlotReady).GetError());
+        return core::Result<VulkanFrameBeginResult>::FromError(std::move(presentSlotReady).GetError());
     }
     if (!presentSlotReady.GetValue())
     {
-        return core::Result<VulkanFrameBeginResult>::FromValue(
-            VulkanFrameBeginResult{.status = FrameStatus::TimedOut});
+        return core::Result<VulkanFrameBeginResult>::FromValue(VulkanFrameBeginResult{.status = FrameStatus::TimedOut});
     }
 
-    core::Result<bool> frameSlotReady =
-        frameResources.PrepareFrameSlot(dispatch, frameSlotIndex, kFenceWaitTimeoutNanoseconds);
+    core::Result<bool> frameSlotReady = frameResources.PrepareFrameSlot(dispatch, frameSlotIndex, kFenceWaitTimeoutNanoseconds);
     if (!frameSlotReady)
     {
-        return core::Result<VulkanFrameBeginResult>::FromError(
-            std::move(frameSlotReady).GetError());
+        return core::Result<VulkanFrameBeginResult>::FromError(std::move(frameSlotReady).GetError());
     }
     if (!frameSlotReady.GetValue())
     {
-        return core::Result<VulkanFrameBeginResult>::FromValue(
-            VulkanFrameBeginResult{.status = FrameStatus::TimedOut});
+        return core::Result<VulkanFrameBeginResult>::FromValue(VulkanFrameBeginResult{.status = FrameStatus::TimedOut});
     }
 
     for (const std::uint32_t completedSlot : frameResources.ConsumeCompletedSubmissionSlots())
@@ -5905,25 +5370,21 @@ core::Result<VulkanFrameBeginResult> BeginVulkanFrame(
 
     const VulkanFrameSlotResources slot = frameResources.GetSlot(frameSlotIndex);
     std::uint32_t imageIndex{};
-    VkResult result = dispatch.acquireNextImage(
-        device.GetHandle(), swapchain.GetHandle(), kAcquireTimeoutNanoseconds,
-        slot.imageAvailableSemaphore, slot.imageAcquiredFence, &imageIndex);
+    VkResult result = dispatch.acquireNextImage(device.GetHandle(), swapchain.GetHandle(), kAcquireTimeoutNanoseconds, slot.imageAvailableSemaphore,
+                                                slot.imageAcquiredFence, &imageIndex);
     if (result == VK_TIMEOUT || result == VK_NOT_READY)
     {
-        return core::Result<VulkanFrameBeginResult>::FromValue(
-            VulkanFrameBeginResult{.status = FrameStatus::TimedOut});
+        return core::Result<VulkanFrameBeginResult>::FromValue(VulkanFrameBeginResult{.status = FrameStatus::TimedOut});
     }
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        return core::Result<VulkanFrameBeginResult>::FromValue(
-            VulkanFrameBeginResult{.status = FrameStatus::RecreationPending});
+        return core::Result<VulkanFrameBeginResult>::FromValue(VulkanFrameBeginResult{.status = FrameStatus::RecreationPending});
     }
 
     const bool suboptimal = result == VK_SUBOPTIMAL_KHR;
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
     {
-        return core::Result<VulkanFrameBeginResult>::FromError(
-            MakeVulkanError(MapFrameFailure(result), "vkAcquireNextImageKHR", result));
+        return core::Result<VulkanFrameBeginResult>::FromError(MakeVulkanError(MapFrameFailure(result), "vkAcquireNextImageKHR", result));
     }
 
     VulkanFrameRecordingState recording{.phase = VulkanFrameRecordingPhase::Recording,
@@ -5939,16 +5400,12 @@ core::Result<VulkanFrameBeginResult> BeginVulkanFrame(
 
     if (imageIndex >= swapchain.GetFramebufferCount())
     {
-        return failAcquiredFrame(
-            MakeRenderError(RenderErrorCode::BackendFailure,
-                            "vkAcquireNextImageKHR returned an invalid image index."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::BackendFailure, "vkAcquireNextImageKHR returned an invalid image index."));
     }
 
     if (frameResources.GetRenderFinishedSemaphore(imageIndex) == VK_NULL_HANDLE)
     {
-        return failAcquiredFrame(
-            MakeRenderError(RenderErrorCode::BackendFailure,
-                            "The acquired swapchain image has no render-finished semaphore."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::BackendFailure, "The acquired swapchain image has no render-finished semaphore."));
     }
 
     presentationTracker.RecordImageAcquired(frameSlotIndex, imageIndex);
@@ -5956,8 +5413,7 @@ core::Result<VulkanFrameBeginResult> BeginVulkanFrame(
     result = dispatch.resetCommandBuffer(slot.commandBuffer, 0U);
     if (result != VK_SUCCESS)
     {
-        return failAcquiredFrame(
-            MakeVulkanError(MapFrameFailure(result), "vkResetCommandBuffer", result));
+        return failAcquiredFrame(MakeVulkanError(MapFrameFailure(result), "vkResetCommandBuffer", result));
     }
 
     VkCommandBufferBeginInfo beginInfo{};
@@ -5966,49 +5422,39 @@ core::Result<VulkanFrameBeginResult> BeginVulkanFrame(
     result = dispatch.beginCommandBuffer(slot.commandBuffer, &beginInfo);
     if (result != VK_SUCCESS)
     {
-        return failAcquiredFrame(
-            MakeVulkanError(MapFrameFailure(result), "vkBeginCommandBuffer", result));
+        return failAcquiredFrame(MakeVulkanError(MapFrameFailure(result), "vkBeginCommandBuffer", result));
     }
 
-    return core::Result<VulkanFrameBeginResult>::FromValue(
-        VulkanFrameBeginResult{.status = FrameStatus::Ready, .recording = recording});
+    return core::Result<VulkanFrameBeginResult>::FromValue(VulkanFrameBeginResult{.status = FrameStatus::Ready, .recording = recording});
 }
 
-core::VoidResult RecordVulkanFrameClear(const VulkanGlobalDispatch& dispatch,
-                                        const VulkanSwapchainOwner& swapchain,
-                                        const VulkanFrameResourcesOwner& frameResources,
-                                        VulkanFrameRecordingState& recording, ClearColor clearColor)
+core::VoidResult RecordVulkanFrameClear(const VulkanGlobalDispatch& dispatch, const VulkanSwapchainOwner& swapchain,
+                                        const VulkanFrameResourcesOwner& frameResources, VulkanFrameRecordingState& recording, ClearColor clearColor)
 {
     if (!swapchain.IsValid() || !frameResources.IsValid() || frameResources.IsPoisoned())
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Frame clear requires live Vulkan target resources."));
+        return core::VoidResult::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Frame clear requires live Vulkan target resources."));
     }
 
     if (!HasFrameDispatch(dispatch))
     {
-        return core::VoidResult::FromError(MakeRenderError(RenderErrorCode::BackendFailure,
-                                                           "Vulkan frame dispatch is incomplete."));
+        return core::VoidResult::FromError(MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan frame dispatch is incomplete."));
     }
 
     if (recording.phase != VulkanFrameRecordingPhase::Recording)
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "Frame clear requires an acquired command buffer with no recorded clear."));
+        return core::VoidResult::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "Frame clear requires an acquired command buffer with no recorded clear."));
     }
 
     if (!IsValid(clearColor))
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument, "Frame clear received an invalid clear color."));
+        return core::VoidResult::FromError(MakeRenderError(RenderErrorCode::InvalidArgument, "Frame clear received an invalid clear color."));
     }
 
-    if (recording.frameSlotIndex >= frameResources.GetSlotCount() ||
-        recording.imageIndex >= swapchain.GetFramebufferCount())
+    if (recording.frameSlotIndex >= frameResources.GetSlotCount() || recording.imageIndex >= swapchain.GetFramebufferCount())
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState, "Frame clear recording state is invalid."));
+        return core::VoidResult::FromError(MakeRenderError(RenderErrorCode::InvalidState, "Frame clear recording state is invalid."));
     }
 
     const VulkanFrameSlotResources slot = frameResources.GetSlot(recording.frameSlotIndex);
@@ -6035,29 +5481,21 @@ core::VoidResult RecordVulkanFrameClear(const VulkanGlobalDispatch& dispatch,
     return core::VoidResult::Success();
 }
 
-core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch,
-                                         const VulkanDeviceOwner& device,
-                                         const VulkanSwapchainOwner& swapchain,
-                                         VulkanFrameResourcesOwner& frameResources,
-                                         VulkanDraw2DPipelineCache& pipelineCache,
-                                         VulkanFrameRecordingState& recording,
-                                         const draw2d::Draw2DPacket& packet)
+core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device, const VulkanSwapchainOwner& swapchain,
+                                         VulkanFrameResourcesOwner& frameResources, VulkanDraw2DPipelineCache& pipelineCache,
+                                         VulkanFrameRecordingState& recording, const draw2d::Draw2DPacket& packet)
 {
-    if (!device.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() ||
-        frameResources.IsPoisoned())
+    if (!device.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() || frameResources.IsPoisoned())
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Draw2D stage recording requires live Vulkan frame resources."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Draw2D stage recording requires live Vulkan frame resources."));
     }
 
-    if (recording.phase != VulkanFrameRecordingPhase::ClearRecorded ||
-        recording.frameSlotIndex >= frameResources.GetSlotCount() ||
+    if (recording.phase != VulkanFrameRecordingPhase::ClearRecorded || recording.frameSlotIndex >= frameResources.GetSlotCount() ||
         recording.imageIndex >= swapchain.GetFramebufferCount())
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidState,
-            "The generic Draw2D stage must be recorded exactly once after the clear stage."));
+        return core::VoidResult::FromError(
+            MakeRenderError(RenderErrorCode::InvalidState, "The generic Draw2D stage must be recorded exactly once after the clear stage."));
     }
 
     core::Result<draw2d::Draw2DPacketStats> validation = draw2d::ValidateDraw2DPacket(packet);
@@ -6067,48 +5505,39 @@ core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch,
     }
 
     const VulkanSwapchainConfig& config = swapchain.GetConfig();
-    if (packet.GetPixelExtent() !=
-        draw2d::Draw2DPixelExtent{.width = config.extent.width, .height = config.extent.height})
+    if (packet.GetPixelExtent() != draw2d::Draw2DPixelExtent{.width = config.extent.width, .height = config.extent.height})
     {
-        return core::VoidResult::FromError(MakeRenderError(
-            RenderErrorCode::InvalidArgument,
-            "Draw2D packet extent does not match the active Vulkan framebuffer extent."));
+        return core::VoidResult::FromError(
+            MakeRenderError(RenderErrorCode::InvalidArgument, "Draw2D packet extent does not match the active Vulkan framebuffer extent."));
     }
     if (packet.IsEmpty())
     {
         return core::VoidResult::Success();
     }
 
-    const VulkanDraw2DPipelineCompatibilityKey key =
-        MakeVulkanDraw2DPipelineCompatibilityKey(config);
-    core::Result<VulkanDraw2DPipelineCacheUpdate> pipeline =
-        pipelineCache.GetOrCreate(dispatch, device, swapchain, key);
+    const VulkanDraw2DPipelineCompatibilityKey key = MakeVulkanDraw2DPipelineCompatibilityKey(config);
+    core::Result<VulkanDraw2DPipelineCacheUpdate> pipeline = pipelineCache.GetOrCreate(dispatch, device, swapchain, key);
     if (!pipeline)
     {
         return core::VoidResult::FromError(std::move(pipeline).GetError());
     }
-    std::shared_ptr<const VulkanDraw2DPipelineOwner> pipelineOwner =
-        pipelineCache.AcquireCurrentPipeline();
+    std::shared_ptr<const VulkanDraw2DPipelineOwner> pipelineOwner = pipelineCache.AcquireCurrentPipeline();
     if (pipelineOwner == nullptr || !pipelineOwner->IsValid())
     {
         return core::VoidResult::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Draw2D pipeline cache did not publish a usable pipeline."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Draw2D pipeline cache did not publish a usable pipeline."));
     }
     const VulkanDraw2DPipelineOwner& selectedPipeline = *pipelineOwner;
 
-    core::Result<VulkanDraw2DUploadReservation> upload =
-        frameResources.GetDraw2DUploadArena().ReserveAndUpload(recording.frameSlotIndex,
-                                                               std::as_bytes(packet.GetVertices()),
-                                                               std::as_bytes(packet.GetIndices()));
+    core::Result<VulkanDraw2DUploadReservation> upload = frameResources.GetDraw2DUploadArena().ReserveAndUpload(
+        recording.frameSlotIndex, std::as_bytes(packet.GetVertices()), std::as_bytes(packet.GetIndices()));
     if (!upload)
     {
         return core::VoidResult::FromError(std::move(upload).GetError());
     }
     const VulkanDraw2DUploadReservation reservation = upload.GetValue();
 
-    core::VoidResult attached =
-        frameResources.AttachDraw2DPipeline(recording.frameSlotIndex, std::move(pipelineOwner));
+    core::VoidResult attached = frameResources.AttachDraw2DPipeline(recording.frameSlotIndex, std::move(pipelineOwner));
     if (!attached)
     {
         frameResources.AbandonDraw2D(recording.frameSlotIndex);
@@ -6117,10 +5546,8 @@ core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch,
 
     const VulkanFrameSlotResources slot = frameResources.GetSlot(recording.frameSlotIndex);
     core::VoidResult commands = RecordVulkanDraw2DPipelineCommands(
-        dispatch, slot.commandBuffer, selectedPipeline, reservation.buffer,
-        reservation.vertexOffset, reservation.buffer, reservation.indexOffset, config.extent,
-        VkExtent2D{.width = device.GetInfo().maximumViewportDimensions[0],
-                   .height = device.GetInfo().maximumViewportDimensions[1]},
+        dispatch, slot.commandBuffer, selectedPipeline, reservation.buffer, reservation.vertexOffset, reservation.buffer, reservation.indexOffset,
+        config.extent, VkExtent2D{.width = device.GetInfo().maximumViewportDimensions[0], .height = device.GetInfo().maximumViewportDimensions[1]},
         packet.GetDrawRecords());
     if (!commands)
     {
@@ -6132,86 +5559,70 @@ core::VoidResult RecordVulkanDraw2DStage(const VulkanGlobalDispatch& dispatch,
     return core::VoidResult::Success();
 }
 
-core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(
-    const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
-    const VulkanSwapchainOwner& swapchain, VulkanFrameResourcesOwner& frameResources,
-    VulkanPresentationTrackerOwner& presentationTracker, const VulkanDeviceQueuePlan& queuePlan,
-    VulkanFrameRecordingState& recording)
+core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(const VulkanGlobalDispatch& dispatch, const VulkanDeviceOwner& device,
+                                                                        const VulkanSwapchainOwner& swapchain,
+                                                                        VulkanFrameResourcesOwner& frameResources,
+                                                                        VulkanPresentationTrackerOwner& presentationTracker,
+                                                                        const VulkanDeviceQueuePlan& queuePlan, VulkanFrameRecordingState& recording)
 {
-    if (recording.phase != VulkanFrameRecordingPhase::ClearRecorded &&
-        recording.phase != VulkanFrameRecordingPhase::Draw2DRecorded)
+    if (recording.phase != VulkanFrameRecordingPhase::ClearRecorded && recording.phase != VulkanFrameRecordingPhase::Draw2DRecorded)
     {
         return core::Result<VulkanFramePresentationResult>::FromError(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Frame finish requires a clear before submission and presentation."));
+            MakeRenderError(RenderErrorCode::InvalidState, "Frame finish requires a clear before submission and presentation."));
     }
 
-    const auto failAcquiredFrame =
-        [&](core::Error error) -> core::Result<VulkanFramePresentationResult>
+    const auto failAcquiredFrame = [&](core::Error error) -> core::Result<VulkanFramePresentationResult>
     {
         AbandonVulkanFrame(frameResources, presentationTracker, recording);
         return core::Result<VulkanFramePresentationResult>::FromError(std::move(error));
     };
 
-    if (!device.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() ||
-        frameResources.IsPoisoned() || !presentationTracker.IsValid())
+    if (!device.IsValid() || !swapchain.IsValid() || !frameResources.IsValid() || frameResources.IsPoisoned() || !presentationTracker.IsValid())
     {
-        return failAcquiredFrame(MakeRenderError(
-            RenderErrorCode::InvalidState, "Frame finish requires live Vulkan target resources."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::InvalidState, "Frame finish requires live Vulkan target resources."));
     }
 
     if (!HasFrameDispatch(dispatch))
     {
-        return failAcquiredFrame(MakeRenderError(RenderErrorCode::BackendFailure,
-                                                 "Vulkan frame dispatch is incomplete."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::BackendFailure, "Vulkan frame dispatch is incomplete."));
     }
 
     const VkQueue graphicsQueue = device.GetQueue(queuePlan.graphicsQueueFamilyIndex);
     const VkQueue presentationQueue = device.GetQueue(queuePlan.presentationQueueFamilyIndex);
     if (graphicsQueue == VK_NULL_HANDLE || presentationQueue == VK_NULL_HANDLE)
     {
-        return failAcquiredFrame(
-            MakeRenderError(RenderErrorCode::InvalidState,
-                            "Frame finish requires live graphics and presentation queues."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::InvalidState, "Frame finish requires live graphics and presentation queues."));
     }
 
-    if (recording.frameSlotIndex >= frameResources.GetSlotCount() ||
-        recording.imageIndex >= swapchain.GetFramebufferCount())
+    if (recording.frameSlotIndex >= frameResources.GetSlotCount() || recording.imageIndex >= swapchain.GetFramebufferCount())
     {
-        return failAcquiredFrame(MakeRenderError(RenderErrorCode::InvalidState,
-                                                 "Frame finish recording state is invalid."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::InvalidState, "Frame finish recording state is invalid."));
     }
 
     const VulkanFrameSlotResources slot = frameResources.GetSlot(recording.frameSlotIndex);
-    const VkSemaphore renderFinishedSemaphore =
-        frameResources.GetRenderFinishedSemaphore(recording.imageIndex);
+    const VkSemaphore renderFinishedSemaphore = frameResources.GetRenderFinishedSemaphore(recording.imageIndex);
     if (renderFinishedSemaphore == VK_NULL_HANDLE)
     {
-        return failAcquiredFrame(
-            MakeRenderError(RenderErrorCode::BackendFailure,
-                            "The acquired swapchain image has no render-finished semaphore."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::BackendFailure, "The acquired swapchain image has no render-finished semaphore."));
     }
 
     const std::uint64_t presentId = presentationTracker.ReservePresentId();
     if (presentationTracker.UsesPresentIds() && presentId == 0U)
     {
-        return failAcquiredFrame(MakeRenderError(RenderErrorCode::BackendFailure,
-                                                 "The Vulkan present-ID sequence was exhausted."));
+        return failAcquiredFrame(MakeRenderError(RenderErrorCode::BackendFailure, "The Vulkan present-ID sequence was exhausted."));
     }
 
     dispatch.cmdEndRenderPass(slot.commandBuffer);
     VkResult result = dispatch.endCommandBuffer(slot.commandBuffer);
     if (result != VK_SUCCESS)
     {
-        return failAcquiredFrame(
-            MakeVulkanError(MapFrameFailure(result), "vkEndCommandBuffer", result));
+        return failAcquiredFrame(MakeVulkanError(MapFrameFailure(result), "vkEndCommandBuffer", result));
     }
 
     result = dispatch.resetFences(device.GetHandle(), 1U, &slot.inFlightFence);
     if (result != VK_SUCCESS)
     {
-        return failAcquiredFrame(
-            MakeVulkanError(MapFrameFailure(result), "vkResetFences.frame", result));
+        return failAcquiredFrame(MakeVulkanError(MapFrameFailure(result), "vkResetFences.frame", result));
     }
 
     const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -6259,9 +5670,8 @@ core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(
     VkSwapchainKHR swapchainHandle = swapchain.GetHandle();
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.pNext = presentFence != VK_NULL_HANDLE
-                            ? static_cast<const void*>(&presentFenceInfo)
-                            : static_cast<const void*>(presentId != 0U ? &presentIdInfo : nullptr);
+    presentInfo.pNext = presentFence != VK_NULL_HANDLE ? static_cast<const void*>(&presentFenceInfo)
+                                                       : static_cast<const void*>(presentId != 0U ? &presentIdInfo : nullptr);
     presentInfo.waitSemaphoreCount = 1U;
     presentInfo.pWaitSemaphores = &renderFinishedSemaphore;
     presentInfo.swapchainCount = 1U;
@@ -6272,16 +5682,14 @@ core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(
         [[maybe_unused]] auto presentationQueueLock = device.LockQueueOperation(presentationQueue);
         result = dispatch.queuePresent(presentationQueue, &presentInfo);
     }
-    presentationTracker.RecordPresentResult(recording.frameSlotIndex, recording.imageIndex,
-                                            presentId, result);
+    presentationTracker.RecordPresentResult(recording.frameSlotIndex, recording.imageIndex, presentId, result);
     recording.phase = VulkanFrameRecordingPhase::Terminal;
     if (result == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        return core::Result<VulkanFramePresentationResult>::FromValue(
-            VulkanFramePresentationResult{.status = FrameStatus::RecreationPending,
-                                          .presented = false,
-                                          .suboptimal = false,
-                                          .imageIndex = recording.imageIndex});
+        return core::Result<VulkanFramePresentationResult>::FromValue(VulkanFramePresentationResult{.status = FrameStatus::RecreationPending,
+                                                                                                    .presented = false,
+                                                                                                    .suboptimal = false,
+                                                                                                    .imageIndex = recording.imageIndex});
     }
 
     bool suboptimal = recording.suboptimal;
@@ -6295,15 +5703,14 @@ core::Result<VulkanFramePresentationResult> FinishAndPresentVulkanFrame(
         {
             frameResources.MarkPoisoned();
         }
-        return core::Result<VulkanFramePresentationResult>::FromError(
-            MakeVulkanError(MapFrameFailure(result), "vkQueuePresentKHR", result));
+        return core::Result<VulkanFramePresentationResult>::FromError(MakeVulkanError(MapFrameFailure(result), "vkQueuePresentKHR", result));
     }
 
-    return core::Result<VulkanFramePresentationResult>::FromValue(VulkanFramePresentationResult{
-        .status = suboptimal ? FrameStatus::Suboptimal : FrameStatus::Presented,
-        .presented = true,
-        .suboptimal = suboptimal,
-        .imageIndex = recording.imageIndex});
+    return core::Result<VulkanFramePresentationResult>::FromValue(
+        VulkanFramePresentationResult{.status = suboptimal ? FrameStatus::Suboptimal : FrameStatus::Presented,
+                                      .presented = true,
+                                      .suboptimal = suboptimal,
+                                      .imageIndex = recording.imageIndex});
 }
 const char* GetVulkanWsiExtensionName(VulkanWsiKind wsiKind) noexcept
 {
@@ -6335,17 +5742,17 @@ std::string_view GetVulkanWsiKindName(VulkanWsiKind wsiKind) noexcept
     return "unknown";
 }
 
-VulkanWsiKind GetVulkanWsiKind(const platform::NativeWindowHandle& nativeWindowHandle) noexcept
+VulkanWsiKind GetVulkanWsiKind(const ponder::platform::NativeWindowHandle& nativeWindowHandle) noexcept
 {
-    return std::visit(Overloaded{[](platform::NativeWin32Window) noexcept
+    return std::visit(Overloaded{[](ponder::platform::NativeWin32Window) noexcept
                                  {
                                      return VulkanWsiKind::Win32;
                                  },
-                                 [](platform::NativeX11Window) noexcept
+                                 [](ponder::platform::NativeX11Window) noexcept
                                  {
                                      return VulkanWsiKind::X11;
                                  },
-                                 [](platform::NativeWaylandWindow) noexcept
+                                 [](ponder::platform::NativeWaylandWindow) noexcept
                                  {
                                      return VulkanWsiKind::Wayland;
                                  }},
@@ -6370,10 +5777,9 @@ bool IsDefaultValidationEnabledForDeveloperBuild() noexcept
     return PONDER_RENDER_ENABLE_VALIDATION != 0 && PONDER_RENDER_DEVELOPER_BUILD != 0;
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL HandleVulkanDebugUtilsMessage(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-    const VkDebugUtilsMessengerCallbackDataEXT* callbackData, void* userData) noexcept
+VKAPI_ATTR VkBool32 VKAPI_CALL HandleVulkanDebugUtilsMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                                             VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+                                                             const VkDebugUtilsMessengerCallbackDataEXT* callbackData, void* userData) noexcept
 {
     (void)messageTypes;
 
@@ -6399,8 +5805,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL HandleVulkanDebugUtilsMessage(
         AppendCallbackMessage(message, callbackData);
 
         const core::LogLevel level = MapDebugSeverity(messageSeverity);
-        const std::string_view category =
-            IsWarningOrError(messageSeverity) ? kValidationLogCategory : kDebugLogCategory;
+        const std::string_view category = IsWarningOrError(messageSeverity) ? kValidationLogCategory : kDebugLogCategory;
         core::LogMessage(level, category, message);
     }
     catch (...)

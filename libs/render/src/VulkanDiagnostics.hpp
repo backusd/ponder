@@ -11,7 +11,10 @@ namespace pond::render::detail
 class VulkanDiagnosticScope final
 {
 public:
-    VulkanDiagnosticScope() noexcept : m_previous{std::exchange(s_current, this)} {}
+    VulkanDiagnosticScope() noexcept :
+        m_previous{std::exchange(s_current, this)}
+    {
+    }
 
     VulkanDiagnosticScope(const VulkanDiagnosticScope&) = delete;
     VulkanDiagnosticScope& operator=(const VulkanDiagnosticScope&) = delete;

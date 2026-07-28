@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-namespace pond::platform::detail
+namespace ponder::platform::detail
 {
 enum class BackendProcessExitKind
 {
@@ -22,8 +22,7 @@ struct BackendProcessExitStatus final
     BackendProcessExitKind kind{BackendProcessExitKind::Unknown};
     std::uint32_t value{};
 
-    [[nodiscard]] friend constexpr bool operator==(BackendProcessExitStatus,
-                                                   BackendProcessExitStatus) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(BackendProcessExitStatus, BackendProcessExitStatus) noexcept = default;
 };
 
 enum class BackendProcessKillResult
@@ -46,6 +45,7 @@ struct AbandonedProcessEntry final
 {
     PlatformProcessBackend backend;
     void* process{};
+    bool exitConfirmed{};
     AbandonedProcessEntry* next{};
 };
 
@@ -58,23 +58,20 @@ struct PlatformProcessReaperBackend final
 
 [[nodiscard]] PlatformProcessBackend GetPlatformProcessBackend() noexcept;
 [[nodiscard]] PlatformProcessReaperBackend GetPlatformProcessReaperBackend();
-[[nodiscard]] core::Result<Process> LaunchProcess(const ProcessDesc& desc,
-                                                  PlatformProcessBackend backend);
-[[nodiscard]] core::Result<Process> LaunchProcess(const ProcessDesc& desc,
-                                                  PlatformProcessBackend backend,
-                                                  PlatformProcessReaperBackend reaperBackend);
-} // namespace pond::platform::detail
+[[nodiscard]] ponder::core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBackend backend);
+[[nodiscard]] ponder::core::Result<Process> LaunchProcess(const ProcessDesc& desc, PlatformProcessBackend backend,
+                                                          PlatformProcessReaperBackend reaperBackend);
+} // namespace ponder::platform::detail
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::detail::BackendProcessExitKind> : formatter<string_view>
+struct formatter<ponder::platform::detail::BackendProcessExitKind> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendProcessExitKind kind,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendProcessExitKind kind, FormatContext& context) const
     {
-        using pond::platform::detail::BackendProcessExitKind;
+        using ponder::platform::detail::BackendProcessExitKind;
 
         string_view name{"unknown"};
         switch (kind)
@@ -94,24 +91,22 @@ struct formatter<pond::platform::detail::BackendProcessExitKind> : formatter<str
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendProcessExitStatus> : formatter<string>
+struct formatter<ponder::platform::detail::BackendProcessExitStatus> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendProcessExitStatus status,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendProcessExitStatus status, FormatContext& context) const
     {
         return formatter<string>::format(std::format("{}({})", status.kind, status.value), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendProcessKillResult> : formatter<string_view>
+struct formatter<ponder::platform::detail::BackendProcessKillResult> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendProcessKillResult result,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendProcessKillResult result, FormatContext& context) const
     {
-        using pond::platform::detail::BackendProcessKillResult;
+        using ponder::platform::detail::BackendProcessKillResult;
 
         string_view name{"unknown"};
         switch (result)
@@ -132,7 +127,7 @@ struct formatter<pond::platform::detail::BackendProcessKillResult> : formatter<s
 };
 } // namespace std
 
-namespace pond::platform::detail
+namespace ponder::platform::detail
 {
 inline std::ostream& operator<<(std::ostream& output, BackendProcessExitKind kind)
 {
@@ -148,4 +143,4 @@ inline std::ostream& operator<<(std::ostream& output, BackendProcessKillResult r
 {
     return output << std::format("{}", result);
 }
-} // namespace pond::platform::detail
+} // namespace ponder::platform::detail

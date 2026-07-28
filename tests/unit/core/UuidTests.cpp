@@ -5,98 +5,92 @@
 #include <functional>
 #include <gtest/gtest.h>
 #include <span>
+#include <type_traits>
 #include <unordered_set>
 
 namespace
 {
-[[nodiscard]] constexpr pond::core::Uuid::Bytes MakeSequentialBytes() noexcept
+[[nodiscard]] constexpr ponder::core::Uuid::Bytes MakeSequentialBytes() noexcept
 {
-    pond::core::Uuid::Bytes bytes{};
+    ponder::core::Uuid::Bytes bytes{};
 
     for (std::size_t index = 0; index < bytes.size(); ++index)
     {
-        bytes[index] = static_cast<pond::core::Uuid::Byte>(index);
+        bytes[index] = static_cast<ponder::core::Uuid::Byte>(index);
     }
 
     return bytes;
 }
 
-[[nodiscard]] bool FillDeterministicEntropy(
-    std::span<pond::core::Uuid::Byte, pond::core::Uuid::kByteCount> bytes) noexcept
+void FillDeterministicEntropy(std::span<ponder::core::Uuid::Byte, ponder::core::Uuid::kByteCount> bytes) noexcept
 {
-    pond::core::Uuid::Bytes sourceBytes = MakeSequentialBytes();
+    ponder::core::Uuid::Bytes sourceBytes = MakeSequentialBytes();
     std::ranges::copy(sourceBytes, bytes.begin());
-    return true;
-}
-
-[[nodiscard]] bool FailEntropy(
-    std::span<pond::core::Uuid::Byte, pond::core::Uuid::kByteCount>) noexcept
-{
-    return false;
 }
 
 constexpr bool UuidValueObserversAreConstexpr()
 {
-    constexpr pond::core::Uuid::Bytes kBytes = MakeSequentialBytes();
-    constexpr pond::core::Uuid kUuid{kBytes};
-    constexpr pond::core::Uuid kSameUuid{kBytes};
+    constexpr ponder::core::Uuid::Bytes kBytes = MakeSequentialBytes();
+    constexpr ponder::core::Uuid kUuid{kBytes};
+    constexpr ponder::core::Uuid kSameUuid{kBytes};
 
     auto differentBytes = kBytes;
     differentBytes[15] = 42;
-    const pond::core::Uuid differentUuid{differentBytes};
+    const ponder::core::Uuid differentUuid{differentBytes};
 
-    return pond::core::Uuid{}.IsNil() && pond::core::Uuid::Nil().IsNil() &&
-           kUuid.GetBytes() == kBytes && !kUuid.IsNil() && kUuid == kSameUuid &&
+    return ponder::core::Uuid{}.IsNil() && ponder::core::Uuid::Nil().IsNil() && kUuid.GetBytes() == kBytes && !kUuid.IsNil() && kUuid == kSameUuid &&
            kUuid < differentUuid;
 }
 
 constexpr bool UuidVersionAndVariantAreConstexpr()
 {
-    const pond::core::Uuid uuid = pond::core::MakeUuidV4(MakeSequentialBytes());
+    const ponder::core::Uuid uuid = ponder::core::MakeUuidV4(MakeSequentialBytes());
 
-    return uuid.GetVersion() == 4U && uuid.HasRfc4122Variant() && uuid.GetBytes()[6] == 0x46U &&
-           uuid.GetBytes()[8] == 0x88U;
+    return uuid.GetVersion() == 4U && uuid.HasRfc4122Variant() && uuid.GetBytes()[6] == 0x46U && uuid.GetBytes()[8] == 0x88U;
 }
 
 constexpr bool UuidFormattingIsConstexpr()
 {
-    const pond::core::Uuid nilUuid;
-    const pond::core::Uuid uuid{MakeSequentialBytes()};
+    const ponder::core::Uuid nilUuid;
+    const ponder::core::Uuid uuid{MakeSequentialBytes()};
 
-    return nilUuid.ToString() == "00000000-0000-0000-0000-000000000000" &&
-           uuid.ToString() == "00010203-0405-0607-0809-0a0b0c0d0e0f";
+    return nilUuid.ToString() == "00000000-0000-0000-0000-000000000000" && uuid.ToString() == "00010203-0405-0607-0809-0a0b0c0d0e0f";
 }
 
 constexpr bool UuidHashingIsConstexpr()
 {
-    const std::hash<pond::core::Uuid> hash;
+    const std::hash<ponder::core::Uuid> hash;
 
-    return hash(pond::core::Uuid{}) == hash(pond::core::Uuid::Nil()) &&
-           hash(pond::core::Uuid{}) != hash(pond::core::Uuid{MakeSequentialBytes()});
+    return hash(ponder::core::Uuid{}) == hash(ponder::core::Uuid::Nil()) &&
+           hash(ponder::core::Uuid{}) != hash(ponder::core::Uuid{MakeSequentialBytes()});
 }
 
 static_assert(UuidValueObserversAreConstexpr());
 static_assert(UuidVersionAndVariantAreConstexpr());
 static_assert(UuidFormattingIsConstexpr());
 static_assert(UuidHashingIsConstexpr());
+static_assert(std::is_same_v<ponder::core::UuidEntropySource, void (*)(std::span<ponder::core::Uuid::Byte, ponder::core::Uuid::kByteCount>)>);
+static_assert(std::is_same_v<decltype(ponder::core::GenerateUuidV4()), ponder::core::Uuid>);
+static_assert(noexcept(ponder::core::GenerateUuidV4(FillDeterministicEntropy)));
+static_assert(noexcept(ponder::core::GenerateUuidV4()));
 
 TEST(UuidTests, DefaultsToNil)
 {
-    pond::core::Uuid uuid;
+    ponder::core::Uuid uuid;
 
     EXPECT_TRUE(uuid.IsNil());
-    EXPECT_EQ(uuid, pond::core::Uuid::Nil());
+    EXPECT_EQ(uuid, ponder::core::Uuid::Nil());
     EXPECT_EQ(uuid.ToString(), "00000000-0000-0000-0000-000000000000");
 }
 
 TEST(UuidTests, StoresBytesAndComparesByValue)
 {
-    pond::core::Uuid::Bytes bytes = MakeSequentialBytes();
-    pond::core::Uuid uuid{bytes};
-    pond::core::Uuid sameUuid{bytes};
+    ponder::core::Uuid::Bytes bytes = MakeSequentialBytes();
+    ponder::core::Uuid uuid{bytes};
+    ponder::core::Uuid sameUuid{bytes};
 
     bytes[15] = 42;
-    pond::core::Uuid differentUuid{bytes};
+    ponder::core::Uuid differentUuid{bytes};
 
     EXPECT_EQ(uuid.GetBytes(), MakeSequentialBytes());
     EXPECT_EQ(uuid, sameUuid);
@@ -106,33 +100,31 @@ TEST(UuidTests, StoresBytesAndComparesByValue)
 
 TEST(UuidTests, SupportsHashing)
 {
-    std::unordered_set<pond::core::Uuid> ids;
+    std::unordered_set<ponder::core::Uuid> ids;
 
-    ids.insert(pond::core::Uuid{MakeSequentialBytes()});
+    ids.insert(ponder::core::Uuid{MakeSequentialBytes()});
 
-    EXPECT_TRUE(ids.contains(pond::core::Uuid{MakeSequentialBytes()}));
+    EXPECT_TRUE(ids.contains(ponder::core::Uuid{MakeSequentialBytes()}));
 }
 
 TEST(UuidTests, FormatsCanonicalLowercaseText)
 {
-    pond::core::Uuid uuid{MakeSequentialBytes()};
+    ponder::core::Uuid uuid{MakeSequentialBytes()};
 
     EXPECT_EQ(uuid.ToString(), "00010203-0405-0607-0809-0a0b0c0d0e0f");
 }
 
 TEST(UuidTests, ParsesCanonicalLowercaseText)
 {
-    pond::core::Result<pond::core::Uuid> result =
-        pond::core::ParseUuid("00010203-0405-0607-0809-0a0b0c0d0e0f");
+    ponder::core::Result<ponder::core::Uuid> result = ponder::core::ParseUuid("00010203-0405-0607-0809-0a0b0c0d0e0f");
 
     ASSERT_TRUE(result.HasValue());
-    EXPECT_EQ(result.GetValue(), pond::core::Uuid{MakeSequentialBytes()});
+    EXPECT_EQ(result.GetValue(), ponder::core::Uuid{MakeSequentialBytes()});
 }
 
 TEST(UuidTests, ParsesCanonicalUppercaseText)
 {
-    pond::core::Result<pond::core::Uuid> result =
-        pond::core::ParseUuid("00010203-0405-0607-0809-0A0B0C0D0E0F");
+    ponder::core::Result<ponder::core::Uuid> result = ponder::core::ParseUuid("00010203-0405-0607-0809-0A0B0C0D0E0F");
 
     ASSERT_TRUE(result.HasValue());
     EXPECT_EQ(result.GetValue().ToString(), "00010203-0405-0607-0809-0a0b0c0d0e0f");
@@ -140,15 +132,15 @@ TEST(UuidTests, ParsesCanonicalUppercaseText)
 
 TEST(UuidTests, RejectsInvalidText)
 {
-    EXPECT_FALSE(pond::core::ParseUuid("").HasValue());
-    EXPECT_FALSE(pond::core::ParseUuid("000102030405060708090a0b0c0d0e0f").HasValue());
-    EXPECT_FALSE(pond::core::ParseUuid("00010203_0405-0607-0809-0a0b0c0d0e0f").HasValue());
-    EXPECT_FALSE(pond::core::ParseUuid("00010203-0405-0607-0809-0a0b0c0d0e0x").HasValue());
+    EXPECT_FALSE(ponder::core::ParseUuid("").HasValue());
+    EXPECT_FALSE(ponder::core::ParseUuid("000102030405060708090a0b0c0d0e0f").HasValue());
+    EXPECT_FALSE(ponder::core::ParseUuid("00010203_0405-0607-0809-0a0b0c0d0e0f").HasValue());
+    EXPECT_FALSE(ponder::core::ParseUuid("00010203-0405-0607-0809-0a0b0c0d0e0x").HasValue());
 }
 
 TEST(UuidTests, BuildsDeterministicVersion4UuidFromBytes)
 {
-    pond::core::Uuid uuid = pond::core::MakeUuidV4(MakeSequentialBytes());
+    ponder::core::Uuid uuid = ponder::core::MakeUuidV4(MakeSequentialBytes());
 
     EXPECT_EQ(uuid.ToString(), "00010203-0405-4607-8809-0a0b0c0d0e0f");
     EXPECT_EQ(uuid.GetVersion(), 4U);
@@ -157,27 +149,16 @@ TEST(UuidTests, BuildsDeterministicVersion4UuidFromBytes)
 
 TEST(UuidTests, GeneratesVersion4UuidFromInjectedEntropy)
 {
-    pond::core::Result<pond::core::Uuid> result =
-        pond::core::GenerateUuidV4(FillDeterministicEntropy);
+    const ponder::core::Uuid uuid = ponder::core::GenerateUuidV4(FillDeterministicEntropy);
 
-    ASSERT_TRUE(result.HasValue());
-    EXPECT_EQ(result.GetValue().ToString(), "00010203-0405-4607-8809-0a0b0c0d0e0f");
+    EXPECT_EQ(uuid.ToString(), "00010203-0405-4607-8809-0a0b0c0d0e0f");
 }
 
-TEST(UuidTests, ReportsEntropyFailures)
+TEST(UuidTests, DefaultGenerationIsWellFormed)
 {
-    EXPECT_FALSE(pond::core::GenerateUuidV4(nullptr).HasValue());
-    EXPECT_FALSE(pond::core::GenerateUuidV4(FailEntropy).HasValue());
-}
+    const ponder::core::Uuid uuid = ponder::core::GenerateUuidV4();
 
-TEST(UuidTests, DefaultGenerationIsWellFormedWhenAvailable)
-{
-    pond::core::Result<pond::core::Uuid> result = pond::core::GenerateUuidV4();
-
-    if (result.HasValue())
-    {
-        EXPECT_EQ(result.GetValue().GetVersion(), 4U);
-        EXPECT_TRUE(result.GetValue().HasRfc4122Variant());
-    }
+    EXPECT_EQ(uuid.GetVersion(), 4U);
+    EXPECT_TRUE(uuid.HasRfc4122Variant());
 }
 } // namespace

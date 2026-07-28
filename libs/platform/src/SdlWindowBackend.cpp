@@ -1,6 +1,6 @@
 #include "SdlWindowBackend.hpp"
 
-#include <ponder/core/Assert.hpp>
+#include <ponder/core/Exception.hpp>
 #include <ponder/platform/PlatformError.hpp>
 
 #include <SDL3/SDL_keyboard.h>
@@ -12,15 +12,16 @@
 #include <cstdint>
 #include <format>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <string_view>
 #include <utility>
 
-#include "PlatformRuntimeBackend.hpp"
 #include "SdlCommon.hpp"
 #include "SdlError.hpp"
+#include "SdlRuntimeTypes.hpp"
 
-namespace pond::platform::detail
+namespace ponder::platform::detail
 {
 bool IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility compatibility) noexcept
 {
@@ -102,110 +103,110 @@ bool IsReservedSdlWindowPosition(std::int32_t value) noexcept
 
 namespace
 {
-constexpr core::ErrorCode kBackendFailureCode =
-    ToErrorCode(PlatformErrorCode::BackendFailure);
-constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
+constexpr ponder::core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
 
-[[nodiscard]] core::VoidResult CaptureWindowFailure(BackendWindowHandle window,
-                                                     std::string_view operation)
+[[noreturn]] void ThrowWindowBackendFailure(std::string_view operation, std::string_view objectContext,
+                                            std::source_location location = std::source_location::current())
 {
-    return core::VoidResult::FromError(
-        CaptureSdlFailure(kBackendFailureCode, operation, GetBackendWindowContext(window)));
+    const std::string message = CaptureSdlFailureMessage(operation, objectContext);
+    throw ponder::core::MakeFormattedException(location, "Platform error [{}]: {}", PlatformErrorCode::BackendFailure, message);
 }
 
-[[nodiscard]] core::VoidResult ToWindowResult(bool succeeded, BackendWindowHandle window,
-                                               std::string_view operation)
+void ThrowIfWindowOperationFailed(bool succeeded, std::string_view operation, std::string_view objectContext,
+                                  std::source_location location = std::source_location::current())
 {
     if (!succeeded)
     {
-        return CaptureWindowFailure(window, operation);
+        ThrowWindowBackendFailure(operation, objectContext, location);
     }
-
-    return core::VoidResult::Success();
 }
 
-[[nodiscard]] core::VoidResult MakeUnsupportedWindowOperation(
-    BackendWindowHandle window, std::string_view operation)
+[[noreturn]] void ThrowUnsupportedWindowOperation(BackendWindowHandle window, std::string_view operation,
+                                                  std::source_location location = std::source_location::current())
 {
-    return core::VoidResult::FromError(core::Error{
-        kUnsupportedCode,
-        std::format("{} did not apply the requested state for {}; the active video driver may "
-                    "not support this operation.",
-                    operation, GetBackendWindowContext(window))});
+    throw ponder::core::MakeFormattedException(location,
+                                               "Platform error [{}]: {} did not apply the requested state for {}; the active video "
+                                               "driver may not support this operation.",
+                                               PlatformErrorCode::Unsupported, operation, GetBackendWindowContext(window));
 }
 
-[[nodiscard]] core::Result<NativeWindowHandle> MakeNativeHandleError(
-    core::ErrorCode code, BackendWindowHandle window, std::string_view message)
+[[nodiscard]] ponder::core::Result<NativeWindowHandle> MakeUnsupportedNativeHandleError(BackendWindowHandle window, std::string_view message)
 {
-    return core::Result<NativeWindowHandle>::FromError(core::Error{
-        code, std::format("{} Context: {}.", message, GetBackendWindowContext(window))});
+    return ponder::core::Result<NativeWindowHandle>::FromError(
+        ponder::core::Error{kUnsupportedCode, std::format("{} Context: {}.", message, GetBackendWindowContext(window))});
 }
 
-[[nodiscard]] core::Result<NativeWindowHandle> GetWin32NativeWindowHandle(
-    SDL_PropertiesID properties, BackendWindowHandle backendWindow)
+[[noreturn]] void ThrowMalformedNativeWindowProperties(BackendWindowHandle window, std::string_view message,
+                                                       std::source_location location = std::source_location::current())
 {
-    void* const instance =
-        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);
-    void* const window =
-        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
-    if (instance == nullptr || window == nullptr)
+    throw ponder::core::MakeFormattedException(location, "Platform error [{}]: {} Context: {}.", PlatformErrorCode::BackendFailure, message,
+                                               GetBackendWindowContext(window));
+}
+
+[[nodiscard]] NativeWindowHandle GetWin32NativeWindowHandle(SDL_PropertiesID properties, BackendWindowHandle backendWindow)
+{
+    void* const instance = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);
+    void* const window = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+    return MakeWin32NativeWindowHandle(backendWindow, instance, window);
+}
+
+[[nodiscard]] NativeWindowHandle GetX11NativeWindowHandle(SDL_PropertiesID properties, BackendWindowHandle backendWindow)
+{
+    void* const display = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+    const Sint64 window = SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+    return MakeX11NativeWindowHandle(backendWindow, display, window);
+}
+
+[[nodiscard]] NativeWindowHandle GetWaylandNativeWindowHandle(SDL_PropertiesID properties, BackendWindowHandle backendWindow)
+{
+    void* const display = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+    void* const surface = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+    return MakeWaylandNativeWindowHandle(backendWindow, display, surface);
+}
+} // namespace
+
+NativeWindowHandle MakeWin32NativeWindowHandle(BackendWindowHandle backendWindow, void* instance, void* nativeWindow)
+{
+    if (instance == nullptr || nativeWindow == nullptr)
     {
-        return MakeNativeHandleError(kBackendFailureCode, backendWindow,
-                                     "SDL window is missing Win32 native properties.");
+        ThrowMalformedNativeWindowProperties(backendWindow, "SDL window is missing Win32 native properties.");
     }
 
-    return NativeWin32Window{.instance = instance, .window = window};
+    return NativeWin32Window{.instance = instance, .window = nativeWindow};
 }
 
-[[nodiscard]] core::Result<NativeWindowHandle> GetX11NativeWindowHandle(
-    SDL_PropertiesID properties, BackendWindowHandle backendWindow)
+NativeWindowHandle MakeX11NativeWindowHandle(BackendWindowHandle backendWindow, void* display, std::int64_t nativeWindow)
 {
-    void* const display =
-        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-    const Sint64 window =
-        SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
-    if (display == nullptr || window <= 0)
+    if (display == nullptr || nativeWindow <= 0)
     {
-        return MakeNativeHandleError(kBackendFailureCode, backendWindow,
-                                     "SDL window is missing X11 native properties.");
+        ThrowMalformedNativeWindowProperties(backendWindow, "SDL window is missing X11 native properties.");
     }
-    if (!std::in_range<std::uintptr_t>(window))
+    if (!std::in_range<std::uintptr_t>(nativeWindow))
     {
-        return MakeNativeHandleError(kBackendFailureCode, backendWindow,
-                                     "SDL X11 window property is too large for uintptr_t.");
+        ThrowMalformedNativeWindowProperties(backendWindow, "SDL X11 window property is too large for uintptr_t.");
     }
 
-    return NativeX11Window{.display = display, .window = static_cast<std::uintptr_t>(window)};
+    return NativeX11Window{.display = display, .window = static_cast<std::uintptr_t>(nativeWindow)};
 }
 
-[[nodiscard]] core::Result<NativeWindowHandle> GetWaylandNativeWindowHandle(
-    SDL_PropertiesID properties, BackendWindowHandle backendWindow)
+NativeWindowHandle MakeWaylandNativeWindowHandle(BackendWindowHandle backendWindow, void* display, void* surface)
 {
-    void* const display =
-        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
-    void* const surface =
-        SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
     if (display == nullptr || surface == nullptr)
     {
-        return MakeNativeHandleError(kBackendFailureCode, backendWindow,
-                                     "SDL window is missing Wayland native properties.");
+        ThrowMalformedNativeWindowProperties(backendWindow, "SDL window is missing Wayland native properties.");
     }
 
     return NativeWaylandWindow{.display = display, .surface = surface};
 }
-} // namespace
 
-core::Result<BackendWindowHandle> SdlWindowBackend::Create(
-    const BackendWindowCreateDesc& desc)
+BackendWindowHandle SdlWindowBackend::Create(const BackendWindowCreateDesc& desc)
 {
     const std::string title{desc.title};
     SDL_Window* const window =
-        SDL_CreateWindow(title.c_str(), desc.logicalSize.width, desc.logicalSize.height,
-                         static_cast<SDL_WindowFlags>(BuildSdlWindowFlags(desc)));
+        SDL_CreateWindow(title.c_str(), desc.logicalSize.width, desc.logicalSize.height, static_cast<SDL_WindowFlags>(BuildSdlWindowFlags(desc)));
     if (window == nullptr)
     {
-        return core::Result<BackendWindowHandle>::FromError(
-            CaptureSdlFailure(kBackendFailureCode, "SDL_CreateWindow", "window"));
+        ThrowWindowBackendFailure("SDL_CreateWindow", "window");
     }
 
     return ToBackendWindowHandle(window);
@@ -216,13 +217,13 @@ void SdlWindowBackend::Destroy(BackendWindowHandle window) noexcept
     SDL_DestroyWindow(ToSdlWindow(window));
 }
 
-core::Result<std::uint32_t> SdlWindowBackend::GetId(BackendWindowHandle window)
+std::uint32_t SdlWindowBackend::GetId(BackendWindowHandle window)
 {
+    const std::string context = GetBackendWindowContext(window);
     const SDL_WindowID id = SDL_GetWindowID(ToSdlWindow(window));
     if (id == 0)
     {
-        return core::Result<std::uint32_t>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetWindowID", GetBackendWindowContext(window)));
+        ThrowWindowBackendFailure("SDL_GetWindowID", context);
     }
 
     return id;
@@ -230,289 +231,275 @@ core::Result<std::uint32_t> SdlWindowBackend::GetId(BackendWindowHandle window)
 
 std::string SdlWindowBackend::GetTitle(BackendWindowHandle window)
 {
+    const std::string context = GetBackendWindowContext(window);
     const char* const title = SDL_GetWindowTitle(ToSdlWindow(window));
-    PONDER_VERIFY(title != nullptr, "SDL returned a null window title");
+    if (title == nullptr)
+    {
+        ThrowWindowBackendFailure("SDL_GetWindowTitle", context);
+    }
     return std::string{title};
 }
 
-core::VoidResult SdlWindowBackend::SetTitle(BackendWindowHandle window,
-                                            std::string_view title)
+void SdlWindowBackend::SetTitle(BackendWindowHandle window, std::string_view title)
 {
     const std::string ownedTitle{title};
-    return ToWindowResult(SDL_SetWindowTitle(ToSdlWindow(window), ownedTitle.c_str()), window,
-                          "SDL_SetWindowTitle");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowTitle(ToSdlWindow(window), ownedTitle.c_str()), "SDL_SetWindowTitle", context);
 }
 
-core::Result<BackendWindowPosition> SdlWindowBackend::GetPosition(
-    BackendWindowHandle window)
+BackendWindowPosition SdlWindowBackend::GetPosition(BackendWindowHandle window)
 {
+    const std::string context = GetBackendWindowContext(window);
     BackendWindowPosition position;
     if (!SDL_GetWindowPosition(ToSdlWindow(window), &position.x, &position.y))
     {
-        return core::Result<BackendWindowPosition>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetWindowPosition", GetBackendWindowContext(window)));
+        ThrowWindowBackendFailure("SDL_GetWindowPosition", context);
     }
     return position;
 }
 
-core::VoidResult SdlWindowBackend::SetPosition(BackendWindowHandle window,
-                                               BackendWindowPosition position)
+void SdlWindowBackend::SetPosition(BackendWindowHandle window, BackendWindowPosition position)
 {
-    return ToWindowResult(SDL_SetWindowPosition(ToSdlWindow(window), position.x, position.y),
-                          window, "SDL_SetWindowPosition");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowPosition(ToSdlWindow(window), position.x, position.y), "SDL_SetWindowPosition", context);
 }
 
-core::Result<BackendWindowLogicalSize> SdlWindowBackend::GetSize(
-    BackendWindowHandle window)
+BackendWindowLogicalSize SdlWindowBackend::GetSize(BackendWindowHandle window)
 {
+    const std::string context = GetBackendWindowContext(window);
     BackendWindowLogicalSize size;
     if (!SDL_GetWindowSize(ToSdlWindow(window), &size.width, &size.height))
     {
-        return core::Result<BackendWindowLogicalSize>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetWindowSize", GetBackendWindowContext(window)));
+        ThrowWindowBackendFailure("SDL_GetWindowSize", context);
     }
     return size;
 }
 
-core::Result<BackendWindowPixelSize> SdlWindowBackend::GetSizeInPixels(
-    BackendWindowHandle window)
+BackendWindowPixelSize SdlWindowBackend::GetSizeInPixels(BackendWindowHandle window)
 {
+    const std::string context = GetBackendWindowContext(window);
     BackendWindowPixelSize size;
     if (!SDL_GetWindowSizeInPixels(ToSdlWindow(window), &size.width, &size.height))
     {
-        return core::Result<BackendWindowPixelSize>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetWindowSizeInPixels", GetBackendWindowContext(window)));
+        ThrowWindowBackendFailure("SDL_GetWindowSizeInPixels", context);
     }
     return size;
 }
 
-core::VoidResult SdlWindowBackend::SetSize(BackendWindowHandle window,
-                                           BackendWindowLogicalSize size)
+void SdlWindowBackend::SetSize(BackendWindowHandle window, BackendWindowLogicalSize size)
 {
-    return ToWindowResult(SDL_SetWindowSize(ToSdlWindow(window), size.width, size.height),
-                          window, "SDL_SetWindowSize");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowSize(ToSdlWindow(window), size.width, size.height), "SDL_SetWindowSize", context);
 }
 
-core::VoidResult SdlWindowBackend::SetMinimumSize(BackendWindowHandle window,
-                                                  BackendWindowLogicalSize size)
+void SdlWindowBackend::SetMinimumSize(BackendWindowHandle window, BackendWindowLogicalSize size)
 {
-    return ToWindowResult(
-        SDL_SetWindowMinimumSize(ToSdlWindow(window), size.width, size.height), window,
-        "SDL_SetWindowMinimumSize");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowMinimumSize(ToSdlWindow(window), size.width, size.height), "SDL_SetWindowMinimumSize", context);
 }
 
-core::VoidResult SdlWindowBackend::Show(BackendWindowHandle window)
+void SdlWindowBackend::Show(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_ShowWindow(ToSdlWindow(window)), window, "SDL_ShowWindow");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_ShowWindow(ToSdlWindow(window)), "SDL_ShowWindow", context);
 }
 
-core::VoidResult SdlWindowBackend::Hide(BackendWindowHandle window)
+void SdlWindowBackend::Hide(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_HideWindow(ToSdlWindow(window)), window, "SDL_HideWindow");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_HideWindow(ToSdlWindow(window)), "SDL_HideWindow", context);
 }
 
-core::Result<BackendWindowProperties> SdlWindowBackend::GetProperties(
-    BackendWindowHandle window)
+BackendWindowProperties SdlWindowBackend::GetProperties(BackendWindowHandle window)
 {
     const SDL_WindowFlags flags = SDL_GetWindowFlags(ToSdlWindow(window));
-    return BackendWindowProperties{
-        .desktopFullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0,
-        .hidden = (flags & SDL_WINDOW_HIDDEN) != 0,
-        .borderless = (flags & SDL_WINDOW_BORDERLESS) != 0,
-        .resizable = (flags & SDL_WINDOW_RESIZABLE) != 0,
-        .minimized = (flags & SDL_WINDOW_MINIMIZED) != 0,
-        .maximized = (flags & SDL_WINDOW_MAXIMIZED) != 0,
-        .inputFocus = (flags & SDL_WINDOW_INPUT_FOCUS) != 0,
-        .alwaysOnTop = (flags & SDL_WINDOW_ALWAYS_ON_TOP) != 0};
+    return BackendWindowProperties{.desktopFullscreen = (flags & SDL_WINDOW_FULLSCREEN) != 0,
+                                   .hidden = (flags & SDL_WINDOW_HIDDEN) != 0,
+                                   .borderless = (flags & SDL_WINDOW_BORDERLESS) != 0,
+                                   .resizable = (flags & SDL_WINDOW_RESIZABLE) != 0,
+                                   .minimized = (flags & SDL_WINDOW_MINIMIZED) != 0,
+                                   .maximized = (flags & SDL_WINDOW_MAXIMIZED) != 0,
+                                   .inputFocus = (flags & SDL_WINDOW_INPUT_FOCUS) != 0,
+                                   .alwaysOnTop = (flags & SDL_WINDOW_ALWAYS_ON_TOP) != 0};
 }
 
-core::VoidResult SdlWindowBackend::SetFullscreenModeToDesktop(
-    BackendWindowHandle window)
+void SdlWindowBackend::SetFullscreenModeToDesktop(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_SetWindowFullscreenMode(ToSdlWindow(window), nullptr), window,
-                          "SDL_SetWindowFullscreenMode");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowFullscreenMode(ToSdlWindow(window), nullptr), "SDL_SetWindowFullscreenMode", context);
 }
 
-core::VoidResult SdlWindowBackend::SetFullscreen(BackendWindowHandle window, bool fullscreen)
+void SdlWindowBackend::SetFullscreen(BackendWindowHandle window, bool fullscreen)
 {
-    return ToWindowResult(SDL_SetWindowFullscreen(ToSdlWindow(window), fullscreen), window,
-                          "SDL_SetWindowFullscreen");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowFullscreen(ToSdlWindow(window), fullscreen), "SDL_SetWindowFullscreen", context);
 }
 
-core::VoidResult SdlWindowBackend::SetBordered(BackendWindowHandle window, bool bordered)
+void SdlWindowBackend::SetBordered(BackendWindowHandle window, bool bordered)
 {
     SDL_Window* const sdlWindow = ToSdlWindow(window);
-    const bool currentlyBordered =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
+    const bool currentlyBordered = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
     if (currentlyBordered == bordered)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    RETURN_ERROR_IF_FAILED(ToWindowResult(SDL_SetWindowBordered(sdlWindow, bordered), window,
-                                          "SDL_SetWindowBordered"));
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowBordered(sdlWindow, bordered), "SDL_SetWindowBordered", context);
 
     const bool nowBordered = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_BORDERLESS) == 0;
-    return nowBordered == bordered
-               ? core::VoidResult::Success()
-               : MakeUnsupportedWindowOperation(window, "SDL_SetWindowBordered");
+    if (nowBordered != bordered)
+    {
+        ThrowUnsupportedWindowOperation(window, "SDL_SetWindowBordered");
+    }
 }
 
-core::VoidResult SdlWindowBackend::SetResizable(BackendWindowHandle window, bool resizable)
+void SdlWindowBackend::SetResizable(BackendWindowHandle window, bool resizable)
 {
     SDL_Window* const sdlWindow = ToSdlWindow(window);
-    const bool currentlyResizable =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
+    const bool currentlyResizable = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
     if (currentlyResizable == resizable)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    RETURN_ERROR_IF_FAILED(ToWindowResult(SDL_SetWindowResizable(sdlWindow, resizable), window,
-                                          "SDL_SetWindowResizable"));
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowResizable(sdlWindow, resizable), "SDL_SetWindowResizable", context);
 
     const bool nowResizable = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_RESIZABLE) != 0;
-    return nowResizable == resizable
-               ? core::VoidResult::Success()
-               : MakeUnsupportedWindowOperation(window, "SDL_SetWindowResizable");
+    if (nowResizable != resizable)
+    {
+        ThrowUnsupportedWindowOperation(window, "SDL_SetWindowResizable");
+    }
 }
 
-core::VoidResult SdlWindowBackend::SetAlwaysOnTop(BackendWindowHandle window,
-                                                  bool alwaysOnTop)
+void SdlWindowBackend::SetAlwaysOnTop(BackendWindowHandle window, bool alwaysOnTop)
 {
     SDL_Window* const sdlWindow = ToSdlWindow(window);
-    const bool currentlyAlwaysOnTop =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+    const bool currentlyAlwaysOnTop = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
     if (currentlyAlwaysOnTop == alwaysOnTop)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    RETURN_ERROR_IF_FAILED(ToWindowResult(
-        SDL_SetWindowAlwaysOnTop(sdlWindow, alwaysOnTop), window,
-        "SDL_SetWindowAlwaysOnTop"));
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowAlwaysOnTop(sdlWindow, alwaysOnTop), "SDL_SetWindowAlwaysOnTop", context);
 
-    const bool nowAlwaysOnTop =
-        (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
-    return nowAlwaysOnTop == alwaysOnTop
-               ? core::VoidResult::Success()
-               : MakeUnsupportedWindowOperation(window, "SDL_SetWindowAlwaysOnTop");
+    const bool nowAlwaysOnTop = (SDL_GetWindowFlags(sdlWindow) & SDL_WINDOW_ALWAYS_ON_TOP) != 0;
+    if (nowAlwaysOnTop != alwaysOnTop)
+    {
+        ThrowUnsupportedWindowOperation(window, "SDL_SetWindowAlwaysOnTop");
+    }
 }
 
-core::VoidResult SdlWindowBackend::Minimize(BackendWindowHandle window)
+void SdlWindowBackend::Minimize(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_MinimizeWindow(ToSdlWindow(window)), window,
-                          "SDL_MinimizeWindow");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_MinimizeWindow(ToSdlWindow(window)), "SDL_MinimizeWindow", context);
 }
 
-core::VoidResult SdlWindowBackend::Maximize(BackendWindowHandle window)
+void SdlWindowBackend::Maximize(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_MaximizeWindow(ToSdlWindow(window)), window,
-                          "SDL_MaximizeWindow");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_MaximizeWindow(ToSdlWindow(window)), "SDL_MaximizeWindow", context);
 }
 
-core::VoidResult SdlWindowBackend::Restore(BackendWindowHandle window)
+void SdlWindowBackend::Restore(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_RestoreWindow(ToSdlWindow(window)), window,
-                          "SDL_RestoreWindow");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_RestoreWindow(ToSdlWindow(window)), "SDL_RestoreWindow", context);
 }
 
-core::VoidResult SdlWindowBackend::StartTextInput(BackendWindowHandle window)
+void SdlWindowBackend::StartTextInput(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_StartTextInput(ToSdlWindow(window)), window,
-                          "SDL_StartTextInput");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_StartTextInput(ToSdlWindow(window)), "SDL_StartTextInput", context);
 }
 
-core::VoidResult SdlWindowBackend::StopTextInput(BackendWindowHandle window)
+void SdlWindowBackend::StopTextInput(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_StopTextInput(ToSdlWindow(window)), window,
-                          "SDL_StopTextInput");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_StopTextInput(ToSdlWindow(window)), "SDL_StopTextInput", context);
 }
 
-bool SdlWindowBackend::IsTextInputActive(BackendWindowHandle window)
+bool SdlWindowBackend::IsTextInputActive(BackendWindowHandle window) noexcept
 {
     return SDL_TextInputActive(ToSdlWindow(window));
 }
 
-core::VoidResult SdlWindowBackend::ClearTextComposition(BackendWindowHandle window)
+void SdlWindowBackend::ClearTextComposition(BackendWindowHandle window)
 {
-    return ToWindowResult(SDL_ClearComposition(ToSdlWindow(window)), window,
-                          "SDL_ClearComposition");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_ClearComposition(ToSdlWindow(window)), "SDL_ClearComposition", context);
 }
 
-core::VoidResult SdlWindowBackend::SetTextInputArea(
-    BackendWindowHandle window, std::optional<BackendTextInputArea> area)
+void SdlWindowBackend::SetTextInputArea(BackendWindowHandle window, std::optional<BackendTextInputArea> area)
 {
     SDL_Window* const sdlWindow = ToSdlWindow(window);
+    const std::string context = GetBackendWindowContext(window);
     if (!area.has_value())
     {
-        return ToWindowResult(SDL_SetTextInputArea(sdlWindow, nullptr, 0), window,
-                              "SDL_SetTextInputArea");
+        ThrowIfWindowOperationFailed(SDL_SetTextInputArea(sdlWindow, nullptr, 0), "SDL_SetTextInputArea", context);
+        return;
     }
 
     const SDL_Rect rectangle{area->x, area->y, area->width, area->height};
-    return ToWindowResult(
-        SDL_SetTextInputArea(sdlWindow, &rectangle, area->cursorOffset), window,
-        "SDL_SetTextInputArea");
+    ThrowIfWindowOperationFailed(SDL_SetTextInputArea(sdlWindow, &rectangle, area->cursorOffset), "SDL_SetTextInputArea", context);
 }
 
-core::VoidResult SdlWindowBackend::SetMouseGrab(BackendWindowHandle window, bool grabbed)
+void SdlWindowBackend::SetMouseGrab(BackendWindowHandle window, bool grabbed)
 {
-    return ToWindowResult(SDL_SetWindowMouseGrab(ToSdlWindow(window), grabbed), window,
-                          "SDL_SetWindowMouseGrab");
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowMouseGrab(ToSdlWindow(window), grabbed), "SDL_SetWindowMouseGrab", context);
 }
 
-bool SdlWindowBackend::IsMouseGrabbed(BackendWindowHandle window)
+bool SdlWindowBackend::IsMouseGrabbed(BackendWindowHandle window) noexcept
 {
     return SDL_GetWindowMouseGrab(ToSdlWindow(window));
 }
 
-core::VoidResult SdlWindowBackend::SetRelativeMouseMode(BackendWindowHandle window,
-                                                        bool enabled)
+void SdlWindowBackend::SetRelativeMouseMode(BackendWindowHandle window, bool enabled)
 {
     SDL_Window* const sdlWindow = ToSdlWindow(window);
     if (SDL_GetWindowRelativeMouseMode(sdlWindow) == enabled)
     {
-        return core::VoidResult::Success();
+        return;
     }
 
-    RETURN_ERROR_IF_FAILED(ToWindowResult(
-        SDL_SetWindowRelativeMouseMode(sdlWindow, enabled), window,
-        "SDL_SetWindowRelativeMouseMode"));
+    const std::string context = GetBackendWindowContext(window);
+    ThrowIfWindowOperationFailed(SDL_SetWindowRelativeMouseMode(sdlWindow, enabled), "SDL_SetWindowRelativeMouseMode", context);
 
-    return SDL_GetWindowRelativeMouseMode(sdlWindow) == enabled
-               ? core::VoidResult::Success()
-               : MakeUnsupportedWindowOperation(window, "SDL_SetWindowRelativeMouseMode");
+    if (SDL_GetWindowRelativeMouseMode(sdlWindow) != enabled)
+    {
+        ThrowUnsupportedWindowOperation(window, "SDL_SetWindowRelativeMouseMode");
+    }
 }
 
-bool SdlWindowBackend::IsRelativeMouseModeEnabled(BackendWindowHandle window)
+bool SdlWindowBackend::IsRelativeMouseModeEnabled(BackendWindowHandle window) noexcept
 {
     return SDL_GetWindowRelativeMouseMode(ToSdlWindow(window));
 }
 
-core::Result<NativeWindowHandle> SdlWindowBackend::GetNativeHandle(
-    BackendWindowHandle window)
+ponder::core::Result<NativeWindowHandle> SdlWindowBackend::GetNativeHandle(BackendWindowHandle window)
 {
     const char* const currentDriver = SDL_GetCurrentVideoDriver();
     if (currentDriver == nullptr)
     {
-        return MakeNativeHandleError(kBackendFailureCode, window,
-                                     "SDL current video driver is unavailable.");
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::BackendFailure, "SDL current video driver is unavailable. Context: {}.",
+                                 GetBackendWindowContext(window));
     }
 
     const BackendNativeWindowDriver driver = GetNativeWindowDriver(currentDriver);
     if (driver == BackendNativeWindowDriver::Unsupported)
     {
-        return MakeNativeHandleError(
-            kUnsupportedCode, window,
-            "Native window handles are unsupported by this SDL video driver.");
+        return MakeUnsupportedNativeHandleError(window, "Native window handles are unsupported by this SDL video driver.");
     }
 
+    const std::string context = GetBackendWindowContext(window);
     const SDL_PropertiesID properties = SDL_GetWindowProperties(ToSdlWindow(window));
     if (properties == 0)
     {
-        return core::Result<NativeWindowHandle>::FromError(CaptureSdlFailure(
-            kBackendFailureCode, "SDL_GetWindowProperties", GetBackendWindowContext(window)));
+        ThrowWindowBackendFailure("SDL_GetWindowProperties", context);
     }
 
     switch (driver)
@@ -527,8 +514,6 @@ core::Result<NativeWindowHandle> SdlWindowBackend::GetNativeHandle(
         break;
     }
 
-    return MakeNativeHandleError(
-        kUnsupportedCode, window,
-        "Native window handles are unsupported by this SDL video driver.");
+    return MakeUnsupportedNativeHandleError(window, "Native window handles are unsupported by this SDL video driver.");
 }
-} // namespace pond::platform::detail
+} // namespace ponder::platform::detail

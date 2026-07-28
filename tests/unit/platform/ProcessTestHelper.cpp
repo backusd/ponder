@@ -1,4 +1,5 @@
 #include <chrono>
+#include <csignal>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,16 +26,14 @@ namespace
     }
 
     const int requiredBytes =
-        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(),
-                            static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
     if (requiredBytes <= 0)
     {
         return {};
     }
 
     std::string result(static_cast<std::size_t>(requiredBytes), '\0');
-    const int writtenBytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(),
-                                                 static_cast<int>(text.size()), result.data(),
+    const int writtenBytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(),
                                                  requiredBytes, nullptr, nullptr);
     if (writtenBytes != requiredBytes)
     {
@@ -75,8 +74,7 @@ namespace
     return file.good();
 }
 
-[[nodiscard]] bool WriteArguments(const std::filesystem::path& path,
-                                  const std::vector<std::string>& arguments, int firstArgument)
+[[nodiscard]] bool WriteArguments(const std::filesystem::path& path, const std::vector<std::string>& arguments, int firstArgument)
 {
     if (path.has_parent_path())
     {
@@ -105,6 +103,7 @@ int RunHelper(const std::vector<std::string>& arguments)
     std::optional<std::filesystem::path> touchAfterSleepPath;
     int sleepMilliseconds{};
     int exitCode{};
+    int signalToRaise{};
     int firstPassthroughArgument = argc;
 
     for (int index = 1; index < argc;)
@@ -151,6 +150,14 @@ int RunHelper(const std::vector<std::string>& arguments)
                 return 2;
             }
         }
+        else if (argument == "--raise-signal")
+        {
+            if (!ParseInt(value, signalToRaise) || signalToRaise <= 0)
+            {
+                std::cerr << "Invalid signal: " << value << '\n';
+                return 2;
+            }
+        }
         else
         {
             std::cerr << "Unknown argument: " << argument << '\n';
@@ -160,8 +167,7 @@ int RunHelper(const std::vector<std::string>& arguments)
         index += 2;
     }
 
-    if (writeArgumentsPath.has_value() &&
-        !WriteArguments(*writeArgumentsPath, arguments, firstPassthroughArgument))
+    if (writeArgumentsPath.has_value() && !WriteArguments(*writeArgumentsPath, arguments, firstPassthroughArgument))
     {
         std::cerr << "Unable to write argument file\n";
         return 3;
@@ -176,6 +182,15 @@ int RunHelper(const std::vector<std::string>& arguments)
     if (sleepMilliseconds > 0)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds{sleepMilliseconds});
+    }
+
+    if (signalToRaise > 0)
+    {
+        if (std::raise(signalToRaise) != 0)
+        {
+            std::cerr << "Unable to raise signal: " << signalToRaise << '\n';
+        }
+        return 4;
     }
 
     if (touchAfterSleepPath.has_value() && !TouchFile(*touchAfterSleepPath))

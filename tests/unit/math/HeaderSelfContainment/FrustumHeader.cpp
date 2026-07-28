@@ -4,8 +4,7 @@ namespace
 {
 [[nodiscard]] constexpr bool EmptyOptionalFrustumPlaneIsConstantEvaluable()
 {
-    const auto plane = pond::math::detail::CreateOptionalFrustumPlane(
-        pond::math::detail::FrustumPlaneCoefficients{0.0, 0.0, 0.0, 1.0});
+    const auto plane = pond::math::detail::CreateOptionalFrustumPlane(pond::math::detail::FrustumPlaneCoefficients{0.0, 0.0, 0.0, 1.0});
     return plane.HasValue() && !plane.GetValue().has_value();
 }
 

@@ -22,16 +22,11 @@ static_assert(!std::copy_constructible<PaintRecorder>);
 static_assert(std::move_constructible<PaintRecorder>);
 static_assert(!std::copy_constructible<SealedPaintList>);
 static_assert(std::move_constructible<SealedPaintList>);
-static_assert(std::is_same_v<decltype(std::declval<const SealedPaintList&>().GetCommands()),
-                             std::span<const PaintCommandRecord>>);
-static_assert(std::is_same_v<decltype(std::declval<const SealedPaintList&>().GetFillRectangles()),
-                             std::span<const FillRectangleCommand>>);
-static_assert(
-    std::is_same_v<decltype(std::declval<const SealedPaintList&>().GetPushClipRectangles()),
-                   std::span<const PushClipRectangleCommand>>);
+static_assert(std::is_same_v<decltype(std::declval<const SealedPaintList&>().GetCommands()), std::span<const PaintCommandRecord>>);
+static_assert(std::is_same_v<decltype(std::declval<const SealedPaintList&>().GetFillRectangles()), std::span<const FillRectangleCommand>>);
+static_assert(std::is_same_v<decltype(std::declval<const SealedPaintList&>().GetPushClipRectangles()), std::span<const PushClipRectangleCommand>>);
 
-[[nodiscard]] pond::ui::SrgbStraightAlphaColor MakeColor(float red, float green, float blue,
-                                                         float alpha)
+[[nodiscard]] pond::ui::SrgbStraightAlphaColor MakeColor(float red, float green, float blue, float alpha)
 {
     auto color = pond::ui::MakeSrgbStraightAlphaColor(red, green, blue, alpha);
     EXPECT_TRUE(color.HasValue());
@@ -64,14 +59,9 @@ TEST(UiPaintRecorderTests, RecordsOrderedMixedCommandsWithStableIndices)
 {
     PaintRecorder recorder{MakeRecorderTestLimits()};
 
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 20.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 20.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(1.0F, 2.0F, 9.0F, 18.0F)).HasValue());
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(2.0F, 3.0F, 8.0F, 17.0F), MakeColor(0.0F, 1.0F, 0.0F, 0.5F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(2.0F, 3.0F, 8.0F, 17.0F), MakeColor(0.0F, 1.0F, 0.0F, 0.5F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
 
     auto sealedResult = recorder.Seal();
@@ -83,8 +73,7 @@ TEST(UiPaintRecorderTests, RecordsOrderedMixedCommandsWithStableIndices)
     EXPECT_EQ(commands[0], (PaintCommandRecord{0U, PaintCommandKind::FillRectangle, 0U}));
     EXPECT_EQ(commands[1], (PaintCommandRecord{1U, PaintCommandKind::PushClipRectangle, 0U}));
     EXPECT_EQ(commands[2], (PaintCommandRecord{2U, PaintCommandKind::FillRectangle, 1U}));
-    EXPECT_EQ(commands[3], (PaintCommandRecord{3U, PaintCommandKind::PopClip,
-                                               pond::ui::paint::kNoPaintPayloadIndex}));
+    EXPECT_EQ(commands[3], (PaintCommandRecord{3U, PaintCommandKind::PopClip, pond::ui::paint::kNoPaintPayloadIndex}));
 
     const std::span<const FillRectangleCommand> fills = sealed.GetFillRectangles();
     ASSERT_EQ(fills.size(), 2U);
@@ -110,24 +99,20 @@ TEST(UiPaintRecorderTests, RejectsInvalidFillsBeforeStateChange)
     PaintRecorder recorder{MakeRecorderTestLimits()};
 
     const auto negativeExtent = recorder.FillRectangle(
-        pond::ui::LogicalRect{.origin = pond::ui::LogicalPoint{},
-                              .size = pond::ui::LogicalSize{.width = -1.0F, .height = 2.0F}},
+        pond::ui::LogicalRect{.origin = pond::ui::LogicalPoint{}, .size = pond::ui::LogicalSize{.width = -1.0F, .height = 2.0F}},
         MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
     ASSERT_FALSE(negativeExtent.HasValue());
     ExpectUiErrorCode(negativeExtent.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
-    const auto nonFinite = recorder.FillRectangle(
-        pond::ui::LogicalRect{
-            .origin = pond::ui::LogicalPoint{.x = 0.0F, .y = 0.0F},
-            .size = pond::ui::LogicalSize{.width = std::numeric_limits<float>::infinity(),
-                                          .height = 2.0F}},
-        MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
+    const auto nonFinite =
+        recorder.FillRectangle(pond::ui::LogicalRect{.origin = pond::ui::LogicalPoint{.x = 0.0F, .y = 0.0F},
+                                                     .size = pond::ui::LogicalSize{.width = std::numeric_limits<float>::infinity(), .height = 2.0F}},
+                               MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
     ASSERT_FALSE(nonFinite.HasValue());
     ExpectUiErrorCode(nonFinite.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
-    const auto invalidColor = recorder.FillRectangle(
-        MakeRect(0.0F, 0.0F, 1.0F, 1.0F),
-        pond::ui::SrgbStraightAlphaColor{.red = 1.1F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F});
+    const auto invalidColor = recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F),
+                                                     pond::ui::SrgbStraightAlphaColor{.red = 1.1F, .green = 0.0F, .blue = 0.0F, .alpha = 1.0F});
     ASSERT_FALSE(invalidColor.HasValue());
     ExpectUiErrorCode(invalidColor.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
@@ -139,12 +124,8 @@ TEST(UiPaintRecorderTests, RecordsZeroAreaAndTransparentFillsAsValidatedNoOps)
 {
     PaintRecorder recorder{MakeRecorderTestLimits()};
 
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 0.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(1.0F, 1.0F, 4.0F, 5.0F), MakeColor(0.0F, 0.0F, 1.0F, 0.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 0.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(1.0F, 1.0F, 4.0F, 5.0F), MakeColor(0.0F, 0.0F, 1.0F, 0.0F)).HasValue());
 
     auto sealedResult = recorder.Seal();
     ASSERT_TRUE(sealedResult.HasValue());
@@ -192,14 +173,11 @@ TEST(UiPaintRecorderTests, EnforcesClipSentinelAndFinalBalanceTransactionally)
 TEST(UiPaintRecorderTests, RejectsMutationAfterSealUntilReset)
 {
     PaintRecorder recorder{MakeRecorderTestLimits()};
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F)).HasValue());
     auto sealed = recorder.Seal();
     ASSERT_TRUE(sealed.HasValue());
 
-    const auto fillAfterSeal =
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
+    const auto fillAfterSeal = recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
     ASSERT_FALSE(fillAfterSeal.HasValue());
     ExpectUiErrorCode(fillAfterSeal.GetError(), pond::ui::UiErrorCode::InvalidPaintState);
 
@@ -213,9 +191,7 @@ TEST(UiPaintRecorderTests, RejectsMutationAfterSealUntilReset)
 
     recorder.Reset();
     EXPECT_TRUE(recorder.IsOpen());
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(2.0F, 2.0F, 3.0F, 3.0F), MakeColor(0.0F, 1.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(2.0F, 2.0F, 3.0F, 3.0F), MakeColor(0.0F, 1.0F, 1.0F, 1.0F)).HasValue());
     auto resealed = recorder.Seal();
     ASSERT_TRUE(resealed.HasValue());
     EXPECT_EQ(resealed->GetCommands()[0].index, 0U);
@@ -226,12 +202,8 @@ TEST(UiPaintRecorderTests, EnforcesCommandPayloadAndClipDepthLimitsBeforeGrowth)
     pond::ui::UiHardLimits commandLimited = MakeRecorderTestLimits();
     commandLimited.maxPaintCommandCount = 1U;
     PaintRecorder commandRecorder{commandLimited};
-    ASSERT_TRUE(
-        commandRecorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
-    const auto commandLimit = commandRecorder.FillRectangle(MakeRect(1.0F, 1.0F, 2.0F, 2.0F),
-                                                            MakeColor(0.0F, 1.0F, 0.0F, 1.0F));
+    ASSERT_TRUE(commandRecorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
+    const auto commandLimit = commandRecorder.FillRectangle(MakeRect(1.0F, 1.0F, 2.0F, 2.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F));
     ASSERT_FALSE(commandLimit.HasValue());
     ExpectUiErrorCode(commandLimit.GetError(), pond::ui::UiErrorCode::LimitExceeded);
     EXPECT_EQ(commandRecorder.GetSnapshot().stats.commandCount, 1U);
@@ -239,8 +211,7 @@ TEST(UiPaintRecorderTests, EnforcesCommandPayloadAndClipDepthLimitsBeforeGrowth)
     pond::ui::UiHardLimits payloadLimited = MakeRecorderTestLimits();
     payloadLimited.maxPaintCommandPayloadBytes = sizeof(FillRectangleCommand) - 1U;
     PaintRecorder payloadRecorder{payloadLimited};
-    const auto payloadLimit = payloadRecorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F),
-                                                            MakeColor(1.0F, 0.0F, 0.0F, 1.0F));
+    const auto payloadLimit = payloadRecorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F));
     ASSERT_FALSE(payloadLimit.HasValue());
     ExpectUiErrorCode(payloadLimit.GetError(), pond::ui::UiErrorCode::LimitExceeded);
     EXPECT_EQ(payloadRecorder.GetSnapshot().stats.commandCount, 0U);
@@ -259,9 +230,7 @@ TEST(UiPaintRecorderTests, EnforcesCommandPayloadAndClipDepthLimitsBeforeGrowth)
 TEST(UiPaintRecorderTests, MovesRecorderAndSealedListWithoutBorrowingSourceStorage)
 {
     PaintRecorder recorder{MakeRecorderTestLimits()};
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 5.0F, 5.0F), MakeColor(1.0F, 0.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 5.0F, 5.0F), MakeColor(1.0F, 0.0F, 1.0F, 1.0F)).HasValue());
 
     PaintRecorder movedRecorder = std::move(recorder);
     EXPECT_TRUE(recorder.IsOpen());
@@ -270,10 +239,7 @@ TEST(UiPaintRecorderTests, MovesRecorderAndSealedListWithoutBorrowingSourceStora
     EXPECT_EQ(movedFromRecorder.stats.payloadBytes, 0U);
     EXPECT_EQ(movedFromRecorder.stats.clipDepth, 1U);
     EXPECT_EQ(movedFromRecorder.stats.maxClipDepthObserved, 1U);
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(10.0F, 10.0F, 12.0F, 12.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(10.0F, 10.0F, 12.0F, 12.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F)).HasValue());
     auto movedFromSeal = recorder.Seal();
     ASSERT_TRUE(movedFromSeal.HasValue());
     EXPECT_EQ(movedFromSeal->GetStats().commandCount, 1U);
@@ -300,9 +266,7 @@ TEST(UiPaintRecorderTests, MovesRecorderAndSealedListWithoutBorrowingSourceStora
 TEST(UiPaintRecorderTests, ResetPreservesCapacityAndRestartsCommandIndices)
 {
     PaintRecorder recorder{MakeRecorderTestLimits()};
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
     const auto beforeReset = recorder.GetSnapshot();
@@ -317,9 +281,7 @@ TEST(UiPaintRecorderTests, ResetPreservesCapacityAndRestartsCommandIndices)
     EXPECT_GE(afterReset.fillRectangleCapacity, beforeReset.fillRectangleCapacity);
     EXPECT_GE(afterReset.pushClipRectangleCapacity, beforeReset.pushClipRectangleCapacity);
 
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(2.0F, 2.0F, 4.0F, 4.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(2.0F, 2.0F, 4.0F, 4.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F)).HasValue());
     auto sealed = recorder.Seal();
     ASSERT_TRUE(sealed.HasValue());
     EXPECT_EQ(sealed->GetCommands()[0].index, 0U);
@@ -332,10 +294,7 @@ TEST(UiPaintRecorderTests, SealIntoReusesEveryWarmedOutputStream)
     const auto recordPaint = [&]
     {
         ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(0.0F, 0.0F, 8.0F, 8.0F)).HasValue());
-        ASSERT_TRUE(recorder
-                        .FillRectangle(MakeRect(1.0F, 2.0F, 5.0F, 6.0F),
-                                       MakeColor(0.25F, 0.5F, 0.75F, 1.0F))
-                        .HasValue());
+        ASSERT_TRUE(recorder.FillRectangle(MakeRect(1.0F, 2.0F, 5.0F, 6.0F), MakeColor(0.25F, 0.5F, 0.75F, 1.0F)).HasValue());
         ASSERT_TRUE(recorder.PopClip().HasValue());
     };
 
@@ -359,19 +318,13 @@ TEST(UiPaintRecorderTests, SealIntoReusesEveryWarmedOutputStream)
 TEST(UiPaintRecorderTests, SealedListOwnsImmutableDataAfterRecorderReset)
 {
     PaintRecorder recorder{MakeRecorderTestLimits()};
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 4.0F, 4.0F), MakeColor(0.25F, 0.5F, 0.75F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 4.0F, 4.0F), MakeColor(0.25F, 0.5F, 0.75F, 1.0F)).HasValue());
 
     auto sealedResult = recorder.Seal();
     ASSERT_TRUE(sealedResult.HasValue());
     SealedPaintList sealed = std::move(sealedResult).GetValue();
     recorder.Reset();
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(10.0F, 10.0F, 12.0F, 12.0F), MakeColor(1.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(10.0F, 10.0F, 12.0F, 12.0F), MakeColor(1.0F, 1.0F, 0.0F, 1.0F)).HasValue());
 
     ASSERT_EQ(sealed.GetCommands().size(), 1U);
     ASSERT_EQ(sealed.GetFillRectangles().size(), 1U);
@@ -386,8 +339,7 @@ TEST(UiPaintRecorderTests, RejectsInvalidHardLimitsWithoutChangingState)
     invalidLimits.maxCompilerScratchBytes = 0U;
     PaintRecorder recorder{invalidLimits};
 
-    const auto fill =
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
+    const auto fill = recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F));
     ASSERT_FALSE(fill.HasValue());
     ExpectUiErrorCode(fill.GetError(), pond::ui::UiErrorCode::InvalidPaintValue);
 
@@ -405,14 +357,11 @@ TEST(UiPaintRecorderTests, AcceptsExactPayloadAndClipLimits)
 {
     pond::ui::UiHardLimits limits = MakeRecorderTestLimits();
     limits.maxPaintCommandCount = 3U;
-    limits.maxPaintCommandPayloadBytes =
-        sizeof(FillRectangleCommand) + sizeof(PushClipRectangleCommand);
+    limits.maxPaintCommandPayloadBytes = sizeof(FillRectangleCommand) + sizeof(PushClipRectangleCommand);
     limits.maxClipDepth = 2U;
     PaintRecorder recorder{limits};
 
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F)).HasValue());
 
     const auto excessClip = recorder.PushClipRectangle(MakeRect(0.0F, 0.0F, 1.0F, 1.0F));
@@ -432,10 +381,7 @@ TEST(UiPaintRecorderTests, RecordsEmptyClipAsValidatedSemanticState)
     PaintRecorder recorder{MakeRecorderTestLimits()};
 
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(2.0F, 3.0F, 2.0F, 8.0F)).HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.5F, 0.25F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.5F, 0.25F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
 
     auto sealed = recorder.Seal();

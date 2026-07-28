@@ -40,8 +40,7 @@ struct FillRectangleCommand final
     bool isZeroArea{};
     bool isTransparent{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const FillRectangleCommand& lhs, const FillRectangleCommand& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const FillRectangleCommand& lhs, const FillRectangleCommand& rhs) noexcept = default;
 };
 
 struct PushClipRectangleCommand final
@@ -49,9 +48,7 @@ struct PushClipRectangleCommand final
     LogicalRect rectangle{};
     bool isZeroArea{};
 
-    [[nodiscard]] friend constexpr bool operator==(const PushClipRectangleCommand& lhs,
-                                                   const PushClipRectangleCommand& rhs) noexcept =
-        default;
+    [[nodiscard]] friend constexpr bool operator==(const PushClipRectangleCommand& lhs, const PushClipRectangleCommand& rhs) noexcept = default;
 };
 
 struct PaintCommandRecord final
@@ -60,8 +57,7 @@ struct PaintCommandRecord final
     PaintCommandKind kind{};
     std::uint64_t payloadIndex{kNoPaintPayloadIndex};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const PaintCommandRecord& lhs, const PaintCommandRecord& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const PaintCommandRecord& lhs, const PaintCommandRecord& rhs) noexcept = default;
 };
 
 struct PaintListStats final
@@ -75,8 +71,7 @@ struct PaintListStats final
     std::uint64_t clipDepth{};
     std::uint64_t maxClipDepthObserved{};
 
-    [[nodiscard]] friend constexpr bool operator==(const PaintListStats& lhs,
-                                                   const PaintListStats& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const PaintListStats& lhs, const PaintListStats& rhs) noexcept = default;
 };
 
 struct PaintRecorderSnapshot final
@@ -86,8 +81,7 @@ struct PaintRecorderSnapshot final
     std::uint64_t fillRectangleCapacity{};
     std::uint64_t pushClipRectangleCapacity{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const PaintRecorderSnapshot& lhs, const PaintRecorderSnapshot& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const PaintRecorderSnapshot& lhs, const PaintRecorderSnapshot& rhs) noexcept = default;
 };
 
 class SealedPaintList final
@@ -126,8 +120,7 @@ public:
     PaintRecorder& operator=(PaintRecorder&& other) noexcept;
     ~PaintRecorder() = default;
 
-    [[nodiscard]] core::VoidResult FillRectangle(LogicalRect rectangle,
-                                                 SrgbStraightAlphaColor color);
+    [[nodiscard]] core::VoidResult FillRectangle(LogicalRect rectangle, SrgbStraightAlphaColor color);
     [[nodiscard]] core::VoidResult PushClipRectangle(LogicalRect rectangle);
     [[nodiscard]] core::VoidResult PopClip();
     [[nodiscard]] core::Result<SealedPaintList> Seal();
@@ -143,18 +136,11 @@ public:
 
 private:
     [[nodiscard]] core::VoidResult EnsureOpen() const;
-    [[nodiscard]] core::VoidResult CheckCommandLimit(
-        std::uint64_t requested,
-        std::source_location location = std::source_location::current()) const;
-    [[nodiscard]] core::VoidResult CheckPayloadLimit(
-        std::uint64_t requested,
-        std::source_location location = std::source_location::current()) const;
-    [[nodiscard]] core::VoidResult CheckClipDepthLimit(
-        std::uint64_t requested,
-        std::source_location location = std::source_location::current()) const;
-    [[nodiscard]] core::VoidResult ReserveForAppend(std::uint64_t nextCommandCount,
-                                                    std::uint64_t nextFillCount,
-                                                    std::uint64_t nextClipCount);
+    [[nodiscard]] core::VoidResult CheckCommandLimit(std::uint64_t requested, std::source_location location = std::source_location::current()) const;
+    [[nodiscard]] core::VoidResult CheckPayloadLimit(std::uint64_t requested, std::source_location location = std::source_location::current()) const;
+    [[nodiscard]] core::VoidResult CheckClipDepthLimit(std::uint64_t requested,
+                                                       std::source_location location = std::source_location::current()) const;
+    [[nodiscard]] core::VoidResult ReserveForAppend(std::uint64_t nextCommandCount, std::uint64_t nextFillCount, std::uint64_t nextClipCount);
     [[nodiscard]] PaintListStats MakeStats() const noexcept;
 
     UiHardLimits m_limits{};

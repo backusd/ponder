@@ -46,8 +46,7 @@ static_assert(sizeof(draw2d::Draw2DDrawRecord) == 28U);
     return *result;
 }
 
-[[nodiscard]] pond::ui::SrgbStraightAlphaColor MakeColor(float red, float green, float blue,
-                                                         float alpha)
+[[nodiscard]] pond::ui::SrgbStraightAlphaColor MakeColor(float red, float green, float blue, float alpha)
 {
     const auto result = pond::ui::MakeSrgbStraightAlphaColor(red, green, blue, alpha);
     if (!result.HasValue())
@@ -58,14 +57,11 @@ static_assert(sizeof(draw2d::Draw2DDrawRecord) == 28U);
     return *result;
 }
 
-[[nodiscard]] pond::ui::UiTargetMetrics MakeMetrics(float logicalWidth, float logicalHeight,
-                                                    std::uint32_t pixelWidth,
-                                                    std::uint32_t pixelHeight)
+[[nodiscard]] pond::ui::UiTargetMetrics MakeMetrics(float logicalWidth, float logicalHeight, std::uint32_t pixelWidth, std::uint32_t pixelHeight)
 {
-    const auto result = pond::ui::MakeUiTargetMetrics(
-        pond::ui::UiTargetId{7U}, pond::ui::UiTargetRevision{11U}, pond::ui::UiMetricsRevision{13U},
-        pond::ui::LogicalSize{.width = logicalWidth, .height = logicalHeight},
-        pond::ui::FramebufferPixelSize{.width = pixelWidth, .height = pixelHeight});
+    const auto result = pond::ui::MakeUiTargetMetrics(pond::ui::UiTargetId{7U}, pond::ui::UiTargetRevision{11U}, pond::ui::UiMetricsRevision{13U},
+                                                      pond::ui::LogicalSize{.width = logicalWidth, .height = logicalHeight},
+                                                      pond::ui::FramebufferPixelSize{.width = pixelWidth, .height = pixelHeight});
     if (!result.HasValue())
     {
         ADD_FAILURE() << "Failed to make target metrics: " << result.GetError().GetMessage();
@@ -85,9 +81,8 @@ static_assert(sizeof(draw2d::Draw2DDrawRecord) == 28U);
     return std::move(result).GetValue();
 }
 
-[[nodiscard]] SealedPaintList MakeSingleRectanglePaint(
-    pond::ui::LogicalRect rectangle = MakeRect(1.0F, 2.0F, 9.0F, 12.0F),
-    pond::ui::SrgbStraightAlphaColor color = MakeColor(1.0F, 1.0F, 1.0F, 1.0F))
+[[nodiscard]] SealedPaintList MakeSingleRectanglePaint(pond::ui::LogicalRect rectangle = MakeRect(1.0F, 2.0F, 9.0F, 12.0F),
+                                                       pond::ui::SrgbStraightAlphaColor color = MakeColor(1.0F, 1.0F, 1.0F, 1.0F))
 {
     pond::ui::paint::PaintRecorder recorder;
     const pond::core::VoidResult fill = recorder.FillRectangle(rectangle, color);
@@ -104,8 +99,7 @@ void ExpectUiErrorCode(const pond::core::Error& error, pond::ui::UiErrorCode cod
     EXPECT_EQ(error.GetCode(), pond::ui::ToErrorCode(code));
 }
 
-void ExpectColor(draw2d::Draw2DPackedLinearPremultipliedRgba8 color, std::uint8_t red,
-                 std::uint8_t green, std::uint8_t blue, std::uint8_t alpha)
+void ExpectColor(draw2d::Draw2DPackedLinearPremultipliedRgba8 color, std::uint8_t red, std::uint8_t green, std::uint8_t blue, std::uint8_t alpha)
 {
     EXPECT_EQ(color.GetRed(), red);
     EXPECT_EQ(color.GetGreen(), green);
@@ -113,16 +107,14 @@ void ExpectColor(draw2d::Draw2DPackedLinearPremultipliedRgba8 color, std::uint8_
     EXPECT_EQ(color.GetAlpha(), alpha);
 }
 
-void ExpectVertex(const draw2d::Draw2DVertex& vertex, float x, float y, std::uint8_t red,
-                  std::uint8_t green, std::uint8_t blue, std::uint8_t alpha)
+void ExpectVertex(const draw2d::Draw2DVertex& vertex, float x, float y, std::uint8_t red, std::uint8_t green, std::uint8_t blue, std::uint8_t alpha)
 {
     EXPECT_FLOAT_EQ(vertex.x, x);
     EXPECT_FLOAT_EQ(vertex.y, y);
     ExpectColor(vertex.color, red, green, blue, alpha);
 }
 
-void ExpectPacketsSemanticallyEqual(const draw2d::Draw2DPacket& lhs,
-                                    const draw2d::Draw2DPacket& rhs)
+void ExpectPacketsSemanticallyEqual(const draw2d::Draw2DPacket& lhs, const draw2d::Draw2DPacket& rhs)
 {
     EXPECT_EQ(lhs.GetPixelExtent(), rhs.GetPixelExtent());
     EXPECT_EQ(lhs.GetSchemaFingerprint(), rhs.GetSchemaFingerprint());
@@ -156,11 +148,8 @@ void ExpectPacketsSemanticallyEqual(const draw2d::Draw2DPacket& lhs,
     }
 }
 
-void ExpectCompileLimitFailure(const SealedPaintList& paint,
-                               const pond::ui::UiTargetMetrics& metrics,
-                               pond::ui::UiHardLimits limits, pond::ui::UiHardLimitKind kind,
-                               std::uint64_t requested, std::uint64_t allowed,
-                               PaintCompileStage stage)
+void ExpectCompileLimitFailure(const SealedPaintList& paint, const pond::ui::UiTargetMetrics& metrics, pond::ui::UiHardLimits limits,
+                               pond::ui::UiHardLimitKind kind, std::uint64_t requested, std::uint64_t allowed, PaintCompileStage stage)
 {
     PaintCompiler compiler{limits};
     const auto result = compiler.Compile(paint, metrics);
@@ -179,8 +168,7 @@ void ExpectCompileLimitFailure(const SealedPaintList& paint,
 
 TEST(UiPaintCompilerTests, EmitsExactIdentityRectanglePacketWindingColorAndMetadata)
 {
-    const SealedPaintList paint = MakeSingleRectanglePaint(MakeRect(1.5F, 2.25F, 9.75F, 12.5F),
-                                                           MakeColor(0.5F, 1.0F, 0.0F, 0.5F));
+    const SealedPaintList paint = MakeSingleRectanglePaint(MakeRect(1.5F, 2.25F, 9.75F, 12.5F), MakeColor(0.5F, 1.0F, 0.0F, 0.5F));
     const pond::ui::UiTargetMetrics metrics = MakeMetrics(100.0F, 80.0F, 100U, 80U);
     PaintCompiler compiler;
 
@@ -204,13 +192,10 @@ TEST(UiPaintCompilerTests, EmitsExactIdentityRectanglePacketWindingColorAndMetad
     }
 
     ASSERT_EQ(packet.GetDrawRecords().size(), 1U);
-    EXPECT_EQ(packet.GetDrawRecords()[0],
-              (draw2d::Draw2DDrawRecord{0U, 6U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
+    EXPECT_EQ(packet.GetDrawRecords()[0], (draw2d::Draw2DDrawRecord{0U, 6U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
 
-    const float signedAreaTwice = (packet.GetVertices()[1].x - packet.GetVertices()[0].x) *
-                                      (packet.GetVertices()[2].y - packet.GetVertices()[0].y) -
-                                  (packet.GetVertices()[1].y - packet.GetVertices()[0].y) *
-                                      (packet.GetVertices()[2].x - packet.GetVertices()[0].x);
+    const float signedAreaTwice = (packet.GetVertices()[1].x - packet.GetVertices()[0].x) * (packet.GetVertices()[2].y - packet.GetVertices()[0].y) -
+                                  (packet.GetVertices()[1].y - packet.GetVertices()[0].y) * (packet.GetVertices()[2].x - packet.GetVertices()[0].x);
     EXPECT_GT(signedAreaTwice, 0.0F);
 
     const draw2d::Draw2DPacketStats stats = packet.GetStats();
@@ -231,8 +216,7 @@ TEST(UiPaintCompilerTests, EmitsExactIdentityRectanglePacketWindingColorAndMetad
     EXPECT_EQ(inspection.visibleRectangleCount, 1U);
     EXPECT_EQ(inspection.mergedDrawRecordCount, 0U);
     EXPECT_EQ(inspection.plannedOutput.counts, (draw2d::Draw2DPacketCounts{4U, 6U, 1U}));
-    EXPECT_EQ(inspection.outputBounds,
-              (pond::ui::paint::CompiledPixelBounds{1.5F, 2.25F, 9.75F, 12.5F, true}));
+    EXPECT_EQ(inspection.outputBounds, (pond::ui::paint::CompiledPixelBounds{1.5F, 2.25F, 9.75F, 12.5F, true}));
     EXPECT_EQ(inspection.packetBuilder.state, draw2d::Draw2DPacketBuilderState::Sealed);
 }
 
@@ -283,24 +267,18 @@ TEST(UiPaintCompilerTests, PreservesFractionalCoordinatesUnderIndependentAxisSca
         SCOPED_TRACE(std::string{testCase.name});
         const SealedPaintList paint = MakeSingleRectanglePaint(testCase.rectangle);
         const pond::ui::UiTargetMetrics metrics =
-            MakeMetrics(testCase.logicalWidth, testCase.logicalHeight, testCase.pixelWidth,
-                        testCase.pixelHeight);
+            MakeMetrics(testCase.logicalWidth, testCase.logicalHeight, testCase.pixelWidth, testCase.pixelHeight);
         PaintCompiler compiler;
         auto result = compiler.Compile(paint, metrics);
         ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
 
         const draw2d::Draw2DPacket& packet = *result;
         ASSERT_EQ(packet.GetVertices().size(), 4U);
-        ExpectVertex(packet.GetVertices()[0], testCase.expectedBounds[0],
-                     testCase.expectedBounds[1], 255U, 255U, 255U, 255U);
-        ExpectVertex(packet.GetVertices()[1], testCase.expectedBounds[2],
-                     testCase.expectedBounds[1], 255U, 255U, 255U, 255U);
-        ExpectVertex(packet.GetVertices()[2], testCase.expectedBounds[2],
-                     testCase.expectedBounds[3], 255U, 255U, 255U, 255U);
-        ExpectVertex(packet.GetVertices()[3], testCase.expectedBounds[0],
-                     testCase.expectedBounds[3], 255U, 255U, 255U, 255U);
-        EXPECT_EQ(packet.GetDrawRecords()[0].scissor,
-                  (draw2d::Draw2DScissor{0U, 0U, testCase.pixelWidth, testCase.pixelHeight}));
+        ExpectVertex(packet.GetVertices()[0], testCase.expectedBounds[0], testCase.expectedBounds[1], 255U, 255U, 255U, 255U);
+        ExpectVertex(packet.GetVertices()[1], testCase.expectedBounds[2], testCase.expectedBounds[1], 255U, 255U, 255U, 255U);
+        ExpectVertex(packet.GetVertices()[2], testCase.expectedBounds[2], testCase.expectedBounds[3], 255U, 255U, 255U, 255U);
+        ExpectVertex(packet.GetVertices()[3], testCase.expectedBounds[0], testCase.expectedBounds[3], 255U, 255U, 255U, 255U);
+        EXPECT_EQ(packet.GetDrawRecords()[0].scissor, (draw2d::Draw2DScissor{0U, 0U, testCase.pixelWidth, testCase.pixelHeight}));
     }
 }
 
@@ -312,28 +290,23 @@ TEST(UiPaintCompilerTests, AcceptsOnePixelAndLargeExactlyRepresentableTargets)
         float logicalExtent;
         std::uint32_t pixelExtent;
     };
-    constexpr std::array cases{
-        ExtentCase{.name = "one-pixel", .logicalExtent = 1.0F, .pixelExtent = 1U},
-        ExtentCase{
-            .name = "large-exact", .logicalExtent = 16'777'216.0F, .pixelExtent = 16'777'216U}};
+    constexpr std::array cases{ExtentCase{.name = "one-pixel", .logicalExtent = 1.0F, .pixelExtent = 1U},
+                               ExtentCase{.name = "large-exact", .logicalExtent = 16'777'216.0F, .pixelExtent = 16'777'216U}};
 
     for (const ExtentCase& testCase : cases)
     {
         SCOPED_TRACE(std::string{testCase.name});
-        const SealedPaintList paint = MakeSingleRectanglePaint(
-            MakeRect(0.0F, 0.0F, testCase.logicalExtent, testCase.logicalExtent));
+        const SealedPaintList paint = MakeSingleRectanglePaint(MakeRect(0.0F, 0.0F, testCase.logicalExtent, testCase.logicalExtent));
         PaintCompiler compiler;
         auto result =
-            compiler.Compile(paint, MakeMetrics(testCase.logicalExtent, testCase.logicalExtent,
-                                                testCase.pixelExtent, testCase.pixelExtent));
+            compiler.Compile(paint, MakeMetrics(testCase.logicalExtent, testCase.logicalExtent, testCase.pixelExtent, testCase.pixelExtent));
         ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
         ASSERT_EQ(result->GetVertices().size(), 4U);
         EXPECT_FLOAT_EQ(result->GetVertices()[0].x, 0.0F);
         EXPECT_FLOAT_EQ(result->GetVertices()[0].y, 0.0F);
         EXPECT_FLOAT_EQ(result->GetVertices()[2].x, testCase.logicalExtent);
         EXPECT_FLOAT_EQ(result->GetVertices()[2].y, testCase.logicalExtent);
-        EXPECT_EQ(result->GetDrawRecords()[0].scissor,
-                  (draw2d::Draw2DScissor{0U, 0U, testCase.pixelExtent, testCase.pixelExtent}));
+        EXPECT_EQ(result->GetDrawRecords()[0].scissor, (draw2d::Draw2DScissor{0U, 0U, testCase.pixelExtent, testCase.pixelExtent}));
         EXPECT_TRUE(draw2d::InspectDraw2DPacket(*result).IsValid());
     }
 }
@@ -343,16 +316,10 @@ TEST(UiPaintCompilerTests, IntersectsRootAndNestedFractionalClipsWithConservativ
     pond::ui::paint::PaintRecorder recorder;
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(10.25F, 5.5F, 80.75F, 60.25F)).HasValue());
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(20.125F, 0.0F, 90.5F, 40.25F)).HasValue());
-    ASSERT_TRUE(recorder
-                    .FillRectangle(MakeRect(-10.0F, -10.0F, 95.0F, 70.0F),
-                                   MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-                    .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(-10.0F, -10.0F, 95.0F, 70.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(-5.0F, 70.0F, 10.0F, 90.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(-5.0F, 70.0F, 10.0F, 90.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F)).HasValue());
     const SealedPaintList paint = Seal(recorder);
 
     PaintCompiler compiler;
@@ -370,8 +337,7 @@ TEST(UiPaintCompilerTests, IntersectsRootAndNestedFractionalClipsWithConservativ
     ExpectVertex(packet.GetVertices()[6], 10.0F, 80.0F, 0U, 255U, 0U, 255U);
     ExpectVertex(packet.GetVertices()[7], 0.0F, 80.0F, 0U, 255U, 0U, 255U);
 
-    constexpr std::array<draw2d::Draw2DIndex, 12U> kExpectedIndices{0U, 1U, 2U, 0U, 2U, 3U,
-                                                                    4U, 5U, 6U, 4U, 6U, 7U};
+    constexpr std::array<draw2d::Draw2DIndex, 12U> kExpectedIndices{0U, 1U, 2U, 0U, 2U, 3U, 4U, 5U, 6U, 4U, 6U, 7U};
     ASSERT_EQ(packet.GetIndices().size(), kExpectedIndices.size());
     for (std::size_t index = 0U; index < kExpectedIndices.size(); ++index)
     {
@@ -379,39 +345,24 @@ TEST(UiPaintCompilerTests, IntersectsRootAndNestedFractionalClipsWithConservativ
     }
 
     ASSERT_EQ(packet.GetDrawRecords().size(), 2U);
-    EXPECT_EQ(packet.GetDrawRecords()[0],
-              (draw2d::Draw2DDrawRecord{0U, 6U, 0, draw2d::Draw2DScissor{20U, 5U, 81U, 41U}}));
-    EXPECT_EQ(packet.GetDrawRecords()[1],
-              (draw2d::Draw2DDrawRecord{6U, 6U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
+    EXPECT_EQ(packet.GetDrawRecords()[0], (draw2d::Draw2DDrawRecord{0U, 6U, 0, draw2d::Draw2DScissor{20U, 5U, 81U, 41U}}));
+    EXPECT_EQ(packet.GetDrawRecords()[1], (draw2d::Draw2DDrawRecord{6U, 6U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
 
     const auto inspection = compiler.GetInspection();
     EXPECT_EQ(inspection.maximumClipDepth, 3U);
     EXPECT_EQ(inspection.visibleRectangleCount, 2U);
-    EXPECT_EQ(inspection.outputBounds,
-              (pond::ui::paint::CompiledPixelBounds{0.0F, 5.5F, 80.75F, 80.0F, true}));
+    EXPECT_EQ(inspection.outputBounds, (pond::ui::paint::CompiledPixelBounds{0.0F, 5.5F, 80.75F, 80.0F, true}));
 }
 
 TEST(UiPaintCompilerTests, ElidesDisjointAndOffTargetGeometryThenRestoresClipState)
 {
     pond::ui::paint::PaintRecorder recorder;
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(200.0F, 200.0F, 210.0F, 210.0F)).HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(-20.0F, 1.0F, 0.0F, 5.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(100.0F, 1.0F, 110.0F, 5.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(-5.0F, -5.0F, 5.0F, 5.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(-20.0F, 1.0F, 0.0F, 5.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(100.0F, 1.0F, 110.0F, 5.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(-5.0F, -5.0F, 5.0F, 5.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F)).HasValue());
     const SealedPaintList paint = Seal(recorder);
 
     PaintCompiler compiler;
@@ -435,18 +386,10 @@ TEST(UiPaintCompilerTests, ElidesDisjointAndOffTargetGeometryThenRestoresClipSta
 TEST(UiPaintCompilerTests, ProducesCanonicalExtentSpecificEmptyPacketForAllElisionKinds)
 {
     pond::ui::paint::PaintRecorder recorder;
-    ASSERT_TRUE(
-        recorder.FillRectangle(MakeRect(0.0F, 0.0F, 0.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(0.0F, 1.0F, 0.0F, 0.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 0.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(0.0F, 1.0F, 0.0F, 0.0F)).HasValue());
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(200.0F, 200.0F, 210.0F, 210.0F)).HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
     const SealedPaintList paint = Seal(recorder);
 
@@ -473,32 +416,14 @@ TEST(UiPaintCompilerTests, ProducesCanonicalExtentSpecificEmptyPacketForAllElisi
 TEST(UiPaintCompilerTests, MergesOnlyAdjacentContiguousDrawsWithEqualScissors)
 {
     pond::ui::paint::PaintRecorder recorder;
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(10.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(10.0F, 0.0F, 20.0F, 10.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(0.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(10.0F, 0.0F, 10.0F, 10.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(10.0F, 0.0F, 20.0F, 10.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(0.0F, 0.0F, 50.0F, 50.0F)).HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(20.0F, 0.0F, 30.0F, 10.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(30.0F, 0.0F, 40.0F, 10.0F), MakeColor(1.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(20.0F, 0.0F, 30.0F, 10.0F), MakeColor(0.0F, 0.0F, 1.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(30.0F, 0.0F, 40.0F, 10.0F), MakeColor(1.0F, 1.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(40.0F, 0.0F, 50.0F, 10.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(40.0F, 0.0F, 50.0F, 10.0F), MakeColor(1.0F, 1.0F, 1.0F, 1.0F)).HasValue());
     const SealedPaintList paint = Seal(recorder);
 
     PaintCompiler compiler;
@@ -509,16 +434,12 @@ TEST(UiPaintCompilerTests, MergesOnlyAdjacentContiguousDrawsWithEqualScissors)
     EXPECT_EQ(packet.GetVertices().size(), 20U);
     EXPECT_EQ(packet.GetIndices().size(), 30U);
     ASSERT_EQ(packet.GetDrawRecords().size(), 3U);
-    EXPECT_EQ(packet.GetDrawRecords()[0],
-              (draw2d::Draw2DDrawRecord{0U, 12U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
-    EXPECT_EQ(packet.GetDrawRecords()[1],
-              (draw2d::Draw2DDrawRecord{12U, 12U, 0, draw2d::Draw2DScissor{0U, 0U, 50U, 50U}}));
-    EXPECT_EQ(packet.GetDrawRecords()[2],
-              (draw2d::Draw2DDrawRecord{24U, 6U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
+    EXPECT_EQ(packet.GetDrawRecords()[0], (draw2d::Draw2DDrawRecord{0U, 12U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
+    EXPECT_EQ(packet.GetDrawRecords()[1], (draw2d::Draw2DDrawRecord{12U, 12U, 0, draw2d::Draw2DScissor{0U, 0U, 50U, 50U}}));
+    EXPECT_EQ(packet.GetDrawRecords()[2], (draw2d::Draw2DDrawRecord{24U, 6U, 0, draw2d::Draw2DScissor{0U, 0U, 100U, 80U}}));
 
-    constexpr std::array<draw2d::Draw2DIndex, 30U> kExpectedIndices{
-        0U, 1U,  2U,  0U,  2U,  3U,  4U,  5U,  6U,  4U,  6U,  7U,  8U,  9U,  10U,
-        8U, 10U, 11U, 12U, 13U, 14U, 12U, 14U, 15U, 16U, 17U, 18U, 16U, 18U, 19U};
+    constexpr std::array<draw2d::Draw2DIndex, 30U> kExpectedIndices{0U, 1U,  2U,  0U,  2U,  3U,  4U,  5U,  6U,  4U,  6U,  7U,  8U,  9U,  10U,
+                                                                    8U, 10U, 11U, 12U, 13U, 14U, 12U, 14U, 15U, 16U, 17U, 18U, 16U, 18U, 19U};
     ASSERT_EQ(packet.GetIndices().size(), kExpectedIndices.size());
     for (std::size_t index = 0U; index < kExpectedIndices.size(); ++index)
     {
@@ -586,14 +507,8 @@ TEST(UiPaintCompilerTests, EnforcesInputAndScratchLimitsAtExactBoundaries)
 {
     pond::ui::paint::PaintRecorder recorder;
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(0.0F, 0.0F, 50.0F, 50.0F)).HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(1.0F, 1.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(10.0F, 10.0F, 20.0F, 20.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(1.0F, 1.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(10.0F, 10.0F, 20.0F, 20.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
     const SealedPaintList paint = Seal(recorder);
     const auto stats = paint.GetStats();
@@ -611,26 +526,22 @@ TEST(UiPaintCompilerTests, EnforcesInputAndScratchLimitsAtExactBoundaries)
 
     pond::ui::UiHardLimits commandLimited = exact;
     --commandLimited.maxPaintCommandCount;
-    ExpectCompileLimitFailure(paint, metrics, commandLimited,
-                              pond::ui::UiHardLimitKind::PaintCommandCount, stats.commandCount,
+    ExpectCompileLimitFailure(paint, metrics, commandLimited, pond::ui::UiHardLimitKind::PaintCommandCount, stats.commandCount,
                               stats.commandCount - 1U, PaintCompileStage::PaintValidation);
 
     pond::ui::UiHardLimits payloadLimited = exact;
     --payloadLimited.maxPaintCommandPayloadBytes;
-    ExpectCompileLimitFailure(
-        paint, metrics, payloadLimited, pond::ui::UiHardLimitKind::PaintCommandPayloadBytes,
-        stats.payloadBytes, stats.payloadBytes - 1U, PaintCompileStage::PaintValidation);
+    ExpectCompileLimitFailure(paint, metrics, payloadLimited, pond::ui::UiHardLimitKind::PaintCommandPayloadBytes, stats.payloadBytes,
+                              stats.payloadBytes - 1U, PaintCompileStage::PaintValidation);
 
     pond::ui::UiHardLimits clipLimited = exact;
     --clipLimited.maxClipDepth;
-    ExpectCompileLimitFailure(paint, metrics, clipLimited, pond::ui::UiHardLimitKind::ClipDepth,
-                              stats.maxClipDepthObserved, stats.maxClipDepthObserved - 1U,
-                              PaintCompileStage::PaintValidation);
+    ExpectCompileLimitFailure(paint, metrics, clipLimited, pond::ui::UiHardLimitKind::ClipDepth, stats.maxClipDepthObserved,
+                              stats.maxClipDepthObserved - 1U, PaintCompileStage::PaintValidation);
 
     pond::ui::UiHardLimits scratchLimited = exact;
     --scratchLimited.maxCompilerScratchBytes;
-    ExpectCompileLimitFailure(paint, metrics, scratchLimited,
-                              pond::ui::UiHardLimitKind::CompilerScratchBytes, 64U, 63U,
+    ExpectCompileLimitFailure(paint, metrics, scratchLimited, pond::ui::UiHardLimitKind::CompilerScratchBytes, 64U, 63U,
                               PaintCompileStage::ScratchPreflight);
 }
 
@@ -653,37 +564,27 @@ TEST(UiPaintCompilerTests, EnforcesOutputLimitsAtExactBoundaries)
 
     pond::ui::UiHardLimits vertexLimited = exact;
     vertexLimited.maxCompiledVertexCount = 3U;
-    ExpectCompileLimitFailure(paint, metrics, vertexLimited,
-                              pond::ui::UiHardLimitKind::CompiledVertexCount, 4U, 3U,
+    ExpectCompileLimitFailure(paint, metrics, vertexLimited, pond::ui::UiHardLimitKind::CompiledVertexCount, 4U, 3U,
                               PaintCompileStage::GeometryPreflight);
 
     pond::ui::UiHardLimits indexLimited = exact;
     indexLimited.maxCompiledIndexCount = 5U;
-    ExpectCompileLimitFailure(paint, metrics, indexLimited,
-                              pond::ui::UiHardLimitKind::CompiledIndexCount, 6U, 5U,
+    ExpectCompileLimitFailure(paint, metrics, indexLimited, pond::ui::UiHardLimitKind::CompiledIndexCount, 6U, 5U,
                               PaintCompileStage::GeometryPreflight);
 
     pond::ui::UiHardLimits packetLimited = exact;
     packetLimited.maxDrawPacketBytes = 99U;
-    ExpectCompileLimitFailure(paint, metrics, packetLimited,
-                              pond::ui::UiHardLimitKind::DrawPacketBytes, 100U, 99U,
+    ExpectCompileLimitFailure(paint, metrics, packetLimited, pond::ui::UiHardLimitKind::DrawPacketBytes, 100U, 99U,
                               PaintCompileStage::GeometryPreflight);
 
     pond::ui::UiHardLimits uploadLimited = exact;
     uploadLimited.maxUploadBytes = 71U;
-    ExpectCompileLimitFailure(paint, metrics, uploadLimited, pond::ui::UiHardLimitKind::UploadBytes,
-                              72U, 71U, PaintCompileStage::GeometryPreflight);
+    ExpectCompileLimitFailure(paint, metrics, uploadLimited, pond::ui::UiHardLimitKind::UploadBytes, 72U, 71U, PaintCompileStage::GeometryPreflight);
 
     pond::ui::paint::PaintRecorder twoDrawRecorder;
-    ASSERT_TRUE(
-        twoDrawRecorder
-            .FillRectangle(MakeRect(1.0F, 1.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(twoDrawRecorder.FillRectangle(MakeRect(1.0F, 1.0F, 10.0F, 10.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(twoDrawRecorder.PushClipRectangle(MakeRect(0.0F, 0.0F, 50.0F, 50.0F)).HasValue());
-    ASSERT_TRUE(
-        twoDrawRecorder
-            .FillRectangle(MakeRect(10.0F, 10.0F, 20.0F, 20.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(twoDrawRecorder.FillRectangle(MakeRect(10.0F, 10.0F, 20.0F, 20.0F), MakeColor(0.0F, 1.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(twoDrawRecorder.PopClip().HasValue());
     const SealedPaintList twoDrawPaint = Seal(twoDrawRecorder);
 
@@ -707,16 +608,14 @@ TEST(UiPaintCompilerTests, EnforcesOutputLimitsAtExactBoundaries)
     EXPECT_EQ(drawLimitedInspection.rejectedCommandIndex, 2U);
     EXPECT_EQ(drawLimitedInspection.processedCommandCount, 3U);
     ASSERT_TRUE(drawLimitedInspection.hasRejectedLimit);
-    EXPECT_EQ(drawLimitedInspection.rejectedLimit,
-              (pond::ui::UiLimitExceeded{pond::ui::UiHardLimitKind::DrawRecordCount, 2U, 1U}));
+    EXPECT_EQ(drawLimitedInspection.rejectedLimit, (pond::ui::UiLimitExceeded{pond::ui::UiHardLimitKind::DrawRecordCount, 2U, 1U}));
     EXPECT_EQ(drawLimitedInspection.packetBuilder.state, draw2d::Draw2DPacketBuilderState::Open);
     EXPECT_EQ(drawLimitedInspection.packetBuilder.counts, draw2d::Draw2DPacketCounts{});
 }
 
 TEST(UiPaintCompilerTests, CountInspectionChecksExactStatisticsLimitsAndOverflow)
 {
-    const auto oneRectangle = pond::ui::paint::InspectPaintCompileCounts(
-        1U, 1U, pond::ui::kDefaultUiHardLimits, draw2d::kDefaultDraw2DPacketLimits);
+    const auto oneRectangle = pond::ui::paint::InspectPaintCompileCounts(1U, 1U, pond::ui::kDefaultUiHardLimits, draw2d::kDefaultDraw2DPacketLimits);
     ASSERT_TRUE(oneRectangle.IsValid());
     EXPECT_EQ(oneRectangle.counts, (draw2d::Draw2DPacketCounts{4U, 6U, 1U}));
     EXPECT_EQ(oneRectangle.packetStats.vertexBytes, 48U);
@@ -727,22 +626,19 @@ TEST(UiPaintCompilerTests, CountInspectionChecksExactStatisticsLimitsAndOverflow
 
     pond::ui::UiHardLimits invalidLimits = pond::ui::kDefaultUiHardLimits;
     invalidLimits.maxCompiledVertexCount = 0U;
-    const auto invalid = pond::ui::paint::InspectPaintCompileCounts(
-        1U, 1U, invalidLimits, draw2d::kDefaultDraw2DPacketLimits);
+    const auto invalid = pond::ui::paint::InspectPaintCompileCounts(1U, 1U, invalidLimits, draw2d::kDefaultDraw2DPacketLimits);
     EXPECT_EQ(invalid.issue, PaintCompileCountIssue::InvalidLimits);
 
     constexpr std::uint64_t kMaximum = std::numeric_limits<std::uint64_t>::max();
-    const auto vertexOverflow = pond::ui::paint::InspectPaintCompileCounts(
-        (kMaximum / 4U) + 1U, 1U, pond::ui::kDefaultUiHardLimits,
-        draw2d::kDefaultDraw2DPacketLimits);
+    const auto vertexOverflow =
+        pond::ui::paint::InspectPaintCompileCounts((kMaximum / 4U) + 1U, 1U, pond::ui::kDefaultUiHardLimits, draw2d::kDefaultDraw2DPacketLimits);
     EXPECT_EQ(vertexOverflow.issue, PaintCompileCountIssue::VertexCountOverflow);
     ASSERT_TRUE(vertexOverflow.hasRejectedLimit);
     EXPECT_EQ(vertexOverflow.rejectedLimit.kind, pond::ui::UiHardLimitKind::CompiledVertexCount);
     EXPECT_EQ(vertexOverflow.rejectedLimit.requested, kMaximum);
 
-    const auto indexOverflow = pond::ui::paint::InspectPaintCompileCounts(
-        (kMaximum / 6U) + 1U, 1U, pond::ui::kDefaultUiHardLimits,
-        draw2d::kDefaultDraw2DPacketLimits);
+    const auto indexOverflow =
+        pond::ui::paint::InspectPaintCompileCounts((kMaximum / 6U) + 1U, 1U, pond::ui::kDefaultUiHardLimits, draw2d::kDefaultDraw2DPacketLimits);
     EXPECT_EQ(indexOverflow.issue, PaintCompileCountIssue::IndexCountOverflow);
     ASSERT_TRUE(indexOverflow.hasRejectedLimit);
     EXPECT_EQ(indexOverflow.rejectedLimit.kind, pond::ui::UiHardLimitKind::CompiledIndexCount);
@@ -784,12 +680,9 @@ TEST(UiPaintCompilerTests, FailureAndResetPreserveInputPreviousPacketAndWarmCapa
     EXPECT_TRUE(compiler.IsReady());
     EXPECT_EQ(resetInspection.status, PaintCompileStatus::Ready);
     EXPECT_GE(resetInspection.clipStackCapacity, successfulInspection.clipStackCapacity);
-    EXPECT_GE(resetInspection.packetBuilder.capacities.vertexCount,
-              successfulInspection.packetBuilder.capacities.vertexCount);
-    EXPECT_GE(resetInspection.packetBuilder.capacities.indexCount,
-              successfulInspection.packetBuilder.capacities.indexCount);
-    EXPECT_GE(resetInspection.packetBuilder.capacities.drawRecordCount,
-              successfulInspection.packetBuilder.capacities.drawRecordCount);
+    EXPECT_GE(resetInspection.packetBuilder.capacities.vertexCount, successfulInspection.packetBuilder.capacities.vertexCount);
+    EXPECT_GE(resetInspection.packetBuilder.capacities.indexCount, successfulInspection.packetBuilder.capacities.indexCount);
+    EXPECT_GE(resetInspection.packetBuilder.capacities.drawRecordCount, successfulInspection.packetBuilder.capacities.drawRecordCount);
 
     const auto failedMetrics = compiler.Compile(paint, pond::ui::UiTargetMetrics{});
     ASSERT_FALSE(failedMetrics.HasValue());
@@ -803,8 +696,7 @@ TEST(UiPaintCompilerTests, FailureAndResetPreserveInputPreviousPacketAndWarmCapa
     EXPECT_TRUE(compiler.IsReady());
     EXPECT_TRUE(movedCompiler.IsReady());
     const auto movedFromCompilerResult = compiler.Compile(paint, metrics);
-    ASSERT_TRUE(movedFromCompilerResult.HasValue())
-        << movedFromCompilerResult.GetError().GetMessage();
+    ASSERT_TRUE(movedFromCompilerResult.HasValue()) << movedFromCompilerResult.GetError().GetMessage();
     auto secondResult = movedCompiler.Compile(paint, metrics);
     ASSERT_TRUE(secondResult.HasValue()) << secondResult.GetError().GetMessage();
     draw2d::Draw2DPacket secondPacket = std::move(secondResult).GetValue();
@@ -815,14 +707,8 @@ TEST(UiPaintCompilerTests, RepeatedCompilationProducesIdenticalSemanticPacketAnd
 {
     pond::ui::paint::PaintRecorder recorder;
     ASSERT_TRUE(recorder.PushClipRectangle(MakeRect(0.5F, 1.25F, 30.75F, 20.5F)).HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(-2.0F, 0.0F, 10.25F, 12.5F), MakeColor(0.5F, 0.25F, 1.0F, 0.5F))
-            .HasValue());
-    ASSERT_TRUE(
-        recorder
-            .FillRectangle(MakeRect(12.0F, 2.0F, 22.0F, 15.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F))
-            .HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(-2.0F, 0.0F, 10.25F, 12.5F), MakeColor(0.5F, 0.25F, 1.0F, 0.5F)).HasValue());
+    ASSERT_TRUE(recorder.FillRectangle(MakeRect(12.0F, 2.0F, 22.0F, 15.0F), MakeColor(1.0F, 0.0F, 0.0F, 1.0F)).HasValue());
     ASSERT_TRUE(recorder.PopClip().HasValue());
     const SealedPaintList paint = Seal(recorder);
     const pond::ui::UiTargetMetrics metrics = MakeMetrics(40.0F, 30.0F, 50U, 45U);

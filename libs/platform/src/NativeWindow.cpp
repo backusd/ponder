@@ -1,21 +1,46 @@
 #include <ponder/core/Assert.hpp>
+#include <ponder/core/Exception.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Window.hpp>
 
-#include "PlatformRuntimeBackend.hpp"
+#include <type_traits>
+#include <variant>
+
 #include "WindowImpl.hpp"
 
-namespace pond::platform
+namespace ponder::platform
 {
 namespace
 {
-constexpr core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
-constexpr core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
+constexpr ponder::core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErrorCode::InvalidArgument);
+constexpr ponder::core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
+
+[[nodiscard]] bool IsCompleteNativeWindowHandle(const NativeWindowHandle& handle) noexcept
+{
+    return std::visit(
+        [](const auto& nativeWindow) noexcept
+        {
+            using NativeWindow = std::remove_cvref_t<decltype(nativeWindow)>;
+            if constexpr (std::is_same_v<NativeWindow, NativeWin32Window>)
+            {
+                return nativeWindow.instance != nullptr && nativeWindow.window != nullptr;
+            }
+            else if constexpr (std::is_same_v<NativeWindow, NativeX11Window>)
+            {
+                return nativeWindow.display != nullptr && nativeWindow.window != 0;
+            }
+            else
+            {
+                return nativeWindow.display != nullptr && nativeWindow.surface != nullptr;
+            }
+        },
+        handle);
+}
 } // namespace
 
 namespace detail
 {
-core::Result<NativeWindowHandle> WindowImpl::GetNativeHandle() const
+ponder::core::Result<NativeWindowHandle> WindowImpl::GetNativeHandle() const
 {
     VerifyUsable("native window handle query");
     switch (m_graphicsCompatibility)
@@ -23,25 +48,38 @@ core::Result<NativeWindowHandle> WindowImpl::GetNativeHandle() const
     case WindowGraphicsCompatibility::Vulkan:
         break;
     case WindowGraphicsCompatibility::Metal:
-        return core::Result<NativeWindowHandle>::FromError(core::Error{
-            kUnsupportedCode,
-            "Native window handles are not defined for Metal window graphics compatibility."});
     case WindowGraphicsCompatibility::Default:
-        return core::Result<NativeWindowHandle>::FromError(
-            core::Error{kInvalidArgumentCode,
-                        "Native window handles require Vulkan window graphics compatibility."});
+        return ponder::core::Result<NativeWindowHandle>::FromError(ponder::core::Error{kInvalidArgumentCode,
+                                                                                       "Native window handles require Vulkan window graphics "
+                                                                                       "compatibility."});
     default:
-        return core::Result<NativeWindowHandle>::FromError(
-            core::Error{kInvalidArgumentCode, "Window graphics compatibility is invalid."});
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Window graphics compatibility is invalid.");
     }
 
-    return m_backend.GetNativeHandle(m_backendWindow);
+    ponder::core::Result<NativeWindowHandle> result = m_backend.GetNativeHandle(m_backendWindow);
+    if (!result.HasValue())
+    {
+        if (result.GetError().GetCode() == kUnsupportedCode)
+        {
+            return result;
+        }
+
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::BackendFailure, "Native window backend returned an unexpected recoverable error for {}: {}",
+                                 GetErrorContext(), result.GetError().GetMessage());
+    }
+    if (!IsCompleteNativeWindowHandle(result.GetValue()))
+    {
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::BackendFailure, "Native window backend returned an incomplete native handle for {}.",
+                                 GetErrorContext());
+    }
+
+    return result;
 }
 } // namespace detail
 
-core::Result<NativeWindowHandle> Window::GetNativeHandle() const
+ponder::core::Result<NativeWindowHandle> Window::GetNativeHandle() const
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Window");
     return m_state->GetNativeHandle();
 }
-} // namespace pond::platform
+} // namespace ponder::platform

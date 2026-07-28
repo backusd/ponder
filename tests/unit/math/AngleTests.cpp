@@ -18,8 +18,7 @@ static_assert(!std::is_convertible_v<pond::math::Degrees, float>);
 static_assert(!std::is_convertible_v<pond::math::Degrees, pond::math::Radians>);
 static_assert(!std::is_convertible_v<pond::math::Radians, pond::math::Degrees>);
 
-[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance,
-                                                     float relativeTolerance)
+[[nodiscard]] pond::core::Tolerance RequireTolerance(float absoluteTolerance, float relativeTolerance)
 {
     auto result = pond::core::Tolerance::Create(absoluteTolerance, relativeTolerance);
     EXPECT_TRUE(result.HasValue());
@@ -41,10 +40,8 @@ TEST(AngleTests, ConvertsBetweenDegreesAndRadians)
 {
     const pond::core::Tolerance tolerance = RequireTolerance(1.0e-5F, 1.0e-6F);
 
-    EXPECT_TRUE(pond::core::IsNear(pond::math::ToRadians(pond::math::Degrees{180.0F}).GetValue(),
-                                   pond::core::kPi, tolerance));
-    EXPECT_TRUE(pond::core::IsNear(
-        pond::math::ToDegrees(pond::math::Radians{pond::core::kPi}).GetValue(), 180.0F, tolerance));
+    EXPECT_TRUE(pond::core::IsNear(pond::math::ToRadians(pond::math::Degrees{180.0F}).GetValue(), pond::core::kPi, tolerance));
+    EXPECT_TRUE(pond::core::IsNear(pond::math::ToDegrees(pond::math::Radians{pond::core::kPi}).GetValue(), 180.0F, tolerance));
 }
 
 TEST(AngleTests, RoundTripsRepresentativeAngles)
@@ -55,8 +52,7 @@ TEST(AngleTests, RoundTripsRepresentativeAngles)
     for (const float degreeValue : kDegreeValues)
     {
         const pond::math::Degrees degrees{degreeValue};
-        const pond::math::Degrees roundTripped =
-            pond::math::ToDegrees(pond::math::ToRadians(degrees));
+        const pond::math::Degrees roundTripped = pond::math::ToDegrees(pond::math::ToRadians(degrees));
 
         EXPECT_TRUE(pond::core::IsNear(roundTripped.GetValue(), degreeValue, tolerance));
     }

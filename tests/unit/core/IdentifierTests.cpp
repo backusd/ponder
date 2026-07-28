@@ -12,8 +12,8 @@ namespace
 struct MoleculeIdTag;
 struct AtomIdTag;
 
-using MoleculeId = pond::core::Identifier<MoleculeIdTag>;
-using AtomId = pond::core::Identifier<AtomIdTag>;
+using MoleculeId = ponder::core::Identifier<MoleculeIdTag>;
+using AtomId = ponder::core::Identifier<AtomIdTag>;
 
 constexpr bool IdentifierValueSemanticsAreConstexpr()
 {
@@ -22,8 +22,8 @@ constexpr bool IdentifierValueSemanticsAreConstexpr()
     constexpr MoleculeId kSameFirst{7};
     constexpr MoleculeId kSecond{9};
 
-    return !kInvalid.IsValid() && kInvalid == MoleculeId::Invalid() && kInvalid.GetValue() == 0 &&
-           kFirst.IsValid() && kFirst.GetValue() == 7 && kFirst == kSameFirst && kFirst < kSecond;
+    return !kInvalid.IsValid() && kInvalid == MoleculeId::Invalid() && kInvalid.GetValue() == 0 && kFirst.IsValid() && kFirst.GetValue() == 7 &&
+           kFirst == kSameFirst && kFirst < kSecond;
 }
 
 constexpr bool IdentifierHashingIsConstexpr()

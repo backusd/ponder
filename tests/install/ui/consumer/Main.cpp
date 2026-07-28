@@ -22,10 +22,9 @@ int main()
         return 2;
     }
 
-    const auto metrics = pond::ui::MakeUiTargetMetrics(
-        pond::ui::UiTargetId{1U}, pond::ui::UiTargetRevision{1U}, pond::ui::UiMetricsRevision{1U},
-        pond::ui::LogicalSize{.width = 100.0F, .height = 50.0F},
-        pond::ui::FramebufferPixelSize{.width = 200U, .height = 100U});
+    const auto metrics = pond::ui::MakeUiTargetMetrics(pond::ui::UiTargetId{1U}, pond::ui::UiTargetRevision{1U}, pond::ui::UiMetricsRevision{1U},
+                                                       pond::ui::LogicalSize{.width = 100.0F, .height = 50.0F},
+                                                       pond::ui::FramebufferPixelSize{.width = 200U, .height = 100U});
     if (!metrics.HasValue() || !pond::ui::IsDrawable(*metrics))
     {
         return 3;
@@ -50,8 +49,7 @@ int main()
     }
 
     constexpr pond::ui::UiDrawCounters kCounters{.recorded = 1U};
-    if (kCounters.recorded != 1U ||
-        pond::ui::UiDrawOutcome::Recorded == pond::ui::UiDrawOutcome::SkippedEmpty)
+    if (kCounters.recorded != 1U || pond::ui::UiDrawOutcome::Recorded == pond::ui::UiDrawOutcome::SkippedEmpty)
     {
         return 7;
     }

@@ -130,10 +130,10 @@ known gaps are follow-up work outside the initial scaffold:
 
 | ID | Decision | Implementation Consequence |
 | --- | --- | --- |
-| Q-STYLE-001 | Use an LLVM-derived custom style with 4-space indentation and a 100-column limit. | `.clang-format` should encode this. |
+| Q-STYLE-001 | Use an LLVM-derived custom style with 4-space indentation and a 150-column code limit. | `.clang-format` should encode this. |
 | Q-STYLE-002 | Types use PascalCase, functions use PascalCase, variables use camelCase, private members use `m_*`, constants use `kPascalCase`, CMake implementation targets use `project_library`, aliases use `project::library`, and braces use Allman style. | Apply consistently in scaffolded code and CMake. |
 | Q-STYLE-003 | Filenames use PascalCase. | Prefer files such as `Result.hpp`, `PonderException.hpp`, and `Main.cpp`. |
-| Q-STYLE-004 | Line length is 100 columns. | Configure formatting and review docs/code with this target. |
+| Q-STYLE-004 | Code lines use a 150-column limit, function parameters and call arguments are packed up to that limit, and comments are not reflowed to satisfy it. Constructor initializer colons remain with the final parameter and each initializer occupies its own following line. | Configure formatting and review docs/code with these targets. |
 | Q-STYLE-005 | Start clang-tidy useful but not overwhelming, then tighten over time. | Initial `.clang-tidy` should catch high-signal issues without blocking early work on noise. |
 | Q-STYLE-006 | Do not enforce include-what-you-use at first. | Keep headers clean manually, use clang-tidy where helpful, and add IWYU later as advisory. |
 | Q-STYLE-007 | Exceptions are for truly exceptional, usually unrecoverable cases. Otherwise prefer `std::expected`. | Core should provide clear exception and result conventions. |

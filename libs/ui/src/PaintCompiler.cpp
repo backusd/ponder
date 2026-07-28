@@ -37,8 +37,7 @@ using render::draw2d::Draw2DVertex;
     return true;
 }
 
-[[nodiscard]] bool CheckedMultiply(std::uint64_t lhs, std::uint64_t rhs,
-                                   std::uint64_t& result) noexcept
+[[nodiscard]] bool CheckedMultiply(std::uint64_t lhs, std::uint64_t rhs, std::uint64_t& result) noexcept
 {
     if (lhs != 0U && rhs > std::numeric_limits<std::uint64_t>::max() / lhs)
     {
@@ -58,17 +57,15 @@ using render::draw2d::Draw2DVertex;
                               .maxBaseVertexValidationIndexCount = limits.maxCompiledIndexCount};
 }
 
-[[nodiscard]] core::VoidResult MakeCompilerFailure(
-    UiErrorCode code, std::string message,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] core::VoidResult MakeCompilerFailure(UiErrorCode code, std::string message,
+                                                   std::source_location location = std::source_location::current())
 {
     return MakeUiFailure(code, std::move(message), location);
 }
 
 template <typename Value>
-[[nodiscard]] core::Result<Value> MakeCompilerFailureValue(
-    UiErrorCode code, std::string message,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] core::Result<Value> MakeCompilerFailureValue(UiErrorCode code, std::string message,
+                                                           std::source_location location = std::source_location::current())
 {
     return MakeUiFailure<Value>(code, std::move(message), location);
 }
@@ -78,8 +75,7 @@ template <typename Value>
     return rectangle.left >= rectangle.right || rectangle.top >= rectangle.bottom;
 }
 
-[[nodiscard]] FractionalPixelRect Intersect(FractionalPixelRect lhs,
-                                            FractionalPixelRect rhs) noexcept
+[[nodiscard]] FractionalPixelRect Intersect(FractionalPixelRect lhs, FractionalPixelRect rhs) noexcept
 {
     const FractionalPixelRect intersection{.left = std::max(lhs.left, rhs.left),
                                            .top = std::max(lhs.top, rhs.top),
@@ -92,20 +88,17 @@ template <typename Value>
     return intersection;
 }
 
-[[nodiscard]] core::Result<FractionalPixelRect> Transform(LogicalRect rectangle, double scaleX,
-                                                          double scaleY)
+[[nodiscard]] core::Result<FractionalPixelRect> Transform(LogicalRect rectangle, double scaleX, double scaleY)
 {
-    const FractionalPixelRect transformed{
-        .left = static_cast<double>(GetLeft(rectangle)) * scaleX,
-        .top = static_cast<double>(GetTop(rectangle)) * scaleY,
-        .right = static_cast<double>(GetRight(rectangle)) * scaleX,
-        .bottom = static_cast<double>(GetBottom(rectangle)) * scaleY};
-    if (!std::isfinite(transformed.left) || !std::isfinite(transformed.top) ||
-        !std::isfinite(transformed.right) || !std::isfinite(transformed.bottom))
+    const FractionalPixelRect transformed{.left = static_cast<double>(GetLeft(rectangle)) * scaleX,
+                                          .top = static_cast<double>(GetTop(rectangle)) * scaleY,
+                                          .right = static_cast<double>(GetRight(rectangle)) * scaleX,
+                                          .bottom = static_cast<double>(GetBottom(rectangle)) * scaleY};
+    if (!std::isfinite(transformed.left) || !std::isfinite(transformed.top) || !std::isfinite(transformed.right) ||
+        !std::isfinite(transformed.bottom))
     {
-        return MakeCompilerFailureValue<FractionalPixelRect>(
-            UiErrorCode::CompilationFailure,
-            "UI paint geometry became non-finite while scaling to framebuffer pixels.");
+        return MakeCompilerFailureValue<FractionalPixelRect>(UiErrorCode::CompilationFailure,
+                                                             "UI paint geometry became non-finite while scaling to framebuffer pixels.");
     }
     return transformed;
 }
@@ -135,37 +128,28 @@ template <typename Value>
     return lhs == rhs;
 }
 
-[[nodiscard]] core::VoidResult ValidatePaintListStructure(const SealedPaintList& paintList,
-                                                          const PaintListStats& stats,
+[[nodiscard]] core::VoidResult ValidatePaintListStructure(const SealedPaintList& paintList, const PaintListStats& stats,
                                                           PaintCommandIndex& rejectedCommand)
 {
     const std::span<const PaintCommandRecord> commands = paintList.GetCommands();
     const std::span<const FillRectangleCommand> fills = paintList.GetFillRectangles();
     const std::span<const PushClipRectangleCommand> clips = paintList.GetPushClipRectangles();
 
-    if (stats.state != PaintRecorderState::Sealed ||
-        stats.commandCount != static_cast<std::uint64_t>(commands.size()) ||
+    if (stats.state != PaintRecorderState::Sealed || stats.commandCount != static_cast<std::uint64_t>(commands.size()) ||
         stats.fillRectangleCount != static_cast<std::uint64_t>(fills.size()) ||
-        stats.pushClipRectangleCount != static_cast<std::uint64_t>(clips.size()) ||
-        stats.clipDepth != 1U)
+        stats.pushClipRectangleCount != static_cast<std::uint64_t>(clips.size()) || stats.clipDepth != 1U)
     {
-        return MakeCompilerFailure(
-            UiErrorCode::InvalidPaintValue,
-            "UI paint compiler received inconsistent sealed paint-list statistics.");
+        return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI paint compiler received inconsistent sealed paint-list statistics.");
     }
 
     std::uint64_t fillBytes{};
     std::uint64_t clipBytes{};
     std::uint64_t payloadBytes{};
-    if (!CheckedMultiply(static_cast<std::uint64_t>(fills.size()), sizeof(FillRectangleCommand),
-                         fillBytes) ||
-        !CheckedMultiply(static_cast<std::uint64_t>(clips.size()), sizeof(PushClipRectangleCommand),
-                         clipBytes) ||
+    if (!CheckedMultiply(static_cast<std::uint64_t>(fills.size()), sizeof(FillRectangleCommand), fillBytes) ||
+        !CheckedMultiply(static_cast<std::uint64_t>(clips.size()), sizeof(PushClipRectangleCommand), clipBytes) ||
         !CheckedAdd(fillBytes, clipBytes, payloadBytes) || payloadBytes != stats.payloadBytes)
     {
-        return MakeCompilerFailure(
-            UiErrorCode::InvalidPaintValue,
-            "UI paint compiler received inconsistent paint payload byte counts.");
+        return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI paint compiler received inconsistent paint payload byte counts.");
     }
 
     std::uint64_t fillIndex{};
@@ -179,9 +163,7 @@ template <typename Value>
         rejectedCommand = static_cast<PaintCommandIndex>(index);
         if (command.index != static_cast<PaintCommandIndex>(index))
         {
-            return MakeCompilerFailure(
-                UiErrorCode::InvalidPaintValue,
-                "UI paint command indices must be contiguous and preserve insertion order.");
+            return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI paint command indices must be contiguous and preserve insertion order.");
         }
 
         switch (command.kind)
@@ -190,18 +172,13 @@ template <typename Value>
         {
             if (command.payloadIndex != fillIndex || fillIndex >= fills.size())
             {
-                return MakeCompilerFailure(
-                    UiErrorCode::InvalidPaintValue,
-                    "UI fill-rectangle command has an invalid payload index.");
+                return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI fill-rectangle command has an invalid payload index.");
             }
             const FillRectangleCommand& fill = fills[static_cast<std::size_t>(fillIndex)];
-            if (!IsValid(fill.rectangle) || !IsValid(fill.color) ||
-                fill.isZeroArea != IsEmpty(fill.rectangle) ||
+            if (!IsValid(fill.rectangle) || !IsValid(fill.color) || fill.isZeroArea != IsEmpty(fill.rectangle) ||
                 fill.isTransparent != IsTransparent(fill.color))
             {
-                return MakeCompilerFailure(
-                    UiErrorCode::InvalidPaintValue,
-                    "UI fill-rectangle payload failed compiler-boundary validation.");
+                return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI fill-rectangle payload failed compiler-boundary validation.");
             }
             ++fillIndex;
             break;
@@ -210,20 +187,16 @@ template <typename Value>
         {
             if (command.payloadIndex != clipIndex || clipIndex >= clips.size())
             {
-                return MakeCompilerFailure(UiErrorCode::InvalidPaintValue,
-                                           "UI push-clip command has an invalid payload index.");
+                return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI push-clip command has an invalid payload index.");
             }
             const PushClipRectangleCommand& clip = clips[static_cast<std::size_t>(clipIndex)];
             if (!IsValid(clip.rectangle) || clip.isZeroArea != IsEmpty(clip.rectangle))
             {
-                return MakeCompilerFailure(
-                    UiErrorCode::InvalidPaintValue,
-                    "UI clip-rectangle payload failed compiler-boundary validation.");
+                return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI clip-rectangle payload failed compiler-boundary validation.");
             }
             if (!CheckedAdd(clipDepth, 1U, clipDepth))
             {
-                return MakeCompilerFailure(UiErrorCode::CompilationFailure,
-                                           "UI paint clip depth overflowed during validation.");
+                return MakeCompilerFailure(UiErrorCode::CompilationFailure, "UI paint clip depth overflowed during validation.");
             }
             maximumClipDepth = std::max(maximumClipDepth, clipDepth);
             ++clipIndex;
@@ -232,26 +205,21 @@ template <typename Value>
         case PaintCommandKind::PopClip:
             if (command.payloadIndex != kNoPaintPayloadIndex || clipDepth == 1U)
             {
-                return MakeCompilerFailure(
-                    UiErrorCode::UnbalancedPaintState,
-                    "UI pop-clip command would underflow the compiler clip sentinel.");
+                return MakeCompilerFailure(UiErrorCode::UnbalancedPaintState, "UI pop-clip command would underflow the compiler clip sentinel.");
             }
             --clipDepth;
             ++popCount;
             break;
         default:
-            return MakeCompilerFailure(UiErrorCode::InvalidPaintValue,
-                                       "UI paint list contains an unknown command kind.");
+            return MakeCompilerFailure(UiErrorCode::InvalidPaintValue, "UI paint list contains an unknown command kind.");
         }
     }
 
     rejectedCommand = kNoRejectedPaintCommand;
-    if (fillIndex != fills.size() || clipIndex != clips.size() || popCount != stats.popClipCount ||
-        clipDepth != 1U || maximumClipDepth != stats.maxClipDepthObserved)
+    if (fillIndex != fills.size() || clipIndex != clips.size() || popCount != stats.popClipCount || clipDepth != 1U ||
+        maximumClipDepth != stats.maxClipDepthObserved)
     {
-        return MakeCompilerFailure(
-            UiErrorCode::UnbalancedPaintState,
-            "UI sealed paint list has inconsistent payload or clip-stack final state.");
+        return MakeCompilerFailure(UiErrorCode::UnbalancedPaintState, "UI sealed paint list has inconsistent payload or clip-stack final state.");
     }
     return core::VoidResult::Success();
 }
@@ -272,10 +240,9 @@ struct PassSummary final
 
     [[nodiscard]] friend bool operator==(const PassSummary&, const PassSummary&) noexcept = default;
 };
-[[nodiscard]] core::Result<PassSummary> RunCompilationPass(
-    const SealedPaintList& paintList, double scaleX, double scaleY, Draw2DPixelExtent extent,
-    std::vector<FractionalPixelRect>& clipStack, UiHardLimits uiLimits,
-    Draw2DPacketLimits packetLimits, Draw2DPacketBuilder* packetBuilder, PassSummary& progress)
+[[nodiscard]] core::Result<PassSummary> RunCompilationPass(const SealedPaintList& paintList, double scaleX, double scaleY, Draw2DPixelExtent extent,
+                                                           std::vector<FractionalPixelRect>& clipStack, UiHardLimits uiLimits,
+                                                           Draw2DPacketLimits packetLimits, Draw2DPacketBuilder* packetBuilder, PassSummary& progress)
 {
     const std::span<const PaintCommandRecord> commands = paintList.GetCommands();
     const std::span<const FillRectangleCommand> fills = paintList.GetFillRectangles();
@@ -284,10 +251,8 @@ struct PassSummary final
     progress = PassSummary{};
     PassSummary& summary = progress;
     clipStack.clear();
-    clipStack.push_back(FractionalPixelRect{.left = 0.0,
-                                            .top = 0.0,
-                                            .right = static_cast<double>(extent.width),
-                                            .bottom = static_cast<double>(extent.height)});
+    clipStack.push_back(
+        FractionalPixelRect{.left = 0.0, .top = 0.0, .right = static_cast<double>(extent.width), .bottom = static_cast<double>(extent.height)});
 
     std::optional<Draw2DDrawRecord> pendingDraw;
     const auto flushPending = [&]() -> core::VoidResult
@@ -300,8 +265,7 @@ struct PassSummary final
         if (!appended.HasValue())
         {
             return MakeCompilerFailure(UiErrorCode::CompilationFailure,
-                                       "UI paint compiler could not append a Draw2D record: " +
-                                           std::string{appended.GetError().GetMessage()});
+                                       "UI paint compiler could not append a Draw2D record: " + std::string{appended.GetError().GetMessage()});
         }
         return core::VoidResult::Success();
     };
@@ -313,17 +277,14 @@ struct PassSummary final
 
         if (command.kind == PaintCommandKind::PushClipRectangle)
         {
-            const PushClipRectangleCommand& clip =
-                clips[static_cast<std::size_t>(command.payloadIndex)];
-            const core::Result<FractionalPixelRect> transformed =
-                Transform(clip.rectangle, scaleX, scaleY);
+            const PushClipRectangleCommand& clip = clips[static_cast<std::size_t>(command.payloadIndex)];
+            const core::Result<FractionalPixelRect> transformed = Transform(clip.rectangle, scaleX, scaleY);
             if (!transformed.HasValue())
             {
                 return core::Result<PassSummary>::FromError(transformed.GetError());
             }
             clipStack.push_back(Intersect(clipStack.back(), *transformed));
-            summary.maximumClipDepth =
-                std::max(summary.maximumClipDepth, static_cast<std::uint64_t>(clipStack.size()));
+            summary.maximumClipDepth = std::max(summary.maximumClipDepth, static_cast<std::uint64_t>(clipStack.size()));
             continue;
         }
         if (command.kind == PaintCommandKind::PopClip)
@@ -350,8 +311,7 @@ struct PassSummary final
             continue;
         }
 
-        const core::Result<FractionalPixelRect> transformed =
-            Transform(fill.rectangle, scaleX, scaleY);
+        const core::Result<FractionalPixelRect> transformed = Transform(fill.rectangle, scaleX, scaleY);
         if (!transformed.HasValue())
         {
             return core::Result<PassSummary>::FromError(transformed.GetError());
@@ -363,79 +323,60 @@ struct PassSummary final
             continue;
         }
 
-        const core::Result<PackedLinearPremultipliedRgba8> packedColor =
-            PackLinearPremultipliedRgba8(fill.color);
+        const core::Result<PackedLinearPremultipliedRgba8> packedColor = PackLinearPremultipliedRgba8(fill.color);
         if (!packedColor.HasValue())
         {
-            return MakeCompilerFailureValue<PassSummary>(
-                UiErrorCode::InvalidPaintValue,
-                "UI paint color failed RGBA8 quantization during compilation.");
+            return MakeCompilerFailureValue<PassSummary>(UiErrorCode::InvalidPaintValue,
+                                                         "UI paint color failed RGBA8 quantization during compilation.");
         }
-        const Draw2DPackedLinearPremultipliedRgba8 packetColor =
-            Draw2DPackedLinearPremultipliedRgba8::FromChannels(
-                packedColor->GetRed(), packedColor->GetGreen(), packedColor->GetBlue(),
-                packedColor->GetAlpha());
+        const Draw2DPackedLinearPremultipliedRgba8 packetColor = Draw2DPackedLinearPremultipliedRgba8::FromChannels(
+            packedColor->GetRed(), packedColor->GetGreen(), packedColor->GetBlue(), packedColor->GetAlpha());
 
         std::uint64_t vertexBaseWide{};
         std::uint64_t firstIndexWide{};
         if (!CheckedMultiply(summary.visibleRectangleCount, 4U, vertexBaseWide) ||
-            !CheckedMultiply(summary.visibleRectangleCount, 6U, firstIndexWide) ||
-            vertexBaseWide > std::numeric_limits<std::uint32_t>::max() ||
+            !CheckedMultiply(summary.visibleRectangleCount, 6U, firstIndexWide) || vertexBaseWide > std::numeric_limits<std::uint32_t>::max() ||
             firstIndexWide > std::numeric_limits<std::uint32_t>::max())
         {
-            return MakeCompilerFailureValue<PassSummary>(
-                UiErrorCode::LimitExceeded,
-                "UI visible rectangle offsets exceed the Draw2D index representation.");
+            return MakeCompilerFailureValue<PassSummary>(UiErrorCode::LimitExceeded,
+                                                         "UI visible rectangle offsets exceed the Draw2D index representation.");
         }
 
         const float left = ToPacketFloat(geometry.left);
         const float top = ToPacketFloat(geometry.top);
         const float right = ToPacketFloat(geometry.right);
         const float bottom = ToPacketFloat(geometry.bottom);
-        if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right) ||
-            !std::isfinite(bottom) || left >= right || top >= bottom)
+        if (!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right) || !std::isfinite(bottom) || left >= right || top >= bottom)
         {
-            return MakeCompilerFailureValue<PassSummary>(
-                UiErrorCode::CompilationFailure, "UI clipped geometry cannot be represented "
-                                                 "without collapsing in Draw2D pixel floats.");
+            return MakeCompilerFailureValue<PassSummary>(UiErrorCode::CompilationFailure, "UI clipped geometry cannot be represented "
+                                                                                          "without collapsing in Draw2D pixel floats.");
         }
 
         const std::uint32_t vertexBase = static_cast<std::uint32_t>(vertexBaseWide);
         const std::array<Draw2DVertex, 4U> vertices{
-            Draw2DVertex{.x = left, .y = top, .color = packetColor},
-            Draw2DVertex{.x = right, .y = top, .color = packetColor},
-            Draw2DVertex{.x = right, .y = bottom, .color = packetColor},
-            Draw2DVertex{.x = left, .y = bottom, .color = packetColor}};
-        const std::array<Draw2DIndex, 6U> indices{vertexBase, vertexBase + 1U, vertexBase + 2U,
-                                                  vertexBase, vertexBase + 2U, vertexBase + 3U};
+            Draw2DVertex{.x = left, .y = top, .color = packetColor}, Draw2DVertex{.x = right, .y = top, .color = packetColor},
+            Draw2DVertex{.x = right, .y = bottom, .color = packetColor}, Draw2DVertex{.x = left, .y = bottom, .color = packetColor}};
+        const std::array<Draw2DIndex, 6U> indices{vertexBase, vertexBase + 1U, vertexBase + 2U, vertexBase, vertexBase + 2U, vertexBase + 3U};
 
         if (packetBuilder != nullptr)
         {
-            if (core::VoidResult appended = packetBuilder->AppendVertices(vertices);
-                !appended.HasValue())
+            if (core::VoidResult appended = packetBuilder->AppendVertices(vertices); !appended.HasValue())
             {
-                return MakeCompilerFailureValue<PassSummary>(
-                    UiErrorCode::CompilationFailure,
-                    "UI paint compiler could not append Draw2D vertices: " +
-                        std::string{appended.GetError().GetMessage()});
+                return MakeCompilerFailureValue<PassSummary>(UiErrorCode::CompilationFailure, "UI paint compiler could not append Draw2D vertices: " +
+                                                                                                  std::string{appended.GetError().GetMessage()});
             }
-            if (core::VoidResult appended = packetBuilder->AppendIndices(indices);
-                !appended.HasValue())
+            if (core::VoidResult appended = packetBuilder->AppendIndices(indices); !appended.HasValue())
             {
-                return MakeCompilerFailureValue<PassSummary>(
-                    UiErrorCode::CompilationFailure,
-                    "UI paint compiler could not append Draw2D indices: " +
-                        std::string{appended.GetError().GetMessage()});
+                return MakeCompilerFailureValue<PassSummary>(UiErrorCode::CompilationFailure, "UI paint compiler could not append Draw2D indices: " +
+                                                                                                  std::string{appended.GetError().GetMessage()});
             }
         }
 
         const Draw2DScissor scissor = MakeScissor(effectiveClip, extent);
         const std::uint32_t firstIndex = static_cast<std::uint32_t>(firstIndexWide);
-        const bool canMerge =
-            pendingDraw.has_value() && IsSameScissor(pendingDraw->scissor, scissor) &&
-            static_cast<std::uint64_t>(pendingDraw->firstIndex) + pendingDraw->indexCount ==
-                firstIndexWide &&
-            pendingDraw->indexCount <= std::numeric_limits<std::uint32_t>::max() - 6U;
+        const bool canMerge = pendingDraw.has_value() && IsSameScissor(pendingDraw->scissor, scissor) &&
+                              static_cast<std::uint64_t>(pendingDraw->firstIndex) + pendingDraw->indexCount == firstIndexWide &&
+                              pendingDraw->indexCount <= std::numeric_limits<std::uint32_t>::max() - 6U;
 
         if (canMerge)
         {
@@ -448,15 +389,13 @@ struct PassSummary final
             {
                 return core::Result<PassSummary>::FromError(std::move(flushed).GetError());
             }
-            pendingDraw = Draw2DDrawRecord{
-                .firstIndex = firstIndex, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
+            pendingDraw = Draw2DDrawRecord{.firstIndex = firstIndex, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
             ++summary.drawRecordCount;
         }
 
         if (!summary.bounds.hasValue)
         {
-            summary.bounds = CompiledPixelBounds{
-                .left = left, .top = top, .right = right, .bottom = bottom, .hasValue = true};
+            summary.bounds = CompiledPixelBounds{.left = left, .top = top, .right = right, .bottom = bottom, .hasValue = true};
         }
         else
         {
@@ -466,13 +405,10 @@ struct PassSummary final
             summary.bounds.bottom = std::max(summary.bounds.bottom, bottom);
         }
         ++summary.visibleRectangleCount;
-        summary.plannedOutput = InspectPaintCompileCounts(
-            summary.visibleRectangleCount, summary.drawRecordCount, uiLimits, packetLimits);
+        summary.plannedOutput = InspectPaintCompileCounts(summary.visibleRectangleCount, summary.drawRecordCount, uiLimits, packetLimits);
         if (!summary.plannedOutput.IsValid())
         {
-            return MakeCompilerFailureValue<PassSummary>(
-                UiErrorCode::LimitExceeded,
-                "UI compiled Draw2D output exceeds a checked hard limit.");
+            return MakeCompilerFailureValue<PassSummary>(UiErrorCode::LimitExceeded, "UI compiled Draw2D output exceeds a checked hard limit.");
         }
     }
 
@@ -482,15 +418,12 @@ struct PassSummary final
     }
     if (clipStack.size() != 1U)
     {
-        return MakeCompilerFailureValue<PassSummary>(
-            UiErrorCode::UnbalancedPaintState,
-            "UI paint compiler ended with an unbalanced clip stack.");
+        return MakeCompilerFailureValue<PassSummary>(UiErrorCode::UnbalancedPaintState, "UI paint compiler ended with an unbalanced clip stack.");
     }
     return summary;
 }
 
-[[nodiscard]] UiHardLimitKind MapPacketIssueToUiLimit(
-    render::draw2d::Draw2DPacketValidationIssue issue) noexcept
+[[nodiscard]] UiHardLimitKind MapPacketIssueToUiLimit(render::draw2d::Draw2DPacketValidationIssue issue) noexcept
 {
     using Issue = render::draw2d::Draw2DPacketValidationIssue;
     switch (issue)
@@ -533,9 +466,7 @@ void CopyPassSummary(PaintCompilerInspection& inspection, const PassSummary& sum
     }
 }
 } // namespace
-PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRectangleCount,
-                                                      std::uint64_t drawRecordCount,
-                                                      UiHardLimits uiLimits,
+PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRectangleCount, std::uint64_t drawRecordCount, UiHardLimits uiLimits,
                                                       Draw2DPacketLimits packetLimits) noexcept
 {
     PaintCompileCountInspection inspection;
@@ -548,43 +479,38 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
     {
         inspection.issue = PaintCompileCountIssue::VertexCountOverflow;
         inspection.hasRejectedLimit = true;
-        inspection.rejectedLimit = UiLimitExceeded{
-            .kind = UiHardLimitKind::CompiledVertexCount,
-            .requested = std::numeric_limits<std::uint64_t>::max(),
-            .allowed = std::min(uiLimits.maxCompiledVertexCount, packetLimits.maxVertexCount)};
+        inspection.rejectedLimit = UiLimitExceeded{.kind = UiHardLimitKind::CompiledVertexCount,
+                                                   .requested = std::numeric_limits<std::uint64_t>::max(),
+                                                   .allowed = std::min(uiLimits.maxCompiledVertexCount, packetLimits.maxVertexCount)};
         return inspection;
     }
     if (!CheckedMultiply(visibleRectangleCount, 6U, inspection.counts.indexCount))
     {
         inspection.issue = PaintCompileCountIssue::IndexCountOverflow;
         inspection.hasRejectedLimit = true;
-        inspection.rejectedLimit = UiLimitExceeded{
-            .kind = UiHardLimitKind::CompiledIndexCount,
-            .requested = std::numeric_limits<std::uint64_t>::max(),
-            .allowed = std::min(uiLimits.maxCompiledIndexCount, packetLimits.maxIndexCount)};
+        inspection.rejectedLimit = UiLimitExceeded{.kind = UiHardLimitKind::CompiledIndexCount,
+                                                   .requested = std::numeric_limits<std::uint64_t>::max(),
+                                                   .allowed = std::min(uiLimits.maxCompiledIndexCount, packetLimits.maxIndexCount)};
         return inspection;
     }
     inspection.counts.drawRecordCount = drawRecordCount;
 
-    const Draw2DPacketLimits arithmeticLimits{
-        .maxVertexCount = std::numeric_limits<std::uint64_t>::max(),
-        .maxIndexCount = std::numeric_limits<std::uint64_t>::max(),
-        .maxDrawRecordCount = std::numeric_limits<std::uint64_t>::max(),
-        .maxPacketBytes = std::numeric_limits<std::uint64_t>::max(),
-        .maxUploadBytes = std::numeric_limits<std::uint64_t>::max()};
-    const render::draw2d::Draw2DPacketValidation arithmetic =
-        render::draw2d::InspectDraw2DPacketCounts(inspection.counts, arithmeticLimits);
+    const Draw2DPacketLimits arithmeticLimits{.maxVertexCount = std::numeric_limits<std::uint64_t>::max(),
+                                              .maxIndexCount = std::numeric_limits<std::uint64_t>::max(),
+                                              .maxDrawRecordCount = std::numeric_limits<std::uint64_t>::max(),
+                                              .maxPacketBytes = std::numeric_limits<std::uint64_t>::max(),
+                                              .maxUploadBytes = std::numeric_limits<std::uint64_t>::max()};
+    const render::draw2d::Draw2DPacketValidation arithmetic = render::draw2d::InspectDraw2DPacketCounts(inspection.counts, arithmeticLimits);
     inspection.packetStats = arithmetic.stats;
     if (!arithmetic.IsValid())
     {
         inspection.issue = PaintCompileCountIssue::LimitExceeded;
         inspection.hasRejectedLimit = true;
         const UiHardLimitKind kind = MapPacketIssueToUiLimit(arithmetic.issue);
-        inspection.rejectedLimit = UiLimitExceeded{
-            .kind = kind,
-            .requested = arithmetic.requested == 0U ? std::numeric_limits<std::uint64_t>::max()
-                                                    : arithmetic.requested,
-            .allowed = arithmetic.allowed};
+        inspection.rejectedLimit =
+            UiLimitExceeded{.kind = kind,
+                            .requested = arithmetic.requested == 0U ? std::numeric_limits<std::uint64_t>::max() : arithmetic.requested,
+                            .allowed = arithmetic.allowed};
         return inspection;
     }
 
@@ -592,20 +518,14 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
     {
         inspection.issue = PaintCompileCountIssue::LimitExceeded;
         inspection.hasRejectedLimit = true;
-        inspection.rejectedLimit =
-            UiLimitExceeded{.kind = kind, .requested = requested, .allowed = allowed};
+        inspection.rejectedLimit = UiLimitExceeded{.kind = kind, .requested = requested, .allowed = allowed};
     };
 
-    const std::uint64_t vertexLimit =
-        std::min(uiLimits.maxCompiledVertexCount, packetLimits.maxVertexCount);
-    const std::uint64_t indexLimit =
-        std::min(uiLimits.maxCompiledIndexCount, packetLimits.maxIndexCount);
-    const std::uint64_t drawLimit =
-        std::min(uiLimits.maxDrawRecordCount, packetLimits.maxDrawRecordCount);
-    const std::uint64_t packetByteLimit =
-        std::min(uiLimits.maxDrawPacketBytes, packetLimits.maxPacketBytes);
-    const std::uint64_t uploadByteLimit =
-        std::min(uiLimits.maxUploadBytes, packetLimits.maxUploadBytes);
+    const std::uint64_t vertexLimit = std::min(uiLimits.maxCompiledVertexCount, packetLimits.maxVertexCount);
+    const std::uint64_t indexLimit = std::min(uiLimits.maxCompiledIndexCount, packetLimits.maxIndexCount);
+    const std::uint64_t drawLimit = std::min(uiLimits.maxDrawRecordCount, packetLimits.maxDrawRecordCount);
+    const std::uint64_t packetByteLimit = std::min(uiLimits.maxDrawPacketBytes, packetLimits.maxPacketBytes);
+    const std::uint64_t uploadByteLimit = std::min(uiLimits.maxUploadBytes, packetLimits.maxUploadBytes);
 
     if (inspection.counts.vertexCount > vertexLimit)
     {
@@ -621,8 +541,7 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
     }
     else if (inspection.packetStats.packetBytes > packetByteLimit)
     {
-        reject(UiHardLimitKind::DrawPacketBytes, inspection.packetStats.packetBytes,
-               packetByteLimit);
+        reject(UiHardLimitKind::DrawPacketBytes, inspection.packetStats.packetBytes, packetByteLimit);
     }
     else if (inspection.packetStats.uploadBytes > uploadByteLimit)
     {
@@ -631,16 +550,19 @@ PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRecta
     return inspection;
 }
 
-PaintCompiler::PaintCompiler(UiHardLimits limits) noexcept
-    : m_limits{limits}, m_packetBuilder{MakePacketLimits(limits)}
+PaintCompiler::PaintCompiler(UiHardLimits limits) noexcept :
+    m_limits{limits},
+    m_packetBuilder{MakePacketLimits(limits)}
 {
     m_inspection.clipStackCapacity = static_cast<std::uint64_t>(m_clipStack.capacity());
     m_inspection.packetBuilder = m_packetBuilder.GetSnapshot();
 }
 
-PaintCompiler::PaintCompiler(PaintCompiler&& other) noexcept
-    : m_limits{other.m_limits}, m_packetBuilder{std::move(other.m_packetBuilder)},
-      m_clipStack{std::move(other.m_clipStack)}, m_inspection{other.m_inspection}
+PaintCompiler::PaintCompiler(PaintCompiler&& other) noexcept :
+    m_limits{other.m_limits},
+    m_packetBuilder{std::move(other.m_packetBuilder)},
+    m_clipStack{std::move(other.m_clipStack)},
+    m_inspection{other.m_inspection}
 {
     other.Reset();
 }
@@ -658,8 +580,7 @@ PaintCompiler& PaintCompiler::operator=(PaintCompiler&& other) noexcept
     return *this;
 }
 
-core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPaintList& paintList,
-                                                                  const UiTargetMetrics& metrics)
+core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPaintList& paintList, const UiTargetMetrics& metrics)
 {
     if (!IsReady())
     {
@@ -668,17 +589,13 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
         m_inspection.stage = PaintCompileStage::StateValidation;
         m_inspection.clipStackCapacity = static_cast<std::uint64_t>(m_clipStack.capacity());
         m_inspection.packetBuilder = m_packetBuilder.GetSnapshot();
-        return MakeCompilerFailureValue<render::draw2d::Draw2DPacket>(
-            UiErrorCode::InvalidPaintState,
-            "UI paint compiler must be reset before another compilation.");
+        return MakeCompilerFailureValue<render::draw2d::Draw2DPacket>(UiErrorCode::InvalidPaintState,
+                                                                      "UI paint compiler must be reset before another compilation.");
     }
 
     m_inspection = PaintCompilerInspection{};
-    const auto fail =
-        [&](PaintCompileStage stage, UiErrorCode code, std::string message,
-            PaintCommandIndex rejectedCommand,
-            std::source_location location =
-                std::source_location::current()) -> core::Result<render::draw2d::Draw2DPacket>
+    const auto fail = [&](PaintCompileStage stage, UiErrorCode code, std::string message, PaintCommandIndex rejectedCommand,
+                          std::source_location location = std::source_location::current()) -> core::Result<render::draw2d::Draw2DPacket>
     {
         m_packetBuilder.Reset();
         m_clipStack.clear();
@@ -687,14 +604,13 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
         m_inspection.rejectedCommandIndex = rejectedCommand;
         m_inspection.clipStackCapacity = static_cast<std::uint64_t>(m_clipStack.capacity());
         m_inspection.packetBuilder = m_packetBuilder.GetSnapshot();
-        return MakeCompilerFailureValue<render::draw2d::Draw2DPacket>(code, std::move(message),
-                                                                      location);
+        return MakeCompilerFailureValue<render::draw2d::Draw2DPacket>(code, std::move(message), location);
     };
 
     if (!IsValid(m_limits))
     {
-        return fail(PaintCompileStage::PaintValidation, UiErrorCode::InvalidPaintValue,
-                    "UI paint compiler limits must all be non-zero.", kNoRejectedPaintCommand);
+        return fail(PaintCompileStage::PaintValidation, UiErrorCode::InvalidPaintValue, "UI paint compiler limits must all be non-zero.",
+                    kNoRejectedPaintCommand);
     }
 
     const auto checkInputLimit = [&](UiHardLimitKind kind, std::uint64_t requested) noexcept
@@ -705,15 +621,13 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
             return true;
         }
         m_inspection.hasRejectedLimit = true;
-        m_inspection.rejectedLimit =
-            UiLimitExceeded{.kind = kind, .requested = requested, .allowed = allowed};
+        m_inspection.rejectedLimit = UiLimitExceeded{.kind = kind, .requested = requested, .allowed = allowed};
         return false;
     };
     const std::uint64_t commandCount = static_cast<std::uint64_t>(paintList.GetCommands().size());
     if (!checkInputLimit(UiHardLimitKind::PaintCommandCount, commandCount))
     {
-        return fail(PaintCompileStage::PaintValidation, UiErrorCode::LimitExceeded,
-                    "UI paint list exceeds the compiler command-count hard limit.",
+        return fail(PaintCompileStage::PaintValidation, UiErrorCode::LimitExceeded, "UI paint list exceeds the compiler command-count hard limit.",
                     kNoRejectedPaintCommand);
     }
 
@@ -721,61 +635,48 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
     if (!checkInputLimit(UiHardLimitKind::PaintCommandPayloadBytes, paintStats.payloadBytes) ||
         !checkInputLimit(UiHardLimitKind::ClipDepth, paintStats.maxClipDepthObserved))
     {
-        return fail(PaintCompileStage::PaintValidation, UiErrorCode::LimitExceeded,
-                    "UI paint list exceeds a compiler input hard limit.", kNoRejectedPaintCommand);
+        return fail(PaintCompileStage::PaintValidation, UiErrorCode::LimitExceeded, "UI paint list exceeds a compiler input hard limit.",
+                    kNoRejectedPaintCommand);
     }
 
     PaintCommandIndex rejectedCommand{kNoRejectedPaintCommand};
-    const core::VoidResult paintValidation =
-        ValidatePaintListStructure(paintList, paintStats, rejectedCommand);
+    const core::VoidResult paintValidation = ValidatePaintListStructure(paintList, paintStats, rejectedCommand);
     if (!paintValidation.HasValue())
     {
-        return fail(PaintCompileStage::PaintValidation,
-                    static_cast<UiErrorCode>(paintValidation.GetError().GetCode().GetValue()),
-                    std::string{paintValidation.GetError().GetMessage()}, rejectedCommand,
-                    paintValidation.GetError().GetLocation());
+        return fail(PaintCompileStage::PaintValidation, static_cast<UiErrorCode>(paintValidation.GetError().GetCode().GetValue()),
+                    std::string{paintValidation.GetError().GetMessage()}, rejectedCommand, paintValidation.GetError().GetLocation());
     }
 
     if (!IsValid(metrics) || !IsDrawable(metrics))
     {
-        return fail(PaintCompileStage::MetricsValidation, UiErrorCode::InvalidMetrics,
-                    "UI paint compilation requires valid drawable target metrics.",
+        return fail(PaintCompileStage::MetricsValidation, UiErrorCode::InvalidMetrics, "UI paint compilation requires valid drawable target metrics.",
                     kNoRejectedPaintCommand);
     }
     const LogicalSize logicalSize = metrics.GetLogicalSize();
     const FramebufferPixelSize framebufferSize = metrics.GetFramebufferPixelSize();
-    if (logicalSize.width <= 0.0F || logicalSize.height <= 0.0F || framebufferSize.width == 0U ||
-        framebufferSize.height == 0U)
+    if (logicalSize.width <= 0.0F || logicalSize.height <= 0.0F || framebufferSize.width == 0U || framebufferSize.height == 0U)
     {
-        return fail(PaintCompileStage::MetricsValidation, UiErrorCode::InvalidMetrics,
-                    "UI paint compilation cannot divide by a zero target extent.",
+        return fail(PaintCompileStage::MetricsValidation, UiErrorCode::InvalidMetrics, "UI paint compilation cannot divide by a zero target extent.",
                     kNoRejectedPaintCommand);
     }
 
-    const double scaleX =
-        static_cast<double>(framebufferSize.width) / static_cast<double>(logicalSize.width);
-    const double scaleY =
-        static_cast<double>(framebufferSize.height) / static_cast<double>(logicalSize.height);
+    const double scaleX = static_cast<double>(framebufferSize.width) / static_cast<double>(logicalSize.width);
+    const double scaleY = static_cast<double>(framebufferSize.height) / static_cast<double>(logicalSize.height);
     if (!std::isfinite(scaleX) || !std::isfinite(scaleY) || scaleX <= 0.0 || scaleY <= 0.0)
     {
         return fail(PaintCompileStage::MetricsValidation, UiErrorCode::InvalidMetrics,
-                    "UI logical-to-framebuffer scales must be finite and positive.",
-                    kNoRejectedPaintCommand);
+                    "UI logical-to-framebuffer scales must be finite and positive.", kNoRejectedPaintCommand);
     }
 
     std::uint64_t scratchBytes{};
-    if (!CheckedMultiply(paintStats.maxClipDepthObserved, sizeof(FractionalPixelRect),
-                         scratchBytes) ||
+    if (!CheckedMultiply(paintStats.maxClipDepthObserved, sizeof(FractionalPixelRect), scratchBytes) ||
         scratchBytes > m_limits.maxCompilerScratchBytes)
     {
         m_inspection.hasRejectedLimit = true;
-        m_inspection.rejectedLimit = UiLimitExceeded{
-            .kind = UiHardLimitKind::CompilerScratchBytes,
-            .requested =
-                scratchBytes == 0U ? std::numeric_limits<std::uint64_t>::max() : scratchBytes,
-            .allowed = m_limits.maxCompilerScratchBytes};
-        return fail(PaintCompileStage::ScratchPreflight, UiErrorCode::LimitExceeded,
-                    "UI paint compiler clip-stack scratch exceeds its hard limit.",
+        m_inspection.rejectedLimit = UiLimitExceeded{.kind = UiHardLimitKind::CompilerScratchBytes,
+                                                     .requested = scratchBytes == 0U ? std::numeric_limits<std::uint64_t>::max() : scratchBytes,
+                                                     .allowed = m_limits.maxCompilerScratchBytes};
+        return fail(PaintCompileStage::ScratchPreflight, UiErrorCode::LimitExceeded, "UI paint compiler clip-stack scratch exceeds its hard limit.",
                     kNoRejectedPaintCommand);
     }
     m_inspection.scratchBytes = scratchBytes;
@@ -786,74 +687,59 @@ core::Result<render::draw2d::Draw2DPacket> PaintCompiler::Compile(const SealedPa
     }
     catch (const std::bad_alloc&)
     {
-        return fail(PaintCompileStage::ScratchPreflight, UiErrorCode::CompilationFailure,
-                    "UI paint compiler could not reserve clip-stack scratch.",
+        return fail(PaintCompileStage::ScratchPreflight, UiErrorCode::CompilationFailure, "UI paint compiler could not reserve clip-stack scratch.",
                     kNoRejectedPaintCommand);
     }
     catch (const std::length_error&)
     {
         return fail(PaintCompileStage::ScratchPreflight, UiErrorCode::CompilationFailure,
-                    "UI paint compiler clip-stack scratch exceeds the host maximum.",
-                    kNoRejectedPaintCommand);
+                    "UI paint compiler clip-stack scratch exceeds the host maximum.", kNoRejectedPaintCommand);
     }
     m_inspection.clipStackCapacity = static_cast<std::uint64_t>(m_clipStack.capacity());
 
-    const Draw2DPixelExtent packetExtent{.width = framebufferSize.width,
-                                         .height = framebufferSize.height};
+    const Draw2DPixelExtent packetExtent{.width = framebufferSize.width, .height = framebufferSize.height};
     PassSummary preflightProgress;
     const core::Result<PassSummary> preflight =
-        RunCompilationPass(paintList, scaleX, scaleY, packetExtent, m_clipStack, m_limits,
-                           m_packetBuilder.GetLimits(), nullptr, preflightProgress);
+        RunCompilationPass(paintList, scaleX, scaleY, packetExtent, m_clipStack, m_limits, m_packetBuilder.GetLimits(), nullptr, preflightProgress);
     if (!preflight.HasValue())
     {
         CopyPassSummary(m_inspection, preflightProgress);
-        return fail(PaintCompileStage::GeometryPreflight,
-                    static_cast<UiErrorCode>(preflight.GetError().GetCode().GetValue()),
-                    std::string{preflight.GetError().GetMessage()},
-                    preflightProgress.lastCommandIndex, preflight.GetError().GetLocation());
+        return fail(PaintCompileStage::GeometryPreflight, static_cast<UiErrorCode>(preflight.GetError().GetCode().GetValue()),
+                    std::string{preflight.GetError().GetMessage()}, preflightProgress.lastCommandIndex, preflight.GetError().GetLocation());
     }
     CopyPassSummary(m_inspection, *preflight);
 
-    if (core::VoidResult extentResult = m_packetBuilder.SetPixelExtent(packetExtent);
-        !extentResult.HasValue())
+    if (core::VoidResult extentResult = m_packetBuilder.SetPixelExtent(packetExtent); !extentResult.HasValue())
     {
-        return fail(PaintCompileStage::PacketBuild, UiErrorCode::CompilationFailure,
-                    std::string{extentResult.GetError().GetMessage()}, kNoRejectedPaintCommand,
-                    extentResult.GetError().GetLocation());
+        return fail(PaintCompileStage::PacketBuild, UiErrorCode::CompilationFailure, std::string{extentResult.GetError().GetMessage()},
+                    kNoRejectedPaintCommand, extentResult.GetError().GetLocation());
     }
-    if (core::VoidResult reserveResult = m_packetBuilder.Reserve(m_inspection.plannedOutput.counts);
-        !reserveResult.HasValue())
+    if (core::VoidResult reserveResult = m_packetBuilder.Reserve(m_inspection.plannedOutput.counts); !reserveResult.HasValue())
     {
-        return fail(PaintCompileStage::PacketBuild, UiErrorCode::CompilationFailure,
-                    std::string{reserveResult.GetError().GetMessage()}, kNoRejectedPaintCommand,
-                    reserveResult.GetError().GetLocation());
+        return fail(PaintCompileStage::PacketBuild, UiErrorCode::CompilationFailure, std::string{reserveResult.GetError().GetMessage()},
+                    kNoRejectedPaintCommand, reserveResult.GetError().GetLocation());
     }
 
     PassSummary emittedProgress;
-    const core::Result<PassSummary> emitted =
-        RunCompilationPass(paintList, scaleX, scaleY, packetExtent, m_clipStack, m_limits,
-                           m_packetBuilder.GetLimits(), &m_packetBuilder, emittedProgress);
+    const core::Result<PassSummary> emitted = RunCompilationPass(paintList, scaleX, scaleY, packetExtent, m_clipStack, m_limits,
+                                                                 m_packetBuilder.GetLimits(), &m_packetBuilder, emittedProgress);
     if (!emitted.HasValue())
     {
         CopyPassSummary(m_inspection, emittedProgress);
-        return fail(PaintCompileStage::PacketBuild,
-                    static_cast<UiErrorCode>(emitted.GetError().GetCode().GetValue()),
-                    std::string{emitted.GetError().GetMessage()}, emittedProgress.lastCommandIndex,
-                    emitted.GetError().GetLocation());
+        return fail(PaintCompileStage::PacketBuild, static_cast<UiErrorCode>(emitted.GetError().GetCode().GetValue()),
+                    std::string{emitted.GetError().GetMessage()}, emittedProgress.lastCommandIndex, emitted.GetError().GetLocation());
     }
     if (*emitted != *preflight)
     {
         return fail(PaintCompileStage::PacketBuild, UiErrorCode::CompilationFailure,
-                    "UI paint compiler emission diverged from deterministic preflight.",
-                    emitted->lastCommandIndex);
+                    "UI paint compiler emission diverged from deterministic preflight.", emitted->lastCommandIndex);
     }
 
     core::Result<render::draw2d::Draw2DPacket> packet = m_packetBuilder.Seal();
     if (!packet.HasValue())
     {
-        return fail(PaintCompileStage::PacketSeal, UiErrorCode::CompilationFailure,
-                    std::string{packet.GetError().GetMessage()}, emitted->lastCommandIndex,
-                    packet.GetError().GetLocation());
+        return fail(PaintCompileStage::PacketSeal, UiErrorCode::CompilationFailure, std::string{packet.GetError().GetMessage()},
+                    emitted->lastCommandIndex, packet.GetError().GetLocation());
     }
 
     CopyPassSummary(m_inspection, *emitted);
@@ -895,7 +781,6 @@ UiHardLimits PaintCompiler::GetLimits() const noexcept
 
 bool PaintCompiler::IsReady() const noexcept
 {
-    return m_inspection.status == PaintCompileStatus::Ready && m_packetBuilder.IsOpen() &&
-           m_packetBuilder.IsEmpty();
+    return m_inspection.status == PaintCompileStatus::Ready && m_packetBuilder.IsOpen() && m_packetBuilder.IsEmpty();
 }
 } // namespace pond::ui::paint

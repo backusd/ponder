@@ -14,16 +14,11 @@ struct ErrorMapping final
 };
 
 constexpr std::array kErrorMappings{
-    ErrorMapping{pond::math::MathErrorCode::InvalidArgument,
-                 pond::core::ErrorCategory::InvalidArgument, 0x0002'0001},
-    ErrorMapping{pond::math::MathErrorCode::NonFiniteInput,
-                 pond::core::ErrorCategory::InvalidArgument, 0x0002'0002},
-    ErrorMapping{pond::math::MathErrorCode::DegenerateInput, pond::core::ErrorCategory::General,
-                 0x0002'0003},
-    ErrorMapping{pond::math::MathErrorCode::SingularMatrix, pond::core::ErrorCategory::General,
-                 0x0002'0004},
-    ErrorMapping{pond::math::MathErrorCode::UndefinedHomogeneousCoordinate,
-                 pond::core::ErrorCategory::General, 0x0002'0005},
+    ErrorMapping{pond::math::MathErrorCode::InvalidArgument, pond::core::ErrorCategory::InvalidArgument, 0x0002'0001},
+    ErrorMapping{pond::math::MathErrorCode::NonFiniteInput, pond::core::ErrorCategory::InvalidArgument, 0x0002'0002},
+    ErrorMapping{pond::math::MathErrorCode::DegenerateInput, pond::core::ErrorCategory::General, 0x0002'0003},
+    ErrorMapping{pond::math::MathErrorCode::SingularMatrix, pond::core::ErrorCategory::General, 0x0002'0004},
+    ErrorMapping{pond::math::MathErrorCode::UndefinedHomogeneousCoordinate, pond::core::ErrorCategory::General, 0x0002'0005},
 };
 
 constexpr bool EveryErrorMappingIsConstexpr()
@@ -43,8 +38,7 @@ constexpr bool EveryErrorMappingIsConstexpr()
 static_assert(EveryErrorMappingIsConstexpr());
 static_assert(pond::math::kMathErrorCodeFirst == 0x0002'0000);
 static_assert(pond::math::kMathErrorCodeLast == 0x0002'FFFF);
-static_assert(
-    std::is_same_v<std::underlying_type_t<pond::math::MathErrorCode>, pond::core::ErrorCodeValue>);
+static_assert(std::is_same_v<std::underlying_type_t<pond::math::MathErrorCode>, pond::core::ErrorCodeValue>);
 
 TEST(MathErrorTests, ReservesStableMathErrorBlock)
 {

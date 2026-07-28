@@ -45,9 +45,8 @@ concept HasVectorSubscript = requires(Vector vector, const Vector constVector, s
     const auto constVector2Element = constVector2.At(1);
     const auto constVector3Element = constVector3.At(2);
     const auto constVector4Element = constVector4.At(3);
-    return constVector2Element.HasValue() && constVector2Element->get() == 20.0F &&
-           constVector3Element.HasValue() && constVector3Element->get() == 50.0F &&
-           constVector4Element.HasValue() && constVector4Element->get() == 90.0F;
+    return constVector2Element.HasValue() && constVector2Element->get() == 20.0F && constVector3Element.HasValue() &&
+           constVector3Element->get() == 50.0F && constVector4Element.HasValue() && constVector4Element->get() == 90.0F;
 }
 
 static_assert(sizeof(pond::math::Vector2) == 8);
@@ -85,8 +84,7 @@ static_assert(SupportsCompileTimeCheckedVectorAccess());
 void ExpectInvalidIndex(auto result)
 {
     ASSERT_FALSE(result.HasValue());
-    EXPECT_EQ(result.GetError().GetCode(),
-              pond::math::ToErrorCode(pond::math::MathErrorCode::InvalidArgument));
+    EXPECT_EQ(result.GetError().GetCode(), pond::math::ToErrorCode(pond::math::MathErrorCode::InvalidArgument));
 }
 
 TEST(Vector2Tests, DefaultsToZeroAndConstructsFromComponents)

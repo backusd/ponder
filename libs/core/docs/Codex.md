@@ -11,7 +11,7 @@ configuration, environment, job-system, or application dependencies.
 ## Local Rules
 
 - Keep public headers under `include/ponder/core/`.
-- Use the `pond::core` namespace.
+- Use the `ponder::core` namespace.
 - Keep `ponder_core` at the bottom of the dependency graph.
 - All project libraries may depend on core; core must not depend on any project
   library.
@@ -25,25 +25,36 @@ configuration, environment, job-system, or application dependencies.
 - Do not create individual utility documentation files. Put durable core utility
   boundary details in `libs/core/docs/Boundary.md` and implementation guidance in
   this file.
-- Use `Result<T>` for recoverable errors.
+- Use `Result<T>` when failure is expected from caller input or external
+  conditions, or when callers can realistically handle the failure locally.
 - `Error` carries category/code, message, source location, and a best-effort
   stacktrace.
 - `Result` success paths may be constexpr, but `Error` construction is
   runtime-only. Keep evaluated constexpr failure paths ill-formed with an
   explicit diagnostic rather than weakening `Error` diagnostics.
-- Use `PonderException` only for truly exceptional failures. It must be a
-  standalone project type and must not derive from `std::exception` or any other
-  type.
-- `PonderException` does not carry `Error`; it carries a human-readable
-  message, source location, and a best-effort stacktrace.
-- Use `throw PONDER_EXCEPTION(...)` or `ThrowPonderException` for throwing
-  `PonderException`. These helpers support std::format-style messages and
-  source-location capture.
-- Use `PONDER_ASSERT` or `PONDER_ASSERT_MESSAGE` for internal invariants.
+- Throw `Exception` when an operation should never or only rarely fail and local
+  recovery is not realistic. Ask where useful handling can occur: use `Result`
+  for nearby handling and an exception for propagation to a higher-level handler.
+- `Exception` is the standalone project exception root and does not derive from
+  `std::exception`. It carries a human-readable message, source location, and a
+  best-effort stacktrace; it does not carry `Error`.
+- `ExceptionWithData<T>` derives from `Exception` and owns a typed payload for
+  exceptional cases that benefit from specific catch handling. Its formatter
+  and stream insertion support must remain usable when `T` is not formattable or
+  stream-insertable, rendering `<unprintable>` for the unsupported data channel.
+- Use `throw PONDER_EXCEPTION(...)` for `Exception` and
+  `throw PONDER_EXCEPTION_WITH_DATA(data, ...)` when attaching typed data.
+  `MakeException`, `MakeFormattedException`, and the corresponding data helpers
+  preserve source locations and support std::format-style messages.
+- Use `PONDER_ASSERT(expression)` or
+  `PONDER_ASSERT(expression, format, arguments...)` for internal invariants.
 - Debug-only assertions should log and debug break, and should compile out in
   release builds.
 - Use `PONDER_VERIFY` when the expression must remain active in release builds;
   verify failures should throw and support std::format-style messages.
+- Use `PONDER_UNREACHABLE` only for impossible control flow. It debug-breaks in
+  debug builds and throws `Exception` in release builds; callers that can reach
+  it must not promise `noexcept`.
 - Use `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARNING`, `LOG_ERROR`, and
   `LOG_FATAL` for diagnostics.
 - Use `_CATEGORY` logging macros when a stable subsystem category helps filtering
@@ -78,6 +89,11 @@ configuration, environment, job-system, or application dependencies.
 - `Uuid` is the generic stable identifier primitive. Keep domain-specific IDs
   such as `AssetId`, `NodeId`, and `MoleculeId` in the owning domain library.
   Keep UUID parse/format behavior canonical and deterministic.
+- `UuidEntropySource` returns `void`. `GenerateUuidV4` returns `Uuid` directly,
+  is `noexcept`, and requires a non-null injected source; enforce that precondition
+  with `PONDER_ASSERT`. Entropy callbacks must not let exceptions escape because
+  doing so terminates under the `noexcept` contract. UUID text parsing remains a
+  recoverable `Result`.
 - Core owns build/version information, UUID/stable identifiers, `ScopeExit`,
   minimal identifier hashing helpers, minimal string conversion/validation
   helpers, and minimal number helpers.
@@ -94,6 +110,9 @@ configuration, environment, job-system, or application dependencies.
   code points.
 - Keep string conversion dependency-free and avoid Windows-only APIs in public
   headers.
+- `Tolerance::Create` returns `Tolerance` directly and throws `Exception` for
+  non-finite or negative inputs because those values violate a programming
+  contract rather than representing normal numeric control flow.
 - `LogLevel`, `ErrorCategory`, and `AssertionFailureKind` use compact
   `std::uint8_t` underlying storage; keep future small public enums explicit
   when their value set is intentionally bounded.

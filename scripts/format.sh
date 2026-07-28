@@ -42,7 +42,7 @@ collect_source_files()
     local roots=()
     local root
 
-    for root in apps libs plugins tests tools; do
+    for root in apps examples libs plugins tests tools; do
         if [[ -d "$root" ]]; then
             roots+=("$root")
         fi

@@ -2,6 +2,26 @@
 
 Status: implementation plan for the first real `ponder_platform` library.
 
+This is a historical implementation record. The active exception-first failure
+contract and its migration tasks are defined in `error-handling-update.txt`;
+result-first clauses in completed tasks below are not current guidance.
+
+A 2026-07-23 lifecycle and test-seam cleanup also supersedes completed-task
+wording that prescribed explicit creating, active, and destroying slot states or
+production stage hooks, provider injection, or a virtual runtime-backend
+interface. Current runtime creation uses one private atomic 0/1 reservation held
+through full construction rollback and full teardown, then released to permit
+sequential recreation. `PlatformRuntime::Create` constructs
+`PlatformRuntimeState` directly. The state owns one opaque `BackendImpl`
+containing either the production `SdlRuntimeBackend` aggregate or the test-only
+`MockRuntimeBackend` aggregate selected when building the isolated
+`ponder_platform_runtime_mock_tests` executable; both expose the same private
+non-virtual API. The mock executable compiles the required runtime source
+variant directly and does not link `ponder::platform`. Dialogs retain their
+narrow private backend and weak completion token. Production code contains no
+global test hooks, backend overrides, builders, or test providers. The task text
+remains unchanged as a historical record.
+
 PLAT-000 was completed and the platform contracts were revised on 2026-07-08.
 The former open-question checklist has been removed. Durable decisions live in
 `Boundary.md`, `Codex.md`, and ADR 0007.
@@ -245,9 +265,10 @@ Work:
   and `PixelSize`. `IsValid` rejects non-finite logical values and negative
   logical extents. Zero extents/sizes remain valid foundational observations;
   feature descriptors validate stronger positive-size requirements.
-- Add a strong `Timestamp` backed by `std::chrono::nanoseconds` in SDL's
-  monotonic tick domain with the same epoch as `SDL_GetTicksNS()`. Only
-  timestamp differences are semantically meaningful.
+- Add strong core-owned `Timestamp` and `Duration` types backed by
+  `std::chrono::nanoseconds`; platform retains compatibility aliases. SDL
+  events preserve SDL's monotonic timestamp domain, while application timing
+  uses `core::Timestamp::Now()`. Only compare timestamps from the same source.
 - Add `WindowGraphicsCompatibility`. Its closed set is now `Default`, `Vulkan`,
   and `Metal` after REND-001. Exactly one alternative is selected per window.
 - Reserve numeric block `0x0001'0000` through `0x0001'FFFF` for platform errors.
@@ -324,8 +345,8 @@ Work:
   normally, so shutdown cannot invalidate a live child.
 - Make every public operation call `PONDER_VERIFY` for valid, non-moved-from
   state and correct owner thread before touching SDL.
-- Add `Now()` using `SDL_GetTicksNS()` and returning the same monotonic domain as
-  event timestamps.
+- Use `core::Timestamp::Now()` for application-side monotonic timing. The
+  platform runtime and its backend interfaces expose no clock service.
 - Route initialization errors through the common SDL error adapter.
 - Log lifecycle transitions with the `platform` category.
 
@@ -784,8 +805,12 @@ Provide the host services needed by desktop and future retained UI consumers.
 
 Work:
 
-- Add owner-thread `PlatformRuntime` text get/set operations using `std::string`
-  and `std::string_view`.
+- Add a runtime-owned `ClipboardManager`, reached through
+  `PlatformRuntime::GetClipboardManager()`, with text get/set operations using
+  `std::string` and `std::string_view`.
+- Serialize manager calls. SDL clipboard access remains owner-thread-only;
+  cached-manager calls from other threads return `WrongThread` without touching
+  the backend.
 - Copy SDL-owned text immediately and hide SDL allocation/free behavior.
 - For `SDL_GetClipboardText()`, clear SDL error state immediately before the call
   and snapshot/copy error state immediately after it, before `SDL_free()` or any
@@ -846,18 +871,18 @@ Work:
 - In the callback, immediately copy selected paths or SDL error text before SDL
   releases them. The callback may run on a foreign thread and may only enqueue
   synchronized private completion data.
-- Extend `PlatformEvent` with `DialogCompletedEvent` containing the request ID
-  and exactly one typed outcome:
+- Extend `PlatformEvent` with `DialogCompletedEvent` containing immutable
+  `DialogRequestInfo` and exactly one typed outcome:
   - Selected paths and an optional selected-filter index.
   - Cancellation.
   - `pond::core::Error` failure.
 - Deliver completion exactly once from `PollEvent()` on the runtime owner thread.
   Completion records are FIFO by callback enqueue order; callback/request order
-  and ordering relative to SDL events are unspecified, so consumers use IDs and
-  timestamps rather than ordering assumptions.
+  and ordering relative to SDL events are unspecified, so consumers use the
+  request metadata rather than ordering assumptions.
 - Treat cancellation as a normal outcome and a null SDL file list as failure.
-- Allow multiple outstanding request IDs while keeping each request's storage
-  independent.
+- Let `DialogManager` own multiple independent outstanding requests and expose
+  pending count/state/snapshot queries to callers.
 - Keep a request registered until its completion event is consumed.
 - Enforce that the parent window and public runtime owner outlive a pending
   request. SDL exposes no general programmatic cancellation operation, so do not
@@ -1178,8 +1203,9 @@ the portability matrix—not known implementation defects.
 - Dialog filter validation uses an explicit locale-independent ASCII grammar.
   Request preparation no longer constructs unused filters or retains redundant
   parent/registration fields.
-- Dialog completion uses a request-owned intrusive FIFO, giving owner-thread
-  polling O(1) empty checks and pops without scanning every pending request.
+- Dialog completion stores completed request IDs in a mutex-protected
+  `std::queue`, giving owner-thread polling O(1) empty checks and pops without
+  scanning every pending request.
   The callback snapshots SDL failure text before any later backend call, records
   completion time at callback completion, and contains all exceptions at the C
   ABI boundary with prebuilt no-allocation fallback state.
@@ -1191,10 +1217,11 @@ the portability matrix—not known implementation defects.
   visibility, accepted duplicates remain idempotent, immediate reversals reach
   SDL while flags lag, and delayed SHOWN events cannot erase newer hidden or
   visible intent.
-- The runtime owns a class-based backend through `IPlatformRuntimeBackend`;
-  production and fake implementations carry their own state and lifetime.
-  Window and display backend tables retain designated initializers, keeping
-  every remaining function pointer visibly associated with its field.
+- The runtime owns one opaque, concrete backend aggregate. Production and the
+  test-only mock build select API-compatible SDL and mock implementations at
+  compile time without a provider or virtual runtime interface. The retained
+  narrow window and display backend partitions carry their own state and
+  lifetime.
 - Process termination rejects forged enum values before backend dispatch. The
   process-lifetime abandoned-child reaper is created before child launch, blocks
   while idle, polls all active handles fairly, and never makes public destruction

@@ -11,10 +11,9 @@ ponder_add_project_test(ponder_platform_tests
         PlatformErrorTests.cpp
         PlatformCoverageAuditTests.cpp
         PlatformEventTests.cpp
-        PlatformRuntimeTypesTests.cpp
+        RuntimeTypesTests.cpp
         ProcessTests.cpp
         TextInputTests.cpp
-        TimingTests.cpp
         WindowGraphicsTests.cpp
         WindowStateTests.cpp
         WindowTypesTests.cpp
@@ -29,19 +28,17 @@ target_compile_definitions(ponder_platform_tests PRIVATE
     PONDER_PLATFORM_HEADER_SELF_CONTAINMENT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/HeaderSelfContainment")
 
 add_library(ponder_platform_header_tests OBJECT
-    HeaderSelfContainment/DialogHeader.cpp
     HeaderSelfContainment/DisplayHeader.cpp
     HeaderSelfContainment/GeometryHeader.cpp
-    HeaderSelfContainment/HintManagerHeader.cpp
+    HeaderSelfContainment/HintsHeader.cpp
     HeaderSelfContainment/IdentifiersHeader.cpp
     HeaderSelfContainment/KeyboardHeader.cpp
     HeaderSelfContainment/MouseHeader.cpp
     HeaderSelfContainment/NativeWindowHeader.cpp
     HeaderSelfContainment/PlatformErrorHeader.cpp
     HeaderSelfContainment/PlatformEventHeader.cpp
-    HeaderSelfContainment/PlatformRuntimeHeader.cpp
+    HeaderSelfContainment/RuntimeHeader.cpp
     HeaderSelfContainment/ProcessHeader.cpp
-    HeaderSelfContainment/TimingHeader.cpp
     HeaderSelfContainment/TextInputHeader.cpp
     HeaderSelfContainment/WindowGraphicsHeader.cpp
     HeaderSelfContainment/WindowHeader.cpp
@@ -69,8 +66,7 @@ set_target_properties(ponder_platform_process_helper PROPERTIES
 
 ponder_add_project_test(ponder_platform_backend_tests
     SOURCES
-        HintManagerTests.cpp
-        PlatformRuntimeTests.cpp
+        HintsTests.cpp
         ProcessBackendTests.cpp
         RuntimeChildRegistryTests.cpp
         SdlEventTranslatorTests.cpp
@@ -90,4 +86,36 @@ add_dependencies(ponder_platform_backend_tests ponder_platform_process_helper)
 target_compile_definitions(ponder_platform_backend_tests PRIVATE
     PONDER_PLATFORM_PROCESS_HELPER_PATH="$<TARGET_FILE:ponder_platform_process_helper>")
 
-# PLAT-008 extends this backend target with production event-translator tests.
+# Compile the runtime behavioral tests against a test-only concrete backend variant. This target
+# intentionally does not link ponder::platform because it defines the same public platform symbols
+# with a different private runtime backend selection.
+ponder_add_project_test(ponder_platform_runtime_mock_tests
+    SOURCES
+        MockRuntime.cpp
+        RuntimeTests.cpp
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/Display.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/Mouse.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/NativeWindow.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/PlatformCommon.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/Runtime.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/RuntimeChildRegistry.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/Window.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/WindowProperties.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/WindowRegistry.cpp"
+        "${PROJECT_SOURCE_DIR}/libs/platform/src/WindowTextInput.cpp"
+    PRIVATE_DEPS
+        ponder::core
+    LABELS
+        platform
+        backend)
+
+target_include_directories(ponder_platform_runtime_mock_tests PRIVATE
+    "${PROJECT_SOURCE_DIR}/libs/platform/include"
+    "${PROJECT_SOURCE_DIR}/libs/platform/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+
+target_compile_definitions(ponder_platform_runtime_mock_tests PRIVATE
+    PONDER_PLATFORM_USE_MOCK_RUNTIME)
+
+set_target_properties(ponder_platform_runtime_mock_tests PROPERTIES
+    DISABLE_PRECOMPILE_HEADERS ON)

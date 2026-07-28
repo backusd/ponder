@@ -10,20 +10,13 @@ int main()
 {
     static_assert(pond::render::IsValid(pond::render::RenderBootstrapDesc{}));
     static_assert(pond::render::IsValid(pond::render::RenderValidationMode::Standard));
-    static_assert(pond::render::IsValid(
-        pond::render::ClearColor{.red = 0.1F, .green = 0.2F, .blue = 0.3F, .alpha = 1.0F}));
+    static_assert(pond::render::IsValid(pond::render::ClearColor{.red = 0.1F, .green = 0.2F, .blue = 0.3F, .alpha = 1.0F}));
 
-    const pond::platform::WindowId windowId{42U};
-    const pond::platform::PixelSize pixelSize{.width = 640U, .height = 480U};
-    const pond::platform::LogicalSize logicalSize{.width = 640U, .height = 480U};
+    const ponder::platform::WindowId windowId{42U};
+    const ponder::platform::PixelSize pixelSize{.width = 640U, .height = 480U};
+    const ponder::platform::LogicalSize logicalSize{.width = 640U, .height = 480U};
     const pond::render::RenderTargetSnapshot snapshot{
-        windowId,
-        pixelSize,
-        logicalSize,
-        true,
-        pond::platform::WindowState::Normal,
-        pond::render::PresentationEnvironmentRevision{1U},
-        1U};
+        windowId, pixelSize, logicalSize, true, ponder::platform::WindowState::Normal, pond::render::PresentationEnvironmentRevision{1U}, 1U};
     if (!pond::render::IsValid(snapshot))
     {
         return 1;
@@ -35,8 +28,7 @@ int main()
         return 2;
     }
 
-    const pond::core::ErrorCode invalidArgumentCode =
-        pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidArgument);
+    const pond::core::ErrorCode invalidArgumentCode = pond::render::ToErrorCode(pond::render::RenderErrorCode::InvalidArgument);
     if (invalidArgumentCode.GetValue() == 0)
     {
         return 3;
@@ -48,14 +40,13 @@ int main()
         return 4;
     }
 
-    const auto processResult = pond::platform::LaunchProcess({});
+    const auto processResult = ponder::platform::LaunchProcess({});
     if (processResult.HasValue())
     {
         return 5;
     }
 
-    if (pond::render::GetRequiredWindowGraphicsCompatibility() !=
-        pond::platform::WindowGraphicsCompatibility::Vulkan)
+    if (pond::render::GetRequiredWindowGraphicsCompatibility() != ponder::platform::WindowGraphicsCompatibility::Vulkan)
     {
         return 6;
     }

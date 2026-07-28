@@ -1,0 +1,972 @@
+# Platform Error-Handling Update
+
+Status: Completed on 2026-07-22.
+
+Historical scope note: this completed failure-policy roadmap intentionally
+preserved the then-current `pond::platform` namespace. The independent
+2026-07-23 namespace-and-timing migration supersedes those preservation clauses:
+the current namespace is `ponder::platform`, and public platform declarations
+use `ponder::core::Timestamp` and `ponder::core::Duration` directly without a
+platform timing forwarding header or aliases. A later 2026-07-23 exception
+contract update also supersedes the typed platform-exception clauses below:
+platform now throws `ponder::core::Exception`, and `PLATFORM_EXCEPTION` embeds
+the formatted `PlatformErrorCode` in its message. Task text below is retained
+as a record of the constraints in force when the work was performed.
+
+A later 2026-07-23 lifecycle and test-seam cleanup supersedes task clauses that
+prescribed distinct creating, active, and destroying slot states,
+production-only stage hooks, provider injection, or
+`IPlatformRuntimeBackend`. Current runtime creation uses one private atomic 0/1
+reservation held through full construction rollback and full teardown, then
+released to permit sequential recreation. `PlatformRuntime::Create` constructs
+its state directly. That state owns one opaque `BackendImpl` containing either
+the production `SdlRuntimeBackend` aggregate or the test-only
+`MockRuntimeBackend` aggregate selected for the isolated
+`ponder_platform_runtime_mock_tests` executable; both expose the same private
+non-virtual API. The mock executable compiles the required runtime source
+variant directly and does not link `ponder::platform`. Dialogs retain a narrow
+private backend and a weak completion token. Tests use fixture-owned mock state
+and verify observable rollback instead of mutating global production hooks or
+overrides. The completed task text below is retained unchanged as a historical
+record.
+
+This roadmap migrates `libs/platform/` to the core failure policy established by
+[ADR 0012](../../../docs/adr/0012-core-namespace-and-failure-policy.md) and the
+platform-specific contract established by
+[ADR 0013](../../../docs/adr/0013-platform-failure-policy.md). It is written as a
+sequence of implementation tasks that can be handed to Codex one at a time.
+
+Intermediate tasks may leave later tasks or examples uncompilable. Do not add
+temporary compatibility APIs merely to keep every intermediate revision green.
+The library convergence task must restore all platform builds and automated
+tests before the example work begins. The final task must leave the platform
+library, platform tests, and all four platform examples building, with all
+automated checks passing and available host/manual checks recorded accurately.
+
+## Scope
+
+In scope:
+
+- `libs/platform/`, its public headers, private implementation, and active docs.
+- `tests/unit/platform/` and `tests/integration/platform/`.
+- The four examples under `examples/platform/` and their documentation.
+- The core namespace and exception compatibility changes required by the
+  completed core migration.
+
+Out of scope:
+
+- `libs/render/`, `libs/ui/`, `examples/render/`, and `examples/ui/`.
+- New platform features or general API redesign.
+- Renaming the existing public `pond::platform` namespace. This roadmap migrates
+  removed `pond::core` references to `ponder::core` but preserves the platform
+  namespace under the task-specific public-API constraint.
+- Changing public include paths or the `ponder_platform` / `ponder::platform`
+  CMake target names.
+
+Public API changes are limited to changes that express the new failure policy:
+direct return types, `void`, `optional`, retained `Result` contracts, and correct
+`noexcept` declarations. The `pond::platform` namespace, names, ownership,
+descriptors, event types, and behavior unrelated to failure handling remain
+stable. A whole-project namespace migration requires a separate decision.
+
+## Failure Policy To Implement
+
+### Exceptional failures
+
+Throw for failures that should never or only rarely occur and for which the
+current operation's caller cannot complete a useful recovery. This includes:
+
+- runtime or window construction failure;
+- SDL initialization and ordinary backend query/mutation failure, except for
+  the explicitly retained external-service and capability outcomes below;
+- invalid lifecycle phase, wrong-thread use, moved-from use, and broken
+  invariants;
+- invalid descriptors and forged closed-enum values;
+- unsupported ordinary window, cursor, hint, or dialog operations; and
+- malformed backend data that violates the platform abstraction's contract.
+
+Platform failures that need a stable discriminator throw
+`ponder::core::ExceptionWithData<pond::platform::PlatformErrorCode>`,
+constructed at the failure site with `PONDER_EXCEPTION_WITH_DATA`. Use
+`PONDER_EXCEPTION` for exceptional failures that do not need a platform code,
+and use `PONDER_ASSERT`, `PONDER_VERIFY`, or `PONDER_UNREACHABLE` only according
+to their documented invariant contracts. Do not reintroduce `ThrowException`
+or create a new public platform exception class.
+
+Wrong-thread public calls throw a typed exception carrying
+`PlatformErrorCode::WrongThread`. Invalid descriptors and forged enum inputs
+carry `PlatformErrorCode::InvalidArgument`. Backend/capability failures on
+direct APIs likewise carry their typed platform code.
+Moved-from use and impossible internal invariants remain release-active
+`PONDER_VERIFY` failures and therefore throw the plain
+`ponder::core::Exception` base. Reserve `PONDER_UNREACHABLE` for branches that
+are impossible after validation. Tests must check a platform payload only for
+typed platform failures.
+
+An SDL error string must be copied immediately after the failed SDL call and
+before any other SDL call. The typed exception or retained
+`ponder::core::Error` must include the operation and relevant
+runtime/window/display context. Diagnostic text is never parsed for control
+flow.
+
+### Value-based failures
+
+Retain `Result<T>` only when the failure is a normal input, capability, or
+external-state outcome and the caller or its immediate caller has a concrete
+recovery such as retrying, refreshing topology, falling back, or reporting a
+user-facing problem.
+
+A retained-`Result` function may still throw. Programming errors, lifecycle
+violations, and unexpected backend corruption are exceptional even when the
+same function returns `Result` for an expected outcome. Do not catch an
+exception merely to repackage it as `ponder::core::Error`.
+
+The intended public `Result` surface is exactly these eleven operations:
+
+| API | Expected value-based failures | Immediate recovery |
+| --- | --- | --- |
+| `ClipboardManager::GetClipboardText` | unavailable, unsupported, malformed external text, or access failure | disable paste or retain local text |
+| `ClipboardManager::SetClipboardText` | invalid input, unavailable, unsupported, or access failure | sanitize input or offer another copy path |
+| `PlatformRuntime::GetDisplayInfo` | stale nonzero `DisplayId` (`NotFound`) | re-enumerate displays |
+| `PlatformRuntime::SetMouseCapture` | unsupported or rejected host capability | continue without global capture |
+| `PlatformRuntime::GetGlobalMousePosition` | unsupported or unavailable global coordinates | use window-relative input |
+| `PlatformRuntime::OpenExternalUri` | invalid user-provided URI or host launch/capability failure | show or copy the URI |
+| `Process::Wait` | child/wait operating-system failure | retry or report process failure |
+| `Process::Terminate` | graceful/forced termination failure | retry or escalate termination |
+| `LaunchProcess` | invalid executable/input or operating-system launch failure | correct, retry, or report |
+| `Window::GetNativeHandle` | incompatible graphics mode or unsupported native driver | select another rendering path |
+| `Window::GetDisplayId` | transiently unresolved/disconnected display | wait for topology or retry |
+
+Each implementation task must narrow these functions to their documented
+value-based errors. For example, `GetDisplayInfo` returns `NotFound` for a stale
+nonzero ID, throws `InvalidArgument` for a zero/invalid ID, and throws
+`BackendFailure` for a corrupt backend response. A wrong-thread call throws a
+typed platform exception even if its return type is `Result`; moved-from use
+fails the release-active core verification contract.
+
+Clipboard and URI text classifications are exact:
+
+- An empty clipboard string is a successful value and setting an empty string
+  succeeds.
+- Invalid UTF-8 or an embedded null passed to `SetClipboardText` returns
+  `InvalidArgument` because the immediate caller can sanitize or reject the
+  input.
+- Unsupported/unavailable clipboard access and invalid text received from the
+  host return `Unsupported` or `BackendFailure`. They do not throw.
+- Empty, invalid UTF-8, or embedded-null URI input returns `InvalidArgument`.
+  Unsupported URI service and host launch failure return `Unsupported` or
+  `BackendFailure`.
+- Wrong-thread, moved-from, and broken-lifecycle use follow the exception and
+  verification rules above for both services.
+
+`DialogOutcome` remains
+`variant<DialogSelection, DialogCancellation, DialogFailure>`. Completion
+happens after the initiating stack is gone, so asynchronous dialog failure stays
+event data in `DialogFailure{ponder::core::Error}`. This is not permission to
+retain `Result` for synchronous dialog submission.
+
+### Direct and optional public APIs
+
+The following public contracts are the target:
+
+- `PlatformRuntime::Create` returns `PlatformRuntime`.
+- `PlatformRuntime::CreateWindow` returns `Window`.
+- `PlatformRuntime::EnumerateDisplays` returns `vector<DisplayInfo>`.
+- `PlatformRuntime::SetSystemCursor`, `ShowCursor`, and `HideCursor` return
+  `void`.
+- Every `HintManager::PushHint`, `PopHint`, and `ClearHints` overload returns
+  `void`.
+- Every `HintManager::GetHint` overload returns `optional<hints::Type>`. An
+  unset hint is ordinary absence; malformed hint text throws.
+- `DialogManager::ShowOpenFileDialog`, `ShowSaveFileDialog`, and
+  `ShowOpenFolderDialog` return `DialogRequestId`.
+- `DialogManager::Shutdown` returns `void`.
+- All `Window` operations that currently return `Result` or `VoidResult` become
+  direct values or `void` except `GetNativeHandle` and `GetDisplayId`.
+
+The existing direct observers, IDs, descriptors, event representations,
+ownership model, and move-only contracts remain unchanged.
+
+### Exception and `noexcept` boundaries
+
+- No C++ exception may escape an SDL C callback, an operating-system callback,
+  a thread entry point, or a destructor.
+- Destructors, move operations, and release paths remain `noexcept` and perform
+  best-effort cleanup with diagnostics where recovery is impossible.
+- Do not add `noexcept` to a newly direct API merely because `Result` was
+  removed. SDL calls, allocation, verification, and exception construction can
+  still throw.
+- Preserve the current `ToErrorCode` and public enum-name helper signatures and
+  diagnostic fallback behavior. Redesigning those helpers is unrelated to this
+  Result-to-exception migration.
+- `DisplayOrientation::Unknown` is valid runtime data. It must not be confused
+  with a forged enum value.
+- Audit every `noexcept` function that calls `PONDER_VERIFY` or a newly throwing
+  helper. Operational failures at a destructor, move-release, callback, or
+  thread boundary must be caught and contained. Existing release-active
+  verification of impossible ownership/thread invariants at those boundaries
+  remains an intentional termination contract. Ordinary helpers that can now
+  throw lose `noexcept`.
+
+## Rules For Every Task
+
+- Read the root `AGENTS.md` and `libs/platform/docs/Codex.md` before editing.
+- Preserve SDL encapsulation, one-runtime ownership, owner-thread affinity,
+  strong IDs, staged window creation, display-map consistency, event ordering,
+  and no-throw destruction.
+- Update the production code, mocks/fakes, header self-containment coverage,
+  and focused tests owned by the task.
+- Verify the documented exception type, and verify `PlatformErrorCode` payload
+  only for typed platform failures. Also check message context, source location,
+  rollback, and subsequent usability. Do not only replace `HasValue()`
+  assertions with broad `EXPECT_THROW` checks.
+- Keep `ponder::core::Error` and `ToErrorCode` only in approved `Result` and
+  asynchronous-outcome paths.
+- Remove obsolete `Result.hpp` includes and propagation macros as their last use
+  disappears from a file.
+- Do not change render or UI code to make an intermediate build pass. Set
+  `PONDER_BUILD_RENDER=OFF` and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`, or build only explicit platform
+  targets.
+- If a task intentionally leaves a known compile failure for a later task,
+  record the exact target and cause in its handoff. Never hide the failure with
+  a broad test skip.
+
+## Task Sequence
+
+TASK PLAT-EH-001: Establish The Platform Failure Contract And Core Compatibility
+--------------------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: completed core namespace and failure-policy update.
+
+Work:
+
+- Add ADR 0013 for the platform exception-first policy. Relate it to ADR 0007
+  and ADR 0012, mark the conflicting failure clauses of ADR 0007 as amended,
+  and add it to `docs/adr/README.md`.
+- Update the active contracts in `libs/platform/docs/Codex.md` and
+  `libs/platform/docs/Boundary.md` to match this roadmap. Preserve historical
+  task records in `roadmap.txt` and `examples-roadmap.txt`; add a short pointer
+  to this roadmap instead of rewriting completed history.
+- Preserve `pond::platform`. Migrate removed `pond::core` references and
+  unqualified `core::` references that resolve to it to `ponder::core` across
+  `libs/platform/` and platform tests. Replace the removed
+  `PonderException.hpp` include and `PonderException` catches. Do not migrate
+  platform examples yet.
+- Preserve `PlatformErrorCode` names and numeric values. Establish the standard
+  typed-throw and retained-error idioms without adding a public exception alias.
+- Keep the immediate SDL error-snapshot guarantee. Provide distinct internal
+  paths for a typed exception and a `ponder::core::Error` only where the approved
+  public contract retains `Result`.
+- Preserve `ToErrorCode` values, `noexcept`, and forged-value fallback behavior,
+  and preserve the existing enum-name helper contracts. Keep
+  `DisplayOrientation::Unknown` as a normal value.
+- Update formatting, platform-error, enum, and header self-containment tests for
+  the core namespace and exception compatibility changes.
+
+Tests:
+
+- Build `ponder_platform`, `ponder_platform_header_tests`, and
+  `ponder_platform_tests` with examples off,
+  `PONDER_BUILD_RENDER=OFF`, and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`.
+- Run the focused `PlatformErrorTests`, formatting tests, and enum/value tests.
+- Search `libs/platform/` and platform tests for `pond::core`,
+  `PonderException`, and `PonderException.hpp`. `pond::platform` is expected.
+
+Done when:
+
+- Active platform guidance and ADRs state one unambiguous policy.
+- Platform code and platform tests consume `ponder::core` while preserving the
+  public `pond::platform` namespace.
+- Existing error-code and enum-name fallback tests remain unchanged except for
+  required core namespace references.
+- No public include path, platform namespace, unrelated public symbol, or CMake
+  target has changed.
+
+TASK PLAT-EH-002: Convert Hint Management To Direct And Optional Contracts
+--------------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-001.
+
+Work:
+
+- Change every hint mutation overload to `void` and every hint lookup overload
+  to `optional<hints::Type>`.
+- Convert the private hint backend's fallible setters to typed exceptions.
+  Unset lookup returns `nullopt`; malformed text, invalid enum/value data, wrong
+  phase, reentrant mutation, empty pop, and SDL mutation failure throw.
+- Make `PushHint` strongly exception-safe. If the backend setter throws, restore
+  the local stack and active-list bookkeeping exactly.
+- Keep `PopHint` and `ClearHints` transactional: mutate bookkeeping only after
+  the backend restoration succeeds.
+- Keep `RestoreAllHints` and `HintManager` destruction no-throw. Catch and log
+  each restoration failure while continuing to restore the remaining hints.
+- Ensure exceptions from `configureHintsBeforeInitialization` are allowed to
+  propagate to runtime construction and do not leave partial hint state.
+- Remove the public `Result.hpp` dependency from `HintManager.hpp` if no longer
+  required.
+
+Tests:
+
+- Update `HintManagerTests.cpp`, its fake backend, and the hint header test.
+- Cover unset lookup, malformed backend text, invalid values, empty pop,
+  reentrancy, backend throws, nested push/pop, rollback after a thrown push, and
+  no-throw best-effort destruction.
+
+Done when:
+
+- Hint lookup represents absence without an error object.
+- No hint mutation failure is propagated as `Result`.
+- Failed mutation leaves managed and backend hint state consistent.
+
+TASK PLAT-EH-003: Make Runtime Construction Exception-Safe And Direct
+---------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-002.
+
+Work:
+
+- Change `PlatformRuntime::Create` to return `PlatformRuntime` directly.
+- Convert runtime metadata validation, application metadata setup, backend
+  video initialization, and related private factory paths from `Result` to
+  typed exceptions.
+- Throw `InvalidArgument` for invalid runtime descriptors,
+  `RuntimeAlreadyActive` for a second live runtime, and `BackendFailure` for
+  initialization failures.
+- Replace the current moved-owner cleanup guard with explicit staged RAII:
+  reserve the global slot first, restore configured hints on every failure, and
+  arm an owning backend cleanup guard immediately before video initialization.
+  Descriptor, metadata, allocation, or hint-callback failure before
+  initialization must not call `Quit`. Initialization (including partial
+  initialization) and every later failure call `Quit` exactly once.
+- Stage all allocations and factories before ownership is committed to
+  `PlatformRuntimeState`. A failed creation must allow a later creation on the
+  same thread.
+- Preserve owner/startup-thread rules, move-only ownership, one-live-runtime
+  enforcement, and no-throw runtime destruction.
+- Preserve the existing release-active termination contract for impossible
+  owner-thread/invariant violations during no-throw destruction. Operational
+  cleanup failures are contained and diagnosed.
+
+Tests:
+
+- Update runtime backend mocks and creation tests in
+  `PlatformRuntimeTests.cpp`.
+- Inject failure at metadata validation, metadata setup, hint configuration,
+  SDL initialization, each state allocation/factory stage, and final ownership
+  transfer.
+- Assert typed payloads, zero `Quit` calls before initialization is entered, one
+  `Quit` after initialization is entered, reservation release, hint
+  restoration, and successful creation after every injected failure.
+
+Done when:
+
+- Runtime construction has a direct public contract.
+- Every partial-construction path is leak-free and retryable.
+- Runtime teardown remains no-throw and owner-thread invariants are unchanged.
+
+TASK PLAT-EH-004: Convert Display Backend And Public Query Contracts
+--------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-003.
+
+Work:
+
+- Convert failure-sentinel queries in `IPlatformDisplayBackend` and
+  `SdlDisplayBackend` to direct values that throw typed exceptions after
+  immediately capturing SDL diagnostics.
+- Change `PlatformRuntime::EnumerateDisplays` to return
+  `vector<DisplayInfo>` directly.
+- Keep `PlatformRuntime::GetDisplayInfo` as `Result<DisplayInfo>` only for a
+  stale nonzero ID. Throw `InvalidArgument` for a zero/invalid ID and throw for
+  backend query failure or malformed display data.
+- Keep `Window::GetDisplayId` as `Result<DisplayId>` only for a transiently
+  unresolved display. Change `GetPixelDensity` and `GetDisplayScale` to direct
+  `float` results.
+- Preserve `DisplayOrientation::Unknown` and event ordering semantics.
+
+Tests:
+
+- Update display backend fakes, `DisplayTests.cpp`, display-query sections of
+  `PlatformRuntimeTests.cpp`, and focused integration tests.
+- Cover zero IDs as typed `InvalidArgument`, stale nonzero IDs as `NotFound`
+  results, backend failure as exceptions, malformed records, valid
+  `DisplayOrientation::Unknown`, and direct density/scale values.
+
+Done when:
+
+- Only stale-ID display lookups use `Result`.
+- Enumeration and ordinary display data failures throw typed exceptions.
+
+TASK PLAT-EH-005: Harden Display Topology And Event-Polling Unwinding
+--------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-004.
+
+Work:
+
+- Migrate `PlatformRuntimeState` display refresh, connect, disconnect,
+  move/rekey, and reconciliation paths to the direct display backend.
+- Preserve atomic rollback of both display maps after backend, allocation, or
+  exception-construction failure.
+- Define polling behavior explicitly: an empty queue remains `nullopt`, stale
+  topology events may be diagnosed and dropped, and unexpected backend/topology
+  failure propagates as a typed exception.
+- Catch only the specific stale-event condition intended for best-effort
+  reconciliation. Never use catch-all suppression or parse diagnostic text to
+  decide whether an event is stale.
+- Preserve stable IDs, reconnect behavior, event ordering, and the rule that
+  state is reconciled before the corresponding public event is returned.
+
+Tests:
+
+- Update topology sections of `PlatformRuntimeTests.cpp`,
+  `RuntimeChildRegistryTests.cpp`, `SdlEventTranslatorTests.cpp`, and
+  `PlatformRuntimeIntegrationTests.cpp`.
+- Inject backend and allocation failure into refresh and every event
+  reconciliation path. Cover stale-event drop, exceptional propagation,
+  reconnect with stable IDs, dual-map rollback, and successful polling after a
+  failed reconciliation.
+
+Done when:
+
+- Both topology maps remain mutually consistent after every failure.
+- `PollEvent` distinguishes an empty queue, an ignorable stale event, and an
+  exceptional topology failure without text-based control flow.
+
+TASK PLAT-EH-006: Convert Window Creation, Geometry, And Basic Visibility
+------------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-005.
+
+Work:
+
+- Change `PlatformRuntime::CreateWindow` to return `Window` and
+  `WindowImpl::Create` to return its owning state directly.
+- Convert the matching private window-backend creation, title, position,
+  logical/pixel size, and show/hide operations to direct values or `void`.
+- Change public `SetTitle`, `GetPosition`, `SetPosition`,
+  `GetLogicalSize`, `GetPixelSize`, `SetLogicalSize`, `Show`, and `Hide` to
+  their direct contracts.
+- Throw typed `InvalidArgument` exceptions for invalid descriptors, embedded
+  nulls, invalid positions, and non-positive sizes. Backend failures throw
+  `BackendFailure`.
+- Preserve staged-hidden construction, graphics-compatibility flags, minimum
+  size setup, registry ordering, and final visibility.
+- Keep an active rollback token until registry commit is genuinely non-throwing.
+  Precompute diagnostic context before commit so an exception cannot leave a
+  stale registered window.
+- Add failure injection at every construction stage and prove backend
+  destruction, child counts, registry state, and IDs are restored.
+
+Tests:
+
+- Update the relevant `IPlatformWindowBackend` /
+  `SdlWindowBackend` methods and mocks.
+- Update basic window sections of `PlatformRuntimeTests.cpp`,
+  `WindowBackendTests.cpp`, `WindowTypesTests.cpp`, and live integration tests.
+- Verify direct success values, typed failure payloads, moved-from behavior,
+  construction rollback, idempotent show/hide, and destruction order.
+
+Done when:
+
+- Window construction and basic operations contain no pass-through `Result`
+  plumbing.
+- A failure at any stage leaves no SDL window, registry entry, or child token.
+
+TASK PLAT-EH-007: Convert Window Presentation And Property State Machines
+------------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-006.
+
+Work:
+
+- Change presentation, decoration, state, visibility, resizability, focus, and
+  always-on-top queries to direct enum or `bool` values.
+- Change their setters and `Minimize`, `Maximize`, and `Restore` to `void`.
+- Convert the corresponding private backend interface and SDL implementation
+  methods to direct/throwing contracts.
+- Remove result-propagation helpers such as `RETURN_ERROR_IF_FAILED` from these
+  paths.
+- Preserve idempotence and the existing state machine: update cached markers
+  only after backend success, route hidden/visible transitions correctly, and
+  preserve restore-then-minimize/maximize intermediate states.
+- Treat unsupported ordinary window mutations as typed `Unsupported`
+  exceptions. The higher application boundary, not the window implementation,
+  decides whether to continue.
+- Ensure observer callbacks marked `noexcept` contain and diagnose any refresh
+  failure or have `noexcept` removed when they are not callback boundaries.
+
+Tests:
+
+- Update property/state sections in `PlatformRuntimeTests.cpp`,
+  `WindowBackendTests.cpp`, `WindowStateTests.cpp`, and integration tests.
+- Cover every idempotent branch and inject failure before and after each
+  multi-step transition to verify cached state does not advance prematurely.
+- Check `Unsupported` and `BackendFailure` exception payloads independently.
+
+Done when:
+
+- No window property/state method returns `Result`.
+- All existing transition and rollback invariants survive exception unwinding.
+
+TASK PLAT-EH-008: Convert Window Text And Mouse Operations; Narrow Native Handles
+---------------------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-007.
+
+Work:
+
+- Change text-input start/stop, composition clearing, input-area mutation,
+  mouse grab, and relative mouse mode operations to `void`.
+- Preserve the existing direct live-state observers for text input, mouse grab,
+  and relative mouse mode.
+- Convert matching private backend operations to typed exceptions and keep
+  state changes transactional. Invalid text areas or forged modes throw
+  `InvalidArgument`; backend/capability failures throw their platform codes.
+- Keep `Window::GetNativeHandle` as `Result<NativeWindowHandle>` only for
+  incompatible graphics mode (`InvalidArgument`) or unsupported native driver
+  (`Unsupported`). Unexpected SDL property corruption and backend failure
+  throw.
+- Preserve native-handle driver/type validation and never return a partially
+  initialized handle.
+- Audit `noexcept` event observers and backend live-state queries after the
+  conversion.
+
+Tests:
+
+- Update text, mouse, and native-handle sections of
+  `PlatformRuntimeTests.cpp`, `WindowBackendTests.cpp`,
+  `NativeWindowTests.cpp`, `TextInputTests.cpp`, `MouseTests.cpp`, and
+  integration tests.
+- Cover idempotence, invalid text rectangles, unsupported relative mode,
+  backend throws, state rollback, native-driver mismatch, missing native
+  properties, and successful handles for supported drivers.
+
+Done when:
+
+- Text and window-local mouse commands are direct/throwing.
+- Native-handle `Result` contains only the two documented local-recovery cases.
+
+TASK PLAT-EH-009: Apply The Mixed Policy To Runtime Desktop Services
+-------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-008.
+
+Work:
+
+- Change system-cursor selection and cursor show/hide to `void` and convert the
+  matching runtime-backend paths to typed exceptions.
+- Retain `Result` for mouse capture and global mouse position only for
+  unsupported/unavailable host behavior that permits local fallback. Throw for
+  wrong-thread use and malformed backend data; moved-from state fails
+  release-active verification.
+- Retain clipboard `Result` contracts for invalid caller text, unavailable or
+  unsupported service, invalid external clipboard text, and access failure.
+  Empty text succeeds. Wrong-thread use throws and moved-from/lifecycle
+  violations follow their verification contracts; no SDL call may occur on the
+  wrong thread.
+- Retain `OpenExternalUri` as `VoidResult` for user-provided URI rejection,
+  unsupported host service, or launch failure. Empty, invalid UTF-8, and
+  embedded-null input return `InvalidArgument` as specified in the common
+  matrix.
+- Split the remaining `IPlatformRuntimeBackend` methods accordingly. Do not
+  convert unexpected exceptions to generic `BackendFailure` results.
+- Preserve cursor ownership/cache behavior and clipboard data lifetime.
+- Apply the immediate SDL diagnostic snapshot rule to both throwing and
+  retained-error paths.
+
+Tests:
+
+- Update runtime-backend fakes and cursor, mouse, clipboard, URI, owner-thread,
+  and integration sections in `PlatformRuntimeTests.cpp` and
+  `PlatformRuntimeIntegrationTests.cpp`.
+- Test empty, invalid UTF-8, embedded-null, unsupported, unavailable, and
+  backend-failure behavior for each applicable service. Test those retained
+  outcomes separately from wrong-thread exceptions, moved-from verification,
+  and unexpected malformed-backend exceptions.
+- Verify failed cursor replacement does not discard the active cursor and that
+  cleanup remains no-throw.
+
+Done when:
+
+- The five retained runtime-service `Result` APIs expose only locally actionable
+  failures.
+- Cursor commands and all non-actionable service failures throw typed
+  exceptions.
+
+TASK PLAT-EH-010: Make Dialog Submission Direct And Rollback-Safe
+-----------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-009.
+
+Work:
+
+- Change all three `Show*Dialog` methods to return `DialogRequestId` directly
+  and `Shutdown` to return `void`.
+- Convert descriptor validation, filter preparation, parent lookup, request-ID
+  allocation, registry insertion, and synchronous SDL launch failure to typed
+  exceptions.
+- Use rollback ownership around parent leases and request insertion until SDL
+  has accepted the request.
+- Make synchronous launch failure remove the request and release its parent
+  lease exactly once while preserving monotonic request IDs.
+- Keep the existing callback/outcome representation temporarily; its no-throw
+  redesign is owned by PLAT-EH-011.
+
+Tests:
+
+- Update synchronous dialog sections of `DialogTests.cpp` and
+  `PlatformRuntimeTests.cpp`.
+- Inject descriptor, filter preparation, parent lookup, request allocation,
+  registry insertion, SDL launch, and shutdown failures.
+- Verify typed synchronous exceptions, request counts, parent leases, rollback,
+  owner-thread behavior, monotonic IDs, and successful reuse after failure.
+
+Done when:
+
+- Synchronous dialog submission has no `Result` plumbing.
+- Every synchronous failure restores request and parent-window state.
+
+TASK PLAT-EH-011: Contain Dialog Callback And Completion Failures
+----------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-010.
+
+Work:
+
+- Preserve asynchronous selection, cancellation, and `DialogFailure` as
+  `DialogOutcome` data. Keep `ponder::core::Error` only in this asynchronous
+  boundary.
+- Redesign the SDL callback handoff so no C++ exception can cross `SDLCALL`.
+  Catch project, standard, and unknown exceptions at the boundary, and use a
+  request-owned/preallocated completion path or another demonstrably no-throw
+  handoff.
+- Do not catch an allocation failure and then allocate a queue node or
+  diagnostic string to report it. Prebuild the minimal fallback state before
+  SDL owns the callback.
+- Ensure normal completion, conversion failure, completion enqueue, shutdown,
+  late callbacks, and destruction release every request and parent lease
+  exactly once.
+- Keep manager destruction no-throw and owner-thread affine. Operational
+  failures are contained; impossible release-time invariant violations preserve
+  their existing termination contract.
+
+Tests:
+
+- Update asynchronous sections of `DialogTests.cpp`, dialog sections of
+  `PlatformRuntimeTests.cpp`, event/value/formatting tests, and live/manual
+  integration coverage.
+- Inject callback conversion, completion handoff, shutdown, allocation, and
+  late-callback failures.
+- Verify asynchronous failure events, no callback exception escape, FIFO
+  completion, request counts, exactly-once leases/completions, no-throw
+  destruction, and successful reuse after failure.
+
+Done when:
+
+- Cancellation remains a normal outcome and asynchronous failure remains typed
+  event data.
+- The SDL callback and destruction boundaries are mechanically no-throw.
+
+TASK PLAT-EH-012: Keep Process Results Narrow And Make Cleanup No-Throw
+----------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-011.
+
+Work:
+
+- Preserve the public `LaunchProcess`, `Process::Wait`, and
+  `Process::Terminate` `Result` signatures.
+- Audit validation and platform backends so executable, permission, child
+  state, wait, and termination failures remain value-based and actionable.
+  Forged termination modes throw typed `InvalidArgument`. Moved-from use and
+  broken invariants fail release-active verification, and unexpected internal
+  exceptions propagate; none is repackaged as an ordinary process error.
+- Preserve graceful-to-force fallback behavior and exact exit-status variants.
+- Make the abandoned-process cleanup worker robust to injected callback/backend
+  exceptions. Constrain function-pointer contracts to `noexcept` where valid or
+  catch at the thread entry point and retain enough state for deterministic
+  cleanup.
+- Keep public process destruction no-throw and allocation-free. Do not lose a
+  child or terminate the cleanup thread because a diagnostic allocation fails.
+- Preserve the existing process thread-affinity and destruction behavior. Do
+  not invent a new wrong-thread destruction error; moved-from public use remains
+  a release-active verification failure.
+- Remove stale core exception names and obsolete result helpers that are not
+  part of the approved process contract.
+
+Tests:
+
+- Update `ProcessTests.cpp`, `ProcessBackendTests.cpp`, the process helper, and
+  process integration coverage.
+- Cover invalid input, missing executable, normal/nonzero/signal exit, repeated
+  wait, graceful and forced termination, moved-from use, injected cleanup
+  callback exceptions, and abandoned-child cleanup.
+
+Done when:
+
+- Process `Result` values represent only external/input failures with an
+  immediate orchestration response.
+- Process destruction and the cleanup thread cannot leak exceptions.
+
+TASK PLAT-EH-013: Converge And Verify The Platform Library
+----------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-002 through PLAT-EH-012.
+
+Work:
+
+- Audit all public and private platform signatures against the matrix at the
+  top of this roadmap. The public library must have exactly the eleven approved
+  `Result` operations plus asynchronous `DialogFailure` data.
+- Audit every remaining `Result` construction, `HasValue` branch,
+  `GetError` call, `ToErrorCode` use, and `Result.hpp` include. Either tie it to
+  an approved local-recovery contract or remove it.
+- Audit exception sites for the correct `PlatformErrorCode`, message context,
+  source location, and immediate SDL diagnostic capture.
+- Audit `noexcept` on public APIs, private helpers, callbacks, thread entry
+  points, move operations, and destructors. Prove containment at every no-throw
+  boundary.
+- Update header self-containment sources, compile-time signature checks, mocks,
+  coverage audits, integration fixtures, and active platform documentation.
+- Remove temporary adapters, stale comments, obsolete propagation macros, and
+  any blanket skips introduced during the migration.
+- Format changed C++ and CMake files. The full Release and static-analysis gate
+  is intentionally deferred to PLAT-EH-018.
+
+Tests:
+
+- In a fresh Debug configuration with `PONDER_BUILD_EXAMPLES=OFF`,
+  `PONDER_BUILD_RENDER=OFF`, and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`, build `ponder_platform`,
+  `ponder_platform_header_tests`,
+  `ponder_platform_tests`, `ponder_platform_backend_tests`,
+  `ponder_platform_integration_tests`, and
+  `ponder_platform_process_helper`.
+- Run all platform unit, backend, and integration tests using the resource-lock
+  rules in `HeadlessAndHostVerification.md`.
+- Search for removed `pond::core` references, removed exception names,
+  unapproved public `Result` signatures, and exceptions escaping no-throw
+  boundaries.
+
+Done when:
+
+- The platform library and all platform tests compile and pass in Debug.
+- Public headers are self-contained and match the target signature matrix.
+- Failure injection demonstrates strong rollback and reusable state across
+  runtime, hint, display, window, service, dialog, and process paths.
+- Render and UI remain untouched.
+
+TASK PLAT-EH-014: Update Example 1 - Window And Display Lab
+-----------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-013.
+
+Work:
+
+- Preserve `pond::platform`, migrate removed core references to
+  `ponder::core`, and update the example and README for the new direct runtime,
+  window, geometry, property, and display-enumeration APIs.
+- Keep explicit local handling for `GetDisplayId` and `GetDisplayInfo` because
+  topology can become stale between calls.
+- Add a top-level catch for typed platform exceptions followed by the core
+  exception base. Do not wrap every direct call in a local catch.
+- Preserve the example's controls, event-loop behavior, display refresh, and
+  output; this task is an error-handling migration, not a feature rewrite.
+
+Tests:
+
+- Build `ponder_platform_1_window_display_lab` with
+  `PONDER_BUILD_RENDER=OFF` and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`.
+- Exercise startup, window property changes, display refresh, topology changes
+  where available, and clean shutdown in the supported headless/host modes.
+
+Done when:
+
+- The example teaches direct APIs, one high-level exception boundary, and local
+  stale-display recovery without result-propagation boilerplate.
+
+TASK PLAT-EH-015: Update Example 2 - Input And Drop Monitor
+-----------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-013.
+
+Work:
+
+- Migrate the example and README to the new runtime, window, text-input,
+  window-mouse, and cursor contracts.
+- Handle the retained mouse-capture and global-position `Result` outcomes at the
+  feature boundary, disabling or degrading only the affected capability.
+- Route direct-operation failures to the top-level typed platform/core
+  exception boundary.
+- Preserve input/drop event reporting, relative-mode behavior, text lifecycle,
+  cursor controls, and shutdown ordering.
+
+Tests:
+
+- Build `ponder_platform_2_input_drop_monitor` with
+  `PONDER_BUILD_RENDER=OFF` and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`.
+- Exercise text input, mouse grab/relative mode, cursor visibility, retained
+  capability fallback, file drop where available, and clean shutdown.
+
+Done when:
+
+- Expected global-mouse limitations are handled locally and all other platform
+  failures use the application exception boundary.
+
+TASK PLAT-EH-016: Update Example 3 - Desktop Services Workbench
+---------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-013.
+
+Work:
+
+- Migrate the example and README to direct runtime/window/dialog submission and
+  `void` dialog shutdown.
+- Keep local `Result` handling for clipboard and external-URI operations, with
+  concrete user-facing fallback/reporting.
+- Continue handling dialog selection, cancellation, and asynchronous
+  `DialogFailure` distinctly in the event loop.
+- Keep `Result` for example-local parsing only where invalid interactive/user
+  input is expected and immediately correctable.
+- Add top-level typed platform/core exception handling without swallowing
+  failures from unrelated operations.
+- Preserve outstanding-request display, parent-window lifetime, completion
+  ordering, and shutdown behavior.
+
+Tests:
+
+- Build `ponder_platform_3_desktop_services_workbench` with
+  `PONDER_BUILD_RENDER=OFF` and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`.
+- Exercise clipboard get/set, URI success/failure, dialog submission,
+  cancellation, selection, asynchronous failure, parent closure, and shutdown
+  using the headless/manual split in the verification guide.
+
+Done when:
+
+- The example clearly distinguishes retained service outcomes, asynchronous
+  dialog outcomes, and exceptional synchronous failures.
+
+TASK PLAT-EH-017: Update Example 4 - Responsive Process Runner
+--------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-013.
+
+Work:
+
+- Migrate runtime and window setup to direct APIs, use `ponder::core` for core
+  types/exceptions, and preserve `pond::platform`.
+- Preserve local `Result` handling for process launch, wait, and termination;
+  this example is the canonical demonstration of retry/report/escalation at the
+  immediate orchestration layer.
+- Keep example-local command parsing as `Result` where bad user input is normal.
+- Catch exceptions at worker-thread entry points and marshal a stable failure
+  back to the owner thread. No exception may escape a thread entry point.
+- Add the typed platform/core exception boundary on the main thread.
+- Preserve responsiveness, graceful-to-force termination, event pumping,
+  output ordering, and shutdown.
+
+Tests:
+
+- Build `ponder_platform_4_responsive_process_runner` and its process helper
+  with `PONDER_BUILD_RENDER=OFF` and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`.
+- Exercise launch failure, normal and nonzero exit, wait failure injection,
+  graceful and forced termination, window-close cancellation, worker failure,
+  and clean shutdown.
+
+Done when:
+
+- Process `Result` handling remains local and deliberate while construction and
+  ordinary platform failures use high-level exception boundaries.
+
+TASK PLAT-EH-018: Run The Final Platform And Example Verification Gate
+----------------------------------------------------------------------
+
+Status: Completed on 2026-07-22.
+
+Depends on: PLAT-EH-014 through PLAT-EH-017.
+
+Work:
+
+- Reconcile all four examples and platform docs with the final public headers.
+- Remove temporary task notes, obsolete compatibility code, stale
+  `HasValue`/`GetError` boilerplate, and accidental catches that merely
+  rethrow/repackage.
+- Perform a final diff review limited to platform, platform tests, platform
+  examples, and the ADR/docs explicitly named by this roadmap. Revert no
+  unrelated user changes.
+- Update `HeadlessAndHostVerification.md` only where commands or expected
+  outcomes changed. Record host-only/manual checks explicitly; never claim an
+  unavailable desktop check passed.
+
+Verification:
+
+- Configure fresh Debug and true Release builds with
+  `PONDER_BUILD_TESTS=ON`, `PONDER_BUILD_EXAMPLES=ON`,
+  `PONDER_BUILD_RENDER=OFF`, and
+  `PONDER_BUILD_UI_RENDER_INTEGRATION=OFF`.
+- Build the platform library, header tests, unit tests, backend tests,
+  integration tests, process helper, and all four platform example targets in
+  both configurations.
+- Run all platform unit/backend/integration tests. Run the documented headless
+  example checks and the available host/manual window, display, input,
+  clipboard, URI, dialog, and process checks.
+- Run formatting, warnings-as-errors, supported sanitizers/static analysis, and
+  the platform coverage/header-manifest audits.
+- Search the final scope for removed `pond::core` references,
+  `PonderException`, `ThrowException`, unapproved public `Result` signatures,
+  stale result-propagation macros, and undocumented `noexcept` termination
+  paths. `pond::platform` remains the expected public namespace.
+
+Done when:
+
+- `ponder_platform` and every platform test target compile and pass in Debug and
+  true Release.
+- All four platform examples compile and their automated checks pass; available
+  host/manual checks are recorded accurately.
+- The public API differs from the pre-migration API only by the failure-contract
+  changes documented here; `pond::platform` is preserved.
+- The eleven retained `Result` operations and asynchronous dialog failure are
+  the only public value-based platform failures.
+- No exception escapes a destructor, callback, or thread boundary.
+- Render, UI, and their examples have not been modified.

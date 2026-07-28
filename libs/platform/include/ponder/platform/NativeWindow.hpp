@@ -6,7 +6,7 @@
 #include <string>
 #include <variant>
 
-namespace pond::platform
+namespace ponder::platform
 {
 struct NativeWin32Window final
 {
@@ -32,55 +32,48 @@ struct NativeWaylandWindow final
     friend constexpr bool operator==(NativeWaylandWindow, NativeWaylandWindow) noexcept = default;
 };
 
-using NativeWindowHandle =
-    std::variant<NativeWin32Window, NativeX11Window, NativeWaylandWindow>;
-} // namespace pond::platform
+using NativeWindowHandle = std::variant<NativeWin32Window, NativeX11Window, NativeWaylandWindow>;
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::NativeWin32Window> : formatter<string>
+struct formatter<ponder::platform::NativeWin32Window> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::NativeWin32Window window, FormatContext& context) const
+    auto format(ponder::platform::NativeWin32Window window, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("win32(instance=0x{:X}, window=0x{:X})",
-                        reinterpret_cast<std::uintptr_t>(window.instance),
-                        reinterpret_cast<std::uintptr_t>(window.window)),
-            context);
+        return formatter<string>::format(std::format("win32(instance=0x{:X}, window=0x{:X})", reinterpret_cast<std::uintptr_t>(window.instance),
+                                                     reinterpret_cast<std::uintptr_t>(window.window)),
+                                         context);
     }
 };
 
 template <>
-struct formatter<pond::platform::NativeX11Window> : formatter<string>
+struct formatter<ponder::platform::NativeX11Window> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::NativeX11Window window, FormatContext& context) const
+    auto format(ponder::platform::NativeX11Window window, FormatContext& context) const
     {
         return formatter<string>::format(
-            std::format("x11(display=0x{:X}, window=0x{:X})",
-                        reinterpret_cast<std::uintptr_t>(window.display), window.window),
-            context);
+            std::format("x11(display=0x{:X}, window=0x{:X})", reinterpret_cast<std::uintptr_t>(window.display), window.window), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::NativeWaylandWindow> : formatter<string>
+struct formatter<ponder::platform::NativeWaylandWindow> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::NativeWaylandWindow window, FormatContext& context) const
+    auto format(ponder::platform::NativeWaylandWindow window, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("wayland(display=0x{:X}, surface=0x{:X})",
-                        reinterpret_cast<std::uintptr_t>(window.display),
-                        reinterpret_cast<std::uintptr_t>(window.surface)),
-            context);
+        return formatter<string>::format(std::format("wayland(display=0x{:X}, surface=0x{:X})", reinterpret_cast<std::uintptr_t>(window.display),
+                                                     reinterpret_cast<std::uintptr_t>(window.surface)),
+                                         context);
     }
 };
 } // namespace std
 
-namespace pond::platform
+namespace ponder::platform
 {
 inline std::ostream& operator<<(std::ostream& output, NativeWin32Window window)
 {
@@ -96,4 +89,4 @@ inline std::ostream& operator<<(std::ostream& output, NativeWaylandWindow window
 {
     return output << std::format("{}", window);
 }
-} // namespace pond::platform
+} // namespace ponder::platform

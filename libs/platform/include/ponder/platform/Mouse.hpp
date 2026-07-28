@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace pond::platform
+namespace ponder::platform
 {
 struct MousePosition final
 {
@@ -40,27 +40,27 @@ enum class SystemCursorShape : std::uint8_t
     Progress,
     NotAllowed
 };
-} // namespace pond::platform
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::MousePosition> : formatter<string>
+struct formatter<ponder::platform::MousePosition> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::MousePosition position, FormatContext& context) const
+    auto format(ponder::platform::MousePosition position, FormatContext& context) const
     {
         return formatter<string>::format(std::format("({}, {})", position.x, position.y), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::MouseButton> : formatter<string_view>
+struct formatter<ponder::platform::MouseButton> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::MouseButton button, FormatContext& context) const
+    auto format(ponder::platform::MouseButton button, FormatContext& context) const
     {
-        using pond::platform::MouseButton;
+        using ponder::platform::MouseButton;
 
         string_view name{"unknown"};
         switch (button)
@@ -89,12 +89,12 @@ struct formatter<pond::platform::MouseButton> : formatter<string_view>
 };
 
 template <>
-struct formatter<pond::platform::SystemCursorShape> : formatter<string_view>
+struct formatter<ponder::platform::SystemCursorShape> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::SystemCursorShape shape, FormatContext& context) const
+    auto format(ponder::platform::SystemCursorShape shape, FormatContext& context) const
     {
-        using pond::platform::SystemCursorShape;
+        using ponder::platform::SystemCursorShape;
 
         string_view name{"unknown"};
         switch (shape)
@@ -139,7 +139,7 @@ struct formatter<pond::platform::SystemCursorShape> : formatter<string_view>
 };
 } // namespace std
 
-namespace pond::platform
+namespace ponder::platform
 {
 inline std::ostream& operator<<(std::ostream& output, MousePosition position)
 {
@@ -155,4 +155,4 @@ inline std::ostream& operator<<(std::ostream& output, SystemCursorShape shape)
 {
     return output << std::format("{}", shape);
 }
-} // namespace pond::platform
+} // namespace ponder::platform

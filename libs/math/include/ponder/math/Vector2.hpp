@@ -17,7 +17,11 @@ struct Vector2 final
 
     constexpr Vector2() noexcept = default;
 
-    explicit constexpr Vector2(float xValue, float yValue) noexcept : x(xValue), y(yValue) {}
+    explicit constexpr Vector2(float xValue, float yValue) noexcept :
+        x(xValue),
+        y(yValue)
+    {
+    }
 
     [[nodiscard]] static constexpr Vector2 Zero() noexcept
     {
@@ -33,13 +37,12 @@ struct Vector2 final
         case 1:
             return std::ref(y);
         default:
-            [[unlikely]] return core::Result<std::reference_wrapper<float>>::FromError(core::Error{
-                ToErrorCode(MathErrorCode::InvalidArgument), "Vector2 index is out of range."});
+            [[unlikely]] return core::Result<std::reference_wrapper<float>>::FromError(
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Vector2 index is out of range."});
         }
     }
 
-    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(
-        std::size_t index) const
+    [[nodiscard]] constexpr core::Result<std::reference_wrapper<const float>> At(std::size_t index) const
     {
         switch (index)
         {
@@ -49,13 +52,11 @@ struct Vector2 final
             return std::cref(y);
         default:
             [[unlikely]] return core::Result<std::reference_wrapper<const float>>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
-                            "Vector2 index is out of range."});
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Vector2 index is out of range."});
         }
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Vector2& lhs,
-                                                   const Vector2& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Vector2& lhs, const Vector2& rhs) noexcept = default;
 };
 
 [[nodiscard]] constexpr Vector2 operator+(Vector2 lhs, Vector2 rhs) noexcept
@@ -148,16 +149,14 @@ struct Vector2 final
     if (!core::IsFinite(vector.x) || !core::IsFinite(vector.y)) [[unlikely]]
     {
         return core::Result<Vector2>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                        "Vector2 normalization requires finite components."});
+            core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Vector2 normalization requires finite components."});
     }
 
     const float maxMagnitude = std::max(std::abs(vector.x), std::abs(vector.y));
     if (maxMagnitude == 0.0F) [[unlikely]]
     {
         return core::Result<Vector2>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
-                        "Vector2 normalization requires non-zero length."});
+            core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Vector2 normalization requires non-zero length."});
     }
 
     const Vector2 scaled = vector / maxMagnitude;
@@ -165,16 +164,14 @@ struct Vector2 final
     if (!core::IsFinite(scaledLength) || scaledLength == 0.0F) [[unlikely]]
     {
         return core::Result<Vector2>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
-                        "Vector2 normalization input is numerically unnormalizable."});
+            core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Vector2 normalization input is numerically unnormalizable."});
     }
 
     const Vector2 normalized = scaled / scaledLength;
     if (!core::IsFinite(normalized.x) || !core::IsFinite(normalized.y)) [[unlikely]]
     {
         return core::Result<Vector2>::FromError(
-            core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
-                        "Vector2 normalization result is numerically unnormalizable."});
+            core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Vector2 normalization result is numerically unnormalizable."});
     }
 
     return normalized;

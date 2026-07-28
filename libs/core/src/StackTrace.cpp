@@ -12,7 +12,7 @@
 #endif
 #endif
 
-namespace pond::core
+namespace ponder::core
 {
 namespace
 {
@@ -25,7 +25,10 @@ constexpr bool kHasStdStackTrace{false};
 constexpr std::size_t kCaptureStackTraceInternalFrames{1};
 } // namespace
 
-StackTrace::StackTrace(std::vector<std::string> frames) : m_frames(std::move(frames)) {}
+StackTrace::StackTrace(std::vector<std::string> frames) :
+    m_frames(std::move(frames))
+{
+}
 
 bool StackTrace::IsEmpty() const noexcept
 {
@@ -85,8 +88,7 @@ StackTrace CaptureStackTrace(StackTraceCaptureOptions options)
     }
 
 #if defined(__cpp_lib_stacktrace) && __cpp_lib_stacktrace >= 202011L
-    std::stacktrace stackTrace = std::stacktrace::current(
-        options.GetSkipFrames() + kCaptureStackTraceInternalFrames, options.GetMaxFrames());
+    std::stacktrace stackTrace = std::stacktrace::current(options.GetSkipFrames() + kCaptureStackTraceInternalFrames, options.GetMaxFrames());
 
     std::vector<std::string> frames;
     frames.reserve(stackTrace.size());
@@ -107,4 +109,4 @@ StackTrace CaptureStackTrace()
 {
     return CaptureStackTrace(StackTraceCaptureOptions{});
 }
-} // namespace pond::core
+} // namespace ponder::core

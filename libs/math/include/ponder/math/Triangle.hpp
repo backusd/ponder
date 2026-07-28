@@ -9,23 +9,20 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteTriangleVector(Vector3 value) noexcept
 {
-    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
-           ::pond::core::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) && ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
 class Triangle final
 {
 public:
-    [[nodiscard]] static constexpr core::Result<Triangle> Create(Vector3 vertex0, Vector3 vertex1,
-                                                                 Vector3 vertex2)
+    [[nodiscard]] static constexpr core::Result<Triangle> Create(Vector3 vertex0, Vector3 vertex1, Vector3 vertex2)
     {
-        if (!detail::IsFiniteTriangleVector(vertex0) || !detail::IsFiniteTriangleVector(vertex1) ||
-            !detail::IsFiniteTriangleVector(vertex2)) [[unlikely]]
+        if (!detail::IsFiniteTriangleVector(vertex0) || !detail::IsFiniteTriangleVector(vertex1) || !detail::IsFiniteTriangleVector(vertex2))
+            [[unlikely]]
         {
             return core::Result<Triangle>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                            "Triangle construction requires finite vertices."});
+                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Triangle construction requires finite vertices."});
         }
 
         return Triangle{vertex0, vertex1, vertex2};
@@ -46,12 +43,13 @@ public:
         return m_vertex2;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Triangle& lhs,
-                                                   const Triangle& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Triangle& lhs, const Triangle& rhs) noexcept = default;
 
 private:
-    constexpr Triangle(Vector3 vertex0, Vector3 vertex1, Vector3 vertex2) noexcept
-        : m_vertex0(vertex0), m_vertex1(vertex1), m_vertex2(vertex2)
+    constexpr Triangle(Vector3 vertex0, Vector3 vertex1, Vector3 vertex2) noexcept :
+        m_vertex0(vertex0),
+        m_vertex1(vertex1),
+        m_vertex2(vertex2)
     {
     }
 

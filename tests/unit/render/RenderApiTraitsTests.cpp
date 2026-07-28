@@ -9,9 +9,8 @@ namespace
 template <typename Owner>
 constexpr bool IsRenderOwnerRole()
 {
-    return std::is_default_constructible_v<Owner> && !std::is_copy_constructible_v<Owner> &&
-           !std::is_copy_assignable_v<Owner> && std::is_nothrow_move_constructible_v<Owner> &&
-           std::is_nothrow_move_assignable_v<Owner> && std::is_nothrow_destructible_v<Owner>;
+    return std::is_default_constructible_v<Owner> && !std::is_copy_constructible_v<Owner> && !std::is_copy_assignable_v<Owner> &&
+           std::is_nothrow_move_constructible_v<Owner> && std::is_nothrow_move_assignable_v<Owner> && std::is_nothrow_destructible_v<Owner>;
 }
 
 static_assert(IsRenderOwnerRole<pond::render::RenderBootstrap>());
@@ -20,15 +19,12 @@ static_assert(IsRenderOwnerRole<pond::render::PreparedSurface>());
 static_assert(IsRenderOwnerRole<pond::render::RenderTarget>());
 static_assert(IsRenderOwnerRole<pond::render::RenderFrame>());
 static_assert(noexcept(pond::render::GetRequiredWindowGraphicsCompatibility()));
-static_assert(std::is_same_v<decltype(pond::render::GetRequiredWindowGraphicsCompatibility()),
-                             pond::platform::WindowGraphicsCompatibility>);
+static_assert(std::is_same_v<decltype(pond::render::GetRequiredWindowGraphicsCompatibility()), ponder::platform::WindowGraphicsCompatibility>);
 static_assert(
-    std::is_same_v<decltype(std::declval<const pond::render::RenderDevice&>().GetSelectedAdapter()),
-                   const pond::render::RenderAdapterSnapshot&>);
+    std::is_same_v<decltype(std::declval<const pond::render::RenderDevice&>().GetSelectedAdapter()), const pond::render::RenderAdapterSnapshot&>);
 static_assert(noexcept(std::declval<const pond::render::RenderDevice&>().GetSelectedAdapter()));
 static_assert(!noexcept(std::declval<const pond::render::RenderDevice&>().GetDiagnostics()));
-static_assert(
-    noexcept(std::declval<const pond::render::RenderTarget&>().GetSelectedPresentationConfig()));
+static_assert(noexcept(std::declval<const pond::render::RenderTarget&>().GetSelectedPresentationConfig()));
 static_assert(!noexcept(std::declval<const pond::render::RenderTarget&>().GetDiagnostics()));
 static_assert(noexcept(std::declval<const pond::render::RenderFrame&>().GetMetrics()));
 

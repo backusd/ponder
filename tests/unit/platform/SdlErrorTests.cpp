@@ -1,12 +1,18 @@
+#include <ponder/core/Exception.hpp>
+#include <ponder/platform/PlatformError.hpp>
+
 #include <SDL3/SDL_error.h>
 #include <gtest/gtest.h>
+#include <string>
 #include <string_view>
 
 #include "SdlError.hpp"
 
 namespace
 {
-using pond::platform::detail::CaptureSdlFailure;
+using ponder::platform::detail::CaptureSdlFailure;
+using ponder::platform::detail::CaptureSdlFailureMessage;
+using ponder::platform::detail::FormatCapturedSdlFailureMessage;
 
 class PlatformSdlErrorTests : public testing::Test
 {
@@ -24,15 +30,13 @@ protected:
 
 TEST_F(PlatformSdlErrorTests, PreservesCallerSelectedCodeAndFormatsContext)
 {
-    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Unsupported, 73};
+    constexpr ponder::core::ErrorCode kCode{ponder::core::ErrorCategory::Unsupported, 73};
     static_cast<void>(SDL_SetError("synthetic failure"));
 
-    const pond::core::Error error =
-        pond::platform::detail::CaptureSdlFailure(kCode, "SDL_TestOperation", "window 7");
+    const ponder::core::Error error = ponder::platform::detail::CaptureSdlFailure(kCode, "SDL_TestOperation", "window 7");
 
     EXPECT_TRUE(error.GetCode() == kCode);
-    EXPECT_EQ(error.GetMessage(),
-              std::string_view{"SDL_TestOperation failed (window 7): synthetic failure"});
+    EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_TestOperation failed (window 7): synthetic failure"});
     EXPECT_STREQ(SDL_GetError(), "synthetic failure");
 }
 
@@ -40,8 +44,7 @@ TEST_F(PlatformSdlErrorTests, OmitsEmptyObjectContext)
 {
     static_cast<void>(SDL_SetError("synthetic failure"));
 
-    const pond::core::Error error =
-        pond::platform::detail::CaptureSdlFailure(pond::core::ErrorCode{}, "SDL_TestOperation");
+    const ponder::core::Error error = ponder::platform::detail::CaptureSdlFailure(ponder::core::ErrorCode{}, "SDL_TestOperation");
 
     EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_TestOperation failed: synthetic failure"});
 }
@@ -49,19 +52,16 @@ TEST_F(PlatformSdlErrorTests, OmitsEmptyObjectContext)
 TEST_F(PlatformSdlErrorTests, OwnsErrorTextAfterSdlStateChanges)
 {
     static_cast<void>(SDL_SetError("first failure"));
-    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
-        pond::core::ErrorCode{}, "SDL_TestOperation", "window 7");
+    const ponder::core::Error error = ponder::platform::detail::CaptureSdlFailure(ponder::core::ErrorCode{}, "SDL_TestOperation", "window 7");
 
     static_cast<void>(SDL_SetError("second failure"));
 
-    EXPECT_EQ(error.GetMessage(),
-              std::string_view{"SDL_TestOperation failed (window 7): first failure"});
+    EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_TestOperation failed (window 7): first failure"});
 }
 
 TEST_F(PlatformSdlErrorTests, UsesFallbackForEmptySdlError)
 {
-    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
-        pond::core::ErrorCode{}, "SDL_TestOperation", "window 7");
+    const ponder::core::Error error = ponder::platform::detail::CaptureSdlFailure(ponder::core::ErrorCode{}, "SDL_TestOperation", "window 7");
 
     EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_TestOperation failed (window 7): "
                                                    "SDL did not provide an error message"});
@@ -69,11 +69,11 @@ TEST_F(PlatformSdlErrorTests, UsesFallbackForEmptySdlError)
 
 TEST_F(PlatformSdlErrorTests, FormatsAlreadyCapturedErrorWithoutReplacingItFromSdlState)
 {
-    constexpr pond::core::ErrorCode kCode{pond::core::ErrorCategory::Unsupported, 73};
+    constexpr ponder::core::ErrorCode kCode{ponder::core::ErrorCategory::Unsupported, 73};
     static_cast<void>(SDL_SetError("new SDL state"));
 
-    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
-        kCode, "SDL_GetClipboardText", "clipboard text", "captured clipboard failure");
+    const ponder::core::Error error =
+        ponder::platform::detail::CaptureSdlFailure(kCode, "SDL_GetClipboardText", "clipboard text", "captured clipboard failure");
 
     EXPECT_TRUE(error.GetCode() == kCode);
     EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_GetClipboardText failed (clipboard text): "
@@ -83,8 +83,8 @@ TEST_F(PlatformSdlErrorTests, FormatsAlreadyCapturedErrorWithoutReplacingItFromS
 
 TEST_F(PlatformSdlErrorTests, UsesFallbackForEmptyCapturedError)
 {
-    const pond::core::Error error = pond::platform::detail::CaptureSdlFailure(
-        pond::core::ErrorCode{}, "SDL_GetClipboardText", "clipboard text", "");
+    const ponder::core::Error error =
+        ponder::platform::detail::CaptureSdlFailure(ponder::core::ErrorCode{}, "SDL_GetClipboardText", "clipboard text", "");
 
     EXPECT_EQ(error.GetMessage(), std::string_view{"SDL_GetClipboardText failed (clipboard text): "
                                                    "SDL did not provide an error message"});
@@ -92,13 +92,40 @@ TEST_F(PlatformSdlErrorTests, UsesFallbackForEmptyCapturedError)
 
 TEST_F(PlatformSdlErrorTests, UsesCallerSourceLocationByDefault)
 {
-    constexpr pond::core::ErrorCode kCode;
+    constexpr ponder::core::ErrorCode kCode;
     static_cast<void>(SDL_SetError("synthetic failure"));
 
     const auto expectedLine = __LINE__ + 1;
-    const pond::core::Error error = CaptureSdlFailure(kCode, "SDL_TestOperation");
+    const ponder::core::Error error = CaptureSdlFailure(kCode, "SDL_TestOperation");
 
     EXPECT_STREQ(error.GetLocation().file_name(), __FILE__);
     EXPECT_EQ(error.GetLocation().line(), expectedLine);
+}
+
+TEST_F(PlatformSdlErrorTests, BuildsPlatformExceptionWithoutLosingSdlContextOrSourceLocation)
+{
+    static_cast<void>(SDL_SetError("synthetic failure"));
+
+    const auto expectedLine = __LINE__ + 2;
+    const ponder::core::Exception exception =
+        PLATFORM_EXCEPTION(ponder::platform::PlatformErrorCode::BackendFailure, "{}", CaptureSdlFailureMessage("SDL_TestOperation", "window 7"));
+
+    EXPECT_EQ(exception.GetMessage(), std::string_view{"Platform error [backend_failure]: "
+                                                       "SDL_TestOperation failed (window 7): "
+                                                       "synthetic failure"});
+    EXPECT_STREQ(exception.GetLocation().file_name(), __FILE__);
+    EXPECT_EQ(exception.GetLocation().line(), expectedLine);
+    EXPECT_STREQ(SDL_GetError(), "synthetic failure");
+}
+
+TEST_F(PlatformSdlErrorTests, FormatsCapturedMessageWithoutConsultingCurrentSdlState)
+{
+    static_cast<void>(SDL_SetError("new SDL state"));
+
+    const std::string message = FormatCapturedSdlFailureMessage("SDL_GetClipboardText", "clipboard text", "captured clipboard failure");
+
+    EXPECT_EQ(message, std::string_view{"SDL_GetClipboardText failed (clipboard text): "
+                                        "captured clipboard failure"});
+    EXPECT_STREQ(SDL_GetError(), "new SDL state");
 }
 } // namespace

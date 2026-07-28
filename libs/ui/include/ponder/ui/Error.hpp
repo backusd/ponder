@@ -43,24 +43,20 @@ enum class UiErrorCode : core::ErrorCodeValue
     return core::ErrorCode{core::ErrorCategory::Internal, value};
 }
 
-[[nodiscard]] inline core::Error MakeUiError(
-    UiErrorCode code, std::string message,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] inline core::Error MakeUiError(UiErrorCode code, std::string message, std::source_location location = std::source_location::current())
 {
     return core::Error{ToErrorCode(code), std::move(message), location};
 }
 
 template <typename Value>
-[[nodiscard]] inline core::Result<Value> MakeUiFailure(
-    UiErrorCode code, std::string message,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] inline core::Result<Value> MakeUiFailure(UiErrorCode code, std::string message,
+                                                       std::source_location location = std::source_location::current())
 {
     return core::Result<Value>::FromError(MakeUiError(code, std::move(message), location));
 }
 
-[[nodiscard]] inline core::VoidResult MakeUiFailure(
-    UiErrorCode code, std::string message,
-    std::source_location location = std::source_location::current())
+[[nodiscard]] inline core::VoidResult MakeUiFailure(UiErrorCode code, std::string message,
+                                                    std::source_location location = std::source_location::current())
 {
     return core::VoidResult::FromError(MakeUiError(code, std::move(message), location));
 }

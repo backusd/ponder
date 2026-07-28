@@ -5,5 +5,5 @@ namespace
 struct HeaderIdentifierTag;
 }
 
-static_assert(!pond::core::Identifier<HeaderIdentifierTag>{}.IsValid());
-static_assert(pond::core::Identifier<HeaderIdentifierTag>{42}.GetValue() == 42U);
+static_assert(!ponder::core::Identifier<HeaderIdentifierTag>{}.IsValid());
+static_assert(ponder::core::Identifier<HeaderIdentifierTag>{42}.GetValue() == 42U);

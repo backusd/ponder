@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace pond::core
+namespace ponder::core
 {
 [[nodiscard]] constexpr std::size_t HashIdentifierValue(std::uint64_t value) noexcept
 {
@@ -31,4 +31,4 @@ namespace pond::core
 
     return hashValue;
 }
-} // namespace pond::core
+} // namespace ponder::core

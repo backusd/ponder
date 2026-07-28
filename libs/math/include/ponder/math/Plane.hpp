@@ -11,8 +11,7 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFinitePlaneVector(Vector3 value) noexcept
 {
-    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
-           ::pond::core::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) && ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
@@ -24,8 +23,7 @@ public:
         if (!detail::IsFinitePlaneVector(normal) || !core::IsFinite(offset)) [[unlikely]]
         {
             return core::Result<Plane>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                            "Plane construction requires finite normal and offset."});
+                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Plane construction requires finite normal and offset."});
         }
 
         const double x = static_cast<double>(normal.x);
@@ -35,19 +33,15 @@ public:
         if (length == 0.0) [[unlikely]]
         {
             return core::Result<Plane>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::DegenerateInput),
-                            "Plane construction requires a non-zero normal."});
+                core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Plane construction requires a non-zero normal."});
         }
 
-        const Vector3 normalized{static_cast<float>(x / length), static_cast<float>(y / length),
-                                 static_cast<float>(z / length)};
+        const Vector3 normalized{static_cast<float>(x / length), static_cast<float>(y / length), static_cast<float>(z / length)};
         const float adjustedOffset = static_cast<float>(static_cast<double>(offset) / length);
-        if (!detail::IsFinitePlaneVector(normalized) || !core::IsFinite(adjustedOffset))
-            [[unlikely]]
+        if (!detail::IsFinitePlaneVector(normalized) || !core::IsFinite(adjustedOffset)) [[unlikely]]
         {
-            return core::Result<Plane>::FromError(core::Error{
-                ToErrorCode(MathErrorCode::DegenerateInput),
-                "Plane construction result is not representable as finite coefficients."});
+            return core::Result<Plane>::FromError(
+                core::Error{ToErrorCode(MathErrorCode::DegenerateInput), "Plane construction result is not representable as finite coefficients."});
         }
 
         return Plane{normalized, adjustedOffset};
@@ -63,11 +57,14 @@ public:
         return m_offset;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Plane& lhs,
-                                                   const Plane& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Plane& lhs, const Plane& rhs) noexcept = default;
 
 private:
-    constexpr Plane(Vector3 normal, float offset) noexcept : m_normal(normal), m_offset(offset) {}
+    constexpr Plane(Vector3 normal, float offset) noexcept :
+        m_normal(normal),
+        m_offset(offset)
+    {
+    }
 
     Vector3 m_normal;
     float m_offset;

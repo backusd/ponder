@@ -24,8 +24,7 @@ concept FrustumClassifies = requires(const pond::math::Frustum& frustum, const S
 };
 
 template <typename Left, typename Right>
-concept HasCollisionIntersect =
-    requires(const Left& left, const Right& right) { pond::math::Intersect(left, right); };
+concept HasCollisionIntersect = requires(const Left& left, const Right& right) { pond::math::Intersect(left, right); };
 
 struct DoubleRayBoxHit final
 {
@@ -50,8 +49,7 @@ struct DoubleVector3 final
 
 [[nodiscard]] pond::math::Frustum MakeOrthographicFrustum(float scale)
 {
-    auto projection = pond::math::Matrix4x4::Orthographic(
-        -scale, scale, -scale, scale, scale, 5.0F * scale, pond::math::ProjectionDepth::ForwardZ);
+    auto projection = pond::math::Matrix4x4::Orthographic(-scale, scale, -scale, scale, scale, 5.0F * scale, pond::math::ProjectionDepth::ForwardZ);
     EXPECT_TRUE(projection.HasValue());
 
     auto frustum = pond::math::Frustum::FromWorldToClip(projection.GetValue());
@@ -66,8 +64,7 @@ struct DoubleVector3 final
     return ray.GetValue();
 }
 
-[[nodiscard]] pond::math::AxisAlignedBox MakeBox(pond::math::Vector3 minimum,
-                                                 pond::math::Vector3 maximum)
+[[nodiscard]] pond::math::AxisAlignedBox MakeBox(pond::math::Vector3 minimum, pond::math::Vector3 maximum)
 {
     auto box = pond::math::AxisAlignedBox::Create(minimum, maximum);
     EXPECT_TRUE(box.HasValue());
@@ -81,9 +78,7 @@ struct DoubleVector3 final
     return sphere.GetValue();
 }
 
-[[nodiscard]] pond::math::Triangle MakeTriangle(pond::math::Vector3 vertex0,
-                                                pond::math::Vector3 vertex1,
-                                                pond::math::Vector3 vertex2)
+[[nodiscard]] pond::math::Triangle MakeTriangle(pond::math::Vector3 vertex0, pond::math::Vector3 vertex1, pond::math::Vector3 vertex2)
 {
     auto triangle = pond::math::Triangle::Create(vertex0, vertex1, vertex2);
     EXPECT_TRUE(triangle.HasValue());
@@ -92,8 +87,7 @@ struct DoubleVector3 final
 
 [[nodiscard]] constexpr DoubleVector3 ToDouble(pond::math::Vector3 value) noexcept
 {
-    return DoubleVector3{static_cast<double>(value.x), static_cast<double>(value.y),
-                         static_cast<double>(value.z)};
+    return DoubleVector3{static_cast<double>(value.x), static_cast<double>(value.y), static_cast<double>(value.z)};
 }
 
 [[nodiscard]] constexpr DoubleVector3 operator-(DoubleVector3 lhs, DoubleVector3 rhs) noexcept
@@ -103,8 +97,7 @@ struct DoubleVector3 final
 
 [[nodiscard]] constexpr DoubleVector3 Cross(DoubleVector3 lhs, DoubleVector3 rhs) noexcept
 {
-    return DoubleVector3{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z,
-                         lhs.x * rhs.y - lhs.y * rhs.x};
+    return DoubleVector3{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z, lhs.x * rhs.y - lhs.y * rhs.x};
 }
 
 [[nodiscard]] constexpr double Dot(DoubleVector3 lhs, DoubleVector3 rhs) noexcept
@@ -120,23 +113,18 @@ struct DoubleVector3 final
 [[nodiscard]] double EvaluatePlane(const pond::math::Plane& plane, pond::math::Vector3 point)
 {
     const pond::math::Vector3 normal = plane.GetNormal();
-    return static_cast<double>(normal.x) * static_cast<double>(point.x) +
-           static_cast<double>(normal.y) * static_cast<double>(point.y) +
-           static_cast<double>(normal.z) * static_cast<double>(point.z) +
-           static_cast<double>(plane.GetOffset());
+    return static_cast<double>(normal.x) * static_cast<double>(point.x) + static_cast<double>(normal.y) * static_cast<double>(point.y) +
+           static_cast<double>(normal.z) * static_cast<double>(point.z) + static_cast<double>(plane.GetOffset());
 }
 
-[[nodiscard]] Classification ClassifyBoxAgainstPlane(const pond::math::Plane& plane,
-                                                     const pond::math::AxisAlignedBox& box)
+[[nodiscard]] Classification ClassifyBoxAgainstPlane(const pond::math::Plane& plane, const pond::math::AxisAlignedBox& box)
 {
     const pond::math::Vector3 normal = plane.GetNormal();
     const pond::math::Vector3 minimum = box.GetMinimum();
     const pond::math::Vector3 maximum = box.GetMaximum();
-    const pond::math::Vector3 positive{normal.x >= 0.0F ? maximum.x : minimum.x,
-                                       normal.y >= 0.0F ? maximum.y : minimum.y,
+    const pond::math::Vector3 positive{normal.x >= 0.0F ? maximum.x : minimum.x, normal.y >= 0.0F ? maximum.y : minimum.y,
                                        normal.z >= 0.0F ? maximum.z : minimum.z};
-    const pond::math::Vector3 negative{normal.x >= 0.0F ? minimum.x : maximum.x,
-                                       normal.y >= 0.0F ? minimum.y : maximum.y,
+    const pond::math::Vector3 negative{normal.x >= 0.0F ? minimum.x : maximum.x, normal.y >= 0.0F ? minimum.y : maximum.y,
                                        normal.z >= 0.0F ? minimum.z : maximum.z};
 
     if (EvaluatePlane(plane, positive) < 0.0)
@@ -151,8 +139,7 @@ struct DoubleVector3 final
     return Classification::Contains;
 }
 
-[[nodiscard]] Classification ClassifySphereAgainstPlane(const pond::math::Plane& plane,
-                                                        const pond::math::Sphere& sphere)
+[[nodiscard]] Classification ClassifySphereAgainstPlane(const pond::math::Plane& plane, const pond::math::Sphere& sphere)
 {
     const double distance = EvaluatePlane(plane, sphere.GetCenter());
     const double radius = static_cast<double>(sphere.GetRadius());
@@ -169,8 +156,7 @@ struct DoubleVector3 final
 }
 
 template <typename Shape, typename PlaneClassifier>
-[[nodiscard]] Classification ClassifyFrustumOracle(const pond::math::Frustum& frustum,
-                                                   const Shape& shape, PlaneClassifier classifier)
+[[nodiscard]] Classification ClassifyFrustumOracle(const pond::math::Frustum& frustum, const Shape& shape, PlaneClassifier classifier)
 {
     std::array<Classification, 6> planeClassifications{classifier(frustum.GetLeftPlane(), shape),
                                                        classifier(frustum.GetRightPlane(), shape),
@@ -212,18 +198,15 @@ template <typename Shape, typename PlaneClassifier>
     return Classification::Contains;
 }
 
-[[nodiscard]] bool UpdateRayBoxOracleInterval(float origin, float direction, float minimum,
-                                              float maximum, double& entry, double& exit)
+[[nodiscard]] bool UpdateRayBoxOracleInterval(float origin, float direction, float minimum, float maximum, double& entry, double& exit)
 {
     if (direction == 0.0F)
     {
         return origin >= minimum && origin <= maximum;
     }
 
-    double nearDistance = (static_cast<double>(minimum) - static_cast<double>(origin)) /
-                          static_cast<double>(direction);
-    double farDistance = (static_cast<double>(maximum) - static_cast<double>(origin)) /
-                         static_cast<double>(direction);
+    double nearDistance = (static_cast<double>(minimum) - static_cast<double>(origin)) / static_cast<double>(direction);
+    double farDistance = (static_cast<double>(maximum) - static_cast<double>(origin)) / static_cast<double>(direction);
     if (farDistance < nearDistance)
     {
         std::swap(nearDistance, farDistance);
@@ -234,8 +217,7 @@ template <typename Shape, typename PlaneClassifier>
     return entry <= exit;
 }
 
-[[nodiscard]] std::optional<DoubleRayBoxHit> IntersectRayBoxOracle(
-    const pond::math::Ray& ray, const pond::math::AxisAlignedBox& box)
+[[nodiscard]] std::optional<DoubleRayBoxHit> IntersectRayBoxOracle(const pond::math::Ray& ray, const pond::math::AxisAlignedBox& box)
 {
     const pond::math::Vector3 origin = ray.GetOrigin();
     const pond::math::Vector3 direction = ray.GetDirection();
@@ -246,8 +228,7 @@ template <typename Shape, typename PlaneClassifier>
 
     if (!UpdateRayBoxOracleInterval(origin.x, direction.x, minimum.x, maximum.x, entry, exit) ||
         !UpdateRayBoxOracleInterval(origin.y, direction.y, minimum.y, maximum.y, entry, exit) ||
-        !UpdateRayBoxOracleInterval(origin.z, direction.z, minimum.z, maximum.z, entry, exit) ||
-        exit < 0.0)
+        !UpdateRayBoxOracleInterval(origin.z, direction.z, minimum.z, maximum.z, entry, exit) || exit < 0.0)
     {
         return std::nullopt;
     }
@@ -255,8 +236,7 @@ template <typename Shape, typename PlaneClassifier>
     return DoubleRayBoxHit{std::max(0.0, entry), exit};
 }
 
-[[nodiscard]] std::optional<DoubleTriangleHit> IntersectRayTriangleOracle(
-    const pond::math::Ray& ray, const pond::math::Triangle& triangle)
+[[nodiscard]] std::optional<DoubleTriangleHit> IntersectRayTriangleOracle(const pond::math::Ray& ray, const pond::math::Triangle& triangle)
 {
     constexpr double kOracleEpsilon{1.0e-12};
     const DoubleVector3 origin = ToDouble(ray.GetOrigin());
@@ -315,12 +295,9 @@ TEST(CollisionMilestoneTests, PublicQuerySurfaceContainsOnlyInitialCollisionMatr
     static_assert(!HasCollisionIntersect<Sphere, Triangle>);
 
     static_assert(
-        std::same_as<decltype(pond::math::Intersect(std::declval<const Ray&>(),
-                                                    std::declval<const AxisAlignedBox&>())),
-                     std::optional<RayBoxHit>>);
-    static_assert(std::same_as<decltype(pond::math::Intersect(std::declval<const Ray&>(),
-                                                              std::declval<const Triangle&>())),
-                               std::optional<RayTriangleHit>>);
+        std::same_as<decltype(pond::math::Intersect(std::declval<const Ray&>(), std::declval<const AxisAlignedBox&>())), std::optional<RayBoxHit>>);
+    static_assert(
+        std::same_as<decltype(pond::math::Intersect(std::declval<const Ray&>(), std::declval<const Triangle&>())), std::optional<RayTriangleHit>>);
 }
 
 TEST(CollisionMilestoneTests, SeededFrustumQueriesDoNotFalseRejectOracleVisibleObjects)
@@ -337,18 +314,12 @@ TEST(CollisionMilestoneTests, SeededFrustumQueriesDoNotFalseRejectOracleVisibleO
 
         for (int index = 0; index < 96; ++index)
         {
-            const pond::math::Vector3 center{centerDistribution(generator),
-                                             centerDistribution(generator),
-                                             depthDistribution(generator)};
-            const pond::math::Vector3 extent{extentDistribution(generator),
-                                             extentDistribution(generator),
-                                             extentDistribution(generator)};
+            const pond::math::Vector3 center{centerDistribution(generator), centerDistribution(generator), depthDistribution(generator)};
+            const pond::math::Vector3 extent{extentDistribution(generator), extentDistribution(generator), extentDistribution(generator)};
             const pond::math::AxisAlignedBox box = MakeBox(center - extent, center + extent);
             const pond::math::Sphere sphere = MakeSphere(center, extentDistribution(generator));
-            const Classification boxOracle =
-                ClassifyFrustumOracle(frustum, box, ClassifyBoxAgainstPlane);
-            const Classification sphereOracle =
-                ClassifyFrustumOracle(frustum, sphere, ClassifySphereAgainstPlane);
+            const Classification boxOracle = ClassifyFrustumOracle(frustum, box, ClassifyBoxAgainstPlane);
+            const Classification sphereOracle = ClassifyFrustumOracle(frustum, sphere, ClassifySphereAgainstPlane);
 
             if (boxOracle != Classification::Disjoint)
             {
@@ -375,12 +346,8 @@ TEST(CollisionMilestoneTests, SeededRayBoxQueriesMatchHigherPrecisionOracle)
 
         for (int index = 0; index < 64; ++index)
         {
-            const pond::math::Vector3 center{coordinateDistribution(generator),
-                                             coordinateDistribution(generator),
-                                             coordinateDistribution(generator)};
-            const pond::math::Vector3 extent{extentDistribution(generator),
-                                             extentDistribution(generator),
-                                             extentDistribution(generator)};
+            const pond::math::Vector3 center{coordinateDistribution(generator), coordinateDistribution(generator), coordinateDistribution(generator)};
+            const pond::math::Vector3 extent{extentDistribution(generator), extentDistribution(generator), extentDistribution(generator)};
             const pond::math::AxisAlignedBox box = MakeBox(center - extent, center + extent);
             const pond::math::Vector3 target{center.x, center.y, center.z};
             const float distance = distanceDistribution(generator);
@@ -393,10 +360,8 @@ TEST(CollisionMilestoneTests, SeededRayBoxQueriesMatchHigherPrecisionOracle)
             ASSERT_TRUE(actual.has_value());
             const double entryMagnitude = std::max(1.0, Abs(expected->entryDistance));
             const double exitMagnitude = std::max(1.0, Abs(expected->exitDistance));
-            EXPECT_NEAR(actual->GetEntryDistance(), static_cast<float>(expected->entryDistance),
-                        static_cast<float>(1.0e-5 * entryMagnitude));
-            EXPECT_NEAR(actual->GetExitDistance(), static_cast<float>(expected->exitDistance),
-                        static_cast<float>(1.0e-5 * exitMagnitude));
+            EXPECT_NEAR(actual->GetEntryDistance(), static_cast<float>(expected->entryDistance), static_cast<float>(1.0e-5 * entryMagnitude));
+            EXPECT_NEAR(actual->GetExitDistance(), static_cast<float>(expected->exitDistance), static_cast<float>(1.0e-5 * exitMagnitude));
         }
     }
 }
@@ -415,43 +380,33 @@ TEST(CollisionMilestoneTests, SeededRayTriangleQueriesMatchHigherPrecisionOracle
 
         for (int index = 0; index < 64; ++index)
         {
-            const pond::math::Vector3 vertex0{coordinateDistribution(generator),
-                                              coordinateDistribution(generator), -5.0F * scale};
+            const pond::math::Vector3 vertex0{coordinateDistribution(generator), coordinateDistribution(generator), -5.0F * scale};
             const float width = sizeDistribution(generator);
             const float height = sizeDistribution(generator);
             const pond::math::Triangle triangle =
-                MakeTriangle(vertex0, vertex0 + pond::math::Vector3{width, 0.0F, 0.0F},
-                             vertex0 + pond::math::Vector3{0.0F, height, 0.0F});
+                MakeTriangle(vertex0, vertex0 + pond::math::Vector3{width, 0.0F, 0.0F}, vertex0 + pond::math::Vector3{0.0F, height, 0.0F});
             const float rawBarycentric1 = barycentricDistribution(generator);
-            const float rawBarycentric2 =
-                std::min(barycentricDistribution(generator), 0.9F - rawBarycentric1);
+            const float rawBarycentric2 = std::min(barycentricDistribution(generator), 0.9F - rawBarycentric1);
             const float barycentric0 = 1.0F - rawBarycentric1 - rawBarycentric2;
             if (barycentric0 <= 0.1F)
             {
                 continue;
             }
 
-            const pond::math::Vector3 hitPoint = triangle.GetVertex0() * barycentric0 +
-                                                 triangle.GetVertex1() * rawBarycentric1 +
-                                                 triangle.GetVertex2() * rawBarycentric2;
+            const pond::math::Vector3 hitPoint =
+                triangle.GetVertex0() * barycentric0 + triangle.GetVertex1() * rawBarycentric1 + triangle.GetVertex2() * rawBarycentric2;
             const float distance = distanceDistribution(generator);
-            const pond::math::Ray ray =
-                MakeRay(hitPoint + pond::math::Vector3{0.0F, 0.0F, distance},
-                        pond::math::Vector3{0.0F, 0.0F, -1.0F});
+            const pond::math::Ray ray = MakeRay(hitPoint + pond::math::Vector3{0.0F, 0.0F, distance}, pond::math::Vector3{0.0F, 0.0F, -1.0F});
             const auto actual = pond::math::Intersect(ray, triangle);
             const auto expected = IntersectRayTriangleOracle(ray, triangle);
 
             ASSERT_EQ(actual.has_value(), expected.has_value());
             ASSERT_TRUE(actual.has_value());
             const double distanceMagnitude = std::max(1.0, Abs(expected->distance));
-            EXPECT_NEAR(actual->GetDistance(), static_cast<float>(expected->distance),
-                        static_cast<float>(1.0e-5 * distanceMagnitude));
-            EXPECT_NEAR(actual->GetBarycentric0(), static_cast<float>(expected->barycentric0),
-                        1.0e-4F);
-            EXPECT_NEAR(actual->GetBarycentric1(), static_cast<float>(expected->barycentric1),
-                        1.0e-4F);
-            EXPECT_NEAR(actual->GetBarycentric2(), static_cast<float>(expected->barycentric2),
-                        1.0e-4F);
+            EXPECT_NEAR(actual->GetDistance(), static_cast<float>(expected->distance), static_cast<float>(1.0e-5 * distanceMagnitude));
+            EXPECT_NEAR(actual->GetBarycentric0(), static_cast<float>(expected->barycentric0), 1.0e-4F);
+            EXPECT_NEAR(actual->GetBarycentric1(), static_cast<float>(expected->barycentric1), 1.0e-4F);
+            EXPECT_NEAR(actual->GetBarycentric2(), static_cast<float>(expected->barycentric2), 1.0e-4F);
         }
     }
 }

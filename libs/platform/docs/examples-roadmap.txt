@@ -2,6 +2,10 @@
 
 Status: proposed on 2026-07-13.
 
+The current error-handling migration for these examples is defined by tasks
+PLAT-EH-014 through PLAT-EH-018 in `error-handling-update.txt`. Historical
+result-handling guidance below remains as an implementation record.
+
 This roadmap defines runnable, user-facing examples for the complete public
 `ponder_platform` API. The examples are teaching programs, not test fixtures.
 They complement the contract-oriented platform documentation by showing safe
@@ -212,7 +216,7 @@ snapshots, and routes close requests by strong ID.
   usable bounds, optional refresh rate, orientation, and content scale.
 - Window display ID, pixel density, display scale, and the distinction between
   screen, logical, and pixel geometry.
-- `PlatformRuntime::Now()`, `Timestamp` subtraction, `PollEvent()`, and
+- `core::Timestamp::Now()`, `Timestamp` subtraction, `PollEvent()`, and
   the quit, window, pointer-boundary, and display event families.
 - Notification-driven re-query and capability-aware `Result` handling.
 
@@ -321,24 +325,26 @@ Readiness: immediately buildable.
 
 Use a parent window and keyboard commands to inspect/modify clipboard text,
 open an explicitly configured URI, and issue several asynchronous native dialog
-requests. Keep a request table keyed by `DialogRequestId` and correlate every
-completion through the normal platform event pump.
+requests. Let `Runtime` own the pending-request table directly and consume its
+self-describing completions through the normal platform event pump.
 
 ### Features Exercised
 
 - Clipboard get/set, successful empty text, UTF-8 validation, visible warning,
   best-effort preservation, and normal-exit restoration.
-- Explicit `OpenExternalUri()` with application-owned scheme/security policy.
+- Explicit `Runtime::UriOpenExternal()` with application-owned scheme/security
+  policy.
 - Open-file, save-file, and open-folder descriptors with parented/unparented
   requests, default locations, filters, and multiple selection where supported.
   Filters demonstrate `"*"` and semicolon-separated ASCII extensions such as
   `"sdf;mol"`, never glob spellings such as `"*.sdf"`.
-- Strong request IDs and all `DialogOutcome` alternatives: selection with
-  paths/optional filter index, cancellation, and failure.
+- Strong request IDs, immutable `DialogRequestInfo`, pending-state queries, and
+  all `DialogOutcome` alternatives: selection with paths/optional filter index,
+  cancellation, and failure.
 - Multiple outstanding requests, FIFO callback enqueue behavior, unspecified
-  ordering relative to other events, and correlation by ID rather than order.
+  ordering relative to other events, and manager-owned correlation metadata.
 - Window/event lifetime management, owned filesystem paths, typed event
-  visitation, callback-completion timestamps, portable path display through
+  visitation, request/completion timestamps, portable path display through
   `ponder::io`, and differentiated platform errors.
 
 ### Required Interactions
@@ -349,8 +355,9 @@ completion through the normal platform event pump.
   launching it.
 - Open each dialog type, exercise cancellation, and print selected paths and
   filter information.
-- Issue at least two requests concurrently and correlate their completions by
-  `DialogRequestId` rather than assuming request order.
+- Issue at least two requests concurrently and consume each completion's
+  `DialogRequestInfo` rather than duplicating a pending-request registry or
+  assuming request order.
 - Offer both parented and unparented requests and single/multiple selection.
 - On a close request, stop creating new work but continue pumping until every
   registered dialog completion has been consumed before releasing the parent.
@@ -541,9 +548,11 @@ feature groups above:
   `IsRelativeMouseModeEnabled()`; `SetMouseCapture()`,
   `GetGlobalMousePosition()`, `SetSystemCursor()`, `ShowCursor()`,
   `HideCursor()`, and `IsCursorVisible()`.
-- `3-desktop-services-workbench`: `GetClipboardText()`,
-  `SetClipboardText()`, `OpenExternalUri()`, `ShowOpenFileDialog()`,
-  `ShowSaveFileDialog()`, and `ShowOpenFolderDialog()`.
+- `3-desktop-services-workbench`: `Runtime::ClipboardGetText()`,
+  `Runtime::ClipboardSetText()`, `Runtime::UriOpenExternal()`,
+  `Runtime::DialogShowOpenFile()`, `Runtime::DialogShowSaveFile()`,
+  `Runtime::DialogShowOpenFolder()`, `Runtime::DialogHasPending()`,
+  `Runtime::DialogGetPendingCount()`, and `Runtime::DialogGetPending()`.
 - `4-responsive-process-runner`: `LaunchProcess()`, `Process::Wait()`, and
   both modes of `Process::Terminate()`.
 - [`examples/render/1-clear-window`](../../../examples/render/1-clear-window/README.md):

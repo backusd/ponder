@@ -1,3 +1,3 @@
 #include <ponder/core/Hash.hpp>
 
-static_assert(pond::core::HashIdentifierValue(42) == pond::core::HashIdentifierValue(42));
+static_assert(ponder::core::HashIdentifierValue(42) == ponder::core::HashIdentifierValue(42));

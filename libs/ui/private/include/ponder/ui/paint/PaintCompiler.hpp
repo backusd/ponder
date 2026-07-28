@@ -12,8 +12,7 @@
 
 namespace pond::ui::paint
 {
-inline constexpr PaintCommandIndex kNoRejectedPaintCommand{
-    std::numeric_limits<PaintCommandIndex>::max()};
+inline constexpr PaintCommandIndex kNoRejectedPaintCommand{std::numeric_limits<PaintCommandIndex>::max()};
 
 enum class PaintCompileStatus : std::uint8_t
 {
@@ -56,14 +55,11 @@ struct PaintCompileCountInspection final
         return issue == PaintCompileCountIssue::None;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const PaintCompileCountInspection& lhs,
-        const PaintCompileCountInspection& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const PaintCompileCountInspection& lhs, const PaintCompileCountInspection& rhs) noexcept = default;
 };
 
-[[nodiscard]] PaintCompileCountInspection InspectPaintCompileCounts(
-    std::uint64_t visibleRectangleCount, std::uint64_t drawRecordCount, UiHardLimits uiLimits,
-    render::draw2d::Draw2DPacketLimits packetLimits) noexcept;
+[[nodiscard]] PaintCompileCountInspection InspectPaintCompileCounts(std::uint64_t visibleRectangleCount, std::uint64_t drawRecordCount,
+                                                                    UiHardLimits uiLimits, render::draw2d::Draw2DPacketLimits packetLimits) noexcept;
 
 struct CompiledPixelBounds final
 {
@@ -73,8 +69,7 @@ struct CompiledPixelBounds final
     float bottom{};
     bool hasValue{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const CompiledPixelBounds& lhs, const CompiledPixelBounds& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const CompiledPixelBounds& lhs, const CompiledPixelBounds& rhs) noexcept = default;
 };
 
 struct PaintCompilerInspection final
@@ -98,8 +93,7 @@ struct PaintCompilerInspection final
     std::uint64_t clipStackCapacity{};
     render::draw2d::Draw2DPacketBuilderSnapshot packetBuilder{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const PaintCompilerInspection& lhs, const PaintCompilerInspection& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const PaintCompilerInspection& lhs, const PaintCompilerInspection& rhs) noexcept = default;
 };
 
 struct FractionalPixelRect final
@@ -109,8 +103,7 @@ struct FractionalPixelRect final
     double right{};
     double bottom{};
 
-    [[nodiscard]] friend constexpr bool operator==(
-        const FractionalPixelRect& lhs, const FractionalPixelRect& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const FractionalPixelRect& lhs, const FractionalPixelRect& rhs) noexcept = default;
 };
 
 class PaintCompiler final
@@ -123,8 +116,7 @@ public:
     PaintCompiler& operator=(PaintCompiler&& other) noexcept;
     ~PaintCompiler() = default;
 
-    [[nodiscard]] core::Result<render::draw2d::Draw2DPacket> Compile(
-        const SealedPaintList& paintList, const UiTargetMetrics& metrics);
+    [[nodiscard]] core::Result<render::draw2d::Draw2DPacket> Compile(const SealedPaintList& paintList, const UiTargetMetrics& metrics);
 
     void Reset() noexcept;
     void Reset(render::draw2d::Draw2DPacket&& reusablePacket) noexcept;

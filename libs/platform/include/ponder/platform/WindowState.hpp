@@ -5,7 +5,7 @@
 #include <ostream>
 #include <string_view>
 
-namespace pond::platform
+namespace ponder::platform
 {
 enum class WindowPresentation : std::uint8_t
 {
@@ -26,8 +26,7 @@ enum class WindowState : std::uint8_t
     Maximized = 2
 };
 
-[[nodiscard]] constexpr std::string_view GetWindowPresentationName(
-    WindowPresentation presentation) noexcept
+[[nodiscard]] constexpr std::string_view GetWindowPresentationName(WindowPresentation presentation) noexcept
 {
     switch (presentation)
     {
@@ -40,8 +39,7 @@ enum class WindowState : std::uint8_t
     return "unrecognized";
 }
 
-[[nodiscard]] constexpr std::string_view GetWindowDecorationName(
-    WindowDecoration decoration) noexcept
+[[nodiscard]] constexpr std::string_view GetWindowDecorationName(WindowDecoration decoration) noexcept
 {
     switch (decoration)
     {
@@ -83,40 +81,37 @@ inline std::ostream& operator<<(std::ostream& output, WindowState state)
 {
     return output << GetWindowStateName(state);
 }
-} // namespace pond::platform
+} // namespace ponder::platform
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::WindowPresentation> : formatter<string_view>
+struct formatter<ponder::platform::WindowPresentation> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::WindowPresentation presentation, FormatContext& context) const
+    auto format(ponder::platform::WindowPresentation presentation, FormatContext& context) const
     {
-        return formatter<string_view>::format(
-            pond::platform::GetWindowPresentationName(presentation),
-                                              context);
+        return formatter<string_view>::format(ponder::platform::GetWindowPresentationName(presentation), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::WindowDecoration> : formatter<string_view>
+struct formatter<ponder::platform::WindowDecoration> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::WindowDecoration decoration, FormatContext& context) const
+    auto format(ponder::platform::WindowDecoration decoration, FormatContext& context) const
     {
-        return formatter<string_view>::format(pond::platform::GetWindowDecorationName(decoration),
-                                              context);
+        return formatter<string_view>::format(ponder::platform::GetWindowDecorationName(decoration), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::WindowState> : formatter<string_view>
+struct formatter<ponder::platform::WindowState> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::WindowState state, FormatContext& context) const
+    auto format(ponder::platform::WindowState state, FormatContext& context) const
     {
-        return formatter<string_view>::format(pond::platform::GetWindowStateName(state), context);
+        return formatter<string_view>::format(ponder::platform::GetWindowStateName(state), context);
     }
 };
 } // namespace std

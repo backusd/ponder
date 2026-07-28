@@ -1,0 +1,721 @@
+===================================================================
+File: DESIGN-NOTES
+Purpose: State the scope and provisional decisions for this working draft.
+
+/*
+This is an exploratory working draft. It is not an accepted retained-UI API, does not amend the
+UI roadmap, and must not constrain the current rectangle milestone. Every name and signature in
+this file is subject to change.
+
+This draft intentionally starts with one complete UI:
+
+    Window
+    `-- Text ("Hello World", centered)
+
+The draft makes these provisional decisions:
+
+1. Ordinary parent-child relationships are expressed by ordinary C++ ownership. Reflection does
+   not reconstruct a normal tree from parent-name strings.
+
+2. Standard elements are instantiated directly. A developer does not create a new C++ subclass
+   merely to display one piece of text or configure one button.
+
+3. Per-instance behavior should normally use callbacks, commands, or routed event handlers once
+   the input model is designed. A new Element-derived type is appropriate when it provides a
+   reusable control with its own state, measurement, layout, painting, or input invariants.
+
+4. Reflection initially performs discovery only. It finds an annotated root factory and generates
+   an ordinary call to a public registration API. The factory's C++ implementation constructs the
+   tree explicitly.
+
+5. Generated code has no special privileges. A developer can replace it with a handwritten source
+   file that defines the same registration function and makes the same public API calls.
+
+6. Third-party insertion is not modeled as permission to attach to any named parent. A future
+   parent explicitly opts in by placing an extension slot in its ordinary C++ tree. A plugin then
+   contributes one factory to that slot. The slot's factory signature defines the contract, so no
+   closed role enumeration is required.
+
+7. Annotated live global Window or Text objects are deliberately avoided. A factory permits clean
+   recreation, tests, multiple application instances, controlled platform lifetime, and future
+   plugin unload behavior without static initialization.
+
+8. The hypothetical ui::Window below is a logical retained root and window description. It does
+   not own an SDL window, native handle, swapchain, renderer, or GPU lifetime. Application/desktop
+   orchestration remains responsible for creating and connecting platform and render objects.
+
+9. Current UI-local guidance uses the C++ namespace pond::ui even though the root repository
+   guidance says new namespaces use ponder::. This draft uses pond::ui to match the current UI
+   public surface, but does not decide that wider namespace inconsistency.
+
+10. The one-row, one-column grid is kept because it exercises the intended layout relationship.
+    The GridLayout value is not another retained node, so the retained tree remains Window -> Text.
+*/
+===================================================================
+
+===================================================================
+File: include/ponder/ui/Element.hpp
+Purpose: Define the minimal base type owned by the retained tree.
+
+#pragma once
+
+namespace pond::ui
+{
+
+class Element
+{
+  public:
+    Element() = default;
+    virtual ~Element() = default;
+
+    Element(const Element&) = delete;
+    Element& operator=(const Element&) = delete;
+    Element(Element&&) = delete;
+    Element& operator=(Element&&) = delete;
+};
+
+}
+===================================================================
+
+===================================================================
+File: include/ponder/ui/Layout.hpp
+Purpose: Define only the layout values needed by the minimal one-cell grid.
+
+#pragma once
+
+#include <cstddef>
+#include <vector>
+
+namespace pond::ui
+{
+
+enum class Alignment
+{
+    Start,
+    Center,
+    End,
+    Stretch,
+};
+
+struct GridTrack
+{
+    float fraction = 1.0F;
+};
+
+struct GridLayout
+{
+    std::vector<GridTrack> rows;
+    std::vector<GridTrack> columns;
+};
+
+struct GridPlacement
+{
+    std::size_t row = 0;
+    std::size_t column = 0;
+    std::size_t rowSpan = 1;
+    std::size_t columnSpan = 1;
+    Alignment horizontalAlignment = Alignment::Stretch;
+    Alignment verticalAlignment = Alignment::Stretch;
+};
+
+}
+===================================================================
+
+===================================================================
+File: include/ponder/ui/Text.hpp
+Purpose: Define a directly constructible retained text element.
+
+#pragma once
+
+#include <ponder/ui/Element.hpp>
+
+#include <string>
+#include <string_view>
+
+namespace pond::ui
+{
+
+struct TextProperties
+{
+    std::string text;
+
+    // A future style system can add a typed local override here. Inherited text style belongs to
+    // computed style resolution rather than being copied into every TextProperties value.
+};
+
+class Text : public Element
+{
+  public:
+    explicit Text(TextProperties properties);
+
+    [[nodiscard]] std::string_view GetText() const noexcept;
+
+  private:
+    std::string m_text;
+};
+
+}
+===================================================================
+
+===================================================================
+File: src/Text.cpp
+Purpose: Implement the minimal retained text element.
+
+#include <ponder/ui/Text.hpp>
+
+#include <utility>
+
+namespace pond::ui
+{
+
+Text::Text(TextProperties properties)
+    : m_text(std::move(properties.text))
+{
+}
+
+std::string_view Text::GetText() const noexcept
+{
+    return m_text;
+}
+
+}
+===================================================================
+
+===================================================================
+File: include/ponder/ui/Window.hpp
+Purpose: Define a logical root that owns one child in the minimal example.
+
+#pragma once
+
+#include <ponder/ui/Element.hpp>
+#include <ponder/ui/Layout.hpp>
+
+#include <memory>
+#include <string>
+#include <string_view>
+
+namespace pond::ui
+{
+
+struct WindowProperties
+{
+    std::string title;
+    float initialWidth = 800.0F;
+    float initialHeight = 600.0F;
+    GridLayout layout;
+
+    // A future Style value can live here once style inheritance and invalidation are designed.
+};
+
+class Window : public Element
+{
+  public:
+    explicit Window(WindowProperties properties);
+
+    void SetContent(std::unique_ptr<Element> content, GridPlacement placement);
+
+    [[nodiscard]] std::string_view GetTitle() const noexcept;
+    [[nodiscard]] float GetInitialWidth() const noexcept;
+    [[nodiscard]] float GetInitialHeight() const noexcept;
+    [[nodiscard]] const GridLayout& GetLayout() const noexcept;
+    [[nodiscard]] const Element* GetContent() const noexcept;
+    [[nodiscard]] const GridPlacement& GetContentPlacement() const noexcept;
+
+  private:
+    std::string m_title;
+    float m_initialWidth;
+    float m_initialHeight;
+    GridLayout m_layout;
+    std::unique_ptr<Element> m_content;
+    GridPlacement m_contentPlacement;
+};
+
+}
+===================================================================
+
+===================================================================
+File: src/Window.cpp
+Purpose: Implement explicit root-to-child ownership for the minimal tree.
+
+#include <ponder/ui/Window.hpp>
+
+#include <utility>
+
+namespace pond::ui
+{
+
+Window::Window(WindowProperties properties)
+    : m_title(std::move(properties.title)),
+      m_initialWidth(properties.initialWidth),
+      m_initialHeight(properties.initialHeight),
+      m_layout(std::move(properties.layout))
+{
+}
+
+void Window::SetContent(std::unique_ptr<Element> content, GridPlacement placement)
+{
+    // Production code will validate non-null content, grid indices, spans, and replacement rules.
+    m_content = std::move(content);
+    m_contentPlacement = placement;
+}
+
+std::string_view Window::GetTitle() const noexcept
+{
+    return m_title;
+}
+
+float Window::GetInitialWidth() const noexcept
+{
+    return m_initialWidth;
+}
+
+float Window::GetInitialHeight() const noexcept
+{
+    return m_initialHeight;
+}
+
+const GridLayout& Window::GetLayout() const noexcept
+{
+    return m_layout;
+}
+
+const Element* Window::GetContent() const noexcept
+{
+    return m_content.get();
+}
+
+const GridPlacement& Window::GetContentPlacement() const noexcept
+{
+    return m_contentPlacement;
+}
+
+}
+===================================================================
+
+===================================================================
+File: apps/desktop/include/ponder/desktop/UiRootCatalog.hpp
+Purpose: Define the ordinary application-side API used by generated or handwritten registration.
+
+#pragma once
+
+#include <ponder/ui/Window.hpp>
+
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace ponder::desktop
+{
+
+class UiBuildContext
+{
+    // Future construction services are passed explicitly through this application-owned context.
+    // It must not expose SDL, Vulkan, native-window, or render-backend handles to UI elements.
+};
+
+using UiRootFactory = std::unique_ptr<pond::ui::Window> (*)(UiBuildContext& context);
+
+struct UiRootRegistration
+{
+    std::string_view id;
+    UiRootFactory factory = nullptr;
+};
+
+class UiRootCatalog
+{
+  public:
+    void Register(UiRootRegistration registration);
+
+    [[nodiscard]] std::unique_ptr<pond::ui::Window>
+    Create(std::string_view id, UiBuildContext& context) const;
+
+  private:
+    struct Entry
+    {
+        std::string id;
+        UiRootFactory factory;
+    };
+
+    std::vector<Entry> m_entries;
+};
+
+}
+===================================================================
+
+===================================================================
+File: apps/desktop/src/UiRootCatalog.cpp
+Purpose: Show that the catalog is normal runtime code, independent of the reflection tool.
+
+#include <ponder/desktop/UiRootCatalog.hpp>
+
+#include <ponder/core/Assert.hpp>
+
+#include <algorithm>
+
+namespace ponder::desktop
+{
+
+void UiRootCatalog::Register(UiRootRegistration registration)
+{
+    PONDER_VERIFY(!registration.id.empty(), "A UI root ID must not be empty");
+    PONDER_VERIFY(registration.factory != nullptr, "A UI root factory must not be null");
+
+    const auto duplicate = std::ranges::find_if(
+        m_entries,
+        [id = registration.id](const Entry& entry)
+        {
+            return entry.id == id;
+        });
+
+    PONDER_VERIFY(duplicate == m_entries.end(), "A UI root ID must be unique");
+
+    m_entries.emplace_back(
+        Entry{
+            .id = std::string{registration.id},
+            .factory = registration.factory,
+        });
+}
+
+std::unique_ptr<pond::ui::Window>
+UiRootCatalog::Create(std::string_view id, UiBuildContext& context) const
+{
+    const auto entry = std::ranges::find_if(
+        m_entries,
+        [id](const Entry& candidate)
+        {
+            return candidate.id == id;
+        });
+
+    PONDER_VERIFY(entry != m_entries.end(), "The requested UI root is not registered");
+    return entry->factory(context);
+}
+
+}
+===================================================================
+
+===================================================================
+File: examples/ui/hello-world/HelloWorldUi.hpp
+Purpose: Declare the annotated root factory and stable registration-function contract.
+
+#pragma once
+
+#include <ponder/desktop/UiRootCatalog.hpp>
+#include <ponder/ui/Window.hpp>
+
+#include <memory>
+
+namespace ponder::examples::hello_world
+{
+
+[[clang::annotate(
+    "ponder.ui.root",
+    "org.ponder.examples.hello_world.main_window")]]
+[[nodiscard]] std::unique_ptr<pond::ui::Window>
+CreateMainWindow(ponder::desktop::UiBuildContext& context);
+
+// This function is implemented by either the generated source file or the handwritten source
+// file. The rest of the application does not know which implementation was selected.
+void RegisterHelloWorldUi(ponder::desktop::UiRootCatalog& catalog);
+
+}
+===================================================================
+
+===================================================================
+File: examples/ui/hello-world/HelloWorldUi.cpp
+Purpose: Construct the complete Window -> Text tree using direct ownership.
+
+#include "HelloWorldUi.hpp"
+
+#include <ponder/ui/Layout.hpp>
+#include <ponder/ui/Text.hpp>
+
+#include <memory>
+
+namespace ponder::examples::hello_world
+{
+
+std::unique_ptr<pond::ui::Window>
+CreateMainWindow([[maybe_unused]] ponder::desktop::UiBuildContext& context)
+{
+    auto window = std::make_unique<pond::ui::Window>(
+        pond::ui::WindowProperties{
+            .title = "Hello World",
+            .initialWidth = 800.0F,
+            .initialHeight = 600.0F,
+            .layout =
+                pond::ui::GridLayout{
+                    .rows = {pond::ui::GridTrack{}},
+                    .columns = {pond::ui::GridTrack{}},
+                },
+        });
+
+    auto helloWorldText = std::make_unique<pond::ui::Text>(
+        pond::ui::TextProperties{
+            .text = "Hello World",
+        });
+
+    window->SetContent(
+        std::move(helloWorldText),
+        pond::ui::GridPlacement{
+            .row = 0,
+            .column = 0,
+            .rowSpan = 1,
+            .columnSpan = 1,
+            .horizontalAlignment = pond::ui::Alignment::Center,
+            .verticalAlignment = pond::ui::Alignment::Center,
+        });
+
+    return window;
+}
+
+}
+===================================================================
+
+===================================================================
+File: <build>/generated/HelloWorldUiRegistration.generated.cpp
+Purpose: Show the complete deterministic output produced by the reflection tool.
+
+// Generated by ponder-reflect. This file may be replaced by the handwritten equivalent.
+
+#include "HelloWorldUi.hpp"
+
+#include <ponder/desktop/UiRootCatalog.hpp>
+#include <ponder/ui/Window.hpp>
+
+#include <concepts>
+#include <memory>
+
+namespace ponder::examples::hello_world
+{
+
+static_assert(
+    std::same_as<
+        decltype(&CreateMainWindow),
+        std::unique_ptr<pond::ui::Window> (*)(ponder::desktop::UiBuildContext&)>);
+
+void RegisterHelloWorldUi(ponder::desktop::UiRootCatalog& catalog)
+{
+    catalog.Register(
+        ponder::desktop::UiRootRegistration{
+            .id = "org.ponder.examples.hello_world.main_window",
+            .factory = &CreateMainWindow,
+        });
+}
+
+}
+===================================================================
+
+===================================================================
+File: examples/ui/hello-world/HelloWorldUiRegistration.cpp
+Purpose: Provide the optional handwritten replacement for the generated implementation.
+
+#include "HelloWorldUi.hpp"
+
+#include <ponder/desktop/UiRootCatalog.hpp>
+
+namespace ponder::examples::hello_world
+{
+
+void RegisterHelloWorldUi(ponder::desktop::UiRootCatalog& catalog)
+{
+    catalog.Register(
+        ponder::desktop::UiRootRegistration{
+            .id = "org.ponder.examples.hello_world.main_window",
+            .factory = &CreateMainWindow,
+        });
+}
+
+}
+===================================================================
+
+===================================================================
+File: examples/ui/hello-world/Main.cpp
+Purpose: Use the reflected root without knowing whether registration was generated or handwritten.
+
+#include "HelloWorldUi.hpp"
+
+#include <ponder/desktop/DesktopHost.hpp>
+#include <ponder/desktop/UiRootCatalog.hpp>
+
+#include <memory>
+
+int main()
+{
+    ponder::desktop::UiRootCatalog catalog;
+    ponder::examples::hello_world::RegisterHelloWorldUi(catalog);
+
+    ponder::desktop::UiBuildContext buildContext;
+    auto mainWindow = catalog.Create(
+        "org.ponder.examples.hello_world.main_window",
+        buildContext);
+
+    // DesktopHost owns application/platform/render orchestration. The logical UI Window does not
+    // receive native or backend handles.
+    ponder::desktop::DesktopHost host;
+    return host.Run(std::move(mainWindow));
+}
+===================================================================
+
+===================================================================
+File: examples/ui/hello-world/CMakeLists.txt
+Purpose: Select exactly one interchangeable registration implementation.
+
+option(
+    PONDER_GENERATE_HELLO_WORLD_UI_REGISTRATION
+    "Generate the Hello World UI registration source from annotations"
+    ON
+)
+
+add_executable(ponder_ui_hello_world)
+
+target_sources(
+    ponder_ui_hello_world
+    PRIVATE
+        HelloWorldUi.cpp
+        HelloWorldUi.hpp
+        Main.cpp
+)
+
+if(PONDER_GENERATE_HELLO_WORLD_UI_REGISTRATION)
+    ponder_generate_reflection(
+        TARGET ponder_ui_hello_world
+        INPUTS HelloWorldUi.hpp
+        OUTPUT
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/HelloWorldUiRegistration.generated.cpp"
+    )
+
+    target_sources(
+        ponder_ui_hello_world
+        PRIVATE
+            "${CMAKE_CURRENT_BINARY_DIR}/generated/HelloWorldUiRegistration.generated.cpp"
+    )
+else()
+    target_sources(
+        ponder_ui_hello_world
+        PRIVATE
+            HelloWorldUiRegistration.cpp
+    )
+endif()
+
+target_link_libraries(
+    ponder_ui_hello_world
+    PRIVATE
+        ponder::desktop
+        ponder::ui
+)
+
+target_compile_features(ponder_ui_hello_world PRIVATE cxx_std_23)
+===================================================================
+
+===================================================================
+File: FUTURE-COMPOSITION-SKETCH.hpp
+Purpose: Show how large UIs and third-party insertion could build on the minimal design.
+
+#pragma once
+
+#include <ponder/ui/Element.hpp>
+
+#include <memory>
+#include <string_view>
+
+namespace ponder::composition
+{
+
+class UiBuildContext;
+
+using ElementFactory = std::unique_ptr<pond::ui::Element> (*)(UiBuildContext& context);
+
+struct ExtensionPointId
+{
+    std::string_view value;
+};
+
+template <typename Factory>
+class ExtensionPoint
+{
+  public:
+    explicit constexpr ExtensionPoint(ExtensionPointId id) noexcept
+        : m_id(id)
+    {
+    }
+
+    [[nodiscard]] constexpr ExtensionPointId GetId() const noexcept
+    {
+        return m_id;
+    }
+
+  private:
+    ExtensionPointId m_id;
+};
+
+inline constexpr ExtensionPoint<ElementFactory> kMainWindowAdditions{
+    ExtensionPointId{"org.ponder.main_window.content.additions"}};
+
+/*
+A host explicitly consumes the point where additions are allowed:
+
+    contentColumn->AppendExtensions(context, kMainWindowAdditions);
+
+A plugin or separately built component needs only one annotation on its factory:
+
+    [[clang::annotate(
+        "ponder.ui.contribution",
+        "org.ponder.main_window.content.additions",
+        "com.example.clock")]]
+    std::unique_ptr<pond::ui::Element> CreateClock(UiBuildContext& context);
+
+The generated or handwritten registration is still an ordinary call:
+
+    catalog.Register(
+        kMainWindowAdditions,
+        ElementContribution{
+            .id = "com.example.clock",
+            .factory = &CreateClock,
+        });
+
+There is no central role enum. ExtensionPoint<ElementFactory> accepts any standard or custom
+Element. A future specialized extension point can use a different factory signature or a stable,
+versioned contract type without modifying a global enumeration.
+
+The external binary-plugin boundary must adapt this C++ factory to the stable C ABI owned by
+ponder_plugin_sdk. It must not pass std::unique_ptr, C++ exceptions, or C++ class objects across the
+binary boundary.
+*/
+
+}
+===================================================================
+
+===================================================================
+File: SCALING-NOTES
+Purpose: Record how the minimal ownership model grows without reflection-defined parent strings.
+
+/*
+A larger UI is factored into ordinary component factories:
+
+    std::unique_ptr<pond::ui::Element> CreateProjectExplorer(UiBuildContext& context);
+    std::unique_ptr<pond::ui::Element> CreateInspector(UiBuildContext& context);
+    std::unique_ptr<pond::ui::Element> CreateStatusBar(UiBuildContext& context);
+
+Container elements own the returned elements. This keeps each construction unit small without
+requiring one subclass for every node.
+
+Subclassing remains available when a genuinely new reusable control is needed:
+
+    class MoleculeViewport final : public pond::ui::Element
+    {
+        // Reusable state, measurement, painting, input, and lifetime invariants.
+    };
+
+It is not required merely to attach one handler. Once input is designed, ordinary elements should
+support callbacks, commands, or routed handlers for per-instance behavior.
+
+The reflection tool does not infer that every Element-derived data member is a child. A class may
+have helper elements, caches, templates, recycled children, overlays, or temporarily detached
+elements. Explicit ownership operations remain unambiguous under all of those cases.
+
+Stable IDs and annotations are reserved for boundaries that require discovery or external
+identity: application roots, extension contributions, persistence, automation, or similar concrete
+needs. Ordinary internal nodes do not need IDs simply because they appear in the tree.
+*/
+===================================================================

@@ -7,8 +7,7 @@ namespace
 {
 TEST(MathConsumerLinkTests, MathTargetSuppliesInheritedCoreDependency)
 {
-    const pond::core::ErrorCode code =
-        pond::math::ToErrorCode(pond::math::MathErrorCode::InvalidArgument);
+    const pond::core::ErrorCode code = pond::math::ToErrorCode(pond::math::MathErrorCode::InvalidArgument);
     pond::core::Result<pond::core::ErrorCode> result = code;
 
     ASSERT_TRUE(result.HasValue());

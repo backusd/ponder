@@ -17,20 +17,18 @@ namespace
 {
 [[nodiscard]] constexpr pond::render::RenderTargetSnapshot MakeSnapshot(std::uint64_t revision = 1)
 {
-    return pond::render::RenderTargetSnapshot{pond::platform::WindowId{42},
-                                              pond::platform::PixelSize{800, 600},
-                                              pond::platform::LogicalSize{800U, 600U},
+    return pond::render::RenderTargetSnapshot{ponder::platform::WindowId{42},
+                                              ponder::platform::PixelSize{800, 600},
+                                              ponder::platform::LogicalSize{800U, 600U},
                                               true,
-                                              pond::platform::WindowState::Normal,
+                                              ponder::platform::WindowState::Normal,
                                               pond::render::PresentationEnvironmentRevision{1U},
                                               revision};
 }
 
 [[nodiscard]] constexpr pond::render::SurfacePreparationDesc MakeSurfaceDesc()
 {
-    return pond::render::SurfacePreparationDesc{
-        .targetSnapshot = MakeSnapshot(),
-        .reason = pond::render::SurfacePreparationReason::Initial};
+    return pond::render::SurfacePreparationDesc{.targetSnapshot = MakeSnapshot(), .reason = pond::render::SurfacePreparationReason::Initial};
 }
 
 [[nodiscard]] pond::render::RenderBootstrap CreateBootstrapOrAbort()
@@ -44,11 +42,9 @@ namespace
     return std::move(result).GetValue();
 }
 
-[[nodiscard]] pond::render::PreparedSurface CreateSurfaceOrAbort(
-    pond::render::RenderBootstrap& bootstrap)
+[[nodiscard]] pond::render::PreparedSurface CreateSurfaceOrAbort(pond::render::RenderBootstrap& bootstrap)
 {
-    auto result = pond::render::detail::RenderBootstrapTestAccess::CreatePreparedSurface(
-        bootstrap, MakeSurfaceDesc());
+    auto result = pond::render::detail::RenderBootstrapTestAccess::CreatePreparedSurface(bootstrap, MakeSurfaceDesc());
     if (!result)
     {
         std::abort();
@@ -60,16 +56,14 @@ namespace
 [[nodiscard]] constexpr pond::render::RenderTargetDesc MakeSuspendedTargetDesc()
 {
     return pond::render::RenderTargetDesc{
-        .targetSnapshot = pond::render::RenderTargetSnapshot{
-            pond::platform::WindowId{42}, pond::platform::PixelSize{800, 600},
-            pond::platform::LogicalSize{800U, 600U}, false, pond::platform::WindowState::Normal,
-            pond::render::PresentationEnvironmentRevision{1U}, 1U}};
+        .targetSnapshot = pond::render::RenderTargetSnapshot{ponder::platform::WindowId{42}, ponder::platform::PixelSize{800, 600},
+                                                             ponder::platform::LogicalSize{800U, 600U}, false, ponder::platform::WindowState::Normal,
+                                                             pond::render::PresentationEnvironmentRevision{1U}, 1U}};
 }
 
 [[nodiscard]] pond::render::detail::RenderLifetimeContractOwners CreateDeviceAndTargetOrAbort()
 {
-    auto result = pond::render::detail::RenderBackendTestAccess::CreateLifetimeContractOwners(
-        MakeSuspendedTargetDesc());
+    auto result = pond::render::detail::RenderBackendTestAccess::CreateLifetimeContractOwners(MakeSuspendedTargetDesc());
     if (!result)
     {
         std::abort();
@@ -93,8 +87,7 @@ TEST_F(RenderLifetimeContractDeathTests, BootstrapDestructorTerminatesWithLivePr
         {
             std::optional<pond::render::RenderBootstrap> bootstrap;
             bootstrap.emplace(CreateBootstrapOrAbort());
-            [[maybe_unused]] pond::render::PreparedSurface surface =
-                CreateSurfaceOrAbort(*bootstrap);
+            [[maybe_unused]] pond::render::PreparedSurface surface = CreateSurfaceOrAbort(*bootstrap);
             bootstrap.reset();
         },
         "Cannot destroy RenderBootstrap");
@@ -105,8 +98,7 @@ TEST_F(RenderLifetimeContractDeathTests, BootstrapMoveAssignmentTerminatesWithLi
     EXPECT_DEATH(
         {
             pond::render::RenderBootstrap bootstrap = CreateBootstrapOrAbort();
-            [[maybe_unused]] pond::render::PreparedSurface surface =
-                CreateSurfaceOrAbort(bootstrap);
+            [[maybe_unused]] pond::render::PreparedSurface surface = CreateSurfaceOrAbort(bootstrap);
             bootstrap = pond::render::RenderBootstrap{};
         },
         "Cannot destroy RenderBootstrap");
@@ -153,8 +145,7 @@ TEST_F(RenderLifetimeContractDeathTests, BoundPreparedSurfaceDestructorTerminate
             bool transferSucceeded{};
             std::thread renderThread{[&]()
                                      {
-                                         transferSucceeded = static_cast<bool>(
-                                             surface->TransferToCurrentThread(MakeSnapshot(2)));
+                                         transferSucceeded = static_cast<bool>(surface->TransferToCurrentThread(MakeSnapshot(2)));
                                      }};
             renderThread.join();
             if (!transferSucceeded)
@@ -178,8 +169,7 @@ TEST_F(RenderLifetimeContractDeathTests, RenderDeviceDestructorTerminatesWithLiv
         "RenderDevice destruction");
 }
 
-TEST_F(RenderLifetimeContractDeathTests,
-       RenderDeviceMoveAssignmentTerminatesWithLiveDestinationTarget)
+TEST_F(RenderLifetimeContractDeathTests, RenderDeviceMoveAssignmentTerminatesWithLiveDestinationTarget)
 {
     EXPECT_DEATH(
         {
@@ -225,8 +215,7 @@ TEST_F(RenderLifetimeContractDeathTests, RenderTargetDestructorTerminatesWithLiv
         "RenderTarget destruction");
 }
 
-TEST_F(RenderLifetimeContractDeathTests,
-       RenderTargetMoveAssignmentTerminatesWithLiveDestinationFrame)
+TEST_F(RenderLifetimeContractDeathTests, RenderTargetMoveAssignmentTerminatesWithLiveDestinationFrame)
 {
     EXPECT_DEATH(
         {

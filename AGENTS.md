@@ -15,8 +15,7 @@ For subsystem work, read exactly two guidance files by default:
   cost. Instead, prefer quality, simplicity, robustness, scalability, and
   long term maintainability.
 - The canonical project name is `ponder`.
-- C++ namespaces use `pond::`. This is the only intended use of shortened
-  `pond`.
+- C++ namespaces use `ponder::`; core APIs use `ponder::core`.
 - Public includes use `#include <ponder/{library}/{file}>`.
 - New C++ code uses C++23.
 - The build system is CMake.
@@ -31,11 +30,17 @@ For subsystem work, read exactly two guidance files by default:
 
 ## Global Style
 
-- Formatting is LLVM-derived with 4-space indentation, 100 columns, and Allman
+- Formatting is LLVM-derived with 4-space indentation, 150 columns, and Allman
   braces.
+- Pack function parameters and call arguments onto each line up to the
+  150-column code limit, wrapping only the arguments that do not fit.
 - Keep function names on the same line as their return type. If a declaration or
   definition is too long, wrap the parameter list instead of moving the function
   name onto its own line.
+- Do not reflow comments to satisfy the code column limit.
+- Keep a constructor's initializer colon on the same line as its final
+  parameter. Put each constructor initializer on its own following line, with
+  commas terminating all non-final initializers.
 - Types and functions use PascalCase.
 - Variables use camelCase.
 - Private data members use `m_*`.
@@ -45,10 +50,12 @@ For subsystem work, read exactly two guidance files by default:
 
 ## Error Handling And Diagnostics
 
-- Prefer `Result` (an expected-like wrapper) defined in
-  `libs/core/include/ponder/core/Result.hpp` for recoverable errors.
-- Use `PonderException` defined in `libs/core/include/ponder/core/PonderException.hpp`
-  only for truly exceptional, usually unrecoverable cases.
+- Return `Result` from `libs/core/include/ponder/core/Result.hpp` when failure is
+  expected from caller input or external conditions, or when callers can
+  realistically handle the failure locally.
+- Throw `Exception` from `libs/core/include/ponder/core/Exception.hpp` when an
+  operation should never or only rarely fail and local recovery is not realistic.
+  Use `ExceptionWithData<T>` when exceptional handling needs a typed payload.
 - Use project assertion macros defined in `libs/core/include/ponder/core/Assert.hpp`
 - Use project logging macros defined in `libs/core/include/ponder/core/Log.hpp`
 
@@ -103,8 +110,8 @@ For subsystem work, read exactly two guidance files by default:
   C++ cast that expresses the intent.
 - Avoid undefined behavior, implementation-defined assumptions, and lifetime
   tricks. Write code that remains understandable under optimization.
-- Keep exception use narrow. Use `Result` for recoverable failures and
-  `PonderException` for exceptional unrecoverable failures.
+- Keep exception use deliberate. Prefer `Result` when a failure is part of normal
+  control flow and `Exception` when it should propagate to a higher-level handler.
 - Do not ignore errors. Handle them, propagate them, or deliberately document why
   they are safe to discard.
 - Prefer deterministic behavior and reproducible outputs, especially in project

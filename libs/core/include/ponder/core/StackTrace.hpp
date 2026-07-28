@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace pond::core
+namespace ponder::core
 {
 class StackTrace final
 {
@@ -33,8 +33,9 @@ class StackTraceCaptureOptions final
 {
 public:
     constexpr StackTraceCaptureOptions() noexcept = default;
-    constexpr StackTraceCaptureOptions(std::size_t skipFrames, std::size_t maxFrames) noexcept
-        : m_skipFrames(skipFrames), m_maxFrames(maxFrames)
+    constexpr StackTraceCaptureOptions(std::size_t skipFrames, std::size_t maxFrames) noexcept :
+        m_skipFrames(skipFrames),
+        m_maxFrames(maxFrames)
     {
     }
 
@@ -53,22 +54,20 @@ private:
     std::size_t m_maxFrames{64};
 };
 
-[[nodiscard]] std::string FormatSourceLocation(
-    std::source_location location = std::source_location::current());
-[[nodiscard]] std::string FormatSourceLocationWithFunction(
-    std::source_location location = std::source_location::current());
+[[nodiscard]] std::string FormatSourceLocation(std::source_location location = std::source_location::current());
+[[nodiscard]] std::string FormatSourceLocationWithFunction(std::source_location location = std::source_location::current());
 [[nodiscard]] bool IsStackTraceCaptureSupported() noexcept;
 [[nodiscard]] StackTrace CaptureStackTrace(StackTraceCaptureOptions options);
 [[nodiscard]] StackTrace CaptureStackTrace();
-} // namespace pond::core
+} // namespace ponder::core
 
 namespace std
 {
 template <>
-struct formatter<pond::core::StackTrace> : formatter<string>
+struct formatter<ponder::core::StackTrace> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::core::StackTrace& stackTrace, FormatContext& context) const
+    auto format(const ponder::core::StackTrace& stackTrace, FormatContext& context) const
     {
         return formatter<string>::format(stackTrace.Format(), context);
     }

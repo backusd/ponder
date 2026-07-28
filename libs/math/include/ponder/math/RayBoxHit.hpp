@@ -10,24 +10,20 @@ namespace pond::math
 {
 class RayBoxHit;
 
-[[nodiscard]] inline constexpr std::optional<RayBoxHit> Intersect(
-    const Ray& ray, const AxisAlignedBox& box) noexcept;
+[[nodiscard]] inline constexpr std::optional<RayBoxHit> Intersect(const Ray& ray, const AxisAlignedBox& box) noexcept;
 
 namespace detail
 {
-[[nodiscard]] constexpr bool UpdateRayBoxIntervalForSlab(float origin, float direction,
-                                                         float minimum, float maximum,
-                                                         double& entry, double& exit) noexcept
+[[nodiscard]] constexpr bool UpdateRayBoxIntervalForSlab(float origin, float direction, float minimum, float maximum, double& entry,
+                                                         double& exit) noexcept
 {
     if (direction == 0.0F)
     {
         return origin >= minimum && origin <= maximum;
     }
 
-    double slabEntry = (static_cast<double>(minimum) - static_cast<double>(origin)) /
-                       static_cast<double>(direction);
-    double slabExit = (static_cast<double>(maximum) - static_cast<double>(origin)) /
-                      static_cast<double>(direction);
+    double slabEntry = (static_cast<double>(minimum) - static_cast<double>(origin)) / static_cast<double>(direction);
+    double slabExit = (static_cast<double>(maximum) - static_cast<double>(origin)) / static_cast<double>(direction);
     if (slabExit < slabEntry)
     {
         const double temporary = slabEntry;
@@ -53,16 +49,15 @@ struct RayBoxInterval final
     double exitDistance{0.0};
 };
 
-[[nodiscard]] constexpr std::optional<RayBoxInterval> IntersectRayBoxValues(
-    Vector3 origin, Vector3 direction, Vector3 minimum, Vector3 maximum) noexcept
+[[nodiscard]] constexpr std::optional<RayBoxInterval> IntersectRayBoxValues(Vector3 origin, Vector3 direction, Vector3 minimum,
+                                                                            Vector3 maximum) noexcept
 {
     double entry = -std::numeric_limits<double>::infinity();
     double exit = std::numeric_limits<double>::infinity();
 
     if (!UpdateRayBoxIntervalForSlab(origin.x, direction.x, minimum.x, maximum.x, entry, exit) ||
         !UpdateRayBoxIntervalForSlab(origin.y, direction.y, minimum.y, maximum.y, entry, exit) ||
-        !UpdateRayBoxIntervalForSlab(origin.z, direction.z, minimum.z, maximum.z, entry, exit) ||
-        exit < 0.0)
+        !UpdateRayBoxIntervalForSlab(origin.z, direction.z, minimum.z, maximum.z, entry, exit) || exit < 0.0)
     {
         return std::nullopt;
     }
@@ -89,15 +84,14 @@ public:
         return m_exitDistance;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const RayBoxHit& lhs,
-                                                   const RayBoxHit& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const RayBoxHit& lhs, const RayBoxHit& rhs) noexcept = default;
 
 private:
-    friend constexpr std::optional<RayBoxHit> Intersect(const Ray& ray,
-                                                        const AxisAlignedBox& box) noexcept;
+    friend constexpr std::optional<RayBoxHit> Intersect(const Ray& ray, const AxisAlignedBox& box) noexcept;
 
-    constexpr RayBoxHit(float entryDistance, float exitDistance) noexcept
-        : m_entryDistance(entryDistance), m_exitDistance(exitDistance)
+    constexpr RayBoxHit(float entryDistance, float exitDistance) noexcept :
+        m_entryDistance(entryDistance),
+        m_exitDistance(exitDistance)
     {
     }
 
@@ -105,8 +99,7 @@ private:
     float m_exitDistance;
 };
 
-[[nodiscard]] inline constexpr std::optional<RayBoxHit> Intersect(
-    const Ray& ray, const AxisAlignedBox& box) noexcept
+[[nodiscard]] inline constexpr std::optional<RayBoxHit> Intersect(const Ray& ray, const AxisAlignedBox& box) noexcept
 {
     const Vector3 origin = ray.GetOrigin();
     const Vector3 direction = ray.GetDirection();
@@ -120,8 +113,7 @@ private:
 
     const float entryDistance = static_cast<float>(interval->entryDistance);
     const float exitDistance = static_cast<float>(interval->exitDistance);
-    if (!core::IsFinite(entryDistance) || !core::IsFinite(exitDistance) ||
-        exitDistance < entryDistance)
+    if (!core::IsFinite(entryDistance) || !core::IsFinite(exitDistance) || exitDistance < entryDistance)
     {
         return std::nullopt;
     }

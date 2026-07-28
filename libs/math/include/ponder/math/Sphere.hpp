@@ -9,8 +9,7 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteSphereVector(Vector3 value) noexcept
 {
-    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
-           ::pond::core::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) && ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
@@ -22,15 +21,13 @@ public:
         if (!detail::IsFiniteSphereVector(center) || !core::IsFinite(radius)) [[unlikely]]
         {
             return core::Result<Sphere>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                            "Sphere construction requires finite center and radius."});
+                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Sphere construction requires finite center and radius."});
         }
 
         if (radius < 0.0F) [[unlikely]]
         {
             return core::Result<Sphere>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::InvalidArgument),
-                            "Sphere construction requires a non-negative radius."});
+                core::Error{ToErrorCode(MathErrorCode::InvalidArgument), "Sphere construction requires a non-negative radius."});
         }
 
         return Sphere{center, radius};
@@ -46,11 +43,14 @@ public:
         return m_radius;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Sphere& lhs,
-                                                   const Sphere& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Sphere& lhs, const Sphere& rhs) noexcept = default;
 
 private:
-    constexpr Sphere(Vector3 center, float radius) noexcept : m_center(center), m_radius(radius) {}
+    constexpr Sphere(Vector3 center, float radius) noexcept :
+        m_center(center),
+        m_radius(radius)
+    {
+    }
 
     Vector3 m_center;
     float m_radius;

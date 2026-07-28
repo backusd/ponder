@@ -6,13 +6,12 @@
 
 #include <cstdint>
 #include <format>
-#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
 
-namespace pond::platform::detail
+namespace ponder::platform::detail
 {
 class BackendWindowHandle final
 {
@@ -20,13 +19,21 @@ public:
     using ValueType = std::uintptr_t;
 
     constexpr BackendWindowHandle() noexcept = default;
-    explicit constexpr BackendWindowHandle(ValueType value) noexcept : m_value(value) {}
+    explicit constexpr BackendWindowHandle(ValueType value) noexcept :
+        m_value(value)
+    {
+    }
 
-    [[nodiscard]] constexpr bool IsValid() const noexcept { return m_value != 0; }
-    [[nodiscard]] constexpr ValueType GetValue() const noexcept { return m_value; }
+    [[nodiscard]] constexpr bool IsValid() const noexcept
+    {
+        return m_value != 0;
+    }
+    [[nodiscard]] constexpr ValueType GetValue() const noexcept
+    {
+        return m_value;
+    }
 
-    friend constexpr bool operator==(const BackendWindowHandle&,
-                                     const BackendWindowHandle&) noexcept = default;
+    friend constexpr bool operator==(const BackendWindowHandle&, const BackendWindowHandle&) noexcept = default;
 
 private:
     ValueType m_value{};
@@ -98,182 +105,132 @@ public:
     IPlatformWindowBackend(IPlatformWindowBackend&&) = delete;
     IPlatformWindowBackend& operator=(IPlatformWindowBackend&&) = delete;
 
-    [[nodiscard]] virtual core::Result<BackendWindowHandle> Create(
-        const BackendWindowCreateDesc& desc) = 0;
+    [[nodiscard]] virtual BackendWindowHandle Create(const BackendWindowCreateDesc& desc) = 0;
     virtual void Destroy(BackendWindowHandle window) noexcept = 0;
-    [[nodiscard]] virtual core::Result<std::uint32_t> GetId(BackendWindowHandle window) = 0;
+    [[nodiscard]] virtual std::uint32_t GetId(BackendWindowHandle window) = 0;
     [[nodiscard]] virtual std::string GetTitle(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult SetTitle(BackendWindowHandle window,
-                                                    std::string_view title) = 0;
-    [[nodiscard]] virtual core::Result<BackendWindowPosition> GetPosition(
-        BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult SetPosition(BackendWindowHandle window,
-                                                       BackendWindowPosition position) = 0;
-    [[nodiscard]] virtual core::Result<BackendWindowLogicalSize> GetSize(
-        BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::Result<BackendWindowPixelSize> GetSizeInPixels(
-        BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult SetSize(BackendWindowHandle window,
-                                                   BackendWindowLogicalSize size) = 0;
-    [[nodiscard]] virtual core::VoidResult SetMinimumSize(
-        BackendWindowHandle window, BackendWindowLogicalSize size) = 0;
-    [[nodiscard]] virtual core::VoidResult Show(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult Hide(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::Result<BackendWindowProperties> GetProperties(
-        BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult SetFullscreenModeToDesktop(
-        BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult SetFullscreen(BackendWindowHandle window,
-                                                         bool fullscreen) = 0;
-    [[nodiscard]] virtual core::VoidResult SetBordered(BackendWindowHandle window,
-                                                       bool bordered) = 0;
-    [[nodiscard]] virtual core::VoidResult SetResizable(BackendWindowHandle window,
-                                                        bool resizable) = 0;
-    [[nodiscard]] virtual core::VoidResult SetAlwaysOnTop(BackendWindowHandle window,
-                                                          bool alwaysOnTop) = 0;
-    [[nodiscard]] virtual core::VoidResult Minimize(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult Maximize(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult Restore(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult StartTextInput(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult StopTextInput(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual bool IsTextInputActive(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult ClearTextComposition(
-        BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult SetTextInputArea(
-        BackendWindowHandle window, std::optional<BackendTextInputArea> area) = 0;
-    [[nodiscard]] virtual core::VoidResult SetMouseGrab(BackendWindowHandle window,
-                                                        bool grabbed) = 0;
-    [[nodiscard]] virtual bool IsMouseGrabbed(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::VoidResult SetRelativeMouseMode(BackendWindowHandle window,
-                                                                bool enabled) = 0;
-    [[nodiscard]] virtual bool IsRelativeMouseModeEnabled(BackendWindowHandle window) = 0;
-    [[nodiscard]] virtual core::Result<NativeWindowHandle> GetNativeHandle(
-        BackendWindowHandle window) = 0;
+    virtual void SetTitle(BackendWindowHandle window, std::string_view title) = 0;
+    [[nodiscard]] virtual BackendWindowPosition GetPosition(BackendWindowHandle window) = 0;
+    virtual void SetPosition(BackendWindowHandle window, BackendWindowPosition position) = 0;
+    [[nodiscard]] virtual BackendWindowLogicalSize GetSize(BackendWindowHandle window) = 0;
+    [[nodiscard]] virtual BackendWindowPixelSize GetSizeInPixels(BackendWindowHandle window) = 0;
+    virtual void SetSize(BackendWindowHandle window, BackendWindowLogicalSize size) = 0;
+    virtual void SetMinimumSize(BackendWindowHandle window, BackendWindowLogicalSize size) = 0;
+    virtual void Show(BackendWindowHandle window) = 0;
+    virtual void Hide(BackendWindowHandle window) = 0;
+    [[nodiscard]] virtual BackendWindowProperties GetProperties(BackendWindowHandle window) = 0;
+    virtual void SetFullscreenModeToDesktop(BackendWindowHandle window) = 0;
+    virtual void SetFullscreen(BackendWindowHandle window, bool fullscreen) = 0;
+    virtual void SetBordered(BackendWindowHandle window, bool bordered) = 0;
+    virtual void SetResizable(BackendWindowHandle window, bool resizable) = 0;
+    virtual void SetAlwaysOnTop(BackendWindowHandle window, bool alwaysOnTop) = 0;
+    virtual void Minimize(BackendWindowHandle window) = 0;
+    virtual void Maximize(BackendWindowHandle window) = 0;
+    virtual void Restore(BackendWindowHandle window) = 0;
+    virtual void StartTextInput(BackendWindowHandle window) = 0;
+    virtual void StopTextInput(BackendWindowHandle window) = 0;
+    [[nodiscard]] virtual bool IsTextInputActive(BackendWindowHandle window) noexcept = 0;
+    virtual void ClearTextComposition(BackendWindowHandle window) = 0;
+    virtual void SetTextInputArea(BackendWindowHandle window, std::optional<BackendTextInputArea> area) = 0;
+    virtual void SetMouseGrab(BackendWindowHandle window, bool grabbed) = 0;
+    [[nodiscard]] virtual bool IsMouseGrabbed(BackendWindowHandle window) noexcept = 0;
+    virtual void SetRelativeMouseMode(BackendWindowHandle window, bool enabled) = 0;
+    [[nodiscard]] virtual bool IsRelativeMouseModeEnabled(BackendWindowHandle window) noexcept = 0;
+    [[nodiscard]] virtual ponder::core::Result<NativeWindowHandle> GetNativeHandle(BackendWindowHandle window) = 0;
 
 protected:
     IPlatformWindowBackend() noexcept = default;
 };
 
-class IPlatformWindowBackendFactory
-{
-public:
-    virtual ~IPlatformWindowBackendFactory() noexcept = default;
-
-    IPlatformWindowBackendFactory(const IPlatformWindowBackendFactory&) = delete;
-    IPlatformWindowBackendFactory& operator=(const IPlatformWindowBackendFactory&) = delete;
-    IPlatformWindowBackendFactory(IPlatformWindowBackendFactory&&) = delete;
-    IPlatformWindowBackendFactory& operator=(IPlatformWindowBackendFactory&&) = delete;
-
-    [[nodiscard]] virtual std::unique_ptr<IPlatformWindowBackend> Create() const = 0;
-
-protected:
-    IPlatformWindowBackendFactory() noexcept = default;
-};
-} // namespace pond::platform::detail
+} // namespace ponder::platform::detail
 
 namespace std
 {
 template <>
-struct formatter<pond::platform::detail::BackendWindowHandle> : formatter<string>
+struct formatter<ponder::platform::detail::BackendWindowHandle> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendWindowHandle window,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendWindowHandle window, FormatContext& context) const
     {
-        const string text =
-            window.IsValid() ? std::format("0x{:X}", window.GetValue()) : "invalid";
+        const string text = window.IsValid() ? std::format("0x{:X}", window.GetValue()) : "invalid";
         return formatter<string>::format(text, context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendWindowPosition> : formatter<string>
+struct formatter<ponder::platform::detail::BackendWindowPosition> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendWindowPosition position,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendWindowPosition position, FormatContext& context) const
     {
         return formatter<string>::format(std::format("({}, {})", position.x, position.y), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendWindowLogicalSize> : formatter<string>
+struct formatter<ponder::platform::detail::BackendWindowLogicalSize> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendWindowLogicalSize size,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendWindowLogicalSize size, FormatContext& context) const
     {
         return formatter<string>::format(std::format("{}x{}", size.width, size.height), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendWindowPixelSize> : formatter<string>
+struct formatter<ponder::platform::detail::BackendWindowPixelSize> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendWindowPixelSize size,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendWindowPixelSize size, FormatContext& context) const
     {
         return formatter<string>::format(std::format("{}x{}", size.width, size.height), context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendWindowCreateDesc> : formatter<string>
+struct formatter<ponder::platform::detail::BackendWindowCreateDesc> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::platform::detail::BackendWindowCreateDesc& desc,
-                FormatContext& context) const
+    auto format(const ponder::platform::detail::BackendWindowCreateDesc& desc, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format(
-                "title='{}', logicalSize={}, resizable={}, highPixelDensity={}, graphics={}",
-                desc.title, desc.logicalSize, desc.resizable, desc.highPixelDensity,
-                desc.graphicsCompatibility),
-            context);
+        return formatter<string>::format(std::format("title='{}', logicalSize={}, resizable={}, highPixelDensity={}, graphics={}", desc.title,
+                                                     desc.logicalSize, desc.resizable, desc.highPixelDensity, desc.graphicsCompatibility),
+                                         context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendWindowProperties> : formatter<string>
+struct formatter<ponder::platform::detail::BackendWindowProperties> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const pond::platform::detail::BackendWindowProperties& properties,
-                FormatContext& context) const
+    auto format(const ponder::platform::detail::BackendWindowProperties& properties, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("desktopFullscreen={}, hidden={}, borderless={}, resizable={}, "
-                        "minimized={}, maximized={}, inputFocus={}, alwaysOnTop={}",
-                        properties.desktopFullscreen, properties.hidden, properties.borderless,
-                        properties.resizable, properties.minimized, properties.maximized,
-                        properties.inputFocus, properties.alwaysOnTop),
-            context);
+        return formatter<string>::format(std::format("desktopFullscreen={}, hidden={}, borderless={}, resizable={}, "
+                                                     "minimized={}, maximized={}, inputFocus={}, alwaysOnTop={}",
+                                                     properties.desktopFullscreen, properties.hidden, properties.borderless, properties.resizable,
+                                                     properties.minimized, properties.maximized, properties.inputFocus, properties.alwaysOnTop),
+                                         context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendTextInputArea> : formatter<string>
+struct formatter<ponder::platform::detail::BackendTextInputArea> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendTextInputArea area,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendTextInputArea area, FormatContext& context) const
     {
-        return formatter<string>::format(
-            std::format("({}, {}) / {}x{}, cursorOffset={}", area.x, area.y, area.width,
-                        area.height, area.cursorOffset),
-            context);
+        return formatter<string>::format(std::format("({}, {}) / {}x{}, cursorOffset={}", area.x, area.y, area.width, area.height, area.cursorOffset),
+                                         context);
     }
 };
 
 template <>
-struct formatter<pond::platform::detail::BackendNativeWindowDriver> : formatter<string_view>
+struct formatter<ponder::platform::detail::BackendNativeWindowDriver> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(pond::platform::detail::BackendNativeWindowDriver driver,
-                FormatContext& context) const
+    auto format(ponder::platform::detail::BackendNativeWindowDriver driver, FormatContext& context) const
     {
-        using pond::platform::detail::BackendNativeWindowDriver;
+        using ponder::platform::detail::BackendNativeWindowDriver;
 
         string_view name{"unknown"};
         switch (driver)
@@ -297,7 +254,7 @@ struct formatter<pond::platform::detail::BackendNativeWindowDriver> : formatter<
 };
 } // namespace std
 
-namespace pond::platform::detail
+namespace ponder::platform::detail
 {
 inline std::ostream& operator<<(std::ostream& output, BackendWindowHandle window)
 {
@@ -338,4 +295,4 @@ inline std::ostream& operator<<(std::ostream& output, BackendNativeWindowDriver 
 {
     return output << std::format("{}", driver);
 }
-} // namespace pond::platform::detail
+} // namespace ponder::platform::detail

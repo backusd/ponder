@@ -9,21 +9,23 @@ ponder_add_project_test(ponder_core_tests
         HeaderSelfContainment/IdentifierHeader.cpp
         HeaderSelfContainment/LogHeader.cpp
         HeaderSelfContainment/NumbersHeader.cpp
-        HeaderSelfContainment/PonderExceptionHeader.cpp
+        HeaderSelfContainment/ExceptionHeader.cpp
         HeaderSelfContainment/ResultHeader.cpp
         HeaderSelfContainment/ScopeExitHeader.cpp
         HeaderSelfContainment/StackTraceHeader.cpp
         HeaderSelfContainment/StringHeader.cpp
+        HeaderSelfContainment/TimingHeader.cpp
         HeaderSelfContainment/UuidHeader.cpp
         HashTests.cpp
         IdentifierTests.cpp
         LogTests.cpp
         NumbersTests.cpp
-        PonderExceptionTests.cpp
+        ExceptionTests.cpp
         ResultTests.cpp
         ScopeExitTests.cpp
         SmokeTests.cpp
         StringTests.cpp
+        TimingTests.cpp
         UuidTests.cpp
     PRIVATE_DEPS
         ponder::core)

@@ -2,11 +2,17 @@
 
 ## Status
 
-Accepted.
+Accepted. The core namespace and failure policy are amended by
+[ADR 0012: Core Namespace And Failure Policy](0012-core-namespace-and-failure-policy.md)
+and [ADR 0013: Platform Failure Policy](0013-platform-failure-policy.md). The
+combined decision, the 2026-07-23 platform namespace/timing migration, and the
+2026-07-24 flat runtime consolidation are reflected below.
 
 ## Related Decisions
 
 - [ADR 0008: Vulkan Renderer Backend](0008-vulkan-renderer-backend.md)
+- [ADR 0012: Core Namespace And Failure Policy](0012-core-namespace-and-failure-policy.md)
+- [ADR 0013: Platform Failure Policy](0013-platform-failure-policy.md)
 
 ## Context
 
@@ -53,22 +59,27 @@ paint behavior.
 
 ### Runtime And Resource Ownership
 
-There is at most one live logical `PlatformRuntime` per process. Runtime
-creation is fallible and uses an explicit factory returning
-`pond::core::Result<PlatformRuntime>`.
+There is at most one live logical `Runtime` per process. Runtime creation is
+fallible and uses an explicit factory that returns `Runtime` directly and
+throws a platform exception on failure.
 
-`PlatformRuntime` and native resource owners are non-copyable and movable. They
-use heap-stable private state so moving a public owner cannot invalidate windows
-or other child resources. Moved-from owners are valid only for destruction or
-move assignment.
+`Runtime` and native resource owners are non-copyable and movable. `Runtime`
+owns exactly one heap-stable `detail::RuntimeImpl` through `std::unique_ptr`;
+production resolves that implementation directly to `SdlRuntime`. Moving the
+public owner therefore cannot invalidate windows or other child resources.
+Moved-from owners are valid only for destruction or move assignment.
 
-The runtime exclusively owns heap-stable private state; child objects borrow that
-state under an enforced lifetime contract. Windows and outstanding platform
-requests must finish before runtime destruction. Before SDL shutdown, the
-runtime uses release-active verification to require an empty child/request
-registry. Because verification does not return normally on failure, SDL cannot
-shut down while a child can still use it. Every child operation verifies its
-state and owner thread before calling SDL.
+`SdlRuntime` directly owns SDL lifecycle, hint stacks, clipboard
+synchronization, dialog requests, event/display topology, cursor caches, and
+child/window registries. The public API is a flat, subsystem-prefixed surface;
+there are no manager service facades, intermediate runtime-state object,
+runtime-backend aggregate, or virtual dialog backend. Child objects borrow the
+heap-stable implementation under an enforced lifetime contract. Windows and
+outstanding platform requests must finish before runtime destruction. Before
+SDL shutdown, the runtime uses release-active verification to require empty
+child, window, and dialog registries. Because verification does not return
+normally on failure, SDL cannot shut down while a child can still use it. Every
+child operation verifies its state and owner thread before calling SDL.
 
 Platform owns the SDL lifecycle exclusively and refuses creation while an SDL
 subsystem is already initialized. Before process-global `SDL_Quit()`, teardown
@@ -84,9 +95,9 @@ completion data into synchronized private state; public completion delivery
 occurs on the owner thread.
 
 Application name, version, and identifier are applied with checked metadata
-property calls before video initialization. The runtime snapshots their prior
-effective nullable values and restores them after failed creation or after
-`SDL_Quit()` during normal shutdown.
+property calls before video initialization. Absent optional properties are
+cleared. The runtime does not snapshot or restore prior metadata; after
+`SDL_Quit()`, the resulting process state is left to SDL.
 
 ### Windows, Displays, And Renderer Interop
 
@@ -131,12 +142,16 @@ payloads. There is no redundant event-kind enum. Global quit requests are
 distinct from window close requests, and close requests never destroy a window
 automatically.
 
-Event timestamps use a project-owned `std::chrono` nanosecond representation in
-SDL's monotonic tick domain, with the same epoch as `SDL_GetTicksNS()`. Only
-timestamp differences are semantically meaningful. Platform may expose a
-monotonic `Now()` value in the same domain. Stateful frame-delta calculation,
-fixed-step simulation, frame limiting, and idle policy belong to the application
-layer.
+Event timestamps use the core-owned `Timestamp` nanosecond representation and
+preserve SDL's monotonic tick domain. `Runtime::TimeNow()` samples that same
+SDL domain so applications can correlate observations with queued events.
+`ponder::core::Timestamp::Now()` is a separate steady-clock source whose epoch
+need not match SDL. Only differences between timestamps from the same source are
+semantically meaningful. Public platform declarations spell
+`ponder::core::Timestamp` and `ponder::core::Duration` directly; platform does
+not provide a timing forwarding header or aliases.
+Stateful frame-delta calculation, fixed-step simulation, frame limiting, and
+idle policy belong to the application layer.
 
 Event polling skips unknown, unsupported, and stale backend events until it can
 return one translated project event or the backend queue is genuinely empty.
@@ -149,20 +164,25 @@ and external-URI opening, without owning retained UI behavior.
 
 ### Errors And Asynchronous Services
 
-Recoverable caller, environment, SDL, and OS failures return
-`pond::core::Result<T>` or `pond::core::VoidResult`. A single private adapter
-copies SDL error text immediately, adds operation context, and maps failures to
-stable core categories and public `PlatformErrorCode` values. Invalid internal
-state and
-violated lifetime or threading contracts use project assertions together with
-release-safe guards.
+The exception-first policy in ADR 0013 reserves `ponder::core::Result<T>` and
+`ponder::core::VoidResult` for exactly nine public operations whose expected
+failures can be handled at the immediate orchestration layer. Other ordinary
+platform failures throw `ponder::core::Exception`, with `PLATFORM_EXCEPTION`
+embedding the formatted `PlatformErrorCode` in the diagnostic message.
+Retained-result operations may also throw for programming, lifecycle, threading,
+or unexpected backend-contract failures. Private adapters copy SDL error text
+immediately, add operation context, and map failures to stable core categories
+and public `PlatformErrorCode` values.
 
-Dialog cancellation is a normal outcome rather than an error. Dialog
-descriptors and filters are copied into owned request state. Completion is
-marshalled to the owner-thread event stream exactly once.
+Dialog cancellation is a normal outcome rather than an error. Synchronous
+submission returns a request ID directly and throws on submission failure.
+Dialog descriptors and filters are copied into owned request state. Asynchronous
+selection, cancellation, or `DialogFailure` completion is marshalled to the
+owner-thread event stream exactly once. No exception escapes a callback,
+destructor, or worker-thread entry point.
 
 The initial process API is shell-free and intentionally small. Process creation
-does not require `PlatformRuntime`. A `Process` is bound to its launching thread;
+does not require `Runtime`. A `Process` is bound to its launching thread;
 all operations and destruction occur on that thread without concurrent
 access. This is the documented exception to the runtime-owner-thread rule.
 Destroying a process releases public ownership but does not wait for, kill, or

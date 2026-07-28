@@ -9,8 +9,7 @@ namespace detail
 {
 [[nodiscard]] constexpr bool IsFiniteRayVector(Vector3 value) noexcept
 {
-    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) &&
-           ::pond::core::IsFinite(value.z);
+    return ::pond::core::IsFinite(value.x) && ::pond::core::IsFinite(value.y) && ::pond::core::IsFinite(value.z);
 }
 } // namespace detail
 
@@ -19,12 +18,10 @@ class Ray final
 public:
     [[nodiscard]] static inline core::Result<Ray> Create(Vector3 origin, Vector3 direction)
     {
-        if (!detail::IsFiniteRayVector(origin) || !detail::IsFiniteRayVector(direction))
-            [[unlikely]]
+        if (!detail::IsFiniteRayVector(origin) || !detail::IsFiniteRayVector(direction)) [[unlikely]]
         {
             return core::Result<Ray>::FromError(
-                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput),
-                            "Ray construction requires finite origin and direction."});
+                core::Error{ToErrorCode(MathErrorCode::NonFiniteInput), "Ray construction requires finite origin and direction."});
         }
 
         auto normalizedDirection = Normalize(direction);
@@ -46,12 +43,12 @@ public:
         return m_direction;
     }
 
-    [[nodiscard]] friend constexpr bool operator==(const Ray& lhs,
-                                                   const Ray& rhs) noexcept = default;
+    [[nodiscard]] friend constexpr bool operator==(const Ray& lhs, const Ray& rhs) noexcept = default;
 
 private:
-    constexpr Ray(Vector3 origin, Vector3 direction) noexcept
-        : m_origin(origin), m_direction(direction)
+    constexpr Ray(Vector3 origin, Vector3 direction) noexcept :
+        m_origin(origin),
+        m_direction(direction)
     {
     }
 

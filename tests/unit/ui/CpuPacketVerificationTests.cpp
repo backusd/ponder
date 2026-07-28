@@ -21,10 +21,9 @@ namespace pond::render::draw2d
 {
 struct Draw2DPacketTestFactory final
 {
-    [[nodiscard]] static Draw2DPacket Create(
-        Draw2DPixelExtent extent, std::vector<Draw2DVertex> vertices = {},
-        std::vector<Draw2DIndex> indices = {}, std::vector<Draw2DDrawRecord> drawRecords = {},
-        std::uint64_t schemaFingerprint = kDraw2DSchemaFingerprint)
+    [[nodiscard]] static Draw2DPacket Create(Draw2DPixelExtent extent, std::vector<Draw2DVertex> vertices = {}, std::vector<Draw2DIndex> indices = {},
+                                             std::vector<Draw2DDrawRecord> drawRecords = {},
+                                             std::uint64_t schemaFingerprint = kDraw2DSchemaFingerprint)
     {
         Draw2DPacket packet;
         packet.m_extent = extent;
@@ -32,13 +31,10 @@ struct Draw2DPacketTestFactory final
         packet.m_vertices = std::move(vertices);
         packet.m_indices = std::move(indices);
         packet.m_drawRecords = std::move(drawRecords);
-        packet.m_stats =
-            InspectDraw2DPacketCounts(
-                Draw2DPacketCounts{
-                    .vertexCount = static_cast<std::uint64_t>(packet.m_vertices.size()),
-                    .indexCount = static_cast<std::uint64_t>(packet.m_indices.size()),
-                    .drawRecordCount = static_cast<std::uint64_t>(packet.m_drawRecords.size())})
-                .stats;
+        packet.m_stats = InspectDraw2DPacketCounts(Draw2DPacketCounts{.vertexCount = static_cast<std::uint64_t>(packet.m_vertices.size()),
+                                                                      .indexCount = static_cast<std::uint64_t>(packet.m_indices.size()),
+                                                                      .drawRecordCount = static_cast<std::uint64_t>(packet.m_drawRecords.size())})
+                             .stats;
         return packet;
     }
 };
@@ -80,8 +76,7 @@ struct DeterministicRng final
     }
 };
 
-[[nodiscard]] constexpr std::uint32_t MakeCaseSeed(std::uint32_t baseSeed,
-                                                   std::uint32_t caseIndex) noexcept
+[[nodiscard]] constexpr std::uint32_t MakeCaseSeed(std::uint32_t baseSeed, std::uint32_t caseIndex) noexcept
 {
     std::uint32_t value = baseSeed + 0x9E37'79B9U + caseIndex;
     value ^= value >> 16U;
@@ -119,23 +114,18 @@ struct ReferenceRect final
     return rect.HasValue() ? *rect : pond::ui::LogicalRect{};
 }
 
-[[nodiscard]] pond::ui::SrgbStraightAlphaColor MakeColor(float red, float green, float blue,
-                                                         float alpha)
+[[nodiscard]] pond::ui::SrgbStraightAlphaColor MakeColor(float red, float green, float blue, float alpha)
 {
     auto color = pond::ui::MakeSrgbStraightAlphaColor(red, green, blue, alpha);
     EXPECT_TRUE(color.HasValue()) << (color.HasValue() ? "" : color.GetError().GetMessage());
     return color.HasValue() ? *color : pond::ui::SrgbStraightAlphaColor{};
 }
 
-[[nodiscard]] pond::ui::UiTargetMetrics MakeMetrics(float logicalWidth, float logicalHeight,
-                                                    std::uint32_t pixelWidth,
-                                                    std::uint32_t pixelHeight)
+[[nodiscard]] pond::ui::UiTargetMetrics MakeMetrics(float logicalWidth, float logicalHeight, std::uint32_t pixelWidth, std::uint32_t pixelHeight)
 {
-    auto metrics = pond::ui::MakeUiTargetMetrics(
-        pond::ui::UiTargetId{101U}, pond::ui::UiTargetRevision{103U},
-        pond::ui::UiMetricsRevision{107U},
-        pond::ui::LogicalSize{.width = logicalWidth, .height = logicalHeight},
-        pond::ui::FramebufferPixelSize{.width = pixelWidth, .height = pixelHeight});
+    auto metrics = pond::ui::MakeUiTargetMetrics(pond::ui::UiTargetId{101U}, pond::ui::UiTargetRevision{103U}, pond::ui::UiMetricsRevision{107U},
+                                                 pond::ui::LogicalSize{.width = logicalWidth, .height = logicalHeight},
+                                                 pond::ui::FramebufferPixelSize{.width = pixelWidth, .height = pixelHeight});
     EXPECT_TRUE(metrics.HasValue()) << (metrics.HasValue() ? "" : metrics.GetError().GetMessage());
     return metrics.HasValue() ? *metrics : pond::ui::UiTargetMetrics{};
 }
@@ -179,16 +169,13 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
     EXPECT_EQ(recorder.GetSnapshot().stats, MakeExpectedStats(model));
 }
 
-[[nodiscard]] bool CanAppendCommand(const RecorderModel& model, pond::ui::UiHardLimits limits,
-                                    std::uint64_t payloadBytesToAdd) noexcept
+[[nodiscard]] bool CanAppendCommand(const RecorderModel& model, pond::ui::UiHardLimits limits, std::uint64_t payloadBytesToAdd) noexcept
 {
-    return model.state == PaintRecorderState::Open &&
-           model.commandCount + 1U <= limits.maxPaintCommandCount &&
+    return model.state == PaintRecorderState::Open && model.commandCount + 1U <= limits.maxPaintCommandCount &&
            model.payloadBytes + payloadBytesToAdd <= limits.maxPaintCommandPayloadBytes;
 }
 
-[[nodiscard]] ReferenceRect ToReferenceRect(pond::ui::LogicalRect rectangle, double scaleX,
-                                            double scaleY) noexcept
+[[nodiscard]] ReferenceRect ToReferenceRect(pond::ui::LogicalRect rectangle, double scaleX, double scaleY) noexcept
 {
     return ReferenceRect{.left = static_cast<double>(pond::ui::GetLeft(rectangle)) * scaleX,
                          .top = static_cast<double>(pond::ui::GetTop(rectangle)) * scaleY,
@@ -210,16 +197,14 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
     return IsEmpty(result) ? ReferenceRect{} : result;
 }
 
-[[nodiscard]] draw2d::Draw2DScissor MakeReferenceScissor(ReferenceRect clip,
-                                                         draw2d::Draw2DPixelExtent extent) noexcept
+[[nodiscard]] draw2d::Draw2DScissor MakeReferenceScissor(ReferenceRect clip, draw2d::Draw2DPixelExtent extent) noexcept
 {
     const double maxX = static_cast<double>(extent.width);
     const double maxY = static_cast<double>(extent.height);
-    return draw2d::Draw2DScissor{
-        .left = static_cast<std::uint32_t>(std::clamp(std::floor(clip.left), 0.0, maxX)),
-        .top = static_cast<std::uint32_t>(std::clamp(std::floor(clip.top), 0.0, maxY)),
-        .right = static_cast<std::uint32_t>(std::clamp(std::ceil(clip.right), 0.0, maxX)),
-        .bottom = static_cast<std::uint32_t>(std::clamp(std::ceil(clip.bottom), 0.0, maxY))};
+    return draw2d::Draw2DScissor{.left = static_cast<std::uint32_t>(std::clamp(std::floor(clip.left), 0.0, maxX)),
+                                 .top = static_cast<std::uint32_t>(std::clamp(std::floor(clip.top), 0.0, maxY)),
+                                 .right = static_cast<std::uint32_t>(std::clamp(std::ceil(clip.right), 0.0, maxX)),
+                                 .bottom = static_cast<std::uint32_t>(std::clamp(std::ceil(clip.bottom), 0.0, maxY))};
 }
 
 [[nodiscard]] SealedPaintList Seal(PaintRecorder& recorder)
@@ -230,8 +215,7 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
 }
 
 [[nodiscard]] std::vector<draw2d::Draw2DVertex> MakePacketVertices(
-    draw2d::Draw2DPackedLinearPremultipliedRgba8 color =
-        draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U))
+    draw2d::Draw2DPackedLinearPremultipliedRgba8 color = draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U))
 {
     return {{.x = 0.0F, .y = 0.0F, .color = color},
             {.x = 8.0F, .y = 0.0F, .color = color},
@@ -245,11 +229,9 @@ void ExpectRecorderMatchesModel(const PaintRecorder& recorder, const RecorderMod
 }
 
 [[nodiscard]] draw2d::Draw2DDrawRecord MakePacketDraw(
-    draw2d::Draw2DScissor scissor = draw2d::Draw2DScissor{
-        .left = 0U, .top = 0U, .right = 64U, .bottom = 48U}) noexcept
+    draw2d::Draw2DScissor scissor = draw2d::Draw2DScissor{.left = 0U, .top = 0U, .right = 64U, .bottom = 48U}) noexcept
 {
-    return draw2d::Draw2DDrawRecord{
-        .firstIndex = 0U, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
+    return draw2d::Draw2DDrawRecord{.firstIndex = 0U, .indexCount = 6U, .baseVertex = 0, .scissor = scissor};
 }
 
 void ExpectPacketsEqual(const draw2d::Draw2DPacket& lhs, const draw2d::Draw2DPacket& rhs)
@@ -268,16 +250,14 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
     constexpr std::uint32_t kSeed{0x5EED'1601U};
     pond::ui::UiHardLimits limits = pond::ui::kDefaultUiHardLimits;
     limits.maxPaintCommandCount = 12U;
-    limits.maxPaintCommandPayloadBytes =
-        (3U * sizeof(FillRectangleCommand)) + (3U * sizeof(PushClipRectangleCommand));
+    limits.maxPaintCommandPayloadBytes = (3U * sizeof(FillRectangleCommand)) + (3U * sizeof(PushClipRectangleCommand));
     limits.maxClipDepth = 4U;
 
     for (std::uint32_t sequenceIndex = 0U; sequenceIndex < 48U; ++sequenceIndex)
     {
         const std::uint32_t caseSeed = MakeCaseSeed(kSeed, sequenceIndex);
         DeterministicRng rng{caseSeed};
-        SCOPED_TRACE("seed=0x5EED1601 sequence=" + std::to_string(sequenceIndex) +
-                     " case_seed=" + std::to_string(caseSeed));
+        SCOPED_TRACE("seed=0x5EED1601 sequence=" + std::to_string(sequenceIndex) + " case_seed=" + std::to_string(caseSeed));
         PaintRecorder recorder{limits};
         RecorderModel model;
 
@@ -286,18 +266,15 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             const std::uint32_t stepSeed = rng.state;
             const auto before = recorder.GetSnapshot();
             const std::uint32_t operation = rng.NextBounded(6U);
-            SCOPED_TRACE("step=" + std::to_string(step) + " step_seed=" + std::to_string(stepSeed) +
-                         " operation=" + std::to_string(operation));
+            SCOPED_TRACE("step=" + std::to_string(step) + " step_seed=" + std::to_string(stepSeed) + " operation=" + std::to_string(operation));
 
             if (operation == 0U)
             {
                 const pond::ui::LogicalRect rectangle = MakeFuzzRect(rng);
                 const pond::ui::SrgbStraightAlphaColor color = MakeFuzzColor(rng);
-                SCOPED_TRACE(::testing::Message()
-                             << "rectangle=" << rectangle.origin.x << ',' << rectangle.origin.y
-                             << ',' << rectangle.size.width << ',' << rectangle.size.height
-                             << " color=" << color.red << ',' << color.green << ',' << color.blue
-                             << ',' << color.alpha);
+                SCOPED_TRACE(::testing::Message() << "rectangle=" << rectangle.origin.x << ',' << rectangle.origin.y << ',' << rectangle.size.width
+                                                  << ',' << rectangle.size.height << " color=" << color.red << ',' << color.green << ',' << color.blue
+                                                  << ',' << color.alpha);
                 const auto result = recorder.FillRectangle(rectangle, color);
                 const bool expected = CanAppendCommand(model, limits, sizeof(FillRectangleCommand));
                 EXPECT_EQ(result.HasValue(), expected);
@@ -316,8 +293,7 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             {
                 const auto result = recorder.PushClipRectangle(MakeFuzzRect(rng));
                 const bool expected =
-                    CanAppendCommand(model, limits, sizeof(PushClipRectangleCommand)) &&
-                    model.clipDepth + 1U <= limits.maxClipDepth;
+                    CanAppendCommand(model, limits, sizeof(PushClipRectangleCommand)) && model.clipDepth + 1U <= limits.maxClipDepth;
                 EXPECT_EQ(result.HasValue(), expected);
                 if (expected)
                 {
@@ -325,8 +301,7 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
                     ++model.pushClipRectangleCount;
                     model.payloadBytes += sizeof(PushClipRectangleCommand);
                     ++model.clipDepth;
-                    model.maxClipDepthObserved =
-                        std::max(model.maxClipDepthObserved, model.clipDepth);
+                    model.maxClipDepthObserved = std::max(model.maxClipDepthObserved, model.clipDepth);
                 }
                 else
                 {
@@ -336,9 +311,8 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             else if (operation == 2U)
             {
                 const auto result = recorder.PopClip();
-                const bool expected = model.state == PaintRecorderState::Open &&
-                                      model.clipDepth > 1U &&
-                                      model.commandCount + 1U <= limits.maxPaintCommandCount;
+                const bool expected =
+                    model.state == PaintRecorderState::Open && model.clipDepth > 1U && model.commandCount + 1U <= limits.maxPaintCommandCount;
                 EXPECT_EQ(result.HasValue(), expected);
                 if (expected)
                 {
@@ -354,8 +328,7 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             else if (operation == 3U)
             {
                 auto sealed = recorder.Seal();
-                const bool expected =
-                    model.state == PaintRecorderState::Open && model.clipDepth == 1U;
+                const bool expected = model.state == PaintRecorderState::Open && model.clipDepth == 1U;
                 EXPECT_EQ(sealed.HasValue(), expected);
                 if (expected)
                 {
@@ -375,11 +348,9 @@ TEST(UiCpuPacketVerificationTests, BoundedRecorderStateSequencesRemainTransactio
             }
             else
             {
-                const auto result = recorder.FillRectangle(
-                    pond::ui::LogicalRect{
-                        .origin = pond::ui::LogicalPoint{.x = 0.0F, .y = 0.0F},
-                        .size = pond::ui::LogicalSize{.width = -1.0F, .height = 1.0F}},
-                    MakeFuzzColor(rng));
+                const auto result = recorder.FillRectangle(pond::ui::LogicalRect{.origin = pond::ui::LogicalPoint{.x = 0.0F, .y = 0.0F},
+                                                                                 .size = pond::ui::LogicalSize{.width = -1.0F, .height = 1.0F}},
+                                                           MakeFuzzColor(rng));
                 EXPECT_FALSE(result.HasValue());
                 EXPECT_EQ(recorder.GetSnapshot(), before);
             }
@@ -397,8 +368,7 @@ TEST(UiCpuPacketVerificationTests, FractionalClipAndScalePropertyMatchesIndepend
     {
         const std::uint32_t caseSeed = MakeCaseSeed(kSeed, caseIndex);
         DeterministicRng rng{caseSeed};
-        SCOPED_TRACE("seed=0xC11A1602 case=" + std::to_string(caseIndex) +
-                     " case_seed=" + std::to_string(caseSeed));
+        SCOPED_TRACE("seed=0xC11A1602 case=" + std::to_string(caseIndex) + " case_seed=" + std::to_string(caseSeed));
         const std::uint32_t pixelWidth = 23U + rng.NextBounded(101U);
         const std::uint32_t pixelHeight = 17U + rng.NextBounded(89U);
         const float logicalWidth = 10.0F + (static_cast<float>(rng.NextBounded(33U)) * 0.25F);
@@ -418,20 +388,14 @@ TEST(UiCpuPacketVerificationTests, FractionalClipAndScalePropertyMatchesIndepend
         const float rectRight = rng.NextFloat(logicalWidth * 0.55F, logicalWidth + 1.0F);
         const float rectBottom = rng.NextFloat(logicalHeight * 0.55F, logicalHeight + 1.0F);
         const auto rect = MakeRect(rectLeft, rectTop, rectRight, rectBottom);
-        SCOPED_TRACE(::testing::Message()
-                     << "metrics=" << logicalWidth << 'x' << logicalHeight << " -> " << pixelWidth
-                     << 'x' << pixelHeight << " clip=" << clipLeft << ',' << clipTop << ','
-                     << clipRight << ',' << clipBottom << " rect=" << rectLeft << ',' << rectTop
-                     << ',' << rectRight << ',' << rectBottom);
+        SCOPED_TRACE(::testing::Message() << "metrics=" << logicalWidth << 'x' << logicalHeight << " -> " << pixelWidth << 'x' << pixelHeight
+                                          << " clip=" << clipLeft << ',' << clipTop << ',' << clipRight << ',' << clipBottom << " rect=" << rectLeft
+                                          << ',' << rectTop << ',' << rectRight << ',' << rectBottom);
 
         const draw2d::Draw2DPixelExtent extent{.width = pixelWidth, .height = pixelHeight};
-        const ReferenceRect root{.left = 0.0,
-                                 .top = 0.0,
-                                 .right = static_cast<double>(pixelWidth),
-                                 .bottom = static_cast<double>(pixelHeight)};
+        const ReferenceRect root{.left = 0.0, .top = 0.0, .right = static_cast<double>(pixelWidth), .bottom = static_cast<double>(pixelHeight)};
         const ReferenceRect effectiveClip = Intersect(root, ToReferenceRect(clip, scaleX, scaleY));
-        const ReferenceRect expectedGeometry =
-            Intersect(ToReferenceRect(rect, scaleX, scaleY), effectiveClip);
+        const ReferenceRect expectedGeometry = Intersect(ToReferenceRect(rect, scaleX, scaleY), effectiveClip);
         ASSERT_FALSE(IsEmpty(expectedGeometry));
 
         PaintRecorder recorder;
@@ -464,16 +428,14 @@ TEST(UiCpuPacketVerificationTests, CompilerOutputInvariantsAreDeterministicAcros
     {
         const std::uint32_t caseSeed = MakeCaseSeed(kSeed, caseIndex);
         DeterministicRng rng{caseSeed};
-        SCOPED_TRACE("seed=0xC0DE1603 case=" + std::to_string(caseIndex) +
-                     " case_seed=" + std::to_string(caseSeed));
+        SCOPED_TRACE("seed=0xC0DE1603 case=" + std::to_string(caseIndex) + " case_seed=" + std::to_string(caseSeed));
         PaintRecorder recorder;
         std::uint32_t openClips = 0U;
         for (std::uint32_t step = 0U; step < 18U; ++step)
         {
             const std::uint32_t stepSeed = rng.state;
             const std::uint32_t operation = rng.NextBounded(5U);
-            SCOPED_TRACE("step=" + std::to_string(step) + " step_seed=" + std::to_string(stepSeed) +
-                         " operation=" + std::to_string(operation));
+            SCOPED_TRACE("step=" + std::to_string(step) + " step_seed=" + std::to_string(stepSeed) + " operation=" + std::to_string(operation));
             if (operation == 0U && openClips < 4U)
             {
                 ASSERT_TRUE(recorder.PushClipRectangle(MakeFuzzRect(rng)).HasValue());
@@ -488,11 +450,9 @@ TEST(UiCpuPacketVerificationTests, CompilerOutputInvariantsAreDeterministicAcros
             {
                 const pond::ui::LogicalRect rectangle = MakeFuzzRect(rng);
                 const pond::ui::SrgbStraightAlphaColor color = MakeFuzzColor(rng);
-                SCOPED_TRACE(::testing::Message()
-                             << "rectangle=" << rectangle.origin.x << ',' << rectangle.origin.y
-                             << ',' << rectangle.size.width << ',' << rectangle.size.height
-                             << " color=" << color.red << ',' << color.green << ',' << color.blue
-                             << ',' << color.alpha);
+                SCOPED_TRACE(::testing::Message() << "rectangle=" << rectangle.origin.x << ',' << rectangle.origin.y << ',' << rectangle.size.width
+                                                  << ',' << rectangle.size.height << " color=" << color.red << ',' << color.green << ',' << color.blue
+                                                  << ',' << color.alpha);
                 ASSERT_TRUE(recorder.FillRectangle(rectangle, color).HasValue());
             }
         }
@@ -525,8 +485,7 @@ TEST(UiCpuPacketVerificationTests, CompilerOutputInvariantsAreDeterministicAcros
             const draw2d::Draw2DDrawRecord& draw = packet.GetDrawRecords()[drawIndex];
             SCOPED_TRACE("draw=" + std::to_string(drawIndex));
             EXPECT_EQ(draw.indexCount % 3U, 0U);
-            EXPECT_LE(static_cast<std::uint64_t>(draw.firstIndex) + draw.indexCount,
-                      packet.GetIndices().size());
+            EXPECT_LE(static_cast<std::uint64_t>(draw.firstIndex) + draw.indexCount, packet.GetIndices().size());
             EXPECT_TRUE(draw2d::IsValid(draw.scissor, packet.GetPixelExtent()));
         }
     }
@@ -536,22 +495,19 @@ TEST(UiCpuPacketVerificationTests, HostilePacketMutationsProjectStableDiagnostic
 {
     constexpr std::uint32_t kSeed{0xBAD0'1604U};
     constexpr draw2d::Draw2DPixelExtent kExtent{.width = 64U, .height = 48U};
-    const auto white =
-        draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U);
+    const auto white = draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(255U, 255U, 255U, 255U);
 
     for (std::uint32_t caseIndex = 0U; caseIndex < 120U; ++caseIndex)
     {
         const std::uint32_t caseSeed = MakeCaseSeed(kSeed, caseIndex);
         DeterministicRng rng{caseSeed};
-        SCOPED_TRACE("seed=0xBAD01604 case=" + std::to_string(caseIndex) +
-                     " case_seed=" + std::to_string(caseSeed));
+        SCOPED_TRACE("seed=0xBAD01604 case=" + std::to_string(caseIndex) + " case_seed=" + std::to_string(caseSeed));
         std::vector<draw2d::Draw2DVertex> vertices = MakePacketVertices(white);
         std::vector<draw2d::Draw2DIndex> indices = MakePacketIndices();
         std::vector<draw2d::Draw2DDrawRecord> draws{MakePacketDraw()};
         draw2d::Draw2DPixelExtent extent = kExtent;
         std::uint64_t fingerprint = draw2d::kDraw2DSchemaFingerprint;
-        draw2d::Draw2DPacketValidationIssue expectedIssue{
-            draw2d::Draw2DPacketValidationIssue::None};
+        draw2d::Draw2DPacketValidationIssue expectedIssue{draw2d::Draw2DPacketValidationIssue::None};
         std::uint64_t expectedElement = draw2d::kNoDraw2DElementIndex;
 
         const std::uint32_t mutation = rng.NextBounded(8U);
@@ -572,8 +528,7 @@ TEST(UiCpuPacketVerificationTests, HostilePacketMutationsProjectStableDiagnostic
             expectedElement = 1U;
             break;
         case 3U:
-            vertices[2].color =
-                draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(2U, 0U, 0U, 1U);
+            vertices[2].color = draw2d::Draw2DPackedLinearPremultipliedRgba8::FromChannels(2U, 0U, 0U, 1U);
             expectedIssue = draw2d::Draw2DPacketValidationIssue::InvalidPackedColor;
             expectedElement = 2U;
             break;
@@ -599,8 +554,8 @@ TEST(UiCpuPacketVerificationTests, HostilePacketMutationsProjectStableDiagnostic
             break;
         }
 
-        const draw2d::Draw2DPacket packet = draw2d::Draw2DPacketTestFactory::Create(
-            extent, std::move(vertices), std::move(indices), std::move(draws), fingerprint);
+        const draw2d::Draw2DPacket packet =
+            draw2d::Draw2DPacketTestFactory::Create(extent, std::move(vertices), std::move(indices), std::move(draws), fingerprint);
         const draw2d::Draw2DPacketValidation validation = draw2d::InspectDraw2DPacket(packet);
         EXPECT_EQ(validation.issue, expectedIssue);
         EXPECT_EQ(validation.elementIndex, expectedElement);
@@ -617,56 +572,32 @@ TEST(UiCpuPacketVerificationTests, PacketValidationIssueNamesAreStableDiagnostic
 
     constexpr std::array kCases{
         NameCase{.issue = draw2d::Draw2DPacketValidationIssue::None, .name = "none"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidLimits,
-                 .name = "invalid_limits"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidExtent,
-                 .name = "invalid_extent"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::SchemaFingerprintMismatch,
-                 .name = "schema_fingerprint_mismatch"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexByteOverflow,
-                 .name = "vertex_byte_overflow"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexByteOverflow,
-                 .name = "index_byte_overflow"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRecordByteOverflow,
-                 .name = "draw_record_byte_overflow"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::UploadByteOverflow,
-                 .name = "upload_byte_overflow"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::PacketByteOverflow,
-                 .name = "packet_byte_overflow"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexCountUnrepresentable,
-                 .name = "vertex_count_unrepresentable"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexCountUnrepresentable,
-                 .name = "index_count_unrepresentable"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexCountLimit,
-                 .name = "vertex_count_limit"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexCountLimit,
-                 .name = "index_count_limit"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRecordCountLimit,
-                 .name = "draw_record_count_limit"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::PacketByteLimit,
-                 .name = "packet_byte_limit"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::UploadByteLimit,
-                 .name = "upload_byte_limit"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonCanonicalEmptyPacket,
-                 .name = "non_canonical_empty_packet"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonFiniteVertex,
-                 .name = "non_finite_vertex"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidPackedColor,
-                 .name = "invalid_packed_color"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexOutOfRange,
-                 .name = "index_out_of_range"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::EmptyDrawRange,
-                 .name = "empty_draw_range"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonTriangleDrawRange,
-                 .name = "non_triangle_draw_range"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRangeOutOfRange,
-                 .name = "draw_range_out_of_range"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::BaseVertexOutOfRange,
-                 .name = "base_vertex_out_of_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidLimits, .name = "invalid_limits"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidExtent, .name = "invalid_extent"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::SchemaFingerprintMismatch, .name = "schema_fingerprint_mismatch"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexByteOverflow, .name = "vertex_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexByteOverflow, .name = "index_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRecordByteOverflow, .name = "draw_record_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::UploadByteOverflow, .name = "upload_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::PacketByteOverflow, .name = "packet_byte_overflow"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexCountUnrepresentable, .name = "vertex_count_unrepresentable"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexCountUnrepresentable, .name = "index_count_unrepresentable"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::VertexCountLimit, .name = "vertex_count_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexCountLimit, .name = "index_count_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRecordCountLimit, .name = "draw_record_count_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::PacketByteLimit, .name = "packet_byte_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::UploadByteLimit, .name = "upload_byte_limit"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonCanonicalEmptyPacket, .name = "non_canonical_empty_packet"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonFiniteVertex, .name = "non_finite_vertex"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidPackedColor, .name = "invalid_packed_color"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::IndexOutOfRange, .name = "index_out_of_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::EmptyDrawRange, .name = "empty_draw_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::NonTriangleDrawRange, .name = "non_triangle_draw_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::DrawRangeOutOfRange, .name = "draw_range_out_of_range"},
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::BaseVertexOutOfRange, .name = "base_vertex_out_of_range"},
         NameCase{.issue = draw2d::Draw2DPacketValidationIssue::BaseVertexValidationIndexCountLimit,
                  .name = "base_vertex_validation_index_count_limit"},
-        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidScissor,
-                 .name = "invalid_scissor"}};
+        NameCase{.issue = draw2d::Draw2DPacketValidationIssue::InvalidScissor, .name = "invalid_scissor"}};
 
     for (const NameCase& testCase : kCases)
     {

@@ -7,7 +7,6 @@ namespace pond::render::detail
 class RenderBootstrapTestAccess final
 {
 public:
-    [[nodiscard]] static core::Result<PreparedSurface> CreatePreparedSurface(
-        RenderBootstrap& bootstrap, const SurfacePreparationDesc& desc);
+    [[nodiscard]] static core::Result<PreparedSurface> CreatePreparedSurface(RenderBootstrap& bootstrap, const SurfacePreparationDesc& desc);
 };
 } // namespace pond::render::detail

@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$SourceRoots = @("apps", "libs", "plugins", "tests", "tools")
+$SourceRoots = @("apps", "examples", "libs", "plugins", "tests", "tools")
 $SourceExtensions = @(".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx")
 $CompileExtensions = @(".cc", ".cpp", ".cxx")
 
