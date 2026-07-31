@@ -2,6 +2,7 @@
 
 #include <ponder/core/Result.hpp>
 #include <ponder/core/Timing.hpp>
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Identifiers.hpp>
@@ -25,17 +26,11 @@
 
 namespace ponder::platform
 {
-enum class DialogKind : std::uint8_t
-{
-    OpenFile,
-    SaveFile,
-    OpenFolder
-};
 
 struct DialogRequestInfo final
 {
-    DialogRequestId id;
-    DialogKind kind{DialogKind::OpenFile};
+    dialogs::DialogRequestId id;
+    dialogs::DialogKind kind{dialogs::DialogKind::OpenFile};
     ponder::core::Timestamp requestedAt{};
     std::optional<WindowId> parentWindowId;
     std::size_t filterCount{};
@@ -383,27 +378,6 @@ using PlatformEvent =
 
 namespace std
 {
-template <>
-struct formatter<ponder::platform::DialogKind> : formatter<string_view>
-{
-    template <typename FormatContext>
-    auto format(ponder::platform::DialogKind kind, FormatContext& context) const
-    {
-        using enum ponder::platform::DialogKind;
-        switch (kind)
-        {
-        case OpenFile:
-            return formatter<string_view>::format("open-file", context);
-        case SaveFile:
-            return formatter<string_view>::format("save-file", context);
-        case OpenFolder:
-            return formatter<string_view>::format("open-folder", context);
-        }
-
-        return formatter<string_view>::format("unrecognized", context);
-    }
-};
-
 template <>
 struct formatter<ponder::platform::DialogRequestInfo> : formatter<string>
 {
@@ -895,10 +869,6 @@ concept PlatformEventPayload =
 
 namespace ponder::platform
 {
-inline std::ostream& operator<<(std::ostream& output, DialogKind kind)
-{
-    return output << std::format("{}", kind);
-}
 
 inline std::ostream& operator<<(std::ostream& output, const DialogRequestInfo& request)
 {

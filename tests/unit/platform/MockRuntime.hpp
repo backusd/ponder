@@ -2,14 +2,18 @@
 
 #include <ponder/core/Result.hpp>
 #include <ponder/core/Timing.hpp>
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Runtime.hpp>
 
 #include <any>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <exception>
 #include <format>
+#include <mutex>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -48,8 +52,11 @@ public:
     std::vector<DisplayInfo> displays;
     std::deque<PlatformEvent> events;
     std::deque<DialogOutcome> dialogOutcomesOnShow;
+    std::exception_ptr dialogOperationException;
     std::vector<std::string> openedUris;
-    std::optional<RuntimeDesc> lastRuntimeDesc;
+    std::optional<std::string> lastApplicationName;
+    std::optional<std::string> lastApplicationVersion;
+    std::optional<std::string> lastApplicationIdentifier;
     std::optional<SystemCursorShape> selectedCursor;
     std::size_t constructionCount{};
     std::size_t initializationAttemptCount{};
@@ -161,7 +168,8 @@ public:
     MockRuntime(MockRuntime&&) = delete;
     MockRuntime& operator=(MockRuntime&&) = delete;
 
-    void Initialize(const RuntimeDesc& desc);
+    void Initialize(std::string_view applicationName, std::optional<std::string_view> applicationVersion,
+                    std::optional<std::string_view> applicationIdentifier);
 
     template <typename Hint>
     void HintPush(const Hint& hint) = delete;
@@ -177,17 +185,19 @@ public:
 
     [[nodiscard]] ponder::core::Result<std::string> ClipboardGetText() const;
     [[nodiscard]] ponder::core::VoidResult ClipboardSetText(std::string_view text);
-    [[nodiscard]] DialogRequestId DialogShowOpenFile(const OpenFileDialogDesc& desc);
-    [[nodiscard]] DialogRequestId DialogShowSaveFile(const SaveFileDialogDesc& desc);
-    [[nodiscard]] DialogRequestId DialogShowOpenFolder(const OpenFolderDialogDesc& desc);
-    [[nodiscard]] std::size_t DialogGetPendingCount() const;
-    [[nodiscard]] bool DialogHasPending() const;
-    [[nodiscard]] std::vector<DialogRequestInfo> DialogGetPending() const;
-    [[nodiscard]] std::optional<DialogCompletedEvent> DialogPollCompletion();
-    [[nodiscard]] std::size_t DialogGetOutstandingRequestCount() const;
-    void DialogShutdown();
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowOpenFile(const dialogs::OpenFileDialogDesc& desc) noexcept;
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowSaveFile(const dialogs::SaveFileDialogDesc& desc) noexcept;
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowOpenFolder(const dialogs::OpenFolderDialogDesc& desc) noexcept;
+    [[nodiscard]] std::size_t DialogGetPendingCount() const noexcept;
+    [[nodiscard]] bool DialogHasPending() const noexcept;
+    [[nodiscard]] std::vector<DialogRequestInfo> DialogGetPending() const noexcept;
+    [[nodiscard]] std::optional<DialogCompletedEvent> DialogPollCompletion() noexcept;
+    [[nodiscard]] std::size_t DialogGetOutstandingRequestCount() const noexcept;
+    [[nodiscard]] ponder::core::VoidResult DialogShutdown() noexcept;
     [[nodiscard]] ponder::core::Timestamp TimeNow() const;
     [[nodiscard]] std::optional<PlatformEvent> EventPoll();
+    [[nodiscard]] std::optional<PlatformEvent> EventWait(ponder::core::Duration timeout);
+    void EventWake();
     [[nodiscard]] Window WindowCreate(const WindowDesc& desc);
     [[nodiscard]] std::vector<DisplayInfo> DisplayEnumerate();
     [[nodiscard]] ponder::core::Result<DisplayInfo> DisplayGetInfo(DisplayId id);
@@ -283,8 +293,9 @@ private:
 
     void VerifyInitialized(std::string_view operation) const;
     [[nodiscard]] IPlatformWindowBackend& GetWindowBackend() noexcept;
-    [[nodiscard]] DialogRequestId DialogShow(DialogKind kind, std::optional<WindowId> parentWindowId, std::size_t filterCount,
-                                             bool allowMultipleSelection);
+    void DialogValidateAccess(std::string_view operation) const;
+    [[nodiscard]] dialogs::DialogRequestId DialogShow(dialogs::DialogKind kind, std::optional<WindowId> parentWindowId, std::size_t filterCount,
+                                                      bool allowMultipleSelection);
 
     RuntimeOwnerThreadGuard m_ownerThread;
     RuntimeChildRegistry m_registry;
@@ -293,12 +304,15 @@ private:
     MockWindowBackend m_windowBackend;
     std::unordered_map<std::type_index, std::vector<std::any>> m_hints;
     std::unordered_set<std::type_index> m_hintsEverPushed;
-    std::unordered_map<DialogRequestId, DialogRequestInfo> m_dialogRequests;
-    std::unordered_map<DialogRequestId, DialogParentLease> m_dialogParentLeases;
-    std::unordered_map<DialogRequestId, DialogOutcome> m_dialogCompletions;
-    std::unordered_map<DialogRequestId, ponder::core::Timestamp> m_dialogCompletionTimestamps;
-    std::deque<DialogRequestId> m_completedDialogRequests;
-    DialogRequestId::ValueType m_nextDialogRequestId{1};
+    std::unordered_map<dialogs::DialogRequestId, DialogRequestInfo> m_dialogRequests;
+    std::unordered_map<dialogs::DialogRequestId, DialogParentLease> m_dialogParentLeases;
+    std::unordered_map<dialogs::DialogRequestId, DialogOutcome> m_dialogCompletions;
+    std::unordered_map<dialogs::DialogRequestId, ponder::core::Timestamp> m_dialogCompletionTimestamps;
+    std::deque<dialogs::DialogRequestId> m_completedDialogRequests;
+    dialogs::DialogRequestId::ValueType m_nextDialogRequestId{1};
+    std::condition_variable m_eventCondition;
+    std::mutex m_eventMutex;
+    bool m_wakePending{};
     bool m_dialogShutdown{};
     bool m_initialized{};
 };

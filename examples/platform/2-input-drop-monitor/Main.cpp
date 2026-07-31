@@ -1122,19 +1122,10 @@ void Shutdown(AppState& state)
 
     PrintLogicalKeyHelperExamples();
 
-    const platform::RuntimeDesc runtimeDesc{
-        .applicationName = "Ponder Platform Input Drop Monitor",
-        .applicationVersion = std::string{"0.1.0"},
-        .applicationIdentifier = std::string{"org.ponder.examples.platform.input-drop-monitor"},
-        .configureHintsBeforeInitialization =
-            [](platform::Runtime& runtime)
-        {
-            runtime.HintPush<platform::hints::MouseFocusClickThrough>(platform::hints::MouseFocusClickThrough{true});
-            runtime.HintPush<platform::hints::MouseAutoCapture>(platform::hints::MouseAutoCapture{false});
-        },
-    };
-
-    platform::Runtime runtime = platform::Runtime::Create(runtimeDesc);
+    platform::Runtime runtime = platform::Runtime::Create();
+    runtime.HintPush(platform::hints::MouseFocusClickThrough{true});
+    runtime.HintPush(platform::hints::MouseAutoCapture{false});
+    runtime.Initialize("Ponder Platform Input Drop Monitor", "0.1.0", "org.ponder.examples.platform.input-drop-monitor");
     const core::Timestamp start = runtime.TimeNow();
 
     std::vector<WindowSlot> windows;

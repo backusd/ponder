@@ -95,11 +95,11 @@ struct ExpectedResultSurface final
 {
     if (stem == "Runtime")
     {
-        return {.resultCount = 3U, .voidResultCount = 3U};
+        return {.resultCount = 6U, .voidResultCount = 4U};
     }
     if (stem == "Process")
     {
-        return {.resultCount = 2U, .voidResultCount = 1U};
+        return {.resultCount = 3U, .voidResultCount = 1U};
     }
     if (stem == "Window")
     {
@@ -144,8 +144,8 @@ TEST(PlatformCoverageAuditTests, PublicHeadersExposeExactlyTheApprovedResultSurf
         voidResultCount += headerVoidResultCount;
     }
 
-    EXPECT_EQ(resultCount, 7U);
-    EXPECT_EQ(voidResultCount, 4U);
-    EXPECT_EQ(resultCount + voidResultCount, 11U);
+    EXPECT_EQ(resultCount, 11U);
+    EXPECT_EQ(voidResultCount, 5U);
+    EXPECT_EQ(resultCount + voidResultCount, 16U);
 }
 } // namespace

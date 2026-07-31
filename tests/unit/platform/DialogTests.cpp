@@ -1,6 +1,6 @@
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformEvent.hpp>
-#include <ponder/platform/Runtime.hpp>
 
 #include <chrono>
 #include <concepts>
@@ -17,33 +17,34 @@
 
 namespace
 {
-static_assert(!std::same_as<ponder::platform::DialogRequestId, ponder::platform::WindowId>);
-static_assert(!std::same_as<ponder::platform::DialogRequestId, ponder::platform::DisplayId>);
-static_assert(!std::convertible_to<std::uint64_t, ponder::platform::DialogRequestId>);
-static_assert(!std::convertible_to<ponder::platform::DialogRequestId, std::uint64_t>);
-static_assert(std::is_trivially_copyable_v<ponder::platform::DialogRequestId>);
+static_assert(!std::same_as<ponder::platform::dialogs::DialogRequestId, ponder::platform::WindowId>);
+static_assert(!std::same_as<ponder::platform::dialogs::DialogRequestId, ponder::platform::DisplayId>);
+static_assert(!std::convertible_to<std::uint64_t, ponder::platform::dialogs::DialogRequestId>);
+static_assert(!std::convertible_to<ponder::platform::dialogs::DialogRequestId, std::uint64_t>);
+static_assert(std::is_nothrow_constructible_v<ponder::platform::dialogs::DialogRequestId, std::uint64_t>);
+static_assert(std::is_trivially_copyable_v<ponder::platform::dialogs::DialogRequestId>);
 static_assert(std::variant_size_v<ponder::platform::DialogOutcome> == 3U);
-static_assert(std::is_scoped_enum_v<ponder::platform::DialogKind>);
+static_assert(std::is_scoped_enum_v<ponder::platform::dialogs::DialogKind>);
 
 TEST(DialogRequestIdTests, DefaultsToInvalidZero)
 {
-    constexpr ponder::platform::DialogRequestId kInvalid;
+    constexpr ponder::platform::dialogs::DialogRequestId kInvalid;
 
     EXPECT_FALSE(kInvalid.IsValid());
-    EXPECT_EQ(kInvalid, ponder::platform::DialogRequestId::Invalid());
+    EXPECT_EQ(kInvalid, ponder::platform::dialogs::DialogRequestId::Invalid());
     EXPECT_EQ(kInvalid.GetValue(), 0U);
 }
 
 TEST(DialogRequestIdTests, ComparesAndHashesByNumericValue)
 {
-    constexpr ponder::platform::DialogRequestId kFirst{1};
-    constexpr ponder::platform::DialogRequestId kSameFirst{1};
-    constexpr ponder::platform::DialogRequestId kSecond{2};
+    constexpr ponder::platform::dialogs::DialogRequestId kFirst{1};
+    constexpr ponder::platform::dialogs::DialogRequestId kSameFirst{1};
+    constexpr ponder::platform::dialogs::DialogRequestId kSecond{2};
 
     EXPECT_EQ(kFirst, kSameFirst);
     EXPECT_LT(kFirst, kSecond);
 
-    std::unordered_set<ponder::platform::DialogRequestId> ids;
+    std::unordered_set<ponder::platform::dialogs::DialogRequestId> ids;
     ids.insert(kFirst);
     EXPECT_TRUE(ids.contains(kSameFirst));
     EXPECT_FALSE(ids.contains(kSecond));
@@ -51,22 +52,22 @@ TEST(DialogRequestIdTests, ComparesAndHashesByNumericValue)
 
 TEST(DialogTypesTests, OwnDescriptorsAndOutcomes)
 {
-    const ponder::platform::DialogRequestInfo request{.id = ponder::platform::DialogRequestId{5},
-                                                      .kind = ponder::platform::DialogKind::OpenFile,
+    const ponder::platform::DialogRequestInfo request{.id = ponder::platform::dialogs::DialogRequestId{5},
+                                                      .kind = ponder::platform::dialogs::DialogKind::OpenFile,
                                                       .requestedAt = ponder::core::Timestamp{std::chrono::nanoseconds{123}},
                                                       .parentWindowId = ponder::platform::WindowId{7},
                                                       .filterCount = 2,
                                                       .allowMultipleSelection = true};
-    EXPECT_EQ(request.id, ponder::platform::DialogRequestId{5});
-    EXPECT_EQ(request.kind, ponder::platform::DialogKind::OpenFile);
+    EXPECT_EQ(request.id, ponder::platform::dialogs::DialogRequestId{5});
+    EXPECT_EQ(request.kind, ponder::platform::dialogs::DialogKind::OpenFile);
     EXPECT_EQ(request.parentWindowId, ponder::platform::WindowId{7});
     EXPECT_EQ(request.filterCount, 2U);
     EXPECT_TRUE(request.allowMultipleSelection);
 
-    ponder::platform::OpenFileDialogDesc openDesc{.parentWindowId = ponder::platform::WindowId{7},
-                                                  .defaultLocation = std::filesystem::path{"C:/tmp/molecule.sdf"},
-                                                  .filters = {{.name = "Molecules", .pattern = "sdf;mol"}},
-                                                  .allowMultipleSelection = true};
+    ponder::platform::dialogs::OpenFileDialogDesc openDesc{.parentWindowId = ponder::platform::WindowId{7},
+                                                           .defaultLocation = std::filesystem::path{"C:/tmp/molecule.sdf"},
+                                                           .filters = {{.name = "Molecules", .pattern = "sdf;mol"}},
+                                                           .allowMultipleSelection = true};
     EXPECT_EQ(openDesc.parentWindowId, ponder::platform::WindowId{7});
     EXPECT_EQ(openDesc.defaultLocation, std::filesystem::path{"C:/tmp/molecule.sdf"});
     ASSERT_EQ(openDesc.filters.size(), 1U);

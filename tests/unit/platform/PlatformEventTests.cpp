@@ -1,3 +1,4 @@
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/PlatformEvent.hpp>
 
@@ -62,8 +63,8 @@ TEST(PlatformEventTests, ConstructsVisitsAndCopiesEveryAlternative)
         ponder::platform::DropCompleteEvent{timestamp, std::nullopt, {14.0F, 16.0F}, std::nullopt},
         ponder::platform::DialogCompletedEvent{
             timestamp,
-            ponder::platform::DialogRequestInfo{.id = ponder::platform::DialogRequestId{37},
-                                                .kind = ponder::platform::DialogKind::OpenFile,
+            ponder::platform::DialogRequestInfo{.id = ponder::platform::dialogs::DialogRequestId{37},
+                                                .kind = ponder::platform::dialogs::DialogKind::OpenFile,
                                                 .requestedAt = timestamp,
                                                 .parentWindowId = windowId,
                                                 .filterCount = 1,
@@ -183,15 +184,15 @@ TEST(PlatformEventTests, PreservesTypedUnitsAndOptionalValues)
 
     const ponder::platform::DialogCompletedEvent selectedDialog{
         timestamp,
-        ponder::platform::DialogRequestInfo{.id = ponder::platform::DialogRequestId{3},
-                                            .kind = ponder::platform::DialogKind::OpenFile,
+        ponder::platform::DialogRequestInfo{.id = ponder::platform::dialogs::DialogRequestId{3},
+                                            .kind = ponder::platform::dialogs::DialogKind::OpenFile,
                                             .requestedAt = ponder::core::Timestamp{123ns},
                                             .parentWindowId = windowId,
                                             .filterCount = 2,
                                             .allowMultipleSelection = true},
         ponder::platform::DialogSelection{.paths = {std::filesystem::path{"C:/tmp/dialog.sdf"}}, .selectedFilterIndex = 1U}};
-    EXPECT_EQ(selectedDialog.request.id, ponder::platform::DialogRequestId{3});
-    EXPECT_EQ(selectedDialog.request.kind, ponder::platform::DialogKind::OpenFile);
+    EXPECT_EQ(selectedDialog.request.id, ponder::platform::dialogs::DialogRequestId{3});
+    EXPECT_EQ(selectedDialog.request.kind, ponder::platform::dialogs::DialogKind::OpenFile);
     EXPECT_EQ(selectedDialog.request.requestedAt, ponder::core::Timestamp{123ns});
     EXPECT_EQ(selectedDialog.request.parentWindowId, windowId);
     EXPECT_EQ(selectedDialog.request.filterCount, 2U);
@@ -203,12 +204,16 @@ TEST(PlatformEventTests, PreservesTypedUnitsAndOptionalValues)
     EXPECT_EQ(*selection.selectedFilterIndex, 1U);
 
     const ponder::platform::DialogCompletedEvent cancelledDialog{
-        timestamp, ponder::platform::DialogRequestInfo{.id = ponder::platform::DialogRequestId{4}, .kind = ponder::platform::DialogKind::OpenFolder},
+        timestamp,
+        ponder::platform::DialogRequestInfo{.id = ponder::platform::dialogs::DialogRequestId{4},
+                                            .kind = ponder::platform::dialogs::DialogKind::OpenFolder},
         ponder::platform::DialogCancellation{}};
     EXPECT_TRUE(std::holds_alternative<ponder::platform::DialogCancellation>(cancelledDialog.outcome));
 
     const ponder::platform::DialogCompletedEvent failedDialog{
-        timestamp, ponder::platform::DialogRequestInfo{.id = ponder::platform::DialogRequestId{5}, .kind = ponder::platform::DialogKind::SaveFile},
+        timestamp,
+        ponder::platform::DialogRequestInfo{.id = ponder::platform::dialogs::DialogRequestId{5},
+                                            .kind = ponder::platform::dialogs::DialogKind::SaveFile},
         ponder::platform::DialogFailure{
             ponder::core::Error{ponder::platform::ToErrorCode(ponder::platform::PlatformErrorCode::BackendFailure), "asynchronous dialog failure"}}};
     const auto* failure = std::get_if<ponder::platform::DialogFailure>(&failedDialog.outcome);

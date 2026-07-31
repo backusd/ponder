@@ -21,6 +21,7 @@ documentation under `docs/`.
 - `ponder_io` -> `ponder::io`
 - `ponder_render` -> `ponder::render`
 - `ponder_platform` -> `ponder::platform`
+- `ponder_application` -> `ponder::application`
 - `ponder_ui` -> `ponder::ui`
 - `ponder_plugin_sdk` -> `ponder::plugin_sdk`
 

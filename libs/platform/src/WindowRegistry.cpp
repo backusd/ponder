@@ -151,7 +151,10 @@ void WindowRegistry::Unregister(WindowImpl& window, std::uint32_t backendWindowI
 
 DialogParentLease WindowRegistry::AcquireDialogLease(WindowId id)
 {
-    m_ownerThread.Verify("dialog parent lookup");
+    if (!m_ownerThread.IsOwnerThread())
+    {
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::WrongThread, "Dialog parent lookup must run on the Runtime owner thread.");
+    }
     if (!id.IsValid())
     {
         throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Dialog parent window ID must be valid.");

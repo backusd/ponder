@@ -608,6 +608,65 @@ TEST(ProcessBackendTests, RepeatedWaitReturnsTheExactExitStatus)
     EXPECT_EQ(fake.handles.front().blockingWaitCalls.load(std::memory_order_relaxed), 2);
 }
 
+TEST(ProcessBackendTests, TryWaitReportsRunningThenPreservesConfirmedExitStatus)
+{
+    FakeProcessBackend fake{.nextExitStatus = BackendProcessExitStatus{.kind = BackendProcessExitKind::Normal, .value = 42U},
+                            .nextNonblockingWaitExits = false};
+    auto launch = ponder::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+    ASSERT_TRUE(launch.HasValue()) << launch.GetError().GetMessage();
+
+    {
+        ponder::platform::Process process = std::move(launch).GetValue();
+        ASSERT_FALSE(fake.handles.empty());
+
+        auto running = process.TryWait();
+        ASSERT_TRUE(running.HasValue()) << running.GetError().GetMessage();
+        EXPECT_FALSE(running.GetValue().has_value());
+        EXPECT_EQ(fake.handles.front().nonblockingWaitCalls.load(std::memory_order_relaxed), 1);
+        EXPECT_EQ(fake.handles.front().blockingWaitCalls.load(std::memory_order_relaxed), 0);
+
+        fake.handles.front().nonblockingWaitExits.store(true, std::memory_order_release);
+        auto exited = process.TryWait();
+        ASSERT_TRUE(exited.HasValue()) << exited.GetError().GetMessage();
+        ASSERT_TRUE(exited.GetValue().has_value());
+        ASSERT_TRUE(std::holds_alternative<ponder::platform::ProcessNormalExit>(*exited.GetValue()));
+        EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*exited.GetValue()).exitCode, 42U);
+
+        auto repeatedTryWait = process.TryWait();
+        ASSERT_TRUE(repeatedTryWait.HasValue()) << repeatedTryWait.GetError().GetMessage();
+        ASSERT_TRUE(repeatedTryWait.GetValue().has_value());
+        EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*repeatedTryWait.GetValue()).exitCode, 42U);
+
+        auto repeatedBlockingWait = process.Wait();
+        ASSERT_TRUE(repeatedBlockingWait.HasValue()) << repeatedBlockingWait.GetError().GetMessage();
+        EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*repeatedBlockingWait).exitCode, 42U);
+        EXPECT_EQ(fake.handles.front().nonblockingWaitCalls.load(std::memory_order_relaxed), 3);
+        EXPECT_EQ(fake.handles.front().blockingWaitCalls.load(std::memory_order_relaxed), 1);
+    }
+
+    // A confirmed exit is destroyed directly; release does not poll it again.
+    EXPECT_EQ(fake.destroyCalls.load(std::memory_order_relaxed), 1);
+    EXPECT_EQ(fake.handles.front().nonblockingWaitCalls.load(std::memory_order_relaxed), 3);
+}
+
+TEST(ProcessBackendTests, TryWaitFailureIsActionableAndLeavesProcessReusable)
+{
+    FakeProcessBackend fake{.nextExitStatus = BackendProcessExitStatus{.kind = BackendProcessExitKind::Normal, .value = 9U},
+                            .nextNonblockingWaitFailures = 1};
+    auto launch = ponder::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+    ASSERT_TRUE(launch.HasValue()) << launch.GetError().GetMessage();
+    ponder::platform::Process process = std::move(launch).GetValue();
+
+    auto failedTryWait = process.TryWait();
+    ASSERT_FALSE(failedTryWait.HasValue());
+    ExpectErrorCode(failedTryWait.GetError(), ponder::platform::PlatformErrorCode::BackendFailure);
+
+    auto retry = process.TryWait();
+    ASSERT_TRUE(retry.HasValue()) << retry.GetError().GetMessage();
+    ASSERT_TRUE(retry.GetValue().has_value());
+    EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*retry.GetValue()).exitCode, 9U);
+}
+
 TEST(ProcessBackendTests, ResultFailuresLeaveTheProcessReusable)
 {
     {
@@ -666,6 +725,20 @@ TEST(ProcessBackendTests, UnexpectedBackendExceptionsPropagateAndLeaveStateReusa
         ASSERT_TRUE(retry.HasValue()) << retry.GetError().GetMessage();
         ASSERT_TRUE(std::holds_alternative<ponder::platform::ProcessNormalExit>(*retry));
         EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*retry).exitCode, 11U);
+    }
+
+    {
+        FakeProcessBackend fake{.nextExitStatus = BackendProcessExitStatus{.kind = BackendProcessExitKind::Normal, .value = 12U},
+                                .nextNonblockingWaitExceptions = 1};
+        auto launch = ponder::platform::detail::LaunchProcess(MakeFakeProcessDesc(), MakeFakeBackend(fake));
+        ASSERT_TRUE(launch.HasValue()) << launch.GetError().GetMessage();
+        ponder::platform::Process process = std::move(launch).GetValue();
+
+        EXPECT_THROW(static_cast<void>(process.TryWait()), std::runtime_error);
+        auto retry = process.TryWait();
+        ASSERT_TRUE(retry.HasValue()) << retry.GetError().GetMessage();
+        ASSERT_TRUE(retry.GetValue().has_value());
+        EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*retry.GetValue()).exitCode, 12U);
     }
 
     {
@@ -857,8 +930,8 @@ TEST(ProcessBackendTests, EnforcesLaunchingThreadAffinityAfterMove)
     ASSERT_TRUE(result.HasValue()) << result.GetError().GetMessage();
     std::optional<ponder::platform::Process> process{std::move(result).GetValue()};
 
-    std::atomic<bool> caughtVerifyFailure{};
-    std::thread worker{[&process, &caughtVerifyFailure]()
+    std::atomic<int> caughtVerifyFailures{};
+    std::thread worker{[&process, &caughtVerifyFailures]()
                        {
                            try
                            {
@@ -866,12 +939,21 @@ TEST(ProcessBackendTests, EnforcesLaunchingThreadAffinityAfterMove)
                            }
                            catch (const ponder::core::Exception&)
                            {
-                               caughtVerifyFailure.store(true);
+                               caughtVerifyFailures.fetch_add(1);
+                           }
+
+                           try
+                           {
+                               static_cast<void>(process->TryWait());
+                           }
+                           catch (const ponder::core::Exception&)
+                           {
+                               caughtVerifyFailures.fetch_add(1);
                            }
                        }};
     worker.join();
 
-    EXPECT_TRUE(caughtVerifyFailure.load());
+    EXPECT_EQ(caughtVerifyFailures.load(), 2);
     process.reset();
     EXPECT_EQ(fake.destroyCalls.load(std::memory_order_relaxed), 1);
 }
@@ -885,6 +967,7 @@ TEST(ProcessBackendTests, VerifiesMovedFromProcessUse)
     ponder::platform::Process destination{std::move(source)};
 
     EXPECT_THROW(static_cast<void>(source.Wait()), ponder::core::Exception);
+    EXPECT_THROW(static_cast<void>(source.TryWait()), ponder::core::Exception);
     EXPECT_THROW(static_cast<void>(source.Terminate(ponder::platform::ProcessTerminationMode::Force)), ponder::core::Exception);
 
     auto wait = destination.Wait();
@@ -908,6 +991,31 @@ TEST(ProcessBackendTests, HelperPreservesArgumentsAndReportsExitCode)
     ASSERT_TRUE(std::holds_alternative<ponder::platform::ProcessNormalExit>(*wait));
     EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*wait).exitCode, 23U);
     EXPECT_EQ(ReadLines(argumentsFile.GetPath()), (std::vector<std::string>{"alpha beta", nonAsciiArgument}));
+}
+
+TEST(ProcessBackendTests, HelperCanBePolledToCompletionWithoutBlocking)
+{
+    auto launch = ponder::platform::LaunchProcess(
+        ponder::platform::ProcessDesc{.executable = GetHelperPath(), .arguments = {"--sleep-ms", "100", "--exit-code", "17"}});
+    ASSERT_TRUE(launch.HasValue()) << launch.GetError().GetMessage();
+    ponder::platform::Process process = std::move(launch).GetValue();
+
+    std::optional<ponder::platform::ProcessExitStatus> exitStatus;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    while (!exitStatus.has_value() && std::chrono::steady_clock::now() < deadline)
+    {
+        auto tryWait = process.TryWait();
+        ASSERT_TRUE(tryWait.HasValue()) << tryWait.GetError().GetMessage();
+        exitStatus = std::move(tryWait).GetValue();
+        if (!exitStatus.has_value())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+    }
+
+    ASSERT_TRUE(exitStatus.has_value());
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::ProcessNormalExit>(*exitStatus));
+    EXPECT_EQ(std::get<ponder::platform::ProcessNormalExit>(*exitStatus).exitCode, 17U);
 }
 
 TEST(ProcessBackendTests, MissingExecutableIsARecoverableLaunchFailure)

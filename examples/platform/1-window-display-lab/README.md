@@ -6,7 +6,8 @@ window/display events by strong IDs, and shuts down through normal RAII.
 
 ## Features Exercised
 
-- Direct `ponder::platform::Runtime::Create()`, runtime metadata, `TimeNow()`,
+- Explicit `ponder::platform::Runtime::Create()`, typed pre-initialization hint
+  configuration, `Runtime::Initialize()` with application metadata, `TimeNow()`,
   event polling, and safe reporting of the expected `RuntimeAlreadyActive`
   exception from a deliberate second-runtime probe.
 - Move-only `Window` ownership, strong `WindowId`/`DisplayId` values, a released
@@ -40,7 +41,10 @@ always-on-top, and desktop fullscreen.
 ## Lifetime And Error Handling
 
 All platform calls happen on the runtime owner thread from `main()`. The example
-uses the direct runtime, window, geometry, property, and display-enumeration
+uses the explicit Create/Hint*/Initialize sequence: `Create()` constructs the
+uninitialized backend object, hints configure it, and `Initialize()` activates
+it. The example then uses the direct runtime,
+window, geometry, property, and display-enumeration
 contracts: successful calls return their values directly, while exceptional
 failures propagate to one application boundary in `main()`. That boundary
 catches one `ponder::core::Exception` type and prints its message. Platform

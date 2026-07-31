@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -71,6 +72,10 @@ public:
     // Blocks until the child process exits. Do not call from the desktop event
     // loop or any UI/platform/render pumping thread.
     [[nodiscard]] ponder::core::Result<ProcessExitStatus> Wait();
+
+    // Checks the child process without blocking. A successful empty optional
+    // means the child is still running.
+    [[nodiscard]] ponder::core::Result<std::optional<ProcessExitStatus>> TryWait();
     [[nodiscard]] ponder::core::VoidResult Terminate(ProcessTerminationMode mode);
 
 private:

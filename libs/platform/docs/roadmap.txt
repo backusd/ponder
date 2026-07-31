@@ -6,19 +6,35 @@ This is a historical implementation record. The active exception-first failure
 contract and its migration tasks are defined in `error-handling-update.txt`;
 result-first clauses in completed tasks below are not current guidance.
 
-A 2026-07-23 lifecycle and test-seam cleanup also supersedes completed-task
+The 2026-07-29 dialog and timing revision further supersedes completed-task
+wording below: all public dialog operations are `noexcept`; the three submission
+methods and `DialogShutdown` are Result-bearing exception shields, while the
+five pending-state and completion observers return direct values under
+documented preconditions. Caught platform, standard, and unknown exceptions
+become `BackendFailure` Results; original platform messages and their embedded
+codes remain diagnostic text and are never parsed. All platform timestamps are observations in the
+`ponder::core::Timestamp::Now()` steady-clock domain. Platform code never calls
+`SDL_GetTicksNS()`.
+
+The 2026-07-30 explicit lifecycle revision supersedes callback-based creation
+wording below. `Runtime::Create()` takes no arguments, validates the process-entry
+thread, reserves the single Runtime, and returns an uninitialized owner
+without constructing `RuntimeImpl`. Callers configure typed hints and then call
+`Runtime::Initialize()` with application metadata. The first hint operation or
+`Initialize()` lazily constructs the selected implementation and performs SDL
+main-thread and exclusivity checks; `Initialize()` performs metadata and backend
+initialization checks. There is no templated callback factory.
+
+A 2026-07-23 lifecycle and test-seam cleanup, further amended by the explicit
+lifecycle above, also supersedes completed-task
 wording that prescribed explicit creating, active, and destroying slot states or
 production stage hooks, provider injection, or a virtual runtime-backend
-interface. Current runtime creation uses one private atomic 0/1 reservation held
-through full construction rollback and full teardown, then released to permit
-sequential recreation. `PlatformRuntime::Create` constructs
-`PlatformRuntimeState` directly. The state owns one opaque `BackendImpl`
-containing either the production `SdlRuntimeBackend` aggregate or the test-only
-`MockRuntimeBackend` aggregate selected when building the isolated
-`ponder_platform_runtime_mock_tests` executable; both expose the same private
-non-virtual API. The mock executable compiles the required runtime source
-variant directly and does not link `ponder::platform`. Dialogs retain their
-narrow private backend and weak completion token. Production code contains no
+interface. The private atomic 0/1 reservation remains held from
+`Runtime::Create()` until owner destruction and permits sequential recreation
+after release. The first hint operation or `Runtime::Initialize()` lazily
+constructs the selected non-virtual implementation: production uses `SdlRuntime`, while the isolated mock executable
+uses `MockRuntime` through its compile-time source variant and does not link
+`ponder::platform`. Production code contains no
 global test hooks, backend overrides, builders, or test providers. The task text
 remains unchanged as a historical record.
 

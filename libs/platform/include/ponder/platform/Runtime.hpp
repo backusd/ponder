@@ -2,6 +2,7 @@
 
 #include <ponder/core/Result.hpp>
 #include <ponder/core/Timing.hpp>
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Hints.hpp>
@@ -11,7 +12,6 @@
 #include <ponder/platform/Window.hpp>
 
 #include <cstddef>
-#include <filesystem>
 #include <format>
 #include <memory>
 #include <optional>
@@ -22,48 +22,6 @@
 
 namespace ponder::platform
 {
-struct DialogFileFilter final
-{
-    std::string name;
-    std::string pattern;
-
-    [[nodiscard]] friend bool operator==(const DialogFileFilter& lhs, const DialogFileFilter& rhs) = default;
-};
-
-struct OpenFileDialogDesc final
-{
-    std::optional<WindowId> parentWindowId;
-    std::optional<std::filesystem::path> defaultLocation;
-    std::vector<DialogFileFilter> filters;
-    bool allowMultipleSelection{};
-};
-
-struct SaveFileDialogDesc final
-{
-    std::optional<WindowId> parentWindowId;
-    std::optional<std::filesystem::path> defaultLocation;
-    std::vector<DialogFileFilter> filters;
-};
-
-struct OpenFolderDialogDesc final
-{
-    std::optional<WindowId> parentWindowId;
-    std::optional<std::filesystem::path> defaultLocation;
-    bool allowMultipleSelection{};
-};
-
-class Runtime;
-
-using ConfigureHintsBeforeInitialization = void (*)(Runtime&);
-
-struct RuntimeDesc final
-{
-    std::string applicationName{"ponder"};
-    std::optional<std::string> applicationVersion;
-    std::optional<std::string> applicationIdentifier;
-    ConfigureHintsBeforeInitialization configureHintsBeforeInitialization{};
-};
-
 namespace detail
 {
 #ifdef PONDER_PLATFORM_USE_MOCK_RUNTIME
@@ -78,7 +36,10 @@ using RuntimeImpl = SdlRuntime;
 class Runtime final
 {
 public:
-    [[nodiscard]] static Runtime Create(const RuntimeDesc& desc);
+    [[nodiscard]] static Runtime Create();
+
+    void Initialize(std::string_view applicationName = "ponder", std::optional<std::string_view> applicationVersion = std::nullopt,
+                    std::optional<std::string_view> applicationIdentifier = std::nullopt);
 
     ~Runtime() noexcept;
 
@@ -99,18 +60,20 @@ public:
     [[nodiscard]] ponder::core::Result<std::string> ClipboardGetText() const;
     [[nodiscard]] ponder::core::VoidResult ClipboardSetText(std::string_view text);
 
-    [[nodiscard]] DialogRequestId DialogShowOpenFile(const OpenFileDialogDesc& desc);
-    [[nodiscard]] DialogRequestId DialogShowSaveFile(const SaveFileDialogDesc& desc);
-    [[nodiscard]] DialogRequestId DialogShowOpenFolder(const OpenFolderDialogDesc& desc);
-    [[nodiscard]] std::size_t DialogGetPendingCount() const;
-    [[nodiscard]] bool DialogHasPending() const;
-    [[nodiscard]] std::vector<DialogRequestInfo> DialogGetPending() const;
-    [[nodiscard]] std::optional<DialogCompletedEvent> DialogPollCompletion();
-    [[nodiscard]] std::size_t DialogGetOutstandingRequestCount() const;
-    void DialogShutdown();
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowOpenFile(const dialogs::OpenFileDialogDesc& desc) noexcept;
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowSaveFile(const dialogs::SaveFileDialogDesc& desc) noexcept;
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowOpenFolder(const dialogs::OpenFolderDialogDesc& desc) noexcept;
+    [[nodiscard]] std::size_t DialogGetPendingCount() const noexcept;
+    [[nodiscard]] bool DialogHasPending() const noexcept;
+    [[nodiscard]] std::vector<DialogRequestInfo> DialogGetPending() const noexcept;
+    [[nodiscard]] std::optional<DialogCompletedEvent> DialogPollCompletion() noexcept;
+    [[nodiscard]] std::size_t DialogGetOutstandingRequestCount() const noexcept;
+    [[nodiscard]] ponder::core::VoidResult DialogShutdown() noexcept;
 
     [[nodiscard]] ponder::core::Timestamp TimeNow() const;
     [[nodiscard]] std::optional<PlatformEvent> EventPoll();
+    [[nodiscard]] std::optional<PlatformEvent> EventWait(ponder::core::Duration timeout);
+    void EventWake();
 
     [[nodiscard]] Window WindowCreate(const WindowDesc& desc);
 
@@ -130,7 +93,7 @@ private:
     explicit Runtime(std::unique_ptr<detail::RuntimeImpl> impl) noexcept;
 
     std::unique_ptr<detail::RuntimeImpl> m_impl;
-    bool m_hintConfigurationActive{};
+    bool m_initialized{};
 };
 
 #define PONDER_DECLARE_RUNTIME_HINT_SPECIALIZATIONS(Type)                                                                                            \
@@ -212,74 +175,6 @@ PONDER_DECLARE_RUNTIME_HINT_SPECIALIZATIONS(VideoX11Xrandr);
 namespace std
 {
 template <>
-struct formatter<ponder::platform::DialogFileFilter> : formatter<string>
-{
-    template <typename FormatContext>
-    auto format(const ponder::platform::DialogFileFilter& filter, FormatContext& context) const
-    {
-        return formatter<string>::format(std::format("'{}' ({})", filter.name, filter.pattern), context);
-    }
-};
-
-template <>
-struct formatter<ponder::platform::OpenFileDialogDesc> : formatter<string>
-{
-    template <typename FormatContext>
-    auto format(const ponder::platform::OpenFileDialogDesc& desc, FormatContext& context) const
-    {
-        const string parent = desc.parentWindowId.has_value() ? std::format("{}", *desc.parentWindowId) : "none";
-        const string location = desc.defaultLocation.has_value() ? std::format("'{}'", desc.defaultLocation->string()) : "none";
-        return formatter<string>::format(std::format("open_file_dialog(parent={}, defaultLocation={}, filterCount={}, "
-                                                     "allowMultipleSelection={})",
-                                                     parent, location, desc.filters.size(), desc.allowMultipleSelection),
-                                         context);
-    }
-};
-
-template <>
-struct formatter<ponder::platform::SaveFileDialogDesc> : formatter<string>
-{
-    template <typename FormatContext>
-    auto format(const ponder::platform::SaveFileDialogDesc& desc, FormatContext& context) const
-    {
-        const string parent = desc.parentWindowId.has_value() ? std::format("{}", *desc.parentWindowId) : "none";
-        const string location = desc.defaultLocation.has_value() ? std::format("'{}'", desc.defaultLocation->string()) : "none";
-        return formatter<string>::format(
-            std::format("save_file_dialog(parent={}, defaultLocation={}, filterCount={})", parent, location, desc.filters.size()), context);
-    }
-};
-
-template <>
-struct formatter<ponder::platform::OpenFolderDialogDesc> : formatter<string>
-{
-    template <typename FormatContext>
-    auto format(const ponder::platform::OpenFolderDialogDesc& desc, FormatContext& context) const
-    {
-        const string parent = desc.parentWindowId.has_value() ? std::format("{}", *desc.parentWindowId) : "none";
-        const string location = desc.defaultLocation.has_value() ? std::format("'{}'", desc.defaultLocation->string()) : "none";
-        return formatter<string>::format(std::format("open_folder_dialog(parent={}, defaultLocation={}, "
-                                                     "allowMultipleSelection={})",
-                                                     parent, location, desc.allowMultipleSelection),
-                                         context);
-    }
-};
-
-template <>
-struct formatter<ponder::platform::RuntimeDesc> : formatter<string>
-{
-    template <typename FormatContext>
-    auto format(const ponder::platform::RuntimeDesc& desc, FormatContext& context) const
-    {
-        const string version = desc.applicationVersion.has_value() ? *desc.applicationVersion : "none";
-        const string identifier = desc.applicationIdentifier.has_value() ? *desc.applicationIdentifier : "none";
-        return formatter<string>::format(std::format("applicationName='{}', applicationVersion='{}', "
-                                                     "applicationIdentifier='{}', configuresHints={}",
-                                                     desc.applicationName, version, identifier, desc.configureHintsBeforeInitialization != nullptr),
-                                         context);
-    }
-};
-
-template <>
 struct formatter<ponder::platform::Runtime> : formatter<string_view>
 {
     template <typename FormatContext>
@@ -292,31 +187,6 @@ struct formatter<ponder::platform::Runtime> : formatter<string_view>
 
 namespace ponder::platform
 {
-inline std::ostream& operator<<(std::ostream& output, const DialogFileFilter& filter)
-{
-    return output << std::format("{}", filter);
-}
-
-inline std::ostream& operator<<(std::ostream& output, const OpenFileDialogDesc& desc)
-{
-    return output << std::format("{}", desc);
-}
-
-inline std::ostream& operator<<(std::ostream& output, const SaveFileDialogDesc& desc)
-{
-    return output << std::format("{}", desc);
-}
-
-inline std::ostream& operator<<(std::ostream& output, const OpenFolderDialogDesc& desc)
-{
-    return output << std::format("{}", desc);
-}
-
-inline std::ostream& operator<<(std::ostream& output, const RuntimeDesc& desc)
-{
-    return output << std::format("{}", desc);
-}
-
 inline std::ostream& operator<<(std::ostream& output, const Runtime& runtime)
 {
     return output << std::format("{}", runtime);

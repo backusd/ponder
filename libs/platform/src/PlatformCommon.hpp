@@ -1,13 +1,16 @@
 #pragma once
 
 #include <ponder/core/Result.hpp>
+#include <ponder/core/Timing.hpp>
 
+#include <cstdint>
 #include <string_view>
 #include <thread>
 
 namespace ponder::platform::detail
 {
 [[nodiscard]] ponder::core::VoidResult ValidateNullTerminatedUtf8(std::string_view text, std::string_view description);
+[[nodiscard]] std::int32_t GetEventWaitTimeoutMilliseconds(ponder::core::Duration timeout);
 [[nodiscard]] bool IsPlatformProcessEntryThread() noexcept;
 
 class RuntimeOwnerThreadGuard final

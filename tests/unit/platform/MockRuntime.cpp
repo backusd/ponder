@@ -2,14 +2,17 @@
 
 #include <ponder/core/Assert.hpp>
 #include <ponder/core/Exception.hpp>
+#include <ponder/core/Log.hpp>
 #include <ponder/core/String.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -19,7 +22,7 @@
 #include <string_view>
 #include <utility>
 
-#include "SdlRuntimeTypes.hpp"
+#include "SdlRuntime.hpp"
 #include "WindowImpl.hpp"
 
 namespace ponder::platform::detail
@@ -32,6 +35,38 @@ constexpr ponder::core::ErrorCode kInvalidArgumentCode = ToErrorCode(PlatformErr
 constexpr ponder::core::ErrorCode kBackendFailureCode = ToErrorCode(PlatformErrorCode::BackendFailure);
 constexpr ponder::core::ErrorCode kNotFoundCode = ToErrorCode(PlatformErrorCode::NotFound);
 constexpr ponder::core::ErrorCode kUnsupportedCode = ToErrorCode(PlatformErrorCode::Unsupported);
+constexpr std::string_view kLogCategory{"platform"};
+
+template <typename ResultType, typename Operation>
+[[nodiscard]] ResultType InvokeDialogBoundary(MockRuntimeControl& control, std::string_view operation, Operation&& action) noexcept
+{
+    try
+    {
+        if (control.dialogOperationException != nullptr)
+        {
+            std::rethrow_exception(control.dialogOperationException);
+        }
+        return std::invoke(std::forward<Operation>(action));
+    }
+    catch (const ponder::core::Exception& exception)
+    {
+        LOG_ERROR_CATEGORY(kLogCategory, "Mock dialog {} caught a core exception: {}", operation, exception.GetMessage());
+        return ResultType::FromError(ponder::core::Error{kBackendFailureCode,
+                                                         std::format("Mock dialog {} caught a core exception: {}", operation, exception.GetMessage()),
+                                                         exception.GetStackTrace(), exception.GetLocation()});
+    }
+    catch (const std::exception& exception)
+    {
+        LOG_ERROR_CATEGORY(kLogCategory, "Mock dialog {} caught a standard exception: {}", operation, exception.what());
+        return ResultType::FromError(
+            ponder::core::Error{kBackendFailureCode, std::format("Mock dialog {} caught a standard exception: {}", operation, exception.what())});
+    }
+    catch (...)
+    {
+        LOG_ERROR_CATEGORY(kLogCategory, "Mock dialog {} caught an unknown exception", operation);
+        return ResultType::FromError(ponder::core::Error{kBackendFailureCode, std::format("Mock dialog {} caught an unknown exception", operation)});
+    }
+}
 
 [[nodiscard]] MockRuntimeControl& LoadActiveControl()
 {
@@ -146,7 +181,7 @@ void ValidateDefaultLocation(const std::optional<std::filesystem::path>& locatio
     }
 }
 
-void ValidateFilters(std::span<const DialogFileFilter> filters)
+void ValidateFilters(std::span<const dialogs::DialogFileFilter> filters)
 {
     if (filters.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
     {
@@ -155,7 +190,7 @@ void ValidateFilters(std::span<const DialogFileFilter> filters)
 
     for (std::size_t index = 0; index < filters.size(); ++index)
     {
-        const DialogFileFilter& filter = filters[index];
+        const dialogs::DialogFileFilter& filter = filters[index];
         if (filter.name.empty() || !ponder::core::IsValidUtf8WithoutEmbeddedNull(filter.name))
         {
             throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Dialog filter {} name must be non-empty UTF-8 without embedded nulls.",
@@ -164,15 +199,13 @@ void ValidateFilters(std::span<const DialogFileFilter> filters)
         if (filter.pattern.empty() || !ponder::core::IsValidUtf8WithoutEmbeddedNull(filter.pattern) || !IsValidFilterPattern(filter.pattern))
         {
             throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument,
-                                     "Dialog filter {} pattern must be '*', or a semicolon-separated list of ASCII "
-                                     "file extensions.",
-                                     index);
+                                     "Dialog filter {} pattern must be '*', or a semicolon-separated list of ASCII file extensions.", index);
         }
     }
 }
 
 void ValidateDialogDesc(std::optional<WindowId> parentWindowId, const std::optional<std::filesystem::path>& defaultLocation,
-                        std::span<const DialogFileFilter> filters)
+                        std::span<const dialogs::DialogFileFilter> filters)
 {
     if (parentWindowId.has_value() && !parentWindowId->IsValid())
     {
@@ -525,12 +558,15 @@ MockRuntime::~MockRuntime() noexcept
     ++m_control->destructionCount;
 }
 
-void MockRuntime::Initialize(const RuntimeDesc& desc)
+void MockRuntime::Initialize(std::string_view applicationName, std::optional<std::string_view> applicationVersion,
+                             std::optional<std::string_view> applicationIdentifier)
 {
     m_ownerThread.Verify("runtime initialization");
     PONDER_VERIFY(!m_initialized, "Cannot initialize MockRuntime more than once");
     ++m_control->initializationAttemptCount;
-    m_control->lastRuntimeDesc = desc;
+    m_control->lastApplicationName = applicationName;
+    m_control->lastApplicationVersion = applicationVersion.has_value() ? std::optional<std::string>{*applicationVersion} : std::nullopt;
+    m_control->lastApplicationIdentifier = applicationIdentifier.has_value() ? std::optional<std::string>{*applicationIdentifier} : std::nullopt;
     if (m_control->failInitialization)
     {
         throw PLATFORM_EXCEPTION(PlatformErrorCode::BackendFailure, "Mock runtime initialization failed.");
@@ -812,30 +848,45 @@ ponder::core::VoidResult MockRuntime::ClipboardSetText(std::string_view text)
     return ponder::core::VoidResult::Success();
 }
 
-DialogRequestId MockRuntime::DialogShowOpenFile(const OpenFileDialogDesc& desc)
+ponder::core::Result<dialogs::DialogRequestId> MockRuntime::DialogShowOpenFile(const dialogs::OpenFileDialogDesc& desc) noexcept
 {
-    VerifyOwnerThread("dialog request");
-    ValidateDialogDesc(desc.parentWindowId, desc.defaultLocation, desc.filters);
-    return DialogShow(DialogKind::OpenFile, desc.parentWindowId, desc.filters.size(), desc.allowMultipleSelection);
+    return InvokeDialogBoundary<ponder::core::Result<dialogs::DialogRequestId>>(
+        *m_control, "open-file submission",
+        [this, &desc]()
+        {
+            DialogValidateAccess("dialog request");
+            ValidateDialogDesc(desc.parentWindowId, desc.defaultLocation, desc.filters);
+            return DialogShow(dialogs::DialogKind::OpenFile, desc.parentWindowId, desc.filters.size(), desc.allowMultipleSelection);
+        });
 }
 
-DialogRequestId MockRuntime::DialogShowSaveFile(const SaveFileDialogDesc& desc)
+ponder::core::Result<dialogs::DialogRequestId> MockRuntime::DialogShowSaveFile(const dialogs::SaveFileDialogDesc& desc) noexcept
 {
-    VerifyOwnerThread("dialog request");
-    ValidateDialogDesc(desc.parentWindowId, desc.defaultLocation, desc.filters);
-    return DialogShow(DialogKind::SaveFile, desc.parentWindowId, desc.filters.size(), false);
+    return InvokeDialogBoundary<ponder::core::Result<dialogs::DialogRequestId>>(
+        *m_control, "save-file submission",
+        [this, &desc]()
+        {
+            DialogValidateAccess("dialog request");
+            ValidateDialogDesc(desc.parentWindowId, desc.defaultLocation, desc.filters);
+            return DialogShow(dialogs::DialogKind::SaveFile, desc.parentWindowId, desc.filters.size(), false);
+        });
 }
 
-DialogRequestId MockRuntime::DialogShowOpenFolder(const OpenFolderDialogDesc& desc)
+ponder::core::Result<dialogs::DialogRequestId> MockRuntime::DialogShowOpenFolder(const dialogs::OpenFolderDialogDesc& desc) noexcept
 {
-    VerifyOwnerThread("dialog request");
-    ValidateDialogDesc(desc.parentWindowId, desc.defaultLocation, {});
-    return DialogShow(DialogKind::OpenFolder, desc.parentWindowId, 0, desc.allowMultipleSelection);
+    return InvokeDialogBoundary<ponder::core::Result<dialogs::DialogRequestId>>(
+        *m_control, "open-folder submission",
+        [this, &desc]()
+        {
+            DialogValidateAccess("dialog request");
+            ValidateDialogDesc(desc.parentWindowId, desc.defaultLocation, {});
+            return DialogShow(dialogs::DialogKind::OpenFolder, desc.parentWindowId, 0, desc.allowMultipleSelection);
+        });
 }
 
-DialogRequestId MockRuntime::DialogShow(DialogKind kind, std::optional<WindowId> parentWindowId, std::size_t filterCount, bool allowMultipleSelection)
+dialogs::DialogRequestId MockRuntime::DialogShow(dialogs::DialogKind kind, std::optional<WindowId> parentWindowId, std::size_t filterCount,
+                                                 bool allowMultipleSelection)
 {
-    VerifyOwnerThread("dialog request");
     if (m_dialogShutdown)
     {
         throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Cannot show a dialog after dialog services shutdown.");
@@ -851,7 +902,7 @@ DialogRequestId MockRuntime::DialogShow(DialogKind kind, std::optional<WindowId>
         parentLease.emplace(m_windowRegistry.AcquireDialogLease(*parentWindowId));
     }
 
-    const DialogRequestId id{m_nextDialogRequestId++};
+    const dialogs::DialogRequestId id{m_nextDialogRequestId++};
     const DialogRequestInfo info{.id = id,
                                  .kind = kind,
                                  .requestedAt = m_control->currentTime,
@@ -885,21 +936,25 @@ DialogRequestId MockRuntime::DialogShow(DialogKind kind, std::optional<WindowId>
     return id;
 }
 
-std::size_t MockRuntime::DialogGetPendingCount() const
+std::size_t MockRuntime::DialogGetPendingCount() const noexcept
 {
-    VerifyOwnerThread("dialog pending-count query");
+    PONDER_ASSERT(m_ownerThread.IsOwnerThread(), "Dialog pending-state queries must run on the Runtime owner thread.");
+    PONDER_ASSERT(m_initialized, "Cannot query pending dialogs before Runtime initialization.");
     return m_dialogRequests.size();
 }
 
-bool MockRuntime::DialogHasPending() const
+bool MockRuntime::DialogHasPending() const noexcept
 {
-    VerifyOwnerThread("dialog pending-state query");
+    PONDER_ASSERT(m_ownerThread.IsOwnerThread(), "Dialog pending-state queries must run on the Runtime owner thread.");
+    PONDER_ASSERT(m_initialized, "Cannot query pending dialogs before Runtime initialization.");
     return !m_dialogRequests.empty();
 }
 
-std::vector<DialogRequestInfo> MockRuntime::DialogGetPending() const
+std::vector<DialogRequestInfo> MockRuntime::DialogGetPending() const noexcept
 {
-    VerifyOwnerThread("dialog pending-list query");
+    PONDER_ASSERT(m_ownerThread.IsOwnerThread(), "Dialog pending-state queries must run on the Runtime owner thread.");
+    PONDER_ASSERT(m_initialized, "Cannot query pending dialogs before Runtime initialization.");
+
     std::vector<DialogRequestInfo> pending;
     pending.reserve(m_dialogRequests.size());
     for (const auto& [id, request] : m_dialogRequests)
@@ -911,15 +966,17 @@ std::vector<DialogRequestInfo> MockRuntime::DialogGetPending() const
     return pending;
 }
 
-std::optional<DialogCompletedEvent> MockRuntime::DialogPollCompletion()
+std::optional<DialogCompletedEvent> MockRuntime::DialogPollCompletion() noexcept
 {
-    VerifyOwnerThread("dialog completion polling");
+    PONDER_ASSERT(m_ownerThread.IsOwnerThread(), "Dialog completion polling must run on the Runtime owner thread.");
+    PONDER_ASSERT(m_initialized, "Cannot poll dialog completions before Runtime initialization.");
+
     if (m_completedDialogRequests.empty())
     {
         return std::nullopt;
     }
 
-    const DialogRequestId id = m_completedDialogRequests.front();
+    const dialogs::DialogRequestId id = m_completedDialogRequests.front();
     m_completedDialogRequests.pop_front();
     const auto request = m_dialogRequests.find(id);
     const auto completion = m_dialogCompletions.find(id);
@@ -936,27 +993,42 @@ std::optional<DialogCompletedEvent> MockRuntime::DialogPollCompletion()
     return event;
 }
 
-std::size_t MockRuntime::DialogGetOutstandingRequestCount() const
+std::size_t MockRuntime::DialogGetOutstandingRequestCount() const noexcept
 {
-    return DialogGetPendingCount();
+    PONDER_ASSERT(m_ownerThread.IsOwnerThread(), "Dialog outstanding-request queries must run on the Runtime owner thread.");
+    PONDER_ASSERT(m_initialized, "Cannot query outstanding dialogs before Runtime initialization.");
+    return m_dialogRequests.size();
 }
 
-void MockRuntime::DialogShutdown()
+ponder::core::VoidResult MockRuntime::DialogShutdown() noexcept
 {
-    VerifyOwnerThread("dialog services shutdown");
-    if (m_dialogShutdown)
-    {
-        return;
-    }
-    if (!m_dialogRequests.empty())
-    {
-        throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Cannot shut down runtime dialog services with {} outstanding requests.",
-                                 m_dialogRequests.size());
-    }
-    PONDER_VERIFY(m_dialogParentLeases.empty() && m_dialogCompletions.empty() && m_dialogCompletionTimestamps.empty() &&
-                      m_completedDialogRequests.empty(),
-                  "Mock Runtime dialog registries are inconsistent during shutdown");
-    m_dialogShutdown = true;
+    return InvokeDialogBoundary<ponder::core::VoidResult>(
+        *m_control, "services shutdown",
+        [this]() -> ponder::core::VoidResult
+        {
+            DialogValidateAccess("dialog services shutdown");
+            if (m_dialogShutdown)
+            {
+                return ponder::core::VoidResult::Success();
+            }
+            if (!m_dialogRequests.empty())
+            {
+                return ponder::core::VoidResult::FromError(
+                    ponder::core::Error{kInvalidArgumentCode, std::format("Cannot shut down runtime dialog services with {} outstanding requests.",
+                                                                          m_dialogRequests.size())});
+            }
+            PONDER_VERIFY(m_dialogParentLeases.empty() && m_dialogCompletions.empty() && m_dialogCompletionTimestamps.empty() &&
+                              m_completedDialogRequests.empty(),
+                          "Mock Runtime dialog registries are inconsistent during shutdown");
+            m_dialogShutdown = true;
+            return ponder::core::VoidResult::Success();
+        });
+}
+
+void MockRuntime::DialogValidateAccess(std::string_view operation) const
+{
+    m_ownerThread.Verify(operation);
+    VerifyInitialized(operation);
 }
 
 ponder::core::Timestamp MockRuntime::TimeNow() const
@@ -968,10 +1040,12 @@ ponder::core::Timestamp MockRuntime::TimeNow() const
 std::optional<PlatformEvent> MockRuntime::EventPoll()
 {
     VerifyOwnerThread("event polling");
-    if (std::optional<DialogCompletedEvent> completion = DialogPollCompletion(); completion.has_value())
+    std::optional<DialogCompletedEvent> completion = DialogPollCompletion();
+    if (completion.has_value())
     {
         return PlatformEvent{std::move(*completion)};
     }
+    std::scoped_lock lock{m_eventMutex};
     if (m_control->events.empty())
     {
         return std::nullopt;
@@ -980,6 +1054,49 @@ std::optional<PlatformEvent> MockRuntime::EventPoll()
     PlatformEvent event = std::move(m_control->events.front());
     m_control->events.pop_front();
     return event;
+}
+
+std::optional<PlatformEvent> MockRuntime::EventWait(ponder::core::Duration timeout)
+{
+    VerifyOwnerThread("event waiting");
+    const std::int32_t timeoutMilliseconds = GetEventWaitTimeoutMilliseconds(timeout);
+
+    if (std::optional<PlatformEvent> event = EventPoll(); event.has_value())
+    {
+        return event;
+    }
+
+    std::unique_lock lock{m_eventMutex};
+    if (!m_wakePending && m_control->events.empty() && timeoutMilliseconds != 0)
+    {
+        static_cast<void>(m_eventCondition.wait_for(lock, std::chrono::milliseconds{timeoutMilliseconds},
+                                                    [this]
+                                                    {
+                                                        return m_wakePending || !m_control->events.empty();
+                                                    }));
+    }
+
+    if (!m_control->events.empty())
+    {
+        PlatformEvent event = std::move(m_control->events.front());
+        m_control->events.pop_front();
+        return event;
+    }
+    m_wakePending = false;
+    return std::nullopt;
+}
+
+void MockRuntime::EventWake()
+{
+    {
+        std::scoped_lock lock{m_eventMutex};
+        if (!m_initialized)
+        {
+            throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Cannot wake the platform event loop before Runtime initialization.");
+        }
+        m_wakePending = true;
+    }
+    m_eventCondition.notify_one();
 }
 
 Window MockRuntime::WindowCreate(const WindowDesc& desc)

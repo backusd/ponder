@@ -2,16 +2,17 @@
 
 #include <ponder/core/Result.hpp>
 #include <ponder/core/Timing.hpp>
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Hints.hpp>
 #include <ponder/platform/Identifiers.hpp>
 #include <ponder/platform/Mouse.hpp>
 #include <ponder/platform/PlatformEvent.hpp>
-#include <ponder/platform/Runtime.hpp>
 #include <ponder/platform/Window.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
@@ -31,7 +32,6 @@
 #include "PlatformCommon.hpp"
 #include "RuntimeChildRegistry.hpp"
 #include "SdlDisplayBackend.hpp"
-#include "SdlRuntimeTypes.hpp"
 #include "SdlWindowBackend.hpp"
 #include "WindowRegistry.hpp"
 
@@ -43,39 +43,92 @@ class DialogRequestState;
 class SdlRuntime;
 class WindowImpl;
 
-class DialogBackendCompletion final
+enum class ApplicationMetadataProperty : std::uint8_t
+{
+    Name,
+    Version,
+    Identifier
+};
+
+class CursorHandle final
 {
 public:
-    DialogBackendCompletion() noexcept = default;
+    using ValueType = std::uintptr_t;
 
-    void CompleteSelection(std::span<const std::string> paths, int selectedFilter) const noexcept;
-    void CompleteCancellation() const noexcept;
-    void CompleteFailure(std::string_view message) const noexcept;
-    void FailCallback() const noexcept;
-    [[nodiscard]] bool HasLiveRequest() const noexcept
+    constexpr CursorHandle() noexcept = default;
+    explicit constexpr CursorHandle(ValueType value) noexcept :
+        m_value(value)
     {
-        return !m_request.expired();
+    }
+
+    [[nodiscard]] constexpr bool IsValid() const noexcept
+    {
+        return m_value != 0;
+    }
+
+    [[nodiscard]] constexpr ValueType GetValue() const noexcept
+    {
+        return m_value;
+    }
+
+    friend constexpr bool operator==(const CursorHandle&, const CursorHandle&) noexcept = default;
+
+private:
+    ValueType m_value{};
+};
+
+enum class BackendEventKind : std::uint8_t
+{
+    Other,
+    DisplayAdded,
+    DisplayRemoved,
+    DisplayChanged,
+    WindowDisplayChanged,
+    WindowShown
+};
+
+class BackendEvent final
+{
+public:
+    [[nodiscard]] BackendEventKind GetKind() const noexcept
+    {
+        return m_kind;
+    }
+
+    [[nodiscard]] std::uint32_t GetBackendWindowId() const noexcept
+    {
+        return m_backendWindowId;
+    }
+
+    [[nodiscard]] std::uint32_t GetBackendDisplayId() const noexcept
+    {
+        return m_backendDisplayId;
     }
 
 private:
     friend class SdlRuntime;
 
-    explicit DialogBackendCompletion(const std::shared_ptr<DialogRequestState>& request) noexcept;
+    static constexpr std::size_t kStorageSize{128};
 
-    std::weak_ptr<DialogRequestState> m_request;
+    std::array<std::byte, kStorageSize> m_storage{};
+    BackendEventKind m_kind{BackendEventKind::Other};
+    std::uint32_t m_backendWindowId{};
+    std::uint32_t m_backendDisplayId{};
 };
 
-struct DialogBackendRequest final
+struct EventTranslationContext final
 {
-    DialogKind kind{DialogKind::OpenFile};
-    std::optional<BackendWindowHandle> parentWindow;
-    std::span<const DialogFileFilter> filters;
-    std::optional<std::string_view> defaultLocation;
-    bool allowMultipleSelection{};
-    DialogBackendCompletion completion;
+    void* context{};
+    std::optional<WindowId> (*resolveWindowId)(void* context, std::uint32_t backendWindowId){};
+    std::optional<DisplayId> (*resolveDisplayId)(void* context, std::uint32_t backendDisplayId){};
 };
 
-void ShowSdlDialog(const DialogBackendRequest& request);
+inline constexpr std::size_t kSystemCursorShapeCount{11};
+
+[[nodiscard]] bool IsWindowGraphicsCompatibilitySupported(WindowGraphicsCompatibility compatibility) noexcept;
+[[nodiscard]] BackendNativeWindowDriver GetNativeWindowDriver(std::string_view driverName) noexcept;
+[[nodiscard]] std::uint64_t BuildSdlWindowFlags(const BackendWindowCreateDesc& desc) noexcept;
+[[nodiscard]] bool IsReservedSdlWindowPosition(std::int32_t value) noexcept;
 
 enum class RuntimeDisplayLifecycleEventKind : std::uint8_t
 {
@@ -136,7 +189,8 @@ public:
     // ========================================================================
     // Initialization
     // ========================================================================
-    void Initialize(const RuntimeDesc& desc);
+    void Initialize(std::string_view applicationName, std::optional<std::string_view> applicationVersion,
+                    std::optional<std::string_view> applicationIdentifier);
 
     // ========================================================================
     // Hints
@@ -159,15 +213,15 @@ public:
     // ========================================================================
     // Dialogs
     // ========================================================================
-    [[nodiscard]] DialogRequestId DialogShowOpenFile(const OpenFileDialogDesc& desc);
-    [[nodiscard]] DialogRequestId DialogShowSaveFile(const SaveFileDialogDesc& desc);
-    [[nodiscard]] DialogRequestId DialogShowOpenFolder(const OpenFolderDialogDesc& desc);
-    [[nodiscard]] std::size_t DialogGetPendingCount() const;
-    [[nodiscard]] bool DialogHasPending() const;
-    [[nodiscard]] std::vector<DialogRequestInfo> DialogGetPending() const;
-    [[nodiscard]] std::optional<DialogCompletedEvent> DialogPollCompletion();
-    [[nodiscard]] std::size_t DialogGetOutstandingRequestCount() const;
-    void DialogShutdown();
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowOpenFile(const dialogs::OpenFileDialogDesc& desc) noexcept;
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowSaveFile(const dialogs::SaveFileDialogDesc& desc) noexcept;
+    [[nodiscard]] ponder::core::Result<dialogs::DialogRequestId> DialogShowOpenFolder(const dialogs::OpenFolderDialogDesc& desc) noexcept;
+    [[nodiscard]] std::size_t DialogGetPendingCount() const noexcept;
+    [[nodiscard]] bool DialogHasPending() const noexcept;
+    [[nodiscard]] std::vector<DialogRequestInfo> DialogGetPending() const noexcept;
+    [[nodiscard]] std::optional<DialogCompletedEvent> DialogPollCompletion() noexcept;
+    [[nodiscard]] std::size_t DialogGetOutstandingRequestCount() const noexcept;
+    [[nodiscard]] ponder::core::VoidResult DialogShutdown() noexcept;
 
     // ========================================================================
     // Time
@@ -178,6 +232,8 @@ public:
     // Events
     // ========================================================================
     [[nodiscard]] std::optional<PlatformEvent> EventPoll();
+    [[nodiscard]] std::optional<PlatformEvent> EventWait(ponder::core::Duration timeout);
+    void EventWake();
 
     // ========================================================================
     // Window
@@ -238,16 +294,11 @@ private:
     // ========================================================================
     // Hints
     // ========================================================================
-    void HintPushRaw(const char* name, bool beforeInitialization, bool pushOnce, std::string value);
-    void HintPopRaw(const char* name, bool beforeInitialization);
-    void HintClearRaw(const char* name, bool beforeInitialization);
+    void HintPushRaw(const char* name, bool beforeInitializationOnly, bool pushOnce, std::string value);
+    void HintPopRaw(const char* name, bool beforeInitializationOnly);
+    void HintClearRaw(const char* name, bool beforeInitializationOnly);
     [[nodiscard]] std::optional<std::string> HintGetRaw(const char* name) const;
     void HintBeginMutation();
-    void HintValidateMutationPhase(const char* name, bool beforeInitialization) const;
-    [[nodiscard]] bool HintMatchesValue(const char* name, const std::optional<std::string>& value) const noexcept;
-    void HintRestoreValue(const char* name, const std::optional<std::string>& value);
-    void HintSetValue(const char* name, const std::string& value, const std::optional<std::string>& rollbackValue);
-    void HintRestoreOriginalValue(const char* name, const SdlHintValueState& state);
     [[nodiscard]] auto HintFindActive(const char* name) -> std::vector<std::string>::iterator;
     void HintFinishActivation(std::vector<std::string>::iterator activeIterator, SdlHintValueState& state);
     void HintRestoreAll() noexcept;
@@ -255,13 +306,11 @@ private:
     // ========================================================================
     // Dialogs
     // ========================================================================
-    void DialogInitialize();
-    [[nodiscard]] DialogRequestId DialogShow(DialogKind kind, std::optional<WindowId> parentWindowId,
-                                             const std::optional<std::filesystem::path>& defaultLocation, std::span<const DialogFileFilter> filters,
-                                             bool allowMultipleSelection);
-    void DialogRollbackRequest(DialogRequestId id) noexcept;
-    void DialogEnqueueCompletion(DialogRequestId id, ponder::core::Timestamp timestamp, DialogOutcome outcome);
-    void DialogMarkCallbackFailure(DialogRequestId id, ponder::core::Timestamp timestamp) noexcept;
+    [[nodiscard]] dialogs::DialogRequestId DialogShow(dialogs::DialogKind kind, std::optional<WindowId> parentWindowId,
+                                                      const std::optional<std::filesystem::path>& defaultLocation,
+                                                      std::span<const dialogs::DialogFileFilter> filters, bool allowMultipleSelection);
+    void DialogEnqueueCompletion(dialogs::DialogRequestId id, ponder::core::Timestamp timestamp, DialogOutcome outcome);
+    void DialogMarkCallbackFailure(dialogs::DialogRequestId id, ponder::core::Timestamp timestamp) noexcept;
     void DialogShutdownForRuntimeDestruction() noexcept;
 
     // ========================================================================
@@ -269,6 +318,10 @@ private:
     // ========================================================================
     void RecoverPendingDisplayLifecycleEvent();
     [[nodiscard]] bool PollBackendEvent(BackendEvent& event) noexcept;
+    [[nodiscard]] bool WaitBackendEvent(BackendEvent& event, std::int32_t timeoutMilliseconds) noexcept;
+    [[nodiscard]] bool IsExternalWakeBackendEvent(const BackendEvent& event) const noexcept;
+    [[nodiscard]] bool IsDialogWakeBackendEvent(const BackendEvent& event) const noexcept;
+    void DialogWakeNoThrow() noexcept;
     [[nodiscard]] std::optional<PlatformEvent> TranslateBackendEvent(const BackendEvent& event, const EventTranslationContext& context) const;
     [[nodiscard]] std::optional<RuntimeDisplayLifecycleEvent> FindPendingDisplayLifecycleEvent(std::uint32_t backendDisplayId) const;
     void AcknowledgePendingDisplayLifecycleEvent(std::uint32_t backendDisplayId, const RuntimeDisplayLifecycleEvent& pending);
@@ -306,13 +359,16 @@ private:
 
     // Dialogs
     std::shared_ptr<DialogCallbackHandoff> m_dialogCallbackHandoff;
-    DialogRequestId::ValueType m_nextDialogRequestId{1};
+    dialogs::DialogRequestId::ValueType m_nextDialogRequestId{1};
     mutable std::mutex m_dialogMutex;
-    std::unordered_map<DialogRequestId, std::shared_ptr<DialogRequestState>> m_dialogRequests;
-    std::list<DialogRequestId> m_completedDialogRequests;
-    bool m_dialogShutdown{};
+    std::unordered_map<dialogs::DialogRequestId, std::unique_ptr<DialogRequestState>> m_dialogRequests;
+    std::list<dialogs::DialogRequestId> m_completedDialogRequests;
 
     // Events
+    std::optional<BackendEvent> m_waitedBackendEvent;
+    std::uint32_t m_wakeEventType{};
+    std::uint32_t m_dialogWakeEventType{};
+    bool m_wakeObserved{};
 
     // Window
     SdlWindowBackend m_windowBackend;
@@ -410,27 +466,97 @@ PONDER_DECLARE_SDL_RUNTIME_HINT_SPECIALIZATIONS(VideoX11Xrandr);
 namespace std
 {
 template <>
-struct formatter<ponder::platform::detail::DialogBackendCompletion> : formatter<string_view>
+struct formatter<ponder::platform::detail::ApplicationMetadataProperty> : formatter<string_view>
 {
     template <typename FormatContext>
-    auto format(const ponder::platform::detail::DialogBackendCompletion& completion, FormatContext& context) const
+    auto format(ponder::platform::detail::ApplicationMetadataProperty property, FormatContext& context) const
     {
-        return formatter<string_view>::format(completion.HasLiveRequest() ? "live-dialog-completion" : "expired-dialog-completion", context);
+        using ponder::platform::detail::ApplicationMetadataProperty;
+
+        string_view name{"unknown"};
+        switch (property)
+        {
+        case ApplicationMetadataProperty::Name:
+            name = "name";
+            break;
+        case ApplicationMetadataProperty::Version:
+            name = "version";
+            break;
+        case ApplicationMetadataProperty::Identifier:
+            name = "identifier";
+            break;
+        }
+
+        return formatter<string_view>::format(name, context);
     }
 };
 
 template <>
-struct formatter<ponder::platform::detail::DialogBackendRequest> : formatter<string>
+struct formatter<ponder::platform::detail::CursorHandle> : formatter<string>
 {
     template <typename FormatContext>
-    auto format(const ponder::platform::detail::DialogBackendRequest& request, FormatContext& context) const
+    auto format(ponder::platform::detail::CursorHandle cursor, FormatContext& context) const
     {
-        const string parent = request.parentWindow.has_value() ? std::format("{}", *request.parentWindow) : "none";
-        const string location = request.defaultLocation.has_value() ? string{*request.defaultLocation} : "none";
-        return formatter<string>::format(std::format("dialog_backend_request(kind={}, parent={}, filterCount={}, "
-                                                     "defaultLocation='{}', allowMultipleSelection={}, completion={})",
-                                                     request.kind, parent, request.filters.size(), location, request.allowMultipleSelection,
-                                                     request.completion),
+        const string text = cursor.IsValid() ? std::format("0x{:X}", cursor.GetValue()) : "invalid";
+        return formatter<string>::format(text, context);
+    }
+};
+
+template <>
+struct formatter<ponder::platform::detail::BackendEventKind> : formatter<string_view>
+{
+    template <typename FormatContext>
+    auto format(ponder::platform::detail::BackendEventKind kind, FormatContext& context) const
+    {
+        using ponder::platform::detail::BackendEventKind;
+
+        string_view name{"unknown"};
+        switch (kind)
+        {
+        case BackendEventKind::Other:
+            name = "other";
+            break;
+        case BackendEventKind::DisplayAdded:
+            name = "display-added";
+            break;
+        case BackendEventKind::DisplayRemoved:
+            name = "display-removed";
+            break;
+        case BackendEventKind::DisplayChanged:
+            name = "display-changed";
+            break;
+        case BackendEventKind::WindowDisplayChanged:
+            name = "window-display-changed";
+            break;
+        case BackendEventKind::WindowShown:
+            name = "window-shown";
+            break;
+        }
+
+        return formatter<string_view>::format(name, context);
+    }
+};
+
+template <>
+struct formatter<ponder::platform::detail::BackendEvent> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const ponder::platform::detail::BackendEvent& event, FormatContext& context) const
+    {
+        return formatter<string>::format(
+            std::format("kind={}, backendWindowId={}, backendDisplayId={}", event.GetKind(), event.GetBackendWindowId(), event.GetBackendDisplayId()),
+            context);
+    }
+};
+
+template <>
+struct formatter<ponder::platform::detail::EventTranslationContext> : formatter<string>
+{
+    template <typename FormatContext>
+    auto format(const ponder::platform::detail::EventTranslationContext& translation, FormatContext& context) const
+    {
+        return formatter<string>::format(std::format("hasContext={}, resolvesWindows={}, resolvesDisplays={}", translation.context != nullptr,
+                                                     translation.resolveWindowId != nullptr, translation.resolveDisplayId != nullptr),
                                          context);
     }
 };
@@ -530,14 +656,29 @@ struct formatter<ponder::platform::detail::SdlRuntime> : formatter<string_view>
 
 namespace ponder::platform::detail
 {
-inline std::ostream& operator<<(std::ostream& output, const DialogBackendCompletion& completion)
+inline std::ostream& operator<<(std::ostream& output, ApplicationMetadataProperty property)
 {
-    return output << std::format("{}", completion);
+    return output << std::format("{}", property);
 }
 
-inline std::ostream& operator<<(std::ostream& output, const DialogBackendRequest& request)
+inline std::ostream& operator<<(std::ostream& output, CursorHandle cursor)
 {
-    return output << std::format("{}", request);
+    return output << std::format("{}", cursor);
+}
+
+inline std::ostream& operator<<(std::ostream& output, BackendEventKind kind)
+{
+    return output << std::format("{}", kind);
+}
+
+inline std::ostream& operator<<(std::ostream& output, const BackendEvent& event)
+{
+    return output << std::format("{}", event);
+}
+
+inline std::ostream& operator<<(std::ostream& output, const EventTranslationContext& translation)
+{
+    return output << std::format("{}", translation);
 }
 
 inline std::ostream& operator<<(std::ostream& output, RuntimeDisplayLifecycleEventKind kind)

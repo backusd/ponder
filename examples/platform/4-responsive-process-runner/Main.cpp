@@ -849,19 +849,10 @@ void UpdateWindowTitle(AppState& state)
 
 [[nodiscard]] int RunInteractiveParent(const Options& options, const std::filesystem::path& selfExecutable, int argc, char** argv)
 {
-    const platform::RuntimeDesc runtimeDesc{
-        .applicationName = "Ponder Platform Responsive Process Runner",
-        .applicationVersion = std::string{"0.1.0"},
-        .applicationIdentifier = std::string{"org.ponder.examples.platform.responsive-process-runner"},
-        .configureHintsBeforeInitialization =
-            [](platform::Runtime& runtime)
-        {
-            runtime.HintPush<platform::hints::MouseFocusClickThrough>(platform::hints::MouseFocusClickThrough{true});
-            runtime.HintPush<platform::hints::MouseAutoCapture>(platform::hints::MouseAutoCapture{false});
-        },
-    };
-
-    platform::Runtime runtime = platform::Runtime::Create(runtimeDesc);
+    platform::Runtime runtime = platform::Runtime::Create();
+    runtime.HintPush(platform::hints::MouseFocusClickThrough{true});
+    runtime.HintPush(platform::hints::MouseAutoCapture{false});
+    runtime.Initialize("Ponder Platform Responsive Process Runner", "0.1.0", "org.ponder.examples.platform.responsive-process-runner");
     const core::Timestamp startTimestamp = runtime.TimeNow();
     std::vector<WindowSlot> windows;
     windows.reserve(1);

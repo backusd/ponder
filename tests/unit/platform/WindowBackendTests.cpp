@@ -24,7 +24,6 @@
 #include "ProcessBackend.hpp"
 #include "SdlCommon.hpp"
 #include "SdlRuntime.hpp"
-#include "SdlRuntimeTypes.hpp"
 #include "SdlWindowBackend.hpp"
 
 namespace

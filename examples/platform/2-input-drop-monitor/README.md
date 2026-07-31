@@ -44,7 +44,10 @@ Pass `--auto-close-ms <milliseconds>` to exit automatically after a short run.
 
 ## Lifetime And Error Handling
 
-All platform calls stay on the runtime owner thread. Runtime and window
+All platform calls stay on the runtime owner thread. `Runtime::Create()` owns
+the constructed but uninitialized backend object, typed hints configure that
+object, and `Runtime::Initialize()` activates it before any window or service
+use. Runtime and window
 creation return their values directly. Hint changes, text-input commands,
 window mouse-grab and relative-mode changes, and system-cursor selection and
 visibility use direct `void` contracts. Failures from those operations reach

@@ -16,10 +16,8 @@
 
 #ifdef PONDER_PLATFORM_USE_MOCK_RUNTIME
 #include "MockRuntime.hpp"
-#else
-#include "SdlRuntime.hpp"
 #endif
-#include "SdlRuntimeTypes.hpp"
+#include "SdlRuntime.hpp"
 #include "WindowImpl.hpp"
 
 namespace ponder::platform

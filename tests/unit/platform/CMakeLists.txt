@@ -28,6 +28,7 @@ target_compile_definitions(ponder_platform_tests PRIVATE
     PONDER_PLATFORM_HEADER_SELF_CONTAINMENT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/HeaderSelfContainment")
 
 add_library(ponder_platform_header_tests OBJECT
+    HeaderSelfContainment/DialogsHeader.cpp
     HeaderSelfContainment/DisplayHeader.cpp
     HeaderSelfContainment/GeometryHeader.cpp
     HeaderSelfContainment/HintsHeader.cpp

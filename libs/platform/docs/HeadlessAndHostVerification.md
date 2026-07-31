@@ -76,7 +76,7 @@ exercise SDL routing. They are not pure unit-test fakes.
 
 The headless-friendly tests select SDL's dummy driver internally with
 `SDL_HINT_VIDEO_DRIVER`. For manual or ad hoc runs, set the SDL3 video-driver
-environment variable before runtime creation:
+environment variable before `Runtime::Initialize()`:
 
 ```powershell
 $env:SDL_VIDEO_DRIVER = "dummy"
@@ -97,7 +97,8 @@ The dummy driver is useful for CI-like hidden-window coverage, but it is not a
 full desktop. Treat these capabilities as follows:
 
 - Supported and must pass under `dummy`:
-  - runtime creation, metadata, hint rollback, and shutdown;
+  - explicit runtime creation, pre-initialization hints, initialization metadata,
+    initialization rollback, and shutdown;
   - multiple hidden windows, move/lifetime behavior, IDs, logical size, pixel
     size, and state;
   - synthetic event polling and multi-window routing;
@@ -150,24 +151,33 @@ manual check on a capable GUI host.
 Manual smoke procedure:
 
 1. Start from a clean GUI session where opening native dialogs is acceptable.
-2. Create `Runtime` on the process-entry thread.
+2. Call `Runtime::Create()` on the process-entry thread, configure required typed
+   hints, then call `Runtime::Initialize()` with application metadata.
 3. Create one visible parent `Window`.
 4. For each dialog API, open and cancel once without a parent and once with
    `parentWindowId = parent.GetId()`:
-   - `runtime.DialogShowOpenFile(OpenFileDialogDesc)`
-   - `runtime.DialogShowSaveFile(SaveFileDialogDesc)`
-   - `runtime.DialogShowOpenFolder(OpenFolderDialogDesc)`
-5. Confirm `DialogGetPendingCount()` and `DialogGetPending()` describe every
-   accepted request, then call `DialogPollCompletion()` until the matching
-   `DialogCompletedEvent` arrives.
-6. Confirm `event.request` preserves the ID, kind, parent, request timestamp,
+   - `runtime.DialogShowOpenFile(dialogs::OpenFileDialogDesc)`
+   - `runtime.DialogShowSaveFile(dialogs::SaveFileDialogDesc)`
+   - `runtime.DialogShowOpenFolder(dialogs::OpenFolderDialogDesc)`
+   Check every submission `Result`; a success contains the accepted request ID,
+   while a failure is reported locally and does not throw.
+5. Inspect the direct values from `DialogGetPendingCount()`, `DialogHasPending()`,
+   `DialogGetPending()`, and `DialogGetOutstandingRequestCount()` and confirm
+   they describe every accepted request. Poll the direct optional value from
+   `DialogPollCompletion()` until the matching `DialogCompletedEvent` arrives.
+6. Confirm `event.request` preserves the ID, kind, parent, core-clock request timestamp,
    filter count, and multiple-selection setting, and that the outcome is
    `DialogCancellation`.
 7. Confirm the runtime removes each request only when its completion is polled.
    Do not destroy the parent window or runtime until every requested completion
-   has been consumed.
+   has been consumed. Check the `DialogShutdown()` `VoidResult` before runtime
+   teardown.
 8. Record host OS, compiler/configuration, SDL video driver, dialog kind,
    parented/unparented status, and result.
+
+Every dialog entry point is `noexcept`; an unexpected core, standard, or unknown
+exception anywhere below the public boundary must be logged and returned as a
+detailed platform error. Any escaped ordinary exception is a test failure.
 
 On a headless or remote host where native dialogs cannot be presented, record
 dialog presentation as unverified. Do not count the automated callback tests as

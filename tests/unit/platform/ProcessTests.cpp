@@ -19,6 +19,8 @@ static_assert(std::is_nothrow_destructible_v<ponder::platform::Process>);
 static_assert(std::variant_size_v<ponder::platform::ProcessExitStatus> == 3U);
 static_assert(std::is_same_v<decltype(ponder::platform::ProcessNormalExit{}.exitCode), std::uint32_t>);
 static_assert(std::is_same_v<decltype(std::declval<ponder::platform::Process&>().Wait()), ponder::core::Result<ponder::platform::ProcessExitStatus>>);
+static_assert(std::is_same_v<decltype(std::declval<ponder::platform::Process&>().TryWait()),
+                             ponder::core::Result<std::optional<ponder::platform::ProcessExitStatus>>>);
 static_assert(std::is_same_v<decltype(std::declval<ponder::platform::Process&>().Terminate(ponder::platform::ProcessTerminationMode::Force)),
                              ponder::core::VoidResult>);
 static_assert(std::is_same_v<decltype(ponder::platform::LaunchProcess(std::declval<const ponder::platform::ProcessDesc&>())),

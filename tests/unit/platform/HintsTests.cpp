@@ -1,17 +1,78 @@
+#include <ponder/core/Log.hpp>
 #include <ponder/platform/Hints.hpp>
 
+#include <SDL3/SDL_hints.h>
+#include <SDL3/SDL_init.h>
+#include <atomic>
 #include <chrono>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <gtest/gtest.h>
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <type_traits>
+
+#include "SdlRuntime.hpp"
 
 namespace
 {
+std::atomic_size_t g_platformHintErrorLogCount{};
+
+void CapturePlatformHintError(const ponder::core::LogEntry& entry) noexcept
+{
+    if (entry.GetLevel() == ponder::core::LogLevel::Error && entry.GetCategory() == "platform")
+    {
+        g_platformHintErrorLogCount.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+void ResetMalformedHintTestValues()
+{
+    static_cast<void>(SDL_ResetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_EVENT_LOGGING));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_IME_IMPLEMENTED_UI));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_VIDEO_DRIVER));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_MOUSE_DEFAULT_SYSTEM_CURSOR));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_MOUSE_DOUBLE_CLICK_RADIUS));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_MOUSE_DOUBLE_CLICK_TIME));
+    static_cast<void>(SDL_ResetHint(SDL_HINT_MOUSE_NORMAL_SPEED_SCALE));
+}
+
+template <typename Hint>
+void ExpectMalformedHintReturnsNoValue(ponder::platform::detail::SdlRuntime& runtime, const char* name, const char* value)
+{
+    ASSERT_TRUE(SDL_SetHintWithPriority(name, value, SDL_HINT_OVERRIDE));
+
+    const std::size_t logCountBefore = g_platformHintErrorLogCount.load(std::memory_order_relaxed);
+    std::optional<Hint> result;
+    EXPECT_NO_THROW(result = runtime.HintGet<Hint>());
+    EXPECT_EQ(result, std::nullopt);
+    ponder::core::FlushLog();
+    EXPECT_GT(g_platformHintErrorLogCount.load(std::memory_order_relaxed), logCountBefore);
+}
+
+class SdlRuntimeHintGetTests : public testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        ASSERT_EQ(SDL_WasInit(0), 0U);
+        ResetMalformedHintTestValues();
+    }
+
+    void TearDown() override
+    {
+        SDL_Quit();
+        ResetMalformedHintTestValues();
+    }
+};
+
 template <typename Type>
 concept FormattableAndStreamable = std::formattable<Type, char> && requires(std::ostream& output, const Type& value) {
     { output << value } -> std::same_as<std::ostream&>;
@@ -159,5 +220,39 @@ TEST(HintFormattingTests, UsesExplicitFallbacksForForgedEnumValues)
     EXPECT_EQ(std::format("{}", static_cast<EventLoggingLevel>(0xFF)), "<invalid>");
     EXPECT_EQ(std::format("{}", static_cast<ImeUiCapabilities>(0xFF)), "<invalid>");
     EXPECT_EQ(std::format("{}", static_cast<FullscreenFocusLossBehavior>(0xFF)), "<invalid>");
+}
+
+TEST_F(SdlRuntimeHintGetTests, LogsAndReturnsNoValueForEveryMalformedDecoderFamily)
+{
+    using namespace ponder::platform::hints;
+
+    g_platformHintErrorLogCount.store(0, std::memory_order_relaxed);
+    const ponder::core::ScopedMinimumLogLevel minimumLogLevel{ponder::core::LogLevel::Error};
+    const ponder::core::ScopedLogSinkHandler logSink{CapturePlatformHintError};
+    ponder::platform::detail::SdlRuntime runtime;
+
+    ExpectMalformedHintReturnsNoValue<MouseFocusClickThrough>(runtime, SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "");
+    ExpectMalformedHintReturnsNoValue<EventLogging>(runtime, SDL_HINT_EVENT_LOGGING, "unexpected");
+    ExpectMalformedHintReturnsNoValue<ImeImplementedUi>(runtime, SDL_HINT_IME_IMPLEMENTED_UI, "unexpected");
+    ExpectMalformedHintReturnsNoValue<VideoDriver>(runtime, SDL_HINT_VIDEO_DRIVER, "");
+    ExpectMalformedHintReturnsNoValue<VideoMinimizeOnFocusLoss>(runtime, SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "unexpected");
+    ExpectMalformedHintReturnsNoValue<MouseDefaultSystemCursor>(runtime, SDL_HINT_MOUSE_DEFAULT_SYSTEM_CURSOR, "unexpected");
+    ExpectMalformedHintReturnsNoValue<MouseDoubleClickRadius>(runtime, SDL_HINT_MOUSE_DOUBLE_CLICK_RADIUS, "-1");
+    ExpectMalformedHintReturnsNoValue<MouseDoubleClickTime>(runtime, SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, "-1");
+    ExpectMalformedHintReturnsNoValue<MouseNormalSpeedScale>(runtime, SDL_HINT_MOUSE_NORMAL_SPEED_SCALE, "unexpected");
+}
+
+TEST_F(SdlRuntimeHintGetTests, PreservesSdlBooleanInterpretationForNonEmptyValues)
+{
+    ponder::platform::detail::SdlRuntime runtime;
+
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "enabled", SDL_HINT_OVERRIDE));
+    EXPECT_EQ(runtime.HintGet<ponder::platform::hints::MouseFocusClickThrough>(), ponder::platform::hints::MouseFocusClickThrough{true});
+
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "FALSE", SDL_HINT_OVERRIDE));
+    EXPECT_EQ(runtime.HintGet<ponder::platform::hints::MouseFocusClickThrough>(), ponder::platform::hints::MouseFocusClickThrough{false});
+
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "0-with-suffix", SDL_HINT_OVERRIDE));
+    EXPECT_EQ(runtime.HintGet<ponder::platform::hints::MouseFocusClickThrough>(), ponder::platform::hints::MouseFocusClickThrough{false});
 }
 } // namespace

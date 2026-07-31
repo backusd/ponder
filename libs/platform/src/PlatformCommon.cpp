@@ -5,7 +5,10 @@
 #include <ponder/core/String.hpp>
 #include <ponder/platform/PlatformError.hpp>
 
+#include <algorithm>
+#include <cstdint>
 #include <format>
+#include <limits>
 #include <thread>
 
 namespace ponder::platform::detail
@@ -26,6 +29,21 @@ ponder::core::VoidResult ValidateNullTerminatedUtf8(std::string_view text, std::
     }
 
     return ponder::core::VoidResult::Success();
+}
+
+std::int32_t GetEventWaitTimeoutMilliseconds(ponder::core::Duration timeout)
+{
+    constexpr std::int64_t kNanosecondsPerMillisecond{1'000'000};
+
+    const std::int64_t nanoseconds = timeout.GetNanoseconds().count();
+    if (nanoseconds < 0)
+    {
+        throw PLATFORM_EXCEPTION(PlatformErrorCode::InvalidArgument, "Platform event wait timeout must be nonnegative.");
+    }
+
+    const std::int64_t wholeMilliseconds = nanoseconds / kNanosecondsPerMillisecond;
+    const std::int64_t roundedMilliseconds = wholeMilliseconds + (nanoseconds % kNanosecondsPerMillisecond != 0 ? 1 : 0);
+    return static_cast<std::int32_t>(std::min(roundedMilliseconds, static_cast<std::int64_t>(std::numeric_limits<std::int32_t>::max())));
 }
 
 bool IsPlatformProcessEntryThread() noexcept

@@ -8,6 +8,7 @@ inputs.
 
 ## Layout
 
+- `application/` contains high-level application-lifecycle teaching examples.
 - `platform/` contains runnable platform-library teaching examples.
 - `render/` contains runnable renderer/platform integration teaching examples.
 - `projects/` contains sample `.ponder` projects once the native project format
@@ -17,6 +18,7 @@ inputs.
 
 ## Example Indexes
 
+- [Application examples](application/README.md)
 - [Platform examples](platform/README.md)
 - [Render examples](render/README.md)
 - [UI examples](ui/README.md)

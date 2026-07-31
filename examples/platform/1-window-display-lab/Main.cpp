@@ -281,11 +281,11 @@ void PrintAllWindowSnapshots(const std::vector<WindowSlot>& windows)
     return id;
 }
 
-void DemonstrateRuntimeAlreadyActive(const platform::RuntimeDesc& desc)
+void DemonstrateRuntimeAlreadyActive()
 {
     try
     {
-        [[maybe_unused]] auto duplicateRuntime = platform::Runtime::Create(desc);
+        [[maybe_unused]] auto duplicateRuntime = platform::Runtime::Create();
         std::println("Unexpectedly created a second runtime; releasing it immediately.");
     }
     catch (const core::Exception& exception)
@@ -617,22 +617,13 @@ void DrainEvents(AppState& state)
         return 0;
     }
 
-    const platform::RuntimeDesc runtimeDesc{
-        .applicationName = "Ponder Platform Window Display Lab",
-        .applicationVersion = std::string{"0.1.0"},
-        .applicationIdentifier = std::string{"org.ponder.examples.platform.window-display-lab"},
-        .configureHintsBeforeInitialization =
-            [](platform::Runtime& runtime)
-        {
-            runtime.HintPush<platform::hints::MouseFocusClickThrough>(platform::hints::MouseFocusClickThrough{true});
-            runtime.HintPush<platform::hints::MouseAutoCapture>(platform::hints::MouseAutoCapture{false});
-        },
-    };
-
-    platform::Runtime runtime = platform::Runtime::Create(runtimeDesc);
+    platform::Runtime runtime = platform::Runtime::Create();
+    runtime.HintPush(platform::hints::MouseFocusClickThrough{true});
+    runtime.HintPush(platform::hints::MouseAutoCapture{false});
+    runtime.Initialize("Ponder Platform Window Display Lab", "0.1.0", "org.ponder.examples.platform.window-display-lab");
     const core::Timestamp start = runtime.TimeNow();
-    std::println("Platform runtime created at {}", start);
-    DemonstrateRuntimeAlreadyActive(runtimeDesc);
+    std::println("Platform runtime initialized at {}", start);
+    DemonstrateRuntimeAlreadyActive();
     PrintDisplays(runtime);
 
     std::vector<WindowSlot> windows;

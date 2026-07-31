@@ -7,7 +7,6 @@
 #include <optional>
 #include <string_view>
 
-#include "SdlRuntimeTypes.hpp"
 #include "WindowImpl.hpp"
 
 namespace ponder::platform

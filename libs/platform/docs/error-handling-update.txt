@@ -2,6 +2,30 @@
 
 Status: Completed on 2026-07-22.
 
+Current-policy note (2026-07-29): the dialog-specific direct-return and throwing
+clauses in this historical roadmap are superseded. Every public dialog operation
+is now `noexcept`. The three submission methods and `DialogShutdown` are
+Result-bearing exception shields that catch and log ordinary exceptions, roll
+back partial state as needed, and return `BackendFailure`. A caught platform
+exception retains its original formatted message and embedded platform code as
+diagnostic text; no message parsing or typed platform exception is introduced.
+`DialogShutdown` may also return `InvalidArgument` directly while requests are
+outstanding. The five
+pending-state and completion observers return direct values under documented
+preconditions. Asynchronous `DialogFailure` remains outcome data. Platform and
+event timing now use `ponder::core::Timestamp::Now()` exclusively; platform code
+never calls `SDL_GetTicksNS()`.
+
+Current lifecycle note (2026-07-30): callback-based creation clauses below are
+also superseded. `Runtime::Create()` is argument-free, validates the
+process-entry thread, acquires the single-runtime reservation, and returns an
+uninitialized owner without constructing `RuntimeImpl`. Callers configure typed
+hints directly and then call `Runtime::Initialize()` with application metadata;
+the first hint operation or `Initialize()` lazily constructs `RuntimeImpl`, whose
+construction verifies SDL's main-thread and exclusive-lifecycle requirements.
+`Initialize()` validates metadata and initializes the backend. There is no templated
+pre-initialization callback overload.
+
 Historical scope note: this completed failure-policy roadmap intentionally
 preserved the then-current `pond::platform` namespace. The independent
 2026-07-23 namespace-and-timing migration supersedes those preservation clauses:
@@ -13,19 +37,16 @@ platform now throws `ponder::core::Exception`, and `PLATFORM_EXCEPTION` embeds
 the formatted `PlatformErrorCode` in its message. Task text below is retained
 as a record of the constraints in force when the work was performed.
 
-A later 2026-07-23 lifecycle and test-seam cleanup supersedes task clauses that
+A later 2026-07-23 lifecycle and test-seam cleanup, further amended by the
+explicit lifecycle above, supersedes task clauses that
 prescribed distinct creating, active, and destroying slot states,
 production-only stage hooks, provider injection, or
-`IPlatformRuntimeBackend`. Current runtime creation uses one private atomic 0/1
-reservation held through full construction rollback and full teardown, then
-released to permit sequential recreation. `PlatformRuntime::Create` constructs
-its state directly. That state owns one opaque `BackendImpl` containing either
-the production `SdlRuntimeBackend` aggregate or the test-only
-`MockRuntimeBackend` aggregate selected for the isolated
-`ponder_platform_runtime_mock_tests` executable; both expose the same private
-non-virtual API. The mock executable compiles the required runtime source
-variant directly and does not link `ponder::platform`. Dialogs retain a narrow
-private backend and a weak completion token. Tests use fixture-owned mock state
+`IPlatformRuntimeBackend`. The private atomic 0/1 reservation remains held from
+`Runtime::Create()` until owner destruction and permits sequential recreation
+after release. The first hint operation or `Runtime::Initialize()` lazily
+constructs the selected non-virtual `RuntimeImpl`: production uses `SdlRuntime`, while the isolated mock executable
+uses `MockRuntime` through its compile-time source variant and does not link
+`ponder::platform`. Tests use fixture-owned mock state
 and verify observable rollback instead of mutating global production hooks or
 overrides. The completed task text below is retained unchanged as a historical
 record.

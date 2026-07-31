@@ -16,6 +16,7 @@ engine requirements.
 - `ponder_compute_tests`
 - `ponder_io_tests`
 - `ponder_platform_tests`
+- `ponder_application_tests`
 - `ponder_ui_tests`
 - `ponder_plugin_sdk_tests`
 

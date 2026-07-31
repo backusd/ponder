@@ -22,7 +22,9 @@ privately by SDL3.
   deliberately revised.
 - Keep SDL and OS-specific helpers under `src/`. Use PIMPL or another
   heap-stable private representation for native resource owners.
-- Public `Runtime` owns exactly one heap-stable `detail::RuntimeImpl` through
+- From a successful `Runtime::Create()` until owner destruction, public
+  `Runtime` owns exactly one heap-stable, initially uninitialized
+  `detail::RuntimeImpl` through
   `std::unique_ptr` and forwards its complete subsystem-prefixed interface.
   Production resolves `RuntimeImpl` directly to `SdlRuntime`. The test-only
   `PONDER_PLATFORM_USE_MOCK_RUNTIME` selector resolves it to the API-compatible
@@ -58,40 +60,50 @@ privately by SDL3.
   and implementations in dedicated private files. Keep direct SDL dialog
   submission, request translation, callback translation, and completion
   handoff cohesive inside `SdlRuntime.cpp`; do not add a dialog backend
-  interface or virtual dispatch. Put only genuinely shared SDL conversions in
-  `SdlCommon`.
+  interface or virtual dispatch. Keep SdlRuntime's private runtime types in
+  `SdlRuntime.hpp`; do not reintroduce a separate `SdlRuntimeTypes.hpp`. Put only
+  genuinely shared SDL conversions in `SdlCommon`.
 - Permit only one logical `Runtime` per process. Protect creation with a
-  private atomic 0/1 reservation acquired before fallible construction and held
-  through complete construction rollback or complete runtime teardown. The
-  reservation prevents reentrant creation from observing partial startup or
-  teardown; releasing it after either path permits sequential runtime
-  recreation. Do not model creating, active, and destroying as distinct global
-  states. `Runtime::Create` validates the descriptor and process-entry thread,
-  creates one `RuntimeImpl`, permits only `Hint*` calls during descriptor hint
-  configuration, and then initializes it. Runtime and window factories return
-  values directly and throw platform exceptions on construction failure.
+  private atomic 0/1 reservation acquired before fallible `RuntimeImpl`
+  construction and held
+  until the returned owner is destroyed, whether or not initialization succeeds.
+  The reservation prevents reentrant creation from observing the explicit hint
+  configuration phase, partial initialization, or teardown; releasing it permits
+  sequential runtime recreation. Do not model creating, active, and destroying
+  as distinct global states. `Runtime::Create()` takes no metadata, validates the
+  process-entry thread, acquires the reservation, constructs exactly one
+  uninitialized `RuntimeImpl`, and returns its owner. Construction verifies
+  SDL's main-thread and exclusive-lifecycle requirements. The caller may then
+  use the typed `Hint*` API on that implementation before calling
+  `Runtime::Initialize(applicationName, applicationVersion,
+  applicationIdentifier)` exactly once. `Initialize` validates and owns its
+  metadata and is the only public operation that calls
+  `RuntimeImpl::Initialize()`. Do not reintroduce a public runtime
+  descriptor, a callback-taking `Create` overload, or stored initialization
+  callables. Runtime and window factories return values directly, and
+  initialization throws on failure.
 - Arm no-throw SDL rollback immediately before video initialization.
-  Construction failure must quit SDL when initialization was entered, deactivate
-  the dialog completion handoff, restore managed hints only after quit, destroy
-  `RuntimeImpl`, and release the 0/1 reservation last. Normal teardown verifies
+  Initialization failure must quit SDL when initialization was entered and leave
+  the owner safely destructible. Normal teardown verifies
   owner-thread, child, dialog, window, and subsystem invariants; requires every
   owned window and outstanding dialog request to be gone; destroys cached
   cursors; deactivates the dialog completion handoff; calls `SDL_Quit()`; and
-  restores managed hints. Only after `RuntimeImpl` is destroyed may `Runtime`
-  release the process reservation.
+  restores managed hints. Destruction before successful initialization restores
+  managed hints without calling `SDL_Quit()`. Runtime destroys its
+  `RuntimeImpl`, initialized or not, before releasing the process reservation.
 - Do not add production `*ForTesting` functions, global stage-hook registries, or
   mutable backend-override globals. Test construction and backend failures
   through the isolated mock-runtime source variant and fixture-owned
   `MockRuntime` state, and test rollback through observable production
   contracts. A mock executable must compile every `Runtime.hpp` consumer with
   `PONDER_PLATFORM_USE_MOCK_RUNTIME` and must not link `ponder::platform`.
-- Treat SDL lifecycle ownership as exclusive. Reject creation when an SDL
-  subsystem is already initialized; otherwise platform's `SDL_Quit()` could
-  invalidate another owner. Before teardown, verify that no subsystem outside
+- Treat SDL lifecycle ownership as exclusive. Reject `RuntimeImpl` construction
+  in `Runtime::Create()` when an SDL subsystem is already initialized; otherwise
+  platform's `SDL_Quit()` could invalidate another owner. Before teardown, verify that no subsystem outside
   runtime-owned video/events appeared while the runtime was live.
 - Use checked `SDL_SetAppMetadataProperty` calls rather than the convenience
-  metadata function and apply descriptor metadata before video initialization.
-  Clear absent optional descriptor properties and do not snapshot or restore
+  metadata function and apply direct `Runtime::Initialize` metadata before video initialization.
+  Clear absent optional metadata properties and do not snapshot or restore
   prior metadata. After `SDL_Quit()`, leave the resulting process state to SDL.
 - Manage the curated SDL hint catalog exclusively through the explicitly
   specialized `Runtime::HintPush<T>`, `HintPop<T>`, `HintClear<T>`, and
@@ -99,20 +111,32 @@ privately by SDL3.
   primary templates deleted so unsupported types fail at compile time; never
   expose SDL names or an arbitrary string-hint map. Keep an
   independent value stack per hint, enforce value and initialization
-  constraints, and invoke descriptor hint configuration before SDL initialization.
+  constraints, and let callers configure required values explicitly between
+  `Runtime::Create()` and `Runtime::Initialize()`.
   The runtime must not apply implicit hint policies; applications opt into every
   managed hint explicitly. Restore every managed prior effective value after
   `SDL_Quit()`. SDL cannot report priority or
-  provenance, so do not claim to preserve either one.
+  provenance, so do not claim to preserve either one. A typed hint lookup logs
+  malformed or unsupported SDL data with the `platform` category and returns
+  `std::nullopt`; do not throw solely because a third-party hint value is
+  unexpected. Wrong-thread and other programming errors remain exceptional.
 - Keep runtime and resource owners non-copyable and movable. Define moved-from
   behavior and keep child lifetime safe in release builds.
 - Treat SDL-backed APIs as runtime-owner-thread APIs unless explicitly
   documented otherwise. Before SDL, throw a `WrongThread` platform
-  exception for a wrong-thread public call. Use `PONDER_VERIFY` for moved-from,
-  teardown, and impossible ownership invariants that must remain active in
-  release builds.
-- Require runtime creation on the startup thread captured during module
-  initialization and independently verify SDL's main-thread predicate. Treat
+  exception for a wrong-thread public call; fallible dialog submissions and
+  shutdown contain that failure and return `BackendFailure`, retaining the
+  original formatted exception message and its embedded `WrongThread` code as
+  diagnostic text, while direct dialog observers assert the owner-thread
+  precondition. Using an ordinary service before successful `Initialize()` is a
+  programmer error guarded by `PONDER_ASSERT`; typed hint operations are the
+  deliberate pre-initialization exception. Runtime pass-through methods also
+  use `PONDER_ASSERT` for the internal non-null implementation precondition. Use
+  `PONDER_VERIFY` for other moved-from resource contracts, teardown, and
+  impossible ownership invariants that must remain active in release builds.
+- Require `Runtime::Create()` on the startup thread captured during module
+  initialization. During `RuntimeImpl` construction, independently verify SDL's
+  main-thread predicate. Treat
   that check as defense in depth; executable entry remains responsible for the
   portable process-entry-thread guarantee.
 - `SDL_IsMainThread()` cannot identify the process-entry thread before first SDL
@@ -121,9 +145,10 @@ privately by SDL3.
 - Give runtime-owned objects strong, zero-invalid, monotonic IDs that are not
   reused during the runtime lifetime. Ignore stale backend events
   deterministically.
-- Follow ADR 0013's exception-first failure policy and its exact eleven-operation
-  public `Result` surface. A retained-result function may still throw for
-  programming, lifecycle, threading, or backend-contract failures.
+- Follow ADR 0013's exception-first failure policy for the non-dialog surface.
+  Dialog operations are the deliberate exception-shielded boundary described
+  below: every fallible public dialog call returns `Result` and contains all
+  ordinary C++ exceptions raised in its call stack.
 - Throw `ponder::core::Exception` for exceptional platform failures. Construct
   code-bearing failures with `PLATFORM_EXCEPTION`; it embeds the formatted
   `PlatformErrorCode` in the message without adding a typed payload. Do not use
@@ -140,10 +165,11 @@ privately by SDL3.
 - Use project assertion and logging macros. Log lifecycle messages with the
   `platform` category and keep ignored-event logging at trace level or silent.
 - Use a `std::variant` of typed, owned event payloads. Do not add a redundant
-  event-kind enum or raw SDL escape hatch. Give every event the original SDL
-  monotonic nanosecond timestamp; never resample it with `TimeNow()`.
-- Preserve `Runtime::TimeNow()` as an owner-thread observer of SDL's
-  monotonic tick domain. Public platform declarations use
+  event-kind enum or raw SDL escape hatch. Timestamp every translated event at
+  observation with `ponder::core::Timestamp::Now()`. Platform does not expose
+  or depend on SDL's tick epoch, and no platform code calls `SDL_GetTicksNS()`.
+- Preserve `Runtime::TimeNow()` as an owner-thread observer of the same core
+  steady-clock domain. Public platform declarations use
   `ponder::core::Timestamp` and `ponder::core::Duration` directly; do not add a
   platform timing header or forwarding aliases.
 - Map keyboard input to project-owned physical keys, closed logical
@@ -197,6 +223,14 @@ privately by SDL3.
   thread until it can return one translated event or the queue is empty. Never
   let an unsupported, malformed, or stale event masquerade as an empty queue,
   and never destroy a window in response to a close request.
+- Keep `Runtime::EventWait()` owner-thread-only and give it the same dialog,
+  lifecycle, topology, stale-event, and translation ordering as `EventPoll()`.
+  Reject negative durations, round positive sub-millisecond timeouts upward,
+  and clamp the backend millisecond representation. Return no event on timeout
+  or an explicit wake. `Runtime::EventWake()` is the thread-safe cross-thread
+  wake primitive; implement it with a private registered SDL event that never
+  escapes as a `PlatformEvent`. Asynchronous dialog completion must attempt a
+  contained no-throw wake after committing its completion record.
 - Update display routing directly around lifecycle events: connect or allocate
   an added backend display before translation, and translate a removal through
   its retained project ID before finalizing the disconnected tombstone.
@@ -301,6 +335,11 @@ privately by SDL3.
 - Never create a Vulkan surface in platform. Render owns every `VkSurfaceKHR` and
   destroys presentation state before its platform window. This ordering is
   caller-enforced because the platform registry cannot observe render resources.
+- Keep `DialogKind`, `DialogFileFilter`, the three public request descriptors, and
+  `DialogRequestId` in `Dialogs.hpp` under `ponder::platform::dialogs`. Keep
+  dialog event metadata, outcomes, and completion events in `PlatformEvent.hpp`.
+  Implement SDL submission and ownership directly in `SdlRuntime`; do not add a
+  dialog manager or backend interface.
 - Copy all asynchronous dialog inputs and callback outputs. Marshal completion
   to the runtime owner thread and distinguish selection, cancellation, and
   failure. `SdlRuntime` directly owns every accepted request until its completion
@@ -317,11 +356,21 @@ privately by SDL3.
   dialog implementation. Store completed request IDs in a mutex-protected
   standard FIFO queue so owner-thread polling can test and pop completions in
   O(1) without scanning every request.
-- Return `DialogRequestId` directly from synchronous dialog submission and
-  return `void` from shutdown. Descriptor, parent, request-registration, and
-  SDL launch failures throw platform exceptions. Keep asynchronous
-  `DialogFailure{ponder::core::Error}` as outcome data because completion occurs
-  after the initiating stack has gone.
+- Return `Result<dialogs::DialogRequestId>` from synchronous dialog submission
+  and `VoidResult` from shutdown. Return direct `noexcept` values from
+  `DialogGetPendingCount`, `DialogHasPending`, `DialogGetPending`,
+  `DialogPollCompletion`, and `DialogGetOutstandingRequestCount`; owner-thread
+  and initialized-runtime requirements are asserted preconditions. The four
+  fallible methods catch `ponder::core::Exception`, `std::exception`, and unknown
+  exceptions raised in their call stacks, log with the `platform` category,
+  and perform required rollback. Caught exceptions return `BackendFailure`.
+  For a `ponder::core::Exception`, preserve its message, stack trace, and source
+  location in the returned diagnostic; a `PLATFORM_EXCEPTION` message therefore
+  retains its embedded original platform code. Never parse that message to
+  recover a code, and do not reintroduce typed platform exceptions. Shutdown may
+  return `InvalidArgument` directly when outstanding requests prevent it. Keep
+  asynchronous `DialogFailure{ponder::core::Error}` as outcome data because
+  completion occurs after the initiating stack has gone.
 - Keep process launch shell-free. Process destruction must not terminate the
   child or block the caller; abandoned live process handles stay privately
   waitable until cleanup can reap them.
@@ -344,7 +393,10 @@ privately by SDL3.
 - Treat `Process::Wait()` as a blocking operation. Do not call it from the
   desktop event loop or any UI/platform/render pumping thread; use a worker or a
   higher-level orchestration point when waiting for long-running children.
-- Preserve `Result` for `LaunchProcess`, `Process::Wait`, and
+- Keep `Process::TryWait()` nonblocking. Return a successful empty optional while
+  the child is running and a present `ProcessExitStatus` only after exit is
+  confirmed.
+- Preserve `Result` for `LaunchProcess`, `Process::Wait`, `Process::TryWait`, and
   `Process::Terminate` because executable, child, wait, and termination failures
   can be handled at the immediate orchestration layer. These operations still
   throw for programming, lifecycle, and unexpected internal failures.
@@ -358,7 +410,7 @@ privately by SDL3.
 
 ADR 0013 governs the original exception-first migration and
 `error-handling-update.txt` records that completed history. The consolidated
-runtime exposes exactly eleven public `Result` operations:
+runtime retains these non-dialog public `Result` operations:
 
 - `Runtime::ClipboardGetText` for unavailable access, malformed external text,
   or host failures;
@@ -372,24 +424,37 @@ runtime exposes exactly eleven public `Result` operations:
   global coordinates;
 - `Runtime::UriOpenExternal` for invalid user input and host
   launch/capability failure;
-- `LaunchProcess`, `Process::Wait`, and `Process::Terminate` for input,
-  child-state, and operating-system failures that immediate orchestration can
-  handle;
+- `LaunchProcess`, `Process::Wait`, `Process::TryWait`, and
+  `Process::Terminate` for input, child-state, and operating-system failures
+  that immediate orchestration can handle;
 - `Window::GetNativeHandle` for incompatible graphics mode or an unsupported
   native driver; and
 - `Window::GetDisplayId` for a transiently unresolved or disconnected display.
 
-These operations throw for wrong-thread use, lifecycle violations, programming
-errors, or unexpected backend corruption. Synchronous dialog submission does
-not return `Result`; only asynchronous `DialogFailure` retains
-`ponder::core::Error` as event data.
+- The four fallible public dialog operations are Result-bearing and `noexcept`:
+  `DialogShowOpenFile`, `DialogShowSaveFile`, and `DialogShowOpenFolder` return
+  `Result<dialogs::DialogRequestId>`, and `DialogShutdown` returns `VoidResult`.
+  The other five dialog methods are direct `noexcept` observers returning count,
+  state, metadata, or an optional completion.
 
-`Runtime::Create`, `WindowCreate`, `DisplayEnumerate`, and all synchronous dialog
-submission return values directly. System-cursor commands and dialog shutdown
-return `void`. Supported hint template specializations return `void` for
-mutations and `std::optional<T>` for lookup. Every `Window` result operation is a
-direct value or `void` except `GetNativeHandle` and `GetDisplayId`. Existing
-optional event polling and infallible observers remain unchanged.
+The non-dialog operations above may still throw for wrong-thread use, lifecycle
+violations, programming errors, or unexpected backend corruption. Dialog
+submission and shutdown instead catch and log ordinary exceptions raised in
+their call stacks and return `BackendFailure`. A caught project exception's
+message, stack trace, and source location remain diagnostic data, including any
+platform code already embedded in its message; implementations never parse that
+text for control flow or restore a typed platform-exception hierarchy. Direct
+dialog observers have no recoverable failure channel and require their
+documented preconditions.
+Asynchronous `DialogFailure` remains event data.
+
+`Runtime::Create`, `WindowCreate`, and `DisplayEnumerate` return values directly;
+`Runtime::Initialize` returns `void`. The explicit lifecycle is `Create`, typed
+`Hint*` configuration, then `Initialize`; there is no callback-taking factory.
+System-cursor commands return `void`. Supported hint template specializations
+return `void` for mutations and `std::optional<T>` for lookup. Every `Window`
+result operation is a direct value or `void` except `GetNativeHandle` and
+`GetDisplayId`. Existing optional event polling remains unchanged.
 
 ## Verification
 

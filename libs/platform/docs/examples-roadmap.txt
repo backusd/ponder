@@ -6,6 +6,14 @@ The current error-handling migration for these examples is defined by tasks
 PLAT-EH-014 through PLAT-EH-018 in `error-handling-update.txt`. Historical
 result-handling guidance below remains as an implementation record.
 
+Current policy supersedes the completed direct-dialog guidance: examples check
+and report every fallible dialog Result they consume, use direct pending-state
+and completion observers under their preconditions, and use the core Timestamp
+steady-clock domain rather than an SDL-specific tick epoch.
+Runtime-owning examples use the explicit `Runtime::Create()`, typed `Hint*`,
+`Runtime::Initialize(metadata...)` lifecycle; no example supplies a templated
+pre-initialization factory callback.
+
 This roadmap defines runnable, user-facing examples for the complete public
 `ponder_platform` API. The examples are teaching programs, not test fixtures.
 They complement the contract-oriented platform documentation by showing safe
@@ -199,7 +207,8 @@ snapshots, and routes close requests by strong ID.
 
 ### Features Exercised
 
-- Fallible runtime creation with application name, optional version, and
+- Fallible argument-free runtime creation, explicit typed pre-initialization
+  hints, and direct initialization with application name, optional version, and
   optional identifier metadata, including a safe optional demonstration of the
   `RuntimeAlreadyActive` error.
 - Move-only runtime/window RAII, one-runtime ownership, monotonic `WindowId`,

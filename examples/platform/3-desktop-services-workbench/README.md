@@ -9,8 +9,8 @@ opens a URI, or shows a native dialog until you press a command key.
 
 ## Features Exercised
 
-- Direct runtime and window creation, direct asynchronous dialog submission,
-  and explicit `void` `Runtime::DialogShutdown()`.
+- Direct runtime and window creation, Result-bearing asynchronous dialog
+  submission and shutdown, and direct pending-state observation.
 - `Runtime` clipboard read/write, empty text, UTF-8 text, and best-effort
   restoration of the clipboard text captured before the first example write.
 - `Runtime::UriOpenExternal()` behind both an explicit `--uri` command-line value and a
@@ -54,22 +54,28 @@ Pass `--auto-close-ms <milliseconds>` for a short smoke run.
 
 ## Lifetime And Error Handling
 
-All platform operations run on the runtime owner thread. Runtime creation,
-window creation, window title updates, and dialog submission use direct
-contracts. A successful `Runtime::DialogShow*()` call returns its `DialogRequestId`
-after descriptor validation, request registration, and backend invocation.
-Synchronous failures from those operations are exceptional and propagate to a
-single boundary in `main()`. That boundary catches `ponder::core::Exception`
-and prints its message. Platform exceptions embed their formatted platform
-error code inside that message instead of exposing a typed payload. Unrelated
-failures are not converted into service results or silently ignored.
+All platform operations run on the runtime owner thread. The example explicitly
+calls `Runtime::Create()` to construct the uninitialized backend object,
+configures that object through typed hints, and calls `Runtime::Initialize()`
+with its metadata to activate it before using services. Runtime
+creation and initialization, window creation, and window title updates use direct contracts. Every dialog
+operation is `noexcept`. `Runtime::DialogShow*()` and `DialogShutdown()` are
+Result-bearing exception shields; a successful submission Result contains its
+`dialogs::DialogRequestId` after descriptor validation, request registration,
+and backend invocation. A caught platform, standard, or unknown exception
+returns `BackendFailure`; platform-exception diagnostics retain the original
+formatted message, including its embedded platform code, without parsing that
+message for control flow. Pending-state observations return direct values under
+their owner-thread and initialized-runtime preconditions, while dialog
+completions arrive through the normal platform event pump. The workbench reports
+each submission and shutdown failure immediately and keeps already accepted
+work alive long enough to clean it up. No ordinary exception leaks from the
+fallible dialog boundary.
 
 If a concurrent batch accepts one or more requests before a later submission
-throws, the workbench defers rethrowing that exception. It disables new desktop
-work, keeps pumping the already accepted requests to completion, performs the
-normal parent/clipboard/dialog cleanup, and only then lets the exception reach
-`main()`. This preserves the direct exceptional contract without abandoning
-runtime-owned requests during stack unwinding.
+returns an error, the workbench reports that error and keeps pumping the already
+accepted requests to completion. The runtime's direct pending-state observers
+keep the dialog parent alive until every accepted request completes.
 
 Clipboard get/set return `Result<std::string>` and `VoidResult`, respectively,
 because unavailable or malformed host clipboard access can be handled by the
@@ -92,11 +98,11 @@ metadata provide the correlation.
 The title and console show outstanding request counts. Once shutdown is
 requested, the workbench rejects new desktop work, continues pumping events,
 and keeps the parent window and runtime alive until every registered completion
-has been consumed. It then releases the parent, restores the clipboard while
-the runtime is still valid, calls the direct `void`
-`Runtime::DialogShutdown()` only with no pending requests, and finally lets the
-runtime shut down. This ordering prevents callbacks from referring to destroyed
-window or runtime state.
+  has been consumed. It then releases the parent, restores the clipboard while
+  the runtime is still valid, checks the `VoidResult` from
+  `Runtime::DialogShutdown()` only with no pending requests, and finally lets the
+  runtime shut down. This ordering prevents callbacks from referring to destroyed
+  window or runtime state.
 
 ## Side Effects And Host Limits
 
@@ -122,9 +128,11 @@ application.
 The full native-dialog matrix remains the opt-in
 [manual dialog smoke](../../../libs/platform/docs/HeadlessAndHostVerification.md#manual-dialog-smoke).
 
-Each completion reports both the request timestamp stored by `Runtime`
-and the later callback completion timestamp. Neither timestamp represents the
-time this example consumed the event.
+Each completion reports both the request timestamp stored by `Runtime` and the
+later callback completion timestamp. Both use the
+`ponder::core::Timestamp::Now()` steady-clock domain; platform never calls
+`SDL_GetTicksNS()`. Neither timestamp represents the time this example consumed
+the event.
 
 ## Manual Desktop Checklist
 
@@ -145,10 +153,11 @@ On a GUI host where these side effects are acceptable:
    own request ID rather than submission order.
 5. Leave an unparented dialog pending, refocus the parent, and request shutdown.
    Confirm new work is rejected, the parent remains alive through the final
-   completion, and only then is the parent released and the manager shut down.
-6. Treat an asynchronous `DialogFailure` from a constrained host as a failure
-   outcome, not a thrown submission error. The deterministic headless callback
-   check covers this branch without claiming native dialog presentation.
+   completion, and only then is the parent released and dialog state shut down.
+6. Treat a synchronous failed submission Result separately from an asynchronous
+   `DialogFailure` produced after a request was accepted. Neither failure leaks
+   an exception from the dialog API. The deterministic headless callback check
+   covers the asynchronous branch without claiming native dialog presentation.
 
 ## Build And Run
 

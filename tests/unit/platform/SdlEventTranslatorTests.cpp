@@ -10,6 +10,7 @@
 #include <array>
 #include <bit>
 #include <chrono>
+#include <concepts>
 #include <cstdint>
 #include <filesystem>
 #include <gtest/gtest.h>
@@ -22,9 +23,28 @@
 #include <vector>
 
 #include "SdlEventTranslator.hpp"
+#include "SdlRuntime.hpp"
 
 namespace
 {
+template <typename RuntimeType>
+concept NoThrowDialogApi =
+    requires(RuntimeType& runtime, const RuntimeType& constRuntime, const ponder::platform::dialogs::OpenFileDialogDesc& openFileDesc,
+             const ponder::platform::dialogs::SaveFileDialogDesc& saveFileDesc,
+             const ponder::platform::dialogs::OpenFolderDialogDesc& openFolderDesc) {
+        { runtime.DialogShowOpenFile(openFileDesc) } noexcept -> std::same_as<ponder::core::Result<ponder::platform::dialogs::DialogRequestId>>;
+        { runtime.DialogShowSaveFile(saveFileDesc) } noexcept -> std::same_as<ponder::core::Result<ponder::platform::dialogs::DialogRequestId>>;
+        { runtime.DialogShowOpenFolder(openFolderDesc) } noexcept -> std::same_as<ponder::core::Result<ponder::platform::dialogs::DialogRequestId>>;
+        { constRuntime.DialogGetPendingCount() } noexcept -> std::same_as<std::size_t>;
+        { constRuntime.DialogHasPending() } noexcept -> std::same_as<bool>;
+        { constRuntime.DialogGetPending() } noexcept -> std::same_as<std::vector<ponder::platform::DialogRequestInfo>>;
+        { runtime.DialogPollCompletion() } noexcept -> std::same_as<std::optional<ponder::platform::DialogCompletedEvent>>;
+        { constRuntime.DialogGetOutstandingRequestCount() } noexcept -> std::same_as<std::size_t>;
+        { runtime.DialogShutdown() } noexcept -> std::same_as<ponder::core::VoidResult>;
+    };
+
+static_assert(NoThrowDialogApi<ponder::platform::detail::SdlRuntime>);
+
 constexpr std::uint32_t kBackendWindowId{41};
 constexpr std::uint32_t kBackendDisplayId{73};
 constexpr ponder::platform::WindowId kWindowId{7};
@@ -216,9 +236,10 @@ protected:
         m_context = ponder::platform::detail::EventTranslationContext{&m_resolvers, ResolveWindowId, ResolveDisplayId};
     }
 
-    [[nodiscard]] std::optional<ponder::platform::PlatformEvent> Translate(const SDL_Event& event)
+    [[nodiscard]] std::optional<ponder::platform::PlatformEvent> Translate(const SDL_Event& event,
+                                                                           ponder::core::Timestamp timestamp = MakeTimestamp())
     {
-        return ponder::platform::detail::TranslateSdlEvent(event, m_context);
+        return ponder::platform::detail::TranslateSdlEvent(event, timestamp, m_context);
     }
 
     ResolverState m_resolvers;
@@ -550,15 +571,15 @@ TEST_F(SdlEventTranslatorTests, TranslatesAndOwnsEveryDropEvent)
     std::string text{"ligand \xF0\x9F\xA7\xAA", 11};
 
     std::optional<ponder::platform::PlatformEvent> begin =
-        Translate(MakeDropEvent(SDL_EVENT_DROP_BEGIN, nullptr, source.c_str(), 0.0F, 0.0F, kBackendWindowId, 100));
+        Translate(MakeDropEvent(SDL_EVENT_DROP_BEGIN, nullptr, source.c_str(), 0.0F, 0.0F, kBackendWindowId, 100), MakeTimestamp(100));
     std::optional<ponder::platform::PlatformEvent> position =
-        Translate(MakeDropEvent(SDL_EVENT_DROP_POSITION, nullptr, source.c_str(), -4.5F, 8.25F, kBackendWindowId, 200));
+        Translate(MakeDropEvent(SDL_EVENT_DROP_POSITION, nullptr, source.c_str(), -4.5F, 8.25F, kBackendWindowId, 200), MakeTimestamp(200));
     std::optional<ponder::platform::PlatformEvent> file =
-        Translate(MakeDropEvent(SDL_EVENT_DROP_FILE, path.c_str(), source.c_str(), 1.5F, 2.25F, kBackendWindowId, 300));
+        Translate(MakeDropEvent(SDL_EVENT_DROP_FILE, path.c_str(), source.c_str(), 1.5F, 2.25F, kBackendWindowId, 300), MakeTimestamp(300));
     std::optional<ponder::platform::PlatformEvent> droppedText =
-        Translate(MakeDropEvent(SDL_EVENT_DROP_TEXT, text.c_str(), source.c_str(), 3.5F, 4.25F, kBackendWindowId, 400));
+        Translate(MakeDropEvent(SDL_EVENT_DROP_TEXT, text.c_str(), source.c_str(), 3.5F, 4.25F, kBackendWindowId, 400), MakeTimestamp(400));
     std::optional<ponder::platform::PlatformEvent> complete =
-        Translate(MakeDropEvent(SDL_EVENT_DROP_COMPLETE, nullptr, source.c_str(), 5.5F, 6.25F, kBackendWindowId, 500));
+        Translate(MakeDropEvent(SDL_EVENT_DROP_COMPLETE, nullptr, source.c_str(), 5.5F, 6.25F, kBackendWindowId, 500), MakeTimestamp(500));
 
     source.assign("overwritten-source");
     path.assign("overwritten-path");
@@ -867,23 +888,13 @@ TEST_F(SdlEventTranslatorTests, MapsEveryDisplayOrientationIncludingUnknownValue
     }
 }
 
-TEST_F(SdlEventTranslatorTests, EnforcesTimestampRepresentationBounds)
+TEST_F(SdlEventTranslatorTests, UsesInjectedCoreTimestampAndIgnoresBackendTimestamp)
 {
     constexpr std::int64_t kMaximumTimestamp = std::numeric_limits<std::int64_t>::max();
-    ExpectTranslatedEvent(Translate(MakeQuitEvent(static_cast<std::uint64_t>(kMaximumTimestamp))),
+    ExpectTranslatedEvent(Translate(MakeQuitEvent(0), MakeTimestamp(kMaximumTimestamp)),
                           ponder::platform::QuitRequestedEvent{.timestamp = MakeTimestamp(kMaximumTimestamp)});
-    ExpectTranslatedEvent(Translate(MakeQuitEvent(0)), ponder::platform::QuitRequestedEvent{.timestamp = MakeTimestamp(0)});
-
-    EXPECT_FALSE(Translate(MakeQuitEvent(static_cast<std::uint64_t>(kMaximumTimestamp) + 1U)).has_value());
-
-    m_resolvers.windowRequests.clear();
-    SDL_Event overflowedWindow = MakeWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED, std::numeric_limits<std::uint64_t>::max());
-    EXPECT_FALSE(Translate(overflowedWindow).has_value());
-
-    SDL_Event overflowedMouse = MakeMouseMotionEvent();
-    overflowedMouse.motion.timestamp = std::numeric_limits<std::uint64_t>::max();
-    EXPECT_FALSE(Translate(overflowedMouse).has_value());
-    EXPECT_TRUE(m_resolvers.windowRequests.empty());
+    ExpectTranslatedEvent(Translate(MakeQuitEvent(std::numeric_limits<std::uint64_t>::max()), MakeTimestamp(0)),
+                          ponder::platform::QuitRequestedEvent{.timestamp = MakeTimestamp(0)});
 }
 
 TEST_F(SdlEventTranslatorTests, DropsRequiredZeroUnresolvedAndInvalidIds)
@@ -917,9 +928,11 @@ TEST_F(SdlEventTranslatorTests, DropsRequiredZeroUnresolvedAndInvalidIds)
     const ponder::platform::detail::EventTranslationContext missingResolvers{.context = &m_resolvers,
                                                                              .resolveWindowId = nullptr,
                                                                              .resolveDisplayId = nullptr};
-    EXPECT_FALSE(ponder::platform::detail::TranslateSdlEvent(MakeWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED), missingResolvers).has_value());
-    EXPECT_FALSE(ponder::platform::detail::TranslateSdlEvent(MakeDisplayEvent(SDL_EVENT_DISPLAY_MOVED), missingResolvers).has_value());
-    EXPECT_FALSE(ponder::platform::detail::TranslateSdlEvent(MakeMouseMotionEvent(), missingResolvers).has_value());
+    EXPECT_FALSE(ponder::platform::detail::TranslateSdlEvent(MakeWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED), MakeTimestamp(), missingResolvers)
+                     .has_value());
+    EXPECT_FALSE(
+        ponder::platform::detail::TranslateSdlEvent(MakeDisplayEvent(SDL_EVENT_DISPLAY_MOVED), MakeTimestamp(), missingResolvers).has_value());
+    EXPECT_FALSE(ponder::platform::detail::TranslateSdlEvent(MakeMouseMotionEvent(), MakeTimestamp(), missingResolvers).has_value());
 }
 
 TEST_F(SdlEventTranslatorTests, DropsIgnoredAndUnknownKindsWithoutResolvingIds)

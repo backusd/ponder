@@ -1,5 +1,6 @@
 ponder_add_project_library(platform
     PUBLIC_HEADERS
+        include/ponder/platform/Dialogs.hpp
         include/ponder/platform/Display.hpp
         include/ponder/platform/Geometry.hpp
         include/ponder/platform/Hints.hpp
@@ -44,7 +45,6 @@ ponder_add_project_library(platform
         src/SdlEventTranslator.hpp
         src/SdlError.hpp
         src/SdlRuntime.hpp
-        src/SdlRuntimeTypes.hpp
         src/SdlWindowBackend.hpp
         src/WindowImpl.hpp
         src/WindowRegistry.hpp

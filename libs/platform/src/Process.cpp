@@ -18,6 +18,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -412,6 +413,32 @@ public:
         return MakeProcessExitStatus(status);
     }
 
+    [[nodiscard]] ponder::core::Result<std::optional<ProcessExitStatus>> TryWait()
+    {
+        VerifyOperationalState("nonblocking wait");
+
+        // SDL documents false as either "still running" or a backend failure.
+        // Its supported process backends clear the error for the running case,
+        // so clear stale state first and snapshot any new error immediately.
+        static_cast<void>(SDL_ClearError());
+        detail::BackendProcessExitStatus status{.kind = static_cast<detail::BackendProcessExitKind>(-1)};
+        if (!m_backend.wait(m_backend.context, m_process, false, &status))
+        {
+            const char* const rawError = SDL_GetError();
+            const std::string errorText = rawError != nullptr ? std::string{rawError} : std::string{};
+            if (errorText.empty())
+            {
+                return std::optional<ProcessExitStatus>{};
+            }
+
+            return ponder::core::Result<std::optional<ProcessExitStatus>>::FromError(
+                CaptureSdlFailure(kBackendFailureCode, "SDL_WaitProcess", "process", errorText));
+        }
+
+        m_abandonedProcess->exitConfirmed = true;
+        return std::optional<ProcessExitStatus>{MakeProcessExitStatus(status)};
+    }
+
     [[nodiscard]] ponder::core::VoidResult Terminate(ProcessTerminationMode mode)
     {
         VerifyOperationalState("termination");
@@ -562,6 +589,12 @@ ponder::core::Result<ProcessExitStatus> Process::Wait()
 {
     PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Process");
     return m_state->Wait();
+}
+
+ponder::core::Result<std::optional<ProcessExitStatus>> Process::TryWait()
+{
+    PONDER_VERIFY(m_state != nullptr, "Cannot use a moved-from Process");
+    return m_state->TryWait();
 }
 
 ponder::core::VoidResult Process::Terminate(ProcessTerminationMode mode)

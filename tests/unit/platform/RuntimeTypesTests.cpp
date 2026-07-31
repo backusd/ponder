@@ -1,3 +1,4 @@
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/Runtime.hpp>
 
 #include <concepts>
@@ -13,6 +14,23 @@
 namespace
 {
 using ponder::platform::Runtime;
+
+struct LegacyCreateCallbackProbe final
+{
+    void operator()(Runtime&) const {}
+};
+
+template <typename RuntimeType>
+concept LegacyMetadataCreateContract = requires(std::string_view applicationName, std::optional<std::string_view> applicationVersion,
+                                                std::optional<std::string_view> applicationIdentifier) {
+    RuntimeType::Create(applicationName, applicationVersion, applicationIdentifier);
+};
+
+template <typename RuntimeType>
+concept LegacyCallbackCreateContract = requires(std::string_view applicationName, std::optional<std::string_view> applicationVersion,
+                                                std::optional<std::string_view> applicationIdentifier) {
+    RuntimeType::Create(applicationName, applicationVersion, applicationIdentifier, LegacyCreateCallbackProbe{});
+};
 
 template <typename Hint>
 concept RuntimeHintPushContract = requires(Runtime& runtime, const Hint& hint) {
@@ -50,8 +68,14 @@ static_assert(!std::is_copy_assignable_v<Runtime>);
 static_assert(std::is_nothrow_move_constructible_v<Runtime>);
 static_assert(std::is_nothrow_move_assignable_v<Runtime>);
 static_assert(std::is_nothrow_destructible_v<Runtime>);
-static_assert(std::is_same_v<decltype(Runtime::Create(std::declval<const ponder::platform::RuntimeDesc&>())), Runtime>);
-static_assert(std::is_same_v<ponder::platform::ConfigureHintsBeforeInitialization, void (*)(Runtime&)>);
+static_assert(std::is_same_v<decltype(Runtime::Create()), Runtime>);
+static_assert(!LegacyMetadataCreateContract<Runtime>);
+static_assert(!LegacyCallbackCreateContract<Runtime>);
+static_assert(std::is_same_v<decltype(std::declval<Runtime&>().Initialize()), void>);
+static_assert(
+    std::is_same_v<decltype(std::declval<Runtime&>().Initialize(std::declval<std::string_view>(), std::declval<std::optional<std::string_view>>(),
+                                                                std::declval<std::optional<std::string_view>>())),
+                   void>);
 #define PONDER_ASSERT_RUNTIME_HINT_CONTRACT(Type) static_assert(RuntimeHintContract<ponder::platform::hints::Type>)
 
 PONDER_ASSERT_RUNTIME_HINT_CONTRACT(AllowAltTabWhileGrabbed);
@@ -123,20 +147,35 @@ static_assert(!RuntimeHintGetContract<int>);
 static_assert(!LegacyRuntimeHintContract<ponder::platform::hints::MouseFocusClickThrough>);
 static_assert(std::is_same_v<decltype(std::declval<const Runtime&>().ClipboardGetText()), ponder::core::Result<std::string>>);
 static_assert(std::is_same_v<decltype(std::declval<Runtime&>().ClipboardSetText(std::declval<std::string_view>())), ponder::core::VoidResult>);
-static_assert(std::is_same_v<decltype(std::declval<Runtime&>().DialogShowOpenFile(std::declval<const ponder::platform::OpenFileDialogDesc&>())),
-                             ponder::platform::DialogRequestId>);
-static_assert(std::is_same_v<decltype(std::declval<Runtime&>().DialogShowSaveFile(std::declval<const ponder::platform::SaveFileDialogDesc&>())),
-                             ponder::platform::DialogRequestId>);
-static_assert(std::is_same_v<decltype(std::declval<Runtime&>().DialogShowOpenFolder(std::declval<const ponder::platform::OpenFolderDialogDesc&>())),
-                             ponder::platform::DialogRequestId>);
+static_assert(
+    std::is_same_v<decltype(std::declval<Runtime&>().DialogShowOpenFile(std::declval<const ponder::platform::dialogs::OpenFileDialogDesc&>())),
+                   ponder::core::Result<ponder::platform::dialogs::DialogRequestId>>);
+static_assert(
+    std::is_same_v<decltype(std::declval<Runtime&>().DialogShowSaveFile(std::declval<const ponder::platform::dialogs::SaveFileDialogDesc&>())),
+                   ponder::core::Result<ponder::platform::dialogs::DialogRequestId>>);
+static_assert(
+    std::is_same_v<decltype(std::declval<Runtime&>().DialogShowOpenFolder(std::declval<const ponder::platform::dialogs::OpenFolderDialogDesc&>())),
+                   ponder::core::Result<ponder::platform::dialogs::DialogRequestId>>);
 static_assert(std::is_same_v<decltype(std::declval<const Runtime&>().DialogGetPendingCount()), std::size_t>);
 static_assert(std::is_same_v<decltype(std::declval<const Runtime&>().DialogHasPending()), bool>);
 static_assert(std::is_same_v<decltype(std::declval<const Runtime&>().DialogGetPending()), std::vector<ponder::platform::DialogRequestInfo>>);
 static_assert(std::is_same_v<decltype(std::declval<Runtime&>().DialogPollCompletion()), std::optional<ponder::platform::DialogCompletedEvent>>);
 static_assert(std::is_same_v<decltype(std::declval<const Runtime&>().DialogGetOutstandingRequestCount()), std::size_t>);
-static_assert(std::is_same_v<decltype(std::declval<Runtime&>().DialogShutdown()), void>);
+static_assert(std::is_same_v<decltype(std::declval<Runtime&>().DialogShutdown()), ponder::core::VoidResult>);
+static_assert(noexcept(std::declval<Runtime&>().DialogShowOpenFile(std::declval<const ponder::platform::dialogs::OpenFileDialogDesc&>())));
+static_assert(noexcept(std::declval<Runtime&>().DialogShowSaveFile(std::declval<const ponder::platform::dialogs::SaveFileDialogDesc&>())));
+static_assert(noexcept(std::declval<Runtime&>().DialogShowOpenFolder(std::declval<const ponder::platform::dialogs::OpenFolderDialogDesc&>())));
+static_assert(noexcept(std::declval<const Runtime&>().DialogGetPendingCount()));
+static_assert(noexcept(std::declval<const Runtime&>().DialogHasPending()));
+static_assert(noexcept(std::declval<const Runtime&>().DialogGetPending()));
+static_assert(noexcept(std::declval<Runtime&>().DialogPollCompletion()));
+static_assert(noexcept(std::declval<const Runtime&>().DialogGetOutstandingRequestCount()));
+static_assert(noexcept(std::declval<Runtime&>().DialogShutdown()));
 static_assert(std::is_same_v<decltype(std::declval<const Runtime&>().TimeNow()), ponder::core::Timestamp>);
 static_assert(std::is_same_v<decltype(std::declval<Runtime&>().EventPoll()), std::optional<ponder::platform::PlatformEvent>>);
+static_assert(std::is_same_v<decltype(std::declval<Runtime&>().EventWait(std::declval<ponder::core::Duration>())),
+                             std::optional<ponder::platform::PlatformEvent>>);
+static_assert(std::is_same_v<decltype(std::declval<Runtime&>().EventWake()), void>);
 static_assert(
     std::is_same_v<decltype(std::declval<Runtime&>().WindowCreate(std::declval<const ponder::platform::WindowDesc&>())), ponder::platform::Window>);
 static_assert(std::is_same_v<decltype(std::declval<Runtime&>().DisplayEnumerate()), std::vector<ponder::platform::DisplayInfo>>);
@@ -150,25 +189,4 @@ static_assert(std::is_same_v<decltype(std::declval<Runtime&>().MouseShowCursor()
 static_assert(std::is_same_v<decltype(std::declval<Runtime&>().MouseHideCursor()), void>);
 static_assert(std::is_same_v<decltype(std::declval<const Runtime&>().MouseIsCursorVisible()), bool>);
 static_assert(std::is_same_v<decltype(std::declval<Runtime&>().UriOpenExternal(std::declval<std::string_view>())), ponder::core::VoidResult>);
-
-TEST(RuntimeDescTests, ProvidesStableApplicationMetadataDefaults)
-{
-    const ponder::platform::RuntimeDesc desc;
-
-    EXPECT_EQ(desc.applicationName, "ponder");
-    EXPECT_FALSE(desc.applicationVersion.has_value());
-    EXPECT_FALSE(desc.applicationIdentifier.has_value());
-    EXPECT_EQ(desc.configureHintsBeforeInitialization, nullptr);
-}
-
-TEST(RuntimeDescTests, OwnsConfiguredApplicationMetadata)
-{
-    const ponder::platform::RuntimeDesc desc{.applicationName = "Molecular Workbench",
-                                             .applicationVersion = std::string{"1.2.3"},
-                                             .applicationIdentifier = std::string{"org.ponder.workbench"}};
-
-    EXPECT_EQ(desc.applicationName, "Molecular Workbench");
-    EXPECT_EQ(desc.applicationVersion, "1.2.3");
-    EXPECT_EQ(desc.applicationIdentifier, "org.ponder.workbench");
-}
 } // namespace

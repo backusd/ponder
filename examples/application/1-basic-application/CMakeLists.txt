@@ -1,0 +1,12 @@
+ponder_add_project_executable(ponder_application_1_basic_application
+    NO_INSTALL
+    SOURCES
+        Main.cpp
+    PRIVATE_DEPS
+        ponder::core
+        ponder::platform
+        ponder::application
+    OUTPUT_NAME
+        ponder-application-1-basic-application
+    FOLDER
+        "examples/application")

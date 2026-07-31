@@ -2,6 +2,7 @@
 #include <ponder/core/Result.hpp>
 #include <ponder/core/Timing.hpp>
 #include <ponder/io/Path.hpp>
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/Hints.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Runtime.hpp>
@@ -80,6 +81,7 @@ struct AppState final
     core::Timestamp startTimestamp;
     std::uint64_t eventCount{};
     bool shutdownRequested{};
+    bool dialogApiFailed{};
     bool clipboardModified{};
     std::optional<std::string> originalClipboardText;
     std::string lastAction{"ready"};
@@ -290,20 +292,20 @@ void PrintServiceResult(std::string_view operation, const core::VoidResult& resu
     return location;
 }
 
-[[nodiscard]] std::vector<platform::DialogFileFilter> MakeMoleculeFilters()
+[[nodiscard]] std::vector<platform::dialogs::DialogFileFilter> MakeMoleculeFilters()
 {
     return {
-        platform::DialogFileFilter{.name = "Molecule files", .pattern = "sdf;mol;mol2;pdb"},
-        platform::DialogFileFilter{.name = "JSON files", .pattern = "json"},
-        platform::DialogFileFilter{.name = "All files", .pattern = "*"},
+        platform::dialogs::DialogFileFilter{.name = "Molecule files", .pattern = "sdf;mol;mol2;pdb"},
+        platform::dialogs::DialogFileFilter{.name = "JSON files", .pattern = "json"},
+        platform::dialogs::DialogFileFilter{.name = "All files", .pattern = "*"},
     };
 }
 
-[[nodiscard]] std::vector<platform::DialogFileFilter> MakeSaveFilters()
+[[nodiscard]] std::vector<platform::dialogs::DialogFileFilter> MakeSaveFilters()
 {
     return {
-        platform::DialogFileFilter{.name = "SDF molecule", .pattern = "sdf"},
-        platform::DialogFileFilter{.name = "All files", .pattern = "*"},
+        platform::dialogs::DialogFileFilter{.name = "SDF molecule", .pattern = "sdf"},
+        platform::dialogs::DialogFileFilter{.name = "All files", .pattern = "*"},
     };
 }
 
@@ -336,6 +338,13 @@ void PrintServiceResult(std::string_view operation, const core::VoidResult& resu
 void UpdateLastAction(AppState& state, std::string text)
 {
     state.lastAction = Shorten(text, 96);
+}
+
+void ReportDialogApiError(AppState& state, std::string_view operation, const core::Error& error)
+{
+    PrintError(operation, error);
+    state.dialogApiFailed = true;
+    UpdateLastAction(state, std::string{operation} + " failed");
 }
 
 void SetClipboardText(AppState& state, std::string_view text, std::string_view label)
@@ -445,8 +454,15 @@ void OpenConfiguredUri(AppState& state)
     }
 }
 
-void ReportDialogRequest(AppState& state, std::string_view operation, platform::DialogRequestId id)
+void ReportDialogRequest(AppState& state, std::string_view operation, core::Result<platform::dialogs::DialogRequestId> result)
 {
+    if (!result)
+    {
+        ReportDialogApiError(state, operation, result.GetError());
+        return;
+    }
+
+    const platform::dialogs::DialogRequestId id = std::move(result).GetValue();
     std::println("{} accepted as request {}: descriptor validation, request registration, and backend "
                  "invocation have completed. {} dialog(s) are pending.",
                  operation, id, state.runtime.DialogGetPendingCount());
@@ -460,7 +476,7 @@ void ShowParentedOpenFileDialog(AppState& state)
         return;
     }
 
-    const platform::OpenFileDialogDesc desc{
+    const platform::dialogs::OpenFileDialogDesc desc{
         .parentWindowId = GetParentWindowId(state),
         .defaultLocation = GetDialogLocation(state.options),
         .filters = MakeMoleculeFilters(),
@@ -476,7 +492,7 @@ void ShowUnparentedMultiOpenFileDialog(AppState& state)
         return;
     }
 
-    const platform::OpenFileDialogDesc desc{
+    const platform::dialogs::OpenFileDialogDesc desc{
         .parentWindowId = std::nullopt,
         .defaultLocation = GetDialogLocation(state.options),
         .filters = MakeMoleculeFilters(),
@@ -492,7 +508,7 @@ void ShowParentedSaveFileDialog(AppState& state)
         return;
     }
 
-    const platform::SaveFileDialogDesc desc{
+    const platform::dialogs::SaveFileDialogDesc desc{
         .parentWindowId = GetParentWindowId(state),
         .defaultLocation = GetDialogLocation(state.options),
         .filters = MakeSaveFilters(),
@@ -507,7 +523,7 @@ void ShowUnparentedFolderDialog(AppState& state)
         return;
     }
 
-    const platform::OpenFolderDialogDesc desc{
+    const platform::dialogs::OpenFolderDialogDesc desc{
         .parentWindowId = std::nullopt,
         .defaultLocation = GetDialogLocation(state.options),
         .allowMultipleSelection = false,
@@ -524,7 +540,7 @@ void LaunchConcurrentDialogBatch(AppState& state)
 
     std::println("Launching three dialog requests without assuming completion order.");
 
-    const platform::OpenFileDialogDesc openDesc{
+    const platform::dialogs::OpenFileDialogDesc openDesc{
         .parentWindowId = GetParentWindowId(state),
         .defaultLocation = GetDialogLocation(state.options),
         .filters = MakeMoleculeFilters(),
@@ -532,14 +548,14 @@ void LaunchConcurrentDialogBatch(AppState& state)
     };
     ReportDialogRequest(state, "batch parented multi open-file", state.runtime.DialogShowOpenFile(openDesc));
 
-    const platform::SaveFileDialogDesc saveDesc{
+    const platform::dialogs::SaveFileDialogDesc saveDesc{
         .parentWindowId = std::nullopt,
         .defaultLocation = GetDialogLocation(state.options),
         .filters = MakeSaveFilters(),
     };
     ReportDialogRequest(state, "batch unparented save-file", state.runtime.DialogShowSaveFile(saveDesc));
 
-    const platform::OpenFolderDialogDesc folderDesc{
+    const platform::dialogs::OpenFolderDialogDesc folderDesc{
         .parentWindowId = GetParentWindowId(state),
         .defaultLocation = GetDialogLocation(state.options),
         .allowMultipleSelection = true,
@@ -795,19 +811,10 @@ void RestoreClipboardOnExit(AppState& state)
         return 0;
     }
 
-    const platform::RuntimeDesc runtimeDesc{
-        .applicationName = "Ponder Platform Desktop Services Workbench",
-        .applicationVersion = std::string{"0.1.0"},
-        .applicationIdentifier = std::string{"org.ponder.examples.platform.desktop-services-workbench"},
-        .configureHintsBeforeInitialization =
-            [](platform::Runtime& runtime)
-        {
-            runtime.HintPush<platform::hints::MouseFocusClickThrough>(platform::hints::MouseFocusClickThrough{true});
-            runtime.HintPush<platform::hints::MouseAutoCapture>(platform::hints::MouseAutoCapture{false});
-        },
-    };
-
-    platform::Runtime runtime = platform::Runtime::Create(runtimeDesc);
+    platform::Runtime runtime = platform::Runtime::Create();
+    runtime.HintPush(platform::hints::MouseFocusClickThrough{true});
+    runtime.HintPush(platform::hints::MouseAutoCapture{false});
+    runtime.Initialize("Ponder Platform Desktop Services Workbench", "0.1.0", "org.ponder.examples.platform.desktop-services-workbench");
     const core::Timestamp start = runtime.TimeNow();
 
     std::vector<WindowSlot> windows;
@@ -873,13 +880,17 @@ void RestoreClipboardOnExit(AppState& state)
     }
 
     RestoreClipboardOnExit(state);
-    state.runtime.DialogShutdown();
+    const core::VoidResult shutdownResult = state.runtime.DialogShutdown();
+    if (!shutdownResult)
+    {
+        ReportDialogApiError(state, "Runtime::DialogShutdown", shutdownResult.GetError());
+    }
 
     if (deferredFailure != nullptr)
     {
         std::rethrow_exception(deferredFailure);
     }
-    return 0;
+    return state.dialogApiFailed ? 1 : 0;
 }
 } // namespace
 

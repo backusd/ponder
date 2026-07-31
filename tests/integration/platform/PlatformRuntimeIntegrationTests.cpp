@@ -1,6 +1,7 @@
 #include <ponder/core/Exception.hpp>
 #include <ponder/core/ScopeExit.hpp>
 #include <ponder/core/Timing.hpp>
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/PlatformError.hpp>
 #include <ponder/platform/Process.hpp>
 #include <ponder/platform/Runtime.hpp>
@@ -11,11 +12,11 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_platform_defines.h>
-#include <SDL3/SDL_timer.h>
 #include <SDL3/SDL_video.h>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -24,6 +25,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -37,6 +39,12 @@ constexpr char kAutoCaptureHint[]{"SDL_MOUSE_AUTO_CAPTURE"};
 [[nodiscard]] bool HasPlatformErrorPrefix(const ponder::core::Exception& exception, ponder::platform::PlatformErrorCode code)
 {
     return exception.GetMessage().starts_with(std::format("Platform error [{}]: ", code));
+}
+
+void ExpectCoreTimestampWithin(ponder::core::Timestamp timestamp, ponder::core::Timestamp before, ponder::core::Timestamp after)
+{
+    EXPECT_GE(timestamp, before);
+    EXPECT_LE(timestamp, after);
 }
 
 [[nodiscard]] SDL_Window* FindBackendWindow(std::string_view title)
@@ -132,19 +140,12 @@ TEST_F(RuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING, "1.0"));
     ASSERT_TRUE(SDL_SetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING, "org.ponder.prior"));
 
-    const ponder::platform::RuntimeDesc desc{.applicationName = "Ponder Integration Test",
-                                             .applicationVersion = std::string{"2.0"},
-                                             .applicationIdentifier = std::string{"org.ponder.integration"},
-                                             .configureHintsBeforeInitialization = [](ponder::platform::Runtime& runtime)
-                                             {
-                                                 runtime.HintPush(ponder::platform::hints::VideoDriver{"dummy"});
-                                                 runtime.HintPush(ponder::platform::hints::MouseFocusClickThrough{true});
-                                                 runtime.HintPush(ponder::platform::hints::MouseAutoCapture{false});
-                                             }};
-
-    const std::uint64_t ticksBefore = SDL_GetTicksNS();
     {
-        ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(desc);
+        ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+        runtime.HintPush(ponder::platform::hints::VideoDriver{"dummy"});
+        runtime.HintPush(ponder::platform::hints::MouseFocusClickThrough{true});
+        runtime.HintPush(ponder::platform::hints::MouseAutoCapture{false});
+        runtime.Initialize("Ponder Integration Test", std::string_view{"2.0"}, std::string_view{"org.ponder.integration"});
 
         EXPECT_NE(SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO, 0U);
         EXPECT_NE(SDL_WasInit(SDL_INIT_EVENTS) & SDL_INIT_EVENTS, 0U);
@@ -155,10 +156,10 @@ TEST_F(RuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
         EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_VERSION_STRING), "2.0");
         EXPECT_STREQ(SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING), "org.ponder.integration");
 
-        const std::int64_t timestamp = runtime.TimeNow().GetTimeSinceEpoch().count();
-        const std::uint64_t ticksAfter = SDL_GetTicksNS();
-        EXPECT_LE(static_cast<std::int64_t>(ticksBefore), timestamp);
-        EXPECT_LE(timestamp, static_cast<std::int64_t>(ticksAfter));
+        const ponder::core::Timestamp before = ponder::core::Timestamp::Now();
+        const ponder::core::Timestamp timestamp = runtime.TimeNow();
+        const ponder::core::Timestamp after = ponder::core::Timestamp::Now();
+        ExpectCoreTimestampWithin(timestamp, before, after);
     }
 
     EXPECT_EQ(SDL_WasInit(0), 0U);
@@ -167,13 +168,56 @@ TEST_F(RuntimeIntegrationTests, OwnsLiveSdlAndRestoresManagedHints)
     EXPECT_EQ(SDL_GetHint(SDL_HINT_VIDEO_DRIVER), nullptr);
 }
 
+TEST_F(RuntimeIntegrationTests, WaitCanBeWokenFromAnotherThreadWithoutPublishingTheSentinel)
+{
+    using namespace std::chrono_literals;
+
+    ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
+
+    std::exception_ptr wakeFailure;
+    std::thread worker{[&runtime, &wakeFailure]()
+                       {
+                           try
+                           {
+                               std::this_thread::sleep_for(5ms);
+                               runtime.EventWake();
+                           }
+                           catch (...)
+                           {
+                               wakeFailure = std::current_exception();
+                           }
+                       }};
+
+    const std::optional<ponder::platform::PlatformEvent> event = runtime.EventWait(ponder::core::Duration{5s});
+    worker.join();
+
+    EXPECT_EQ(wakeFailure, nullptr);
+    EXPECT_FALSE(event.has_value());
+    EXPECT_FALSE(runtime.EventPoll().has_value());
+
+    SDL_Event quitEvent{};
+    quitEvent.type = SDL_EVENT_QUIT;
+    quitEvent.quit.timestamp = 42'000;
+    ASSERT_TRUE(SDL_PushEvent(&quitEvent));
+
+    const ponder::core::Timestamp before = ponder::core::Timestamp::Now();
+    const std::optional<ponder::platform::PlatformEvent> translated = runtime.EventWait(ponder::core::Duration{1s});
+    const ponder::core::Timestamp after = ponder::core::Timestamp::Now();
+    ASSERT_TRUE(translated.has_value());
+    ASSERT_TRUE(std::holds_alternative<ponder::platform::QuitRequestedEvent>(*translated));
+    ExpectCoreTimestampWithin(std::get<ponder::platform::QuitRequestedEvent>(*translated).timestamp, before, after);
+}
+
 TEST_F(RuntimeIntegrationTests, ReportsLiveSdlVideoInitializationFailure)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "ponder-driver-that-does-not-exist", SDL_HINT_OVERRIDE));
 
     try
     {
-        static_cast<void>(ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{}));
+        ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+        runtime.Initialize();
         FAIL() << "Expected live SDL video initialization to throw";
     }
     catch (const ponder::core::Exception& exception)
@@ -189,7 +233,8 @@ TEST_F(RuntimeIntegrationTests, ReportsLiveSdlVideoInitializationFailure)
 
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
     {
-        ponder::platform::Runtime retry = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+        ponder::platform::Runtime retry = ponder::platform::Runtime::Create();
+        retry.Initialize();
         EXPECT_NE(SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO, 0U);
     }
     EXPECT_EQ(SDL_WasInit(0), 0U);
@@ -200,10 +245,14 @@ TEST_F(RuntimeIntegrationTests, ConvertsLiveDummyDialogCallbackFailuresWithoutEs
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_FILE_DIALOG_DRIVER, "ponder-unsupported-dialog-driver", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
-    const ponder::platform::DialogRequestId firstId = runtime.DialogShowOpenFile(ponder::platform::OpenFileDialogDesc{});
-    EXPECT_EQ(firstId, ponder::platform::DialogRequestId{1});
+    const ponder::core::Result<ponder::platform::dialogs::DialogRequestId> firstIdResult =
+        runtime.DialogShowOpenFile(ponder::platform::dialogs::OpenFileDialogDesc{});
+    ASSERT_TRUE(firstIdResult.HasValue()) << firstIdResult;
+    const ponder::platform::dialogs::DialogRequestId firstId = firstIdResult.GetValue();
+    EXPECT_EQ(firstId, ponder::platform::dialogs::DialogRequestId{1});
     EXPECT_EQ(runtime.DialogGetOutstandingRequestCount(), 1U);
 
     std::optional<ponder::platform::DialogCompletedEvent> completion = runtime.DialogPollCompletion();
@@ -215,22 +264,36 @@ TEST_F(RuntimeIntegrationTests, ConvertsLiveDummyDialogCallbackFailuresWithoutEs
     EXPECT_NE(failure->error.GetMessage().find("SDL_ShowOpenFileDialog"), std::string_view::npos);
     EXPECT_EQ(runtime.DialogGetOutstandingRequestCount(), 0U);
 
-    const ponder::platform::DialogRequestId secondId = runtime.DialogShowOpenFolder(ponder::platform::OpenFolderDialogDesc{});
-    EXPECT_EQ(secondId, ponder::platform::DialogRequestId{2});
+    SDL_Event quitEvent{};
+    quitEvent.type = SDL_EVENT_QUIT;
+    quitEvent.quit.timestamp = 1;
+    ASSERT_TRUE(SDL_PushEvent(&quitEvent));
+    const std::optional<ponder::platform::PlatformEvent> eventAfterStaleDialogWake =
+        runtime.EventWait(ponder::core::Duration{std::chrono::seconds{1}});
+    ASSERT_TRUE(eventAfterStaleDialogWake.has_value());
+    EXPECT_TRUE(std::holds_alternative<ponder::platform::QuitRequestedEvent>(*eventAfterStaleDialogWake));
+
+    const ponder::core::Result<ponder::platform::dialogs::DialogRequestId> secondIdResult =
+        runtime.DialogShowOpenFolder(ponder::platform::dialogs::OpenFolderDialogDesc{});
+    ASSERT_TRUE(secondIdResult.HasValue()) << secondIdResult;
+    const ponder::platform::dialogs::DialogRequestId secondId = secondIdResult.GetValue();
+    EXPECT_EQ(secondId, ponder::platform::dialogs::DialogRequestId{2});
 
     completion = runtime.DialogPollCompletion();
     ASSERT_TRUE(completion.has_value());
     EXPECT_EQ(completion->request.id, secondId);
     EXPECT_TRUE(std::holds_alternative<ponder::platform::DialogFailure>(completion->outcome));
     EXPECT_EQ(runtime.DialogGetOutstandingRequestCount(), 0U);
-    EXPECT_NO_THROW(runtime.DialogShutdown());
+    const ponder::core::VoidResult shutdown = runtime.DialogShutdown();
+    EXPECT_TRUE(shutdown.HasValue()) << shutdown;
 }
 
 TEST_F(RuntimeIntegrationTests, OwnsMultipleLiveHiddenWindows)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
     const ponder::platform::WindowDesc desc{.title = "Live Hidden Window",
                                             .logicalSize = {320, 240},
@@ -285,7 +348,8 @@ TEST_F(RuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
     ponder::platform::WindowDesc desc;
     desc.title = "Live Text Input Window";
@@ -375,35 +439,42 @@ TEST_F(RuntimeIntegrationTests, SupportsLiveTextInputAndImeArea)
     composition.edit.length = 2;
     ASSERT_TRUE(SDL_PushEvent(&composition));
 
+    const ponder::core::Timestamp keyBefore = ponder::core::Timestamp::Now();
     auto keyEvent = runtime.EventPoll();
+    const ponder::core::Timestamp keyAfter = ponder::core::Timestamp::Now();
     ASSERT_TRUE(keyEvent.has_value());
     ASSERT_TRUE(std::holds_alternative<ponder::platform::KeyboardKeyEvent>(*keyEvent));
-    EXPECT_EQ(
-        std::get<ponder::platform::KeyboardKeyEvent>(*keyEvent),
-        (ponder::platform::KeyboardKeyEvent{.timestamp = ponder::core::Timestamp{std::chrono::nanoseconds{100}},
-                                            .windowId = window.GetId(),
-                                            .physicalKey = ponder::platform::PhysicalKey::Q,
-                                            .logicalKey = ponder::platform::LogicalKey::FromCharacter(U'a'),
-                                            .modifiers = ponder::platform::KeyModifiers::LeftControl | ponder::platform::KeyModifiers::RightShift,
-                                            .pressed = true,
-                                            .repeat = true}));
+    const ponder::platform::KeyboardKeyEvent& keyPayload = std::get<ponder::platform::KeyboardKeyEvent>(*keyEvent);
+    ExpectCoreTimestampWithin(keyPayload.timestamp, keyBefore, keyAfter);
+    EXPECT_EQ(keyPayload, (ponder::platform::KeyboardKeyEvent{.timestamp = keyPayload.timestamp,
+                                                              .windowId = window.GetId(),
+                                                              .physicalKey = ponder::platform::PhysicalKey::Q,
+                                                              .logicalKey = ponder::platform::LogicalKey::FromCharacter(U'a'),
+                                                              .modifiers = ponder::platform::KeyModifiers::LeftControl |
+                                                                           ponder::platform::KeyModifiers::RightShift,
+                                                              .pressed = true,
+                                                              .repeat = true}));
 
+    const ponder::core::Timestamp textBefore = ponder::core::Timestamp::Now();
     auto textEvent = runtime.EventPoll();
+    const ponder::core::Timestamp textAfter = ponder::core::Timestamp::Now();
     ASSERT_TRUE(textEvent.has_value());
     ASSERT_TRUE(std::holds_alternative<ponder::platform::TextInputEvent>(*textEvent));
-    EXPECT_EQ(std::get<ponder::platform::TextInputEvent>(*textEvent),
-              (ponder::platform::TextInputEvent{.timestamp = ponder::core::Timestamp{std::chrono::nanoseconds{200}},
-                                                .windowId = window.GetId(),
-                                                .text = "typed"}));
+    const ponder::platform::TextInputEvent& textPayload = std::get<ponder::platform::TextInputEvent>(*textEvent);
+    ExpectCoreTimestampWithin(textPayload.timestamp, textBefore, textAfter);
+    EXPECT_EQ(textPayload, (ponder::platform::TextInputEvent{.timestamp = textPayload.timestamp, .windowId = window.GetId(), .text = "typed"}));
 
+    const ponder::core::Timestamp compositionBefore = ponder::core::Timestamp::Now();
     auto compositionEvent = runtime.EventPoll();
+    const ponder::core::Timestamp compositionAfter = ponder::core::Timestamp::Now();
     ASSERT_TRUE(compositionEvent.has_value());
     ASSERT_TRUE(std::holds_alternative<ponder::platform::TextCompositionEvent>(*compositionEvent));
-    EXPECT_EQ(std::get<ponder::platform::TextCompositionEvent>(*compositionEvent),
-              (ponder::platform::TextCompositionEvent{.timestamp = ponder::core::Timestamp{std::chrono::nanoseconds{300}},
-                                                      .windowId = window.GetId(),
-                                                      .text = "pending",
-                                                      .selection = ponder::platform::TextCompositionRange{1, 2}}));
+    const ponder::platform::TextCompositionEvent& compositionPayload = std::get<ponder::platform::TextCompositionEvent>(*compositionEvent);
+    ExpectCoreTimestampWithin(compositionPayload.timestamp, compositionBefore, compositionAfter);
+    EXPECT_EQ(compositionPayload, (ponder::platform::TextCompositionEvent{.timestamp = compositionPayload.timestamp,
+                                                                          .windowId = window.GetId(),
+                                                                          .text = "pending",
+                                                                          .selection = ponder::platform::TextCompositionRange{1, 2}}));
     EXPECT_FALSE(runtime.EventPoll().has_value());
 
     ASSERT_NO_THROW(window.StopTextInput());
@@ -416,7 +487,8 @@ TEST_F(RuntimeIntegrationTests, SupportsLiveMouseStateWithoutRetainingCapture)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
     ponder::platform::WindowDesc desc;
     desc.title = "Live Mouse State Window";
@@ -545,9 +617,14 @@ TEST_F(RuntimeIntegrationTests, ReportsMissingProcessExecutableAsAResult)
 
 TEST_F(RuntimeIntegrationTests, SupportsLiveClipboardTextAndRestoresPreviousText)
 {
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
     auto previousTextResult = runtime.ClipboardGetText();
-    ASSERT_TRUE(previousTextResult.HasValue()) << previousTextResult.GetError().GetMessage();
+    if (!previousTextResult.HasValue())
+    {
+        GTEST_SKIP() << "The host clipboard is unavailable, so its previous contents cannot be preserved and restored: "
+                     << previousTextResult.GetError().GetMessage();
+    }
     const std::string previousText = previousTextResult.GetValue();
     auto restoreClipboard = ponder::core::MakeScopeExit(
         [&runtime, &previousText]() noexcept
@@ -597,7 +674,8 @@ TEST_F(RuntimeIntegrationTests, RejectsInvalidExternalUrisWithoutLaunchingHostAp
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
     const std::string invalidUtf8{"https://ponder.dev/\xC3\x28"};
     const std::string embeddedNull{"https://ponder.dev/\0hidden", 26};
@@ -613,7 +691,8 @@ TEST_F(RuntimeIntegrationTests, PollsAndRoutesSyntheticEventsForMultipleLiveWind
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
     ponder::platform::WindowDesc firstDesc;
     firstDesc.title = "Polling Window One";
@@ -735,7 +814,8 @@ TEST_F(RuntimeIntegrationTests, SupportsOrthogonalStateForALiveHiddenWindow)
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
     ponder::platform::WindowDesc desc;
     desc.title = "Live Hidden State Window";
@@ -828,7 +908,8 @@ TEST_F(RuntimeIntegrationTests, ExposesLiveDisplaySnapshotsAndWindowDensity)
     std::vector<ponder::platform::DisplayInfo> ownedSnapshots;
     std::string firstDisplayName;
     {
-        ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+        ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+        runtime.Initialize();
 
         const char* const videoDriver = SDL_GetCurrentVideoDriver();
         ASSERT_NE(videoDriver, nullptr);
@@ -903,7 +984,8 @@ TEST_F(RuntimeIntegrationTests, RejectsUnavailableGraphicsCompatibilityForCurren
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
 
     ponder::platform::WindowDesc desc;
     desc.title = "Unsupported Graphics Compatibility Window";
@@ -933,7 +1015,8 @@ TEST_F(RuntimeIntegrationTests, ReportsExpectedNativeHandleFailuresUnderDummyDri
 {
     ASSERT_TRUE(SDL_SetHintWithPriority(SDL_HINT_VIDEO_DRIVER, "dummy", SDL_HINT_OVERRIDE));
 
-    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create(ponder::platform::RuntimeDesc{});
+    ponder::platform::Runtime runtime = ponder::platform::Runtime::Create();
+    runtime.Initialize();
     ASSERT_STREQ(SDL_GetCurrentVideoDriver(), "dummy");
 
     ponder::platform::WindowDesc defaultDesc;

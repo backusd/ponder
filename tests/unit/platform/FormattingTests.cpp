@@ -1,3 +1,4 @@
+#include <ponder/platform/Dialogs.hpp>
 #include <ponder/platform/Display.hpp>
 #include <ponder/platform/Geometry.hpp>
 #include <ponder/platform/Hints.hpp>
@@ -31,12 +32,12 @@ concept FormattableAndStreamable = std::formattable<Type, char> && requires(std:
 
 using namespace ponder::platform;
 
-static_assert(FormattableAndStreamable<DialogFileFilter>);
-static_assert(FormattableAndStreamable<DialogKind>);
+static_assert(FormattableAndStreamable<dialogs::DialogFileFilter>);
+static_assert(FormattableAndStreamable<dialogs::DialogKind>);
 static_assert(FormattableAndStreamable<DialogRequestInfo>);
-static_assert(FormattableAndStreamable<OpenFileDialogDesc>);
-static_assert(FormattableAndStreamable<SaveFileDialogDesc>);
-static_assert(FormattableAndStreamable<OpenFolderDialogDesc>);
+static_assert(FormattableAndStreamable<dialogs::OpenFileDialogDesc>);
+static_assert(FormattableAndStreamable<dialogs::SaveFileDialogDesc>);
+static_assert(FormattableAndStreamable<dialogs::OpenFolderDialogDesc>);
 static_assert(FormattableAndStreamable<DialogSelection>);
 static_assert(FormattableAndStreamable<DialogCancellation>);
 static_assert(FormattableAndStreamable<DialogFailure>);
@@ -53,7 +54,7 @@ static_assert(FormattableAndStreamable<LogicalSize>);
 static_assert(FormattableAndStreamable<PixelSize>);
 static_assert(FormattableAndStreamable<WindowId>);
 static_assert(FormattableAndStreamable<DisplayId>);
-static_assert(FormattableAndStreamable<DialogRequestId>);
+static_assert(FormattableAndStreamable<dialogs::DialogRequestId>);
 static_assert(FormattableAndStreamable<PhysicalKey>);
 static_assert(FormattableAndStreamable<NamedKey>);
 static_assert(FormattableAndStreamable<LogicalKey::Kind>);
@@ -67,7 +68,6 @@ static_assert(FormattableAndStreamable<NativeX11Window>);
 static_assert(FormattableAndStreamable<NativeWaylandWindow>);
 static_assert(FormattableAndStreamable<PlatformErrorCode>);
 static_assert(FormattableAndStreamable<Runtime>);
-static_assert(FormattableAndStreamable<RuntimeDesc>);
 static_assert(FormattableAndStreamable<hints::EventLoggingLevel>);
 static_assert(FormattableAndStreamable<hints::ImeUiCapabilities>);
 static_assert(FormattableAndStreamable<hints::FullscreenFocusLossBehavior>);
@@ -137,9 +137,9 @@ TEST(PlatformFormattingTests, StreamsRepresentativeValuesUsingTheirFormatters)
     ExpectStreamMatchesFormat(QuitRequestedEvent{});
     ExpectStreamMatchesFormat(DialogCancellation{});
     ExpectStreamMatchesFormat(DialogOutcome{DialogCancellation{}});
-    ExpectStreamMatchesFormat(DialogKind::OpenFolder);
-    ExpectStreamMatchesFormat(DialogRequestInfo{.id = DialogRequestId{9},
-                                                .kind = DialogKind::SaveFile,
+    ExpectStreamMatchesFormat(dialogs::DialogKind::OpenFolder);
+    ExpectStreamMatchesFormat(DialogRequestInfo{.id = dialogs::DialogRequestId{9},
+                                                .kind = dialogs::DialogKind::SaveFile,
                                                 .requestedAt = ponder::core::Timestamp{},
                                                 .parentWindowId = WindowId{4},
                                                 .filterCount = 2,
@@ -154,16 +154,16 @@ TEST(PlatformFormattingTests, DescriptorSummariesDoNotDumpProcessArguments)
     EXPECT_EQ(processText, "process(executable='ponder-tool', argumentCount=2)");
     EXPECT_EQ(processText.find("do-not-print"), std::string::npos);
 
-    const OpenFileDialogDesc dialog{.parentWindowId = WindowId{7},
-                                    .defaultLocation = std::filesystem::path{"workspace"},
-                                    .filters = {{.name = "Molecules", .pattern = "mol;cif"}},
-                                    .allowMultipleSelection = true};
+    const dialogs::OpenFileDialogDesc dialog{.parentWindowId = WindowId{7},
+                                             .defaultLocation = std::filesystem::path{"workspace"},
+                                             .filters = {{.name = "Molecules", .pattern = "mol;cif"}},
+                                             .allowMultipleSelection = true};
     EXPECT_EQ(std::format("{}", dialog), "open_file_dialog(parent=7, defaultLocation='workspace', filterCount=1, "
                                          "allowMultipleSelection=true)");
 
-    EXPECT_EQ(std::format("{}", DialogKind::SaveFile), "save-file");
-    const DialogRequestInfo request{.id = DialogRequestId{9},
-                                    .kind = DialogKind::OpenFile,
+    EXPECT_EQ(std::format("{}", dialogs::DialogKind::SaveFile), "save-file");
+    const DialogRequestInfo request{.id = dialogs::DialogRequestId{9},
+                                    .kind = dialogs::DialogKind::OpenFile,
                                     .requestedAt = ponder::core::Timestamp{},
                                     .parentWindowId = WindowId{7},
                                     .filterCount = 3,

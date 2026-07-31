@@ -13,8 +13,10 @@ worker thread. Termination and abandonment flows require explicit key commands.
 
 ## Features Exercised
 
-- Direct `Runtime` and window construction, pre-initialization hint configuration, and
-  direct window-title updates.
+- Explicit `Runtime::Create()` construction of the uninitialized backend,
+  typed hint configuration on that object, `Runtime::Initialize()` activation
+  with application metadata, direct window construction,
+  and direct window-title updates.
 - `ProcessDesc` construction from an executable path and owned UTF-8 arguments.
 - Verbatim arguments containing spaces and non-ASCII text; no shell parsing or
   quoting is involved.
@@ -60,8 +62,8 @@ caller can print the error and correct the command line immediately.
 
 ## Failure Contract
 
-Runtime creation, hint changes, window creation, event polling, and window
-title updates use direct platform contracts. Their rare failures propagate to
+Runtime creation, hint changes, explicit initialization, window creation, event
+polling, and window title updates use direct platform contracts. Their rare failures propagate to
 the high-level boundary in `main()`. That boundary catches one
 `ponder::core::Exception` type and prints its message. Platform exceptions
 embed their formatted platform error code inside that message rather than
@@ -156,7 +158,7 @@ Safe automated runs are intentionally side-effect-light:
   owner thread joins the worker and rethrows the captured
   `std::runtime_error` through the distinct standard-exception boundary.
 - An intentionally invalid video driver is expected to fail direct runtime
-  construction through the `ponder::core::Exception` boundary with the
+  initialization through the `ponder::core::Exception` boundary with the
   platform error code embedded in its message.
 - The focused platform process tests use the dedicated
   `ponder_platform_process_helper` and private backend seams for missing

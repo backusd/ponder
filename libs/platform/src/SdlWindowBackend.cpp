@@ -19,7 +19,7 @@
 
 #include "SdlCommon.hpp"
 #include "SdlError.hpp"
-#include "SdlRuntimeTypes.hpp"
+#include "SdlRuntime.hpp"
 
 namespace ponder::platform::detail
 {
